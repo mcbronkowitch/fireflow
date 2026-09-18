@@ -305,11 +305,13 @@ and came in at **1.3–1.5× their predicted settle**, coherently rather than as
 scatter, so the model appears to
 underestimate — if that factor carries to 2650 Ω, which is an extrapolation and
 not a measurement, this prediction would land nearer 2.0–2.4 µs. Second, and
-more usefully, **"read clean" turned out to be the part that does not hold**: on
-that board a multiplexer channel cannot be read to half an LSB of 12 bit at any
-delay, because the residual wander in the settled region is 9–12 counts against
-an 8-count criterion. A prediction phrased as a settling time was answered by a
-limit on repeatability.
+more usefully, **"read clean" turned out to mean less than it sounds**. The
+criterion itself holds: past the knee, every per-point mean on every pair is
+inside half an LSB of 12 bit of its own reference. What the board does not do
+is hold *still* there — the settled region wanders 8–12 counts peak to peak,
+however long the delay, and it is still doing it at the end of a 12.8 µs grid.
+A prediction phrased as a settling time has no term for a settled state that is
+not quiet, so the answer came back in a dimension this model does not have.
 
 **Where it gets confirmed is the test coupon, not a breadboard**, decided the
 same day this was written. The reason is the model itself: it is **linear in the

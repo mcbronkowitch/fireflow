@@ -408,13 +408,24 @@ void run_settle_probe(bench::Board& hw)
     // rather than reaching a second unbounded wait.
     //
     // init_ok/cal_ok/cfg_ok are the three discarded HAL statuses (see the
-    // flags' own comment above adc_init()). init_ok and cal_ok are boot-only
-    // facts and have no other line to live on. cfg_ok here covers only the
-    // configuration calls made BEFORE this line -- the single adc_select()
-    // just above -- because the per-pair rung selections happen inside the
-    // sweep, long after this line has gone out; the same fold is reprinted on
-    // every block's SHELL_SETTLE_GATES line, which is where a rejected
-    // per-pair configuration becomes visible.
+    // flags' own comment above adc_init()).
+    //
+    // THIS LINE CANNOT BE THE ONLY PLACE THEY APPEAR, and it is not: all
+    // three are reprinted on every block's SHELL_SETTLE_GATES line. The
+    // 2026-09-18 capture is why -- SHELL_SETTLE_WARMUP did not arrive once
+    // in 2730 lines of USB-CDC. StartLog(false) does not wait for a host, so
+    // everything printed before the forever loop goes out milliseconds after
+    // reset, long before Windows finishes enumerating the CDC device; this is
+    // the same trap that moved SHELL_SETTLE_CLK's print into the loop in fix
+    // round 3, and resetting the board to catch it does not work either,
+    // because the reset re-enumerates the device and kills the open handle.
+    // The line is kept anyway: over SWD or a logic analyser it is the
+    // earliest signal the probe gives, and it costs one PrintLine.
+    //
+    // cfg_ok here also covers only the configuration calls made BEFORE this
+    // line -- the single adc_select() just above -- because the per-pair rung
+    // selections happen inside the sweep. That is a second, independent
+    // reason the in-loop copy is the one to read.
     const bool adc_warm_ok = adc_warm_up();
     hw.PrintLine("SHELL_SETTLE_WARMUP ok=%d init_ok=%d cal_ok=%d cfg_ok=%d",
                  adc_warm_ok ? 1 : 0, g_adc_init_ok ? 1 : 0,
@@ -979,18 +990,30 @@ void run_settle_probe(bench::Board& hw)
                          settled_mean_spread[p]);
         }
 
-        // cfg_ok is the HAL_ADC_ConfigChannel fold (final-review I5), not a
-        // fifth gate -- it is NOT part of Gates::ok() and does not change any
-        // verdict. It rides on this line because the per-pair rung selections
-        // happen inside the sweep, after SHELL_SETTLE_WARMUP has gone out, so
-        // a lifetime fold printed only at boot could never show them; the
-        // lifetime `timeouts` counter on SHELL_SETTLE_CAL is the same shape
-        // of field for the same reason. This line, not that one, because CAL
-        // is within a few bytes of the log buffer already.
-        hw.PrintLine("SHELL_SETTLE_GATES g1=%d g2=%d g3=%d g4=%d cfg_ok=%d",
+        // cfg_ok, init_ok and cal_ok are the three HAL statuses of
+        // final-review I5. None of them is a fifth gate: they are NOT part of
+        // Gates::ok(), they do not enter settle_gates(), and they change no
+        // verdict. They ride HERE, inside the loop, for the reason the
+        // 2026-09-18 capture proved the hard way: all three were printed on
+        // SHELL_SETTLE_WARMUP at boot, and that line did not appear once in
+        // 2730 captured lines. StartLog(false) does not wait for a host, so a
+        // boot-time line goes out milliseconds after reset, long before
+        // Windows finishes enumerating the CDC device -- the same trap
+        // SHELL_SETTLE_CLK was moved into this loop to escape in fix round 3,
+        // and a deliberate reset does not help because it re-enumerates the
+        // device and kills the open handle. A status nobody can read is not a
+        // status. The boot line is kept (it still reaches SWD or a logic
+        // analyser) but it may never be the only place these appear.
+        //
+        // This line and not SHELL_SETTLE_CAL: CAL is within a few bytes of
+        // the 128-byte log buffer already, and this one runs about 66 bytes
+        // with all seven fields.
+        hw.PrintLine("SHELL_SETTLE_GATES g1=%d g2=%d g3=%d g4=%d cfg_ok=%d "
+                     "init_ok=%d cal_ok=%d",
                      gates.g1_knee ? 1 : 0, gates.g2_floor ? 1 : 0,
                      gates.g3_band ? 1 : 0, gates.g4_jitter ? 1 : 0,
-                     g_adc_cfg_ok ? 1 : 0);
+                     g_adc_cfg_ok ? 1 : 0, g_adc_init_ok ? 1 : 0,
+                     g_adc_cal_ok ? 1 : 0);
         hw.PrintLine("SHELL_SETTLE_END");
 
         // Sweep state (last pair's channel/sampling time, mux parked on its

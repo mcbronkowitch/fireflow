@@ -265,17 +265,24 @@ def main() -> int:
             print("pair=%d settle_ns=%d predicted_ns=%d%s"
                   % (pair, settle_ns, k["predicted_ns"], tag), file=sys.stderr)
 
-    # Not a gate and deliberately not folded into the exit code: cfg_ok is
-    # the firmware's HAL_ADC_ConfigChannel fold, and the four gates are the
-    # spec's, so turning this into a fifth verdict here would be a spec
-    # change made in the reader. It is loud on stderr instead, because a run
-    # whose ADC channel configuration was rejected has printed numbers from
-    # an ADC that is not configured the way the block header claims.
-    if block["gates"].get("cfg_ok") == 0:
-        print("WARNING: cfg_ok=0 -- the firmware saw HAL_ADC_ConfigChannel "
-              "reject a channel configuration on this run; every count below "
-              "came from an ADC that was not set up as the header says",
-              file=sys.stderr)
+    # Not gates, and deliberately not folded into the exit code: these three
+    # are the firmware's HAL return codes, and the four gates are the spec's,
+    # so turning one of them into a fifth verdict here would be a spec change
+    # made in the reader. They are loud on stderr instead, because a run whose
+    # ADC was never initialised, never calibrated or had a channel
+    # configuration rejected still prints plausible counts.
+    #
+    # .get(), not [...]: these arrive on SHELL_SETTLE_GATES from the
+    # 2026-09-18 firmware onwards, and a block from an older image simply does
+    # not carry them. Absent is not the same as 0 and must not read as a
+    # failure.
+    for flag, what in (("init_ok", "HAL_ADC_Init"),
+                       ("cal_ok", "HAL_ADCEx_Calibration_Start"),
+                       ("cfg_ok", "HAL_ADC_ConfigChannel")):
+        if block["gates"].get(flag) == 0:
+            print("WARNING: %s=0 -- the firmware saw %s fail on this run; "
+                  "every count above came from an ADC that is not set up the "
+                  "way the block header says" % (flag, what), file=sys.stderr)
 
     if not cal["gates_ok"]:
         failed = [_GATE_NAMES[g] for g in ("g1", "g2", "g3", "g4")

@@ -67,7 +67,8 @@ def build_block(num_pairs=2, grid_points=2, sweep_dir=0, gates_ok=1):
         lines.append(
             "SHELL_SETTLE_BAND pair=%d widest_sample_band_counts=4 "
             "at_d_ns=100 settled_mean_spread=%d" % (p, 3 + p))
-    lines.append("SHELL_SETTLE_GATES g1=%d g2=%d g3=%d g4=%d cfg_ok=1"
+    lines.append("SHELL_SETTLE_GATES g1=%d g2=%d g3=%d g4=%d cfg_ok=1 "
+                 "init_ok=1 cal_ok=1"
                  % (gates_ok, gates_ok, gates_ok, gates_ok))
     lines.append("SHELL_SETTLE_END")
     return lines
@@ -187,8 +188,9 @@ check("the metadata carries the calibration pass",
       and meta.get(("cal", "", "b0")) == "12")
 check("the metadata carries the gate verdicts",
       all(meta.get(("gates", "", g)) == "1" for g in ("g1", "g2", "g3", "g4")))
-check("the metadata carries the ADC channel-config fold",
-      meta.get(("gates", "", "cfg_ok")) == "1")
+check("the metadata carries the three HAL statuses beside the gates",
+      all(meta.get(("gates", "", k)) == "1"
+          for k in ("cfg_ok", "init_ok", "cal_ok")))
 
 # "true settle = knee + that pair's offset" -- the arithmetic behind the
 # whole settle-time table, recomputed here from the file alone.

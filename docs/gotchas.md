@@ -56,6 +56,20 @@ by ear are a different list: [`docs/by-ear-decisions.md`](by-ear-decisions.md).
   `--profile X --build-only`, then `--profile X --no-build --program-qspi
   --build-only`, then the plain run. The other order looks like a corrupt
   bank and is not one.
+- **`shell/Makefile`'s per-object prerequisite edges cover only some of the
+  switch headers, and the one that saves you is a different mechanism
+  entirely.** `shell_settle_probe.h` was never added to those edges, unlike
+  every prior switch. It is inert today, and for a reason that is easy to
+  mistake for the edges working: the generator deletes every name in
+  `SWITCH_OBJECTS` at parse time when a switch header changes, which is what
+  actually forces the rebuild. The edges bite only an object that reads a
+  switch macro **without** being listed in `SWITCH_OBJECTS` — add one of those
+  and the stale-object trap is back with no warning. The follow-up is to add
+  the edges for all five switches in one go, not for whichever switch is being
+  worked on. Same family as the memory entry `fireflow-bench-stale-object-trap`
+  (make's one-second mtime resolution, and switches that must be resolved at
+  parse time) and as the bring-up-probe entry further down: `cmp` the image
+  before you flash.
 - **Bench rows can shift ~7 % from icache layout alone** when a new
   translation unit links into the binary (observed on small rows with no
   engine change). Only compare bench rows measured in the same build/run,
@@ -439,6 +453,16 @@ invisible from reading the scripts, and each cost real time.
   were 2311 and 31286 core cycles over 371 ADC cycles, giving 78.10 core cycles
   per ADC cycle and 480 MHz / 78.10 = 6.146 MHz.
 
+  **The long span reads a few core cycles differently from boot to boot, and
+  that is measurement noise, not a discrepancy to chase.** `settle_plan.cpp`
+  bakes `kClkSpanLongCyc = 31286` (it needs a fixed figure to pick a sampling
+  rung on a host with no board); the captures have read 31286, 31287 and 31284
+  on three separate boots of the same image family. Within one boot every block
+  prints the same value, because the clock pass runs once at startup — so the
+  spread is boot-to-boot, about 0.01 % on the derived clock, and it moves no
+  rung boundary and no offset. Do not "fix" the baked constant to match a
+  capture.
+
   Everything derived from the assumed clock is wrong by 2×: one ADC cycle is
   162.7 ns, not 81.4, and a 16.5 + 8.5 = 25-cycle conversion takes 4068 ns, not
   2034. `docs/hardware/settle-budget.md` §1 carried the wrong figure and every
@@ -464,6 +488,23 @@ invisible from reading the scripts, and each cost real time.
   residue; no delay grid on this part can be finer than one ADC clock period
   without a faster ADC clock.
 
+- **`sample_now()`'s timeout path leaves `ADSTART` set and never drains `DR`,
+  and `measure_point()` folds the timed-out sample into the point as a 0.**
+  `shell/settle_probe.cpp`: on `kPollTimeoutCycles` the function returns 0
+  without stopping the conversion (no `ADSTP`) and without reading `DR`, so a
+  conversion that later completes leaves `EOC` set and its value in `DR` — the
+  *next* call can then return that stale value as its own. The caller makes it
+  worse: `measure_point()` has no timeout branch, so the 0 goes into the sum
+  and into the min, dragging that grid point's mean down and pinning its `min`
+  to 0, which is a settling curve with a hole in it that looks like data.
+
+  **Unreachable so far.** Every hardware capture to date prints `timeouts=0` on
+  every `SHELL_SETTLE_CAL` line, which is why this was recorded rather than
+  fixed at the end of the branch — changing measurement behaviour to close a
+  path nothing has ever taken is the worse trade. **Raise it the moment a
+  nonzero `timeouts` is ever seen**, and the fix is `ADSTP` plus a `DR` drain
+  on the timeout path before anything else runs.
+
 - **A bring-up probe that scans once and then reprints its buffer is
   indistinguishable from a working one.** Same shape as the stale-object trap,
   one layer up: the values are per-channel correct, the report is well formed,
@@ -474,3 +515,16 @@ invisible from reading the scripts, and each cost real time.
   any of 24 channels, which a live 16-bit converter does not do. Rescan inside
   the loop, and treat a perfectly still reading as a symptom rather than a
   clean one.
+
+- **Anything printed before the firmware's forever loop never reaches a host
+  over USB-CDC.** `StartLog(false)` does not wait for a terminal, so a
+  boot-time `PrintLine` goes out within milliseconds of reset — long before
+  Windows finishes enumerating the CDC device. `SHELL_SETTLE_WARMUP` did not
+  appear **once** in a 2730-line capture, and the status flags on it were the
+  whole point of the line. Resetting the board to catch it does not help: the
+  reset re-enumerates the device and kills the open handle. This has now cost
+  three separate rounds on one branch (`SHELL_SETTLE_CLK`'s spans, then its
+  derived arithmetic, then the HAL statuses), each time in the same shape —
+  data nobody could observe, mistaken for data. **Anything a reader has to see
+  is printed inside the loop.** A boot line is still worth keeping for SWD or a
+  logic analyser; it may never be the only place a fact appears.

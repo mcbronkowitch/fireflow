@@ -3658,7 +3658,11 @@ default of 8.5 cycles too short in every configuration. **Timing does not decide
 8:1 against 16:1**; that stays a question of availability, price and 595
 outputs. One number in circulation is corrected on the way: the "~15.6 Hz per
 channel" of the 2026-08-23 capture is right for the one-step-per-block pacing
-that was measured, but a *complete* sweep fits in 0.16 of a block at 10 kΩ, so
+that was measured, but a *complete* sweep fits in 0.16 of a block at 10 kΩ (that
+fraction predates the ADC-clock correction; `settle-budget.md` §4 finding 6 now
+computes 0.14 of a block on the 8:1 and 0.20 on the 16:1 from the measured
+6.146 MHz — see the 2026-09-18 update below. The ~500 Hz ceiling this sentence
+draws from it is unchanged), so
 the design's ceiling is the block rate — ~500 Hz per channel. The capture is
 left as written; it is an honest record of its own experiment.
 
@@ -3673,11 +3677,13 @@ sits at 100 k rather than 50 k. The 10 k decision is unaffected; it never rested
 on the cliff. What the board itself said is a document of its own,
 [`docs/hardware/settle-measured.md`](hardware/settle-measured.md): true settle
 **1.3–1.5× the model** across three independent pairs, coherently rather than as
-scatter, and — worth more than the settle time — that on this board a
-multiplexer channel **cannot be read to half an LSB of 12 bit at any delay**,
-because the residual wander in the settled region is 9–12 counts against an
-8-count criterion. The limit is repeatability, not settling time. One board, one
-session; §8 of that document says what would strengthen it.
+scatter, and — worth more than the settle time — that on this board a settled
+multiplexer channel **does not hold still**. The criterion is met, every
+per-point mean past the knee sitting inside half an LSB of 12 bit of its own
+reference; what the board does not deliver is a settled region tighter than
+that, and it wanders 8–12 counts peak to peak however long the delay. The limit
+is repeatability, not settling time. One board, two sessions; §8 of that
+document says what would strengthen it.
 
 **And the same day settles where 5b gets confirmed: on the test coupon, not on
 a breadboard.** The model is linear in the node capacitance and a jumper-wire
