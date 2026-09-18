@@ -136,7 +136,10 @@ is actually built today, and what is still design-only.
   a bisection search. The capacitor at `COM` goes away entirely rather than
   getting smaller, the pot value is a decision with a ceiling of 10 k or 20 k,
   the binding term is charge redistribution rather than the ADC's charging rule
-  — which makes libDaisy's 8.5-cycle default too short in every case — and
+  — which makes libDaisy's 8.5-cycle default too short in every case (no longer
+  true: the ADC clock was measured on 2026-09-17 and is half what this round
+  assumed — see the 2026-09-18 update in the M6 section and
+  [`docs/hardware/settle-measured.md`](hardware/settle-measured.md)) — and
   timing does not decide 8:1 against 16:1. **And 5b is confirmed on the test
   coupon, not on a breadboard**, because the model is linear in a node
   capacitance a jumper wire makes unknown; the envelope spec's §5 now carries
@@ -3658,6 +3661,23 @@ channel" of the 2026-08-23 capture is right for the one-step-per-block pacing
 that was measured, but a *complete* sweep fits in 0.16 of a block at 10 kΩ, so
 the design's ceiling is the block rate — ~500 Hz per channel. The capture is
 left as written; it is an honest record of its own experiment.
+
+**Update, 2026-09-18 — the paper round has now been answered on the coupon, and
+two of its numbers did not survive.** The ADC clock the model derived from PLL3
+is wrong by a factor of two: **6.146 MHz measured, not 12.29**, which moved every
+sampling window and every sweep duration in
+[`docs/hardware/settle-budget.md`](hardware/settle-budget.md). libDaisy's
+8.5-cycle default is *exactly enough* at 10 kΩ with nothing at `COM` and too
+short everywhere else — not "too short in every case" — and the 16:1's cliff
+sits at 100 k rather than 50 k. The 10 k decision is unaffected; it never rested
+on the cliff. What the board itself said is a document of its own,
+[`docs/hardware/settle-measured.md`](hardware/settle-measured.md): true settle
+**1.3–1.5× the model** across three independent pairs, coherently rather than as
+scatter, and — worth more than the settle time — that on this board a
+multiplexer channel **cannot be read to half an LSB of 12 bit at any delay**,
+because the residual wander in the settled region is 9–12 counts against an
+8-count criterion. The limit is repeatability, not settling time. One board, one
+session; §8 of that document says what would strengthen it.
 
 **And the same day settles where 5b gets confirmed: on the test coupon, not on
 a breadboard.** The model is linear in the node capacitance and a jumper-wire
