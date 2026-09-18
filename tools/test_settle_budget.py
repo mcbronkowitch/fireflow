@@ -30,13 +30,35 @@ def _all_configs():
                 yield name, chip, pot, c_ext, label
 
 
-def test_adc_clock_derivation():
-    # PLL3 (M=6, N=295, R=32) on a 16 MHz HSE, then ADC_CLOCK_ASYNC_DIV2.
-    # The 24.58 MHz kernel matches libDaisy's own "24.xMhz" comment on PLL3R.
+def test_adc_clock_prediction_and_measurement():
+    # Two figures that disagree by 2x, and the doc's section 1 tells that story
+    # in both halves, so both halves are guarded.
+    #
+    # The prediction: PLL3 (M=6, N=295, R=32) on a 16 MHz HSE, then
+    # ADC_CLOCK_ASYNC_DIV2.  The 24.58 MHz kernel matches libDaisy's own
+    # "24.xMhz" comment on PLL3R.  It stays in the file as the arithmetic
+    # anyone reading those sources will land on -- not as an answer.
     check(abs(s.ADC_KERNEL_HZ - 24.58e6) < 0.02e6,
           "PLL3R moved: %.3f MHz, expected ~24.58" % (s.ADC_KERNEL_HZ / 1e6))
-    check(abs(s.ADC_CLK_HZ - 12.29e6) < 0.01e6,
-          "ADC clock moved: %.3f MHz, expected ~12.29" % (s.ADC_CLK_HZ / 1e6))
+    check(abs(s.ADC_CLK_PREDICTED_HZ - 12.29e6) < 0.01e6,
+          "the PLL3 prediction moved: %.3f MHz, expected ~12.29"
+          % (s.ADC_CLK_PREDICTED_HZ / 1e6))
+
+    # The measurement, from the coupon's two conversion spans (settle_probe.cpp,
+    # 2026-09-17).  Every sampling window and every sweep duration in the doc
+    # rests on this one.
+    check(abs(s.ADC_CLK_HZ - 6.146e6) < 0.01e6,
+          "the MEASURED ADC conversion clock moved: %.3f MHz, expected ~6.146 "
+          "-- re-read section 1, the spans are a board reading"
+          % (s.ADC_CLK_HZ / 1e6))
+
+    # And the relation the doc calls "exactly half, one prescaler step".  It is
+    # an observed coincidence of the two figures above, not a definition, so if
+    # either moves this is the check that says the sentence needs re-reading.
+    check(abs(s.ADC_CLK_HZ - s.ADC_CLK_PREDICTED_HZ / 2) < 0.01e6,
+          "measured %.3f MHz is no longer half the predicted %.3f MHz -- "
+          "section 1 describes the gap as one prescaler step"
+          % (s.ADC_CLK_HZ / 1e6, s.ADC_CLK_PREDICTED_HZ / 1e6))
 
 
 def test_redistribution_is_the_binding_term():
@@ -51,16 +73,26 @@ def test_redistribution_is_the_binding_term():
               % (name, pot / 1e3, label, t["b"] * 1e9, t["c_redist"] * 1e9))
 
 
-def test_libdaisy_default_sampling_window_is_too_short():
-    # docs claim: the hand-written scan must raise SamplingTime above the
-    # SPEED_8CYCLES_5 default in every configuration considered.
+def test_the_libdaisy_default_covers_exactly_the_ten_k_bare_configurations():
+    # Was "too short in every configuration considered", which was true at the
+    # assumed 12.29 MHz clock.  At the measured 6.146 MHz a cycle is twice as
+    # long, so the same 8.5-cycle default window is 1383 ns rather than 692 ns
+    # and it now covers max(B, C) at 10k with nothing fitted at COM -- on both
+    # chips, and on those two configurations only.  Finding 4 in the doc says
+    # exactly that, so the check is an iff: anything that makes the default
+    # sufficient somewhere else, or insufficient at 10k, breaks the sentence.
     default_s = s.LIBDAISY_DEFAULT_CYCLES / s.ADC_CLK_HZ
     for name, chip, pot, c_ext, label in _all_configs():
         t = s.terms(pot, chip, c_ext)
-        check(max(t["b"], t["c_redist"]) > default_s,
-              "%s pot=%.0fk cap=%s: 8.5 cycles (%.0f ns) would already do -- "
-              "the SPEED_16CYCLES_5 recommendation is no longer general"
-              % (name, pot / 1e3, label, default_s * 1e9))
+        covered = max(t["b"], t["c_redist"]) <= default_s
+        expected = (pot == 10e3 and c_ext == 0.0)
+        check(covered == expected,
+              "%s pot=%.0fk cap=%s: the 8.5-cycle default (%.0f ns) %s "
+              "max(B,C)=%.0f ns; finding 4 says it covers 10k/no cap and "
+              "nothing else"
+              % (name, pot / 1e3, label, default_s * 1e9,
+                 "covers" if covered else "does not cover",
+                 max(t["b"], t["c_redist"]) * 1e9))
 
 
 def test_a_capacitor_at_com_never_helps():
@@ -98,12 +130,22 @@ def test_ten_k_sweeps_inside_one_audio_block():
               "fits in one block' claim is gone" % (name, r["blocks"]))
 
 
-def test_fifty_k_is_where_the_16_to_1_falls_over():
-    # Why the pot value is a real decision and not a detail.
-    r = s.sweep(s.CHIPS["74HC4067 (16:1)"], 50e3, 0.0)
-    check(r["blocks"] is None or r["blocks"] > 1.0,
-          "74HC4067 at 50k/no cap now fits in %.2f of a block -- the pot-value "
-          "ceiling in the doc is wrong" % (r["blocks"] or 0.0))
+def test_one_hundred_k_is_where_the_16_to_1_falls_over():
+    # Why the pot value is a real decision and not a detail.  The cliff was at
+    # 50k while the ADC clock was assumed to be 12.29 MHz; at the measured
+    # 6.146 MHz every ladder rung covers twice as much time, 50k drops from
+    # 387.5 cycles to 64.5, and the cliff moves one pot value up.  Both sides
+    # are checked, because the doc now makes both statements.
+    fifty = s.sweep(s.CHIPS["74HC4067 (16:1)"], 50e3, 0.0)
+    hundred = s.sweep(s.CHIPS["74HC4067 (16:1)"], 100e3, 0.0)
+    check(fifty["blocks"] is not None and fifty["blocks"] < 1.0,
+          "74HC4067 at 50k/no cap no longer fits in one block (%s) -- finding 2 "
+          "says it fits, with almost nothing left"
+          % ("no window long enough" if fifty["blocks"] is None
+             else "%.2f blocks" % fifty["blocks"]))
+    check(hundred["blocks"] is None or hundred["blocks"] > 1.0,
+          "74HC4067 at 100k/no cap now fits in %.2f of a block -- the pot-value "
+          "ceiling in the doc is wrong" % (hundred["blocks"] or 0.0))
 
 
 def test_eight_to_one_costs_fewer_steps_than_sixteen_to_one():

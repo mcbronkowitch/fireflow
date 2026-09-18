@@ -421,9 +421,18 @@ invisible from reading the scripts, and each cost real time.
   guards or it hides the faults it is meant to find — see the `Span` validity
   conditions and the red-proof in `tests/test_coupon_expect.cpp`.
 
-- **The ADC kernel clock is 6.146 MHz, not the 12.29 MHz `settle-budget.md` §1
-  assumes — exactly half.** Measured 2026-09-17 by the settle probe, and the
-  measurement is cheap enough that nobody should ever assume it again: run the
+- **The clock the ADC counts its own cycles in is 6.146 MHz, not the 12.29 MHz
+  `settle-budget.md` §1 assumed — exactly half.** That is the *conversion*
+  clock, and naming it precisely matters: the measurement below is taken
+  downstream of both PLL3R and the prescaler, so it cannot say which of the two
+  carries the factor of two. Whether PLL3R delivers 12.29 MHz instead of the
+  24.58 MHz its dividers predict, or the prescaler divides by more than 2, is
+  unmeasured — do not "correct" either one to make the arithmetic come out.
+  (An earlier version of this entry called the measured figure the ADC *kernel*
+  clock, which claims more than was measured.)
+
+  Measured 2026-09-17 by the settle probe, and the measurement is cheap enough
+  that nobody should ever assume it again: run the
   same conversion at two sampling times and the difference in elapsed core
   cycles is *purely* ADC cycles, because every fixed overhead cancels. At
   `ADC_SAMPLETIME_16CYCLES_5` and `ADC_SAMPLETIME_387CYCLES_5` the DWT spans
@@ -432,8 +441,10 @@ invisible from reading the scripts, and each cost real time.
 
   Everything derived from the assumed clock is wrong by 2×: one ADC cycle is
   162.7 ns, not 81.4, and a 16.5 + 8.5 = 25-cycle conversion takes 4068 ns, not
-  2034. `docs/hardware/settle-budget.md` §1 carries the wrong figure and every
-  number downstream of it inherits the error.
+  2034. `docs/hardware/settle-budget.md` §1 carried the wrong figure and every
+  number downstream of it inherited the error; both were corrected on
+  2026-09-18, and what the coupon went on to measure with the corrected
+  instrument is `docs/hardware/settle-measured.md`.
 
   This cost most of an evening in a shape worth recognising: the probe
   subtracted the assumed conversion time from its measured span and reported

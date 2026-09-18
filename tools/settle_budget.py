@@ -6,6 +6,12 @@ turns 5b from a bisection search into a yes/no confirmation with a predicted
 number.  Everything here is a single-pole RC model.  What it cannot see is
 listed in docs/hardware/settle-budget.md under "What the model cannot see".
 
+ONE constant below is no longer calculated: the ADC conversion clock was
+measured on the test coupon on 2026-09-17 and came out at half the value this
+file used to derive from PLL3's dividers.  See ADC_CLK_HZ.  What the bench said
+about the model's predictions is docs/hardware/settle-measured.md; the model
+itself has still never been on a bench.
+
 Three terms have to fit before a multiplexed channel's value is trustworthy:
 
   A  node settle     after the address changes, the COM node slews from the old
@@ -28,13 +34,43 @@ Guard:            python test_settle_budget.py
 """
 import math
 
-# --- ADC timing, derived from the libDaisy sources in this repo ---------------
-# lib/libDaisy/src/sys/system.cpp:494-499 (PLL3) and :515 (ADC clock source),
-# lib/libDaisy/src/per/adc.cpp:229 (prescaler), adc.h:45-59 (speeds, default).
+# --- ADC timing: one derivation, one measurement, and they disagree by 2x -----
+#
+# DERIVED -- the prediction, kept because it is what the sources say and it is
+# how anyone reading libDaisy will arrive at a number: PLL3 (M=6, N=295, R=32)
+# on the 16 MHz HSE in lib/libDaisy/src/sys/system.cpp:494-499, selected as the
+# ADC clock source at :515, then ADC_CLOCK_ASYNC_DIV2 in
+# lib/libDaisy/src/per/adc.cpp:229.  That gives a 24.58 MHz kernel and a
+# 12.29 MHz conversion clock.  It is not what the board does.
+#
+# MEASURED -- 2026-09-17, on the test coupon, by shell/settle_probe.cpp: the
+# same single conversion run at two sampling times, where the difference in
+# elapsed core cycles is PURELY ADC cycles because every fixed overhead cancels.
+# ADC_SAMPLETIME_16CYCLES_5 and ADC_SAMPLETIME_387CYCLES_5 spanned 2311 and
+# 31286 DWT core cycles over 371 ADC cycles at the 480 MHz core clock, i.e.
+# 78.10 core cycles per ADC cycle: 6.146 MHz, exactly half the prediction.  The
+# spans are carried here rather than a rounded "6.146e6" so the derivation stays
+# reproducible from the board reading.  (A later capture read 31287 instead of
+# 31286 -- 0.004 % on the derived clock; no rung boundary in this file moves.)
+#
+# WHAT THE MEASUREMENT DOES NOT SAY.  It constrains the clock the ADC's own
+# cycles are counted in -- the conversion clock, which is the only ADC clock
+# anything below needs -- and nothing else.  Whether PLL3R actually delivers
+# 12.29 MHz rather than the 24.58 MHz its divider arithmetic predicts, or
+# whether the prescaler divides by more than 2, cannot be separated from a
+# measurement taken downstream of both.  Do not "correct" either line above to
+# make the factor of 2 come out: nobody has measured which of them carries it.
 HSE_HZ = 16e6                                   # Daisy: 16 MHz crystal
 PLL3_M, PLL3_N, PLL3_R = 6, 295, 32
 ADC_KERNEL_HZ = HSE_HZ / PLL3_M * PLL3_N / PLL3_R   # RCC_ADCCLKSOURCE_PLL3
-ADC_CLK_HZ = ADC_KERNEL_HZ / 2                      # ADC_CLOCK_ASYNC_DIV2
+ADC_CLK_PREDICTED_HZ = ADC_KERNEL_HZ / 2            # ADC_CLOCK_ASYNC_DIV2
+
+CLK_CORE_HZ = 480e6              # core clock the DWT counts in
+CLK_SPAN_SHORT_CYC = 2311.0      # core cycles, one conversion @ 16.5 sampling
+CLK_SPAN_LONG_CYC = 31286.0      # core cycles, one conversion @ 387.5 sampling
+CLK_DELTA_ADC_CYC = 371.0        # 387.5 - 16.5 sampling cycles
+ADC_CLK_HZ = (CLK_CORE_HZ * CLK_DELTA_ADC_CYC
+              / (CLK_SPAN_LONG_CYC - CLK_SPAN_SHORT_CYC))
 CONVERSION_CYCLES = 8.5              # STM32H7 RM: 16-bit conversion
 SAMPLING_CYCLES = [1.5, 2.5, 8.5, 16.5, 32.5, 64.5, 387.5, 810.5]
 LIBDAISY_DEFAULT_CYCLES = 8.5        # AdcChannelConfig::SPEED_8CYCLES_5
@@ -136,9 +172,11 @@ COM_CAPS = ((0.0, "none"), (100e-12, "100pF"), (1e-9, "1nF"))
 
 
 def main():
-    print("ADC kernel clock  %7.2f MHz  (PLL3R, system.cpp)"
-          % (ADC_KERNEL_HZ / 1e6))
-    print("ADC clock         %7.2f MHz  (/2, adc.cpp:229)" % (ADC_CLK_HZ / 1e6))
+    print("ADC conv clock    %7.3f MHz  (MEASURED, coupon 2026-09-17)"
+          % (ADC_CLK_HZ / 1e6))
+    print("  predicted was   %7.2f MHz  (PLL3R %.2f MHz /2, adc.cpp:229) "
+          "-- wrong by 2x"
+          % (ADC_CLK_PREDICTED_HZ / 1e6, ADC_KERNEL_HZ / 1e6))
     print("libDaisy default  %7.0f ns   (%.1f cycles, adc.h)"
           % (LIBDAISY_DEFAULT_CYCLES / ADC_CLK_HZ * 1e9, LIBDAISY_DEFAULT_CYCLES))
     print("audio block       %7.0f us   (96 @ 48k)" % (BLOCK_SECONDS * 1e6))

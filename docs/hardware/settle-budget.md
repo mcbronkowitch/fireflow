@@ -1,9 +1,24 @@
 # The settle-time budget — calculated
 
-> **This document is arithmetic, not a measurement, and the probe rule applies
-> to it in full.** Nothing here has been on a bench. It does not close Phase-0
-> Task 6 step 5b; it turns 5b from a bisection search into a **yes/no
-> confirmation with a predicted number**, which is a much cheaper experiment.
+> **This document is arithmetic, and the probe rule applies to it in full.** The
+> model is a single-pole RC calculation and it has never been on a bench. It
+> does not close Phase-0 Task 6 step 5b; it turns 5b from a bisection search
+> into a **yes/no confirmation with a predicted number**, which is a much
+> cheaper experiment.
+>
+> **The bench answer now exists, in a document of its own:**
+> [`settle-measured.md`](settle-measured.md) — what the test coupon said on
+> 2026-09-17, which of the predictions below it confirms, and which it breaks.
+> The two are kept apart on purpose: this one stays the model, that one is the
+> measurement.
+>
+> **One constant here is no longer calculated.** The ADC conversion clock in §1
+> was measured on the coupon and came out at **half** the figure this document
+> derived from PLL3's dividers. Corrected 2026-09-18; every sampling window in
+> §3 and every duration derived from one moved with it, and §4's findings 2 and
+> 4 were rewritten rather than renumbered. The RC terms in §2 do not depend on
+> the clock and did not move.
+>
 > Every number below comes out of [`tools/settle_budget.py`](../../tools/settle_budget.py),
 > guarded by `tools/test_settle_budget.py`, so it is reproducible rather than
 > quotable:
@@ -12,6 +27,9 @@
 > python settle_budget.py        # from tools/
 > python test_settle_budget.py
 > ```
+>
+> Neither script is wired to a runner — `tools/` has none in this repo — so they
+> are run by hand after any edit to either.
 >
 > Written 2026-08-30, after the question "isn't this documented somewhere?" —
 > and the answer to that question is finding 0 below.
@@ -43,15 +61,16 @@ the reason one would guess.
 
 ## 1. Where each constant comes from
 
-The distinction matters more than the values: two of these are read out of the
-sources in this repo, two are datasheet tables, and three are estimates that the
-model is deliberately built to be insensitive to.
+The distinction matters more than the values: one is measured on the board, one
+is read out of the sources in this repo *and is wrong*, one is derived from the
+first, and the rest are datasheet tables and three estimates that the model is
+deliberately built to be insensitive to.
 
 | Constant | Value | Source | Class |
 |---|---|---|---|
-| ADC kernel clock | 24.58 MHz | PLL3 M=6 N=295 R=32 on 16 MHz HSE, [`system.cpp:494`](../../lib/libDaisy/src/sys/system.cpp:494), source selected at `:515` | read from this repo |
-| ADC clock | 12.29 MHz | `ADC_CLOCK_ASYNC_DIV2`, [`adc.cpp:229`](../../lib/libDaisy/src/per/adc.cpp:229) | read from this repo |
-| Sampling window (default) | 692 ns | `SPEED_8CYCLES_5`, [`adc.h:59`](../../lib/libDaisy/src/per/adc.h:59) | read from this repo |
+| **ADC conversion clock** | **6.146 MHz** | **measured** on the test coupon 2026-09-17 by `shell/settle_probe.cpp`: one conversion at two sampling times, 2311 against 31286 core cycles over 371 ADC cycles at a 480 MHz core | measured |
+| ADC clock, *predicted* | 12.29 MHz | PLL3 M=6 N=295 R=32 on 16 MHz HSE, [`system.cpp:494`](../../lib/libDaisy/src/sys/system.cpp:494), source selected at `:515`, gives a 24.58 MHz kernel; then `ADC_CLOCK_ASYNC_DIV2`, [`adc.cpp:229`](../../lib/libDaisy/src/per/adc.cpp:229) | read from this repo — **and falsified** |
+| Sampling window (default) | 1383 ns | `SPEED_8CYCLES_5`, [`adc.h:59`](../../lib/libDaisy/src/per/adc.h:59), at the measured clock | derived |
 | Conversion | 8.5 cycles | STM32H7 RM, 16-bit | datasheet |
 | `C_COM`, 74HC4067 | 50 pF | CD74HC4067 datasheet (TI/Harris SCHS209), "Common Capacitance" | datasheet, verbatim |
 | `C_COM`, 74HC4051 | 25 pF | CD74HC4051 datasheet | datasheet |
@@ -59,6 +78,24 @@ model is deliberately built to be insensitive to.
 | Stray capacitance | 15 pF | **estimate.** MCU pin + PCB trace, not measured | estimate |
 | `C_ADC` | 4 pF | ST, STM32H7 sample-and-hold | datasheet |
 | `R_ADC` | 2 kΩ | ST community figure for slow channels, **not datasheet-verbatim** | estimate |
+
+**The clock is the one place where reading the sources was not enough.** The two
+rows disagree by exactly a factor of two, and the measurement is what decides
+between them: running the same conversion at two sampling times makes the
+difference in elapsed core cycles *purely* ADC cycles, because every fixed
+overhead cancels. That costs one extra pass at boot and it is why the figure
+should never be assumed again.
+
+**Be careful what the measurement is taken to prove.** It constrains the clock
+the ADC's own cycles are counted in — the conversion clock, which is the only
+one this document needs — and nothing beyond that. Whether PLL3R really delivers
+12.29 MHz instead of the 24.58 MHz its divider arithmetic predicts, or whether
+the prescaler divides by more than 2, **cannot be separated from a measurement
+taken downstream of both.** One prescaler step is the tidiest explanation of the
+gap; it is not a measured one, and neither line above is to be "corrected" to
+make the arithmetic come out. What that error cost, and the shape of it — a
+constant the instrument could have measured, sitting beside the instrument as a
+literal — is in [`docs/gotchas.md`](../gotchas.md).
 
 Two of the three estimates cannot hurt much, and that is by construction:
 
@@ -108,19 +145,26 @@ Sampling window auto-picked as the smallest libDaisy `SPEED_*` that covers
 
 | pot | 74HC4051 (8:1, 24 steps) | 74HC4067 (16:1, 32 steps) |
 |---|---|---|
-| **10 k** | 16.5 cy · **218 µs** · 0.11 block | 16.5 cy · **310 µs** · 0.16 block |
-| **20 k** | 32.5 cy · 365 µs · 0.18 block | 32.5 cy · 524 µs · 0.26 block |
-| 50 k | 64.5 cy · 680 µs · 0.34 block | 387.5 cy · 4361 µs · **2.18 blocks** |
-| 100 k | 387.5 cy · 3310 µs · 1.66 blocks | 387.5 cy · 4595 µs · **2.30 blocks** |
+| **10 k** | 8.5 cy · **289 µs** · 0.14 block | 8.5 cy · **404 µs** · 0.20 block |
+| **20 k** | 16.5 cy · 435 µs · 0.22 block | 16.5 cy · 617 µs · 0.31 block |
+| 50 k | 32.5 cy · 750 µs · 0.37 block | 64.5 cy · 1757 µs · **0.88 block** |
+| 100 k | 64.5 cy · 1358 µs · 0.68 block | 387.5 cy · 8719 µs · **4.36 blocks** |
 
 What a capacitor at `COM` costs, at 10 kΩ:
 
 | C at COM | 74HC4051 | 74HC4067 |
 |---|---|---|
-| none | 218 µs | 310 µs |
-| 100 pF | 401 µs | 553 µs |
-| 1 nF | 3689 µs | 4938 µs |
-| 1 nF at a 100 k pot | *no libDaisy sampling window is long enough* | *same* |
+| none | 289 µs | 404 µs |
+| 100 pF | 471 µs | 647 µs |
+| 1 nF | 1736 µs | 2334 µs |
+| 1 nF at a 100 k pot | 18449 µs · 9.22 blocks | 24780 µs · 12.39 blocks |
+
+That last row used to read *"no libDaisy sampling window is long enough"*, and
+the halved clock is why it no longer does: every rung of the ladder covers twice
+as much time, so the longest one (810.5 cycles, 132 µs) now reaches the 90–92 µs
+those two configurations need. Buildable at a dozen audio blocks per sweep is
+not an improvement worth having — the row moved from impossible to merely
+absurd — but the model no longer reports an impossibility that is not there.
 
 ## 4. What it says
 
@@ -134,8 +178,15 @@ linearly with the capacitance while the dip it suppresses shrinks only
 logarithmically.
 
 **2. The pot value is a real design decision with a hard ceiling, and it lands
-on 10 k.** At 50 k the 16:1 falls off a cliff, because term C forces the
-sampling window from 64.5 to 387.5 cycles and the step cost multiplies. The
+on 10 k.** At 100 k the 16:1 falls off a cliff, because term C forces the
+sampling window from 64.5 to 387.5 cycles and the step cost multiplies: 0.88 of
+a block at 50 k, 4.36 blocks at 100 k. *(That cliff sat at 50 k until the ADC
+clock was measured. At half the clock every rung of the ladder covers twice as
+much time, 50 k drops from 387.5 cycles to 64.5, and the ceiling moves one pot
+value up. The 10 k conclusion does not depend on it — the argument between 10 k
+and 20 k was never about timing, both being well inside a block either way.)*
+Even where it fits, the 16:1 at 50 k spends 0.88 of an audio block on one sweep
+against the 8:1's 0.37, which is not a budget to plan a panel around. The
 price of 10 k is current: 65 pots at 3.3 V/10 k is **~21 mA** standing on the
 3V3 rail (20 k → ~11 mA) — which was the only argument for 20 k, and it does not
 hold. The Patch SM datasheet (v1.0.5, Table 1, *Absolute Maximum Ratings*) gives
@@ -165,10 +216,21 @@ stops being true. This is also the explanation for libDaisy's discarded
 conversion: the S&H cap carrying the previous channel's charge is the actual
 problem, not the ADC's charging time.
 
-**4. The libDaisy default of 8.5 cycles is too short in every case.** The
-hand-written scan needs at least `SPEED_16CYCLES_5`, and 32.5 at 20 kΩ. This is
-a concrete firmware setting that came out of the paper round rather than out of
-bring-up.
+**4. The libDaisy default of 8.5 cycles is exactly enough at 10 kΩ with nothing
+fitted at `COM`, and too short everywhere else.** At the measured clock that
+default window is 1383 ns rather than 692, and the auto-pick lands on it for
+both chips at 10 k — the only two configurations in the table where it does. At
+20 kΩ the scan needs `SPEED_16CYCLES_5`, at 50 kΩ 32.5 or 64.5 cycles, and any
+capacitor at `COM` pushes it up a rung as well.
+
+*This finding read "too short in every case" until the clock was measured, which
+is the most direct thing the correction changed: the recommendation that came
+out of the paper round was an artifact of a constant nobody had checked.* And
+the margin it now leaves is not one to lean on — 1383 ns of window against the
+1127 ns the 16:1 needs at 10 k, on a term that is linear in the node
+capacitance, of which 15 pF is an estimate nobody has measured (§5). If that
+margin is not wanted, the rung above is affordable: the 20 kΩ row runs its whole
+sweep at 16.5 cycles for 617 µs, still under a third of a block.
 
 **5. Timing does not decide 8:1 against 16:1.** The 4051 wins twice — half the
 `C_COM`, *and* fewer steps per sweep, because nine chips distribute over four
@@ -183,9 +245,10 @@ computes "~15.6 Hz per channel" for a full sweep. That figure is correct for
 what was measured — the probe deliberately paced **one step per audio block**,
 and it is labelled as arithmetic there, not as a measurement. But it is not a
 property of the design: at 10 kΩ a **complete** sweep of all 65 channels fits in
-0.16 of one block, so the ceiling is the block rate itself, **~500 Hz per
-channel**, about 32× the figure that has been carried around. The capture is
-left as written; it is an honest record of its own experiment.
+0.20 of one block on the 16:1 (0.14 on the 8:1), so the ceiling is the block
+rate itself, **~500 Hz per channel**, about 32× the figure that has been carried
+around. The capture is left as written; it is an honest record of its own
+experiment.
 
 **The model reproduces the only settle number that already existed in the
 repo.** Phase-0 Task 6 step 5 says a 10 nF capacitor at `COM` makes τ ≈ 26 µs;
@@ -203,9 +266,11 @@ the bench is what covers them:
   extremes — and it is the failure the model is blindest to.
 - **Charge injection** from the address switching itself.
 - **The stray capacitance**, at 15 pF an estimate and the one estimate that
-  scales the result linearly. At 10 kΩ there is a factor of 6 of headroom inside
-  a block, so the layout would have to be far worse than assumed before the
-  topology is in danger — but the *number* would move.
+  scales the result linearly. At 10 kΩ there is a factor of 5 of headroom inside
+  a block on the 16:1 (7 on the 8:1), so the layout would have to be far worse
+  than assumed before the topology is in danger — but the *number* would move,
+  and since the clock correction it is also what decides whether the 8.5-cycle
+  default still covers term C at 10 kΩ (finding 4).
 - **Anything about the audio artifact.** The 500 Hz series
   ([`2026-08-23-978cbaf-artifact-triage.md`](../bench/2026-08-23-978cbaf-artifact-triage.md))
   is a separate question and this document says nothing about it.
@@ -218,14 +283,33 @@ the bench is what covers them:
 Not a bisection search from 50 µs downward, but a prediction to confirm or
 break:
 
-> At a 10 kΩ pot, nothing fitted at `COM`, and `SPEED_16CYCLES_5`, a channel
+> At a 10 kΩ pot, nothing fitted at `COM`, and `SPEED_8CYCLES_5`, a channel
 > change must read clean **1.6 µs** after the address is written, with the two
 > neighbouring channels held at opposite extremes.
+
+(The 1.6 µs is term A at 10 kΩ, which is pure RC and did not move with the
+clock. The sampling window in it did: this used to say `SPEED_16CYCLES_5`, see
+finding 4.)
 
 If it does, the topology is settled and the remaining question is only 8:1
 against 16:1 on price. If it does not, the gap between prediction and
 measurement names which of the three estimates in §1 was wrong — which is worth
 more than a bare number.
+
+**This has now been run, and it neither confirmed nor broke the prediction in
+the shape it was written.** [`settle-measured.md`](settle-measured.md) carries
+the run. Two things it settles about this section. First, the coupon never
+measured a 2650 Ω step, so the 1.6 µs above has no direct counterpart in it; the
+three steps it did resolve are all at 5150 Ω (two on the 4067, one on the 4051)
+and came in at **1.3–1.5× their predicted settle**, coherently rather than as
+scatter, so the model appears to
+underestimate — if that factor carries to 2650 Ω, which is an extrapolation and
+not a measurement, this prediction would land nearer 2.0–2.4 µs. Second, and
+more usefully, **"read clean" turned out to be the part that does not hold**: on
+that board a multiplexer channel cannot be read to half an LSB of 12 bit at any
+delay, because the residual wander in the settled region is 9–12 counts against
+an 8-count criterion. A prediction phrased as a settling time was answered by a
+limit on repeatability.
 
 **Where it gets confirmed is the test coupon, not a breadboard**, decided the
 same day this was written. The reason is the model itself: it is **linear in the
