@@ -166,6 +166,56 @@ static void AudioCallback(daisy::AudioHandle::InputBuffer  in,
 #endif
 }
 
+// libDaisy brings every ADC channel up at SPEED_8CYCLES_5 -- the default of
+// AdcChannelConfig::InitSingle(), which DaisyPatchSM::Init() takes without
+// asking (daisy_patch_sm.cpp:319) and offers no way to override.
+//
+// Measured on the coupon, 2026-09-18: at that window a 5150 ohm source -- a
+// 20k pot at mid travel -- reads 19 counts low, and SPEED_16CYCLES_5 recovers
+// 18 of them. Nothing longer buys anything, and that is the half of the
+// measurement worth having: 31736 counts at 16.5 cycles against 31738 at
+// 387.5, over a 23x range of window, is the reading standing still. The full
+// ladder is in docs/hardware/settle-measured.md section 7. The error is small
+// -- about 1.2 LSB of 12 bit -- but it is systematic and in the same direction
+// for every pot on the panel, and it costs one rung to remove.
+//
+// Re-initialising after Init() rather than patching the submodule: the pin set
+// and its ORDER are repeated verbatim from daisy_patch_sm.cpp:303-317, because
+// AdcHandle::GetPtr(i) hands out &dma_buffer[i] (per/adc.cpp:401) and the
+// AnalogControls bound during Init() keep those pointers. The array is static,
+// so the addresses survive a re-Init -- but reorder the pins here and every
+// control silently reads a different pin.
+//
+// Not in bench::board_init(), although that is where the rest of the board
+// setup lives: the bench compares CPU numbers against a history of runs, and a
+// longer conversion means more DMA traffic beside the measured workload. The
+// shipping firmware is where this belongs; the measuring tool keeps the board
+// it has always had.
+#if defined(BENCH_BOARD_PATCH_SM)
+static void adc_use_measured_sampling_time(bench::Board& board)
+{
+    using daisy::AdcChannelConfig;
+    constexpr int kAdcCount = daisy::patch_sm::ADC_LAST;
+
+    const daisy::Pin pins[kAdcCount] = {
+        daisy::patch_sm::DaisyPatchSM::C5, daisy::patch_sm::DaisyPatchSM::C4,
+        daisy::patch_sm::DaisyPatchSM::C3, daisy::patch_sm::DaisyPatchSM::C2,
+        daisy::patch_sm::DaisyPatchSM::C9, daisy::patch_sm::DaisyPatchSM::C8,
+        daisy::patch_sm::DaisyPatchSM::C6, daisy::patch_sm::DaisyPatchSM::C7,
+        daisy::patch_sm::DaisyPatchSM::A2, daisy::patch_sm::DaisyPatchSM::A3,
+        daisy::patch_sm::DaisyPatchSM::D9, daisy::patch_sm::DaisyPatchSM::D8,
+    };
+
+    AdcChannelConfig cfg[kAdcCount];
+    for(int i = 0; i < kAdcCount; ++i)
+        cfg[i].InitSingle(pins[i], AdcChannelConfig::SPEED_16CYCLES_5);
+
+    board.StopAdc();
+    board.adc.Init(cfg, kAdcCount);
+    board.StartAdc();
+}
+#endif
+
 int main(void)
 {
     // Takt, Caches, SDRAM und das Audioformat, dazu der boot_info-Stempel,
@@ -175,6 +225,12 @@ int main(void)
     // beiden je eine eigene Init-Sequenz, waere jeder Vergleich zwischen
     // ihren Zahlen wertlos.
     bench::board_init(hw);
+
+#if defined(BENCH_BOARD_PATCH_SM)
+    // Right after the board is up and before anything reads a control: the
+    // ADC is already converting by then, so this is a restart, not a setup.
+    adc_use_measured_sampling_time(hw);
+#endif
 
     // REIHENFOLGE: erst board_init(), dann init(). fx_mem() selbst ist reine
     // Zeigerarbeit, aber Instrument::init() laeuft bis in TapeEcho::Init und
