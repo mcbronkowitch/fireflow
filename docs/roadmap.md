@@ -3681,7 +3681,8 @@ scatter, and — worth more than the settle time — that on this board a settle
 multiplexer channel **does not hold still**. The criterion is met, every
 per-point mean past the knee sitting inside half an LSB of 12 bit of its own
 reference; what the board does not deliver is a settled region tighter than
-that, and it wanders 8–12 counts peak to peak however long the delay. The limit
+that, and it wanders 8–12 counts peak to peak, still doing so at the end of the
+12.8 µs grid the probe looked over. The limit
 is repeatability, not settling time. One board, two sessions; §8 of that
 document says what would strengthen it.
 

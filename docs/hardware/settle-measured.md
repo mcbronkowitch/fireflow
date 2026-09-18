@@ -140,7 +140,7 @@ that distinction is the point of having gates at all.
 |---|---|---|
 | **G1** reference pairs | both 0 Ω pairs must settle by the first grid step or the next (≤ 200 ns commanded) | a run in which the instrument's own zero is not fast — if a 0 Ω step takes measurable time, the offset subtraction in §1 is a guess and every other knee is built on it |
 | **G2** floor | the spread of the reference pair's 64 settled conversions, `b0`, must be 0…64 counts | a run whose conversion noise is large enough that the *mean* of 64 repeats is no longer decisively inside the 8-count criterion |
-| **G3** settled-region agreement | max − min of the per-point **means**, from each pair's own knee onward, ≤ 8 counts | a curve whose settled region does not actually hold still to the precision the knee claims. It is evaluated only *after* the knee: before the knee a wide band is physics, because aperture jitter times a moving node is voltage |
+| **G3** settled-region agreement | max − min of the per-point **means**, from each pair's own knee onward, ≤ 8 counts | a curve whose settled region is not held to within *half* the band the knee rule already allows — a deliberately stricter test than the criterion, not a restatement of it (see below). It is evaluated only *after* the knee: before the knee a wide band is physics, because aperture jitter times a moving node is voltage |
 | **G4** instrument jitter | `lat_max − lat_min` ≤ one grid step (200 ns), and the latency mean not negative | a run whose aperture jitter is coarser than the grid it is reading, and a run whose conversion-time subtraction came out larger than the span it was subtracted from |
 
 G1, G2 and G4 pass. **G3 fails** — and what that does and does not say is §5.
@@ -202,7 +202,7 @@ offset; the model column is `settle-budget.md`'s prediction as carried in
 `kSettlePlan`; the ratio is derived from the two. A six-block repeat a day
 later follows below and does not replace this table.
 
-| pair | step | R_src | offset | knee, asc / desc | **true settle** | model | ratio |
+| pair | step | R_src | offset | knee, desc / asc | **true settle** | model | ratio |
 |---|---|---:|---:|---:|---:|---:|---:|
 | P1 | `R_LO2` (AGND) → `REF_A`, 4067 | 5150 Ω | 1154 ns | 2800 / 3000 ns | **3954 / 4154 ns** | 3016 ns | 1.31 / 1.38 |
 | P2 | `R_HI2` (A+3V3) → `REF_A`, 4067 | 5150 Ω | 1154 ns | 3000 / 2800 ns | **4154 / 3954 ns** | 3016 ns | 1.38 / 1.31 |
@@ -287,8 +287,8 @@ P0 and P5 sit flat.
 ## 5. The result worth more than a settle time
 
 **On this board a multiplexer channel settles to half an LSB of 12 bit — and
-then keeps wandering across about that same band for as long as you keep
-looking.**
+then keeps wandering across about that same band for the rest of the grid,
+still doing it 12.8 µs after the address changed.**
 
 Measured (`SHELL_SETTLE_BAND`, field `settled_mean_spread`, six consecutive
 blocks on 2026-09-18, both sweep directions): the settled-region mean spread —
@@ -377,9 +377,16 @@ curve it explains.
 The probe therefore alternates direction every block. Measured, two consecutive
 blocks:
 
-- ascending: P1 2800, P2 3000, P4 1600 ns
-- descending: P1 3000, P2 2800, P4 1600 ns
+- descending (`sweep_dir=1`): P1 2800, P2 3000, P4 1600 ns
+- ascending (`sweep_dir=0`): P1 3000, P2 2800, P4 1600 ns
 - P0, P3, P5 at or below their offset in **both** directions
+
+(Those two labels were the other way round in this document until 2026-09-18,
+and in §4's table with them. The firmware prints `sweep_dir = ascending ? 0 : 1`
+and a `sweep_dir=1` block's rows arrive at d = 12800 ns first, both checked in
+the source and in a capture — so `sweep_dir=1` is the descending one. Only the
+labels moved; no measured value did, and nothing either section concludes turns
+on which branch is which.)
 
 **Both directions agree to within one grid step.** The curve is a function of
 the commanded delay and not of wall-clock time; the drift the pre/post pair
@@ -388,7 +395,7 @@ detected is a small additive term, not the shape. The settling is real.
 **The 2026-09-18 repeat keeps that conclusion and takes something else away.**
 Its six blocks alternate direction too, so each direction has three. P1's knee
 scatters by four grid steps across the six — and it scatters *within* each
-direction (3400, 4000, 3600 ascending; 3200, 3600, 3200 descending), with the
+direction (3400, 4000, 3600 descending; 3200, 3600, 3200 ascending), with the
 two directions' ranges overlapping. So the scatter is not direction-dependent
 and this section's ruling stands. What no longer stands is reading "both
 directions agree to within one grid step" as a statement about the knee's
@@ -501,7 +508,8 @@ What would strengthen it, roughly in order of what each buys:
   holds: past the knee, every per-point mean on every pair is inside 8 counts
   of its own reference. What the prediction did not anticipate is that "clean"
   would turn out not to mean *still*: the settled region wanders 8–12 counts
-  peak to peak and keeps doing so however long you wait (§5). A model phrased
+  peak to peak, and is still doing it at the end of the 12.8 µs grid, which is
+  as far as this instrument looked (§5). A model phrased
   as "after time t the channel is settled" has no term for a settled state that
   is not quiet.
 - **The ADC clock**, which the model derived from PLL3's dividers and this probe
