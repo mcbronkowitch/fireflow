@@ -622,16 +622,17 @@ def main() -> int:
 
     csv = format_csv(block)
     if out:
+        meta = format_meta_csv(block)
         with open(out, "w", encoding="utf-8", newline="") as fh:
             fh.write(csv)
         meta_out = out + ".meta.csv"
         with open(meta_out, "w", encoding="utf-8", newline="") as fh:
-            fh.write(format_meta_csv(block))
+            fh.write(meta)
         print("wrote %s (%d grid points) and %s (%d metadata rows: cfg, rate, "
               "clk, cal, span, gates, G5, the G6 recomputation, every case, "
               "every curve statistic and the static means)"
               % (out, len(block["points"]), meta_out,
-                 len(format_meta_csv(block).strip().split("\n")) - 1),
+                 len(meta.strip().split("\n")) - 1),
               file=sys.stderr)
     else:
         sys.stdout.write(csv)
