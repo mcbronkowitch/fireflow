@@ -193,25 +193,42 @@ add_test(NAME spky_tests COMMAND spky_tests)
 # the host build does not have and must not depend on. tone_plan.h reads
 # SHELL_TONE_DC -- Task 1's measured bench answer -- so the host gets its own
 # one-line header. Its value is DERIVED from shell/Makefile's own
-# `SHELL_TONE_DC ?= 0|1` default line below, by regex, rather than carried as
-# a second hand-copied literal here: two copies of one bit is the exact
-# failure class the codec-tone brief's step 6 warned about (the host and the
-# firmware silently disagreeing about kToneRowCount while each build's own
-# suite stays green), and deriving it removes the second copy instead of
-# just flagging it. A host test of the OTHER branch flips the generated
-# line; the firmware's value always comes from the Makefile switch, never
-# from here.
+# SHELL_TONE_DC default line rather than carried as a second hand-copied
+# literal here: two copies of one bit is the exact failure class the
+# codec-tone brief's step 6 warned about (the host and the firmware silently
+# disagreeing about kToneRowCount while each build's own suite stays green),
+# and deriving it removes the second copy instead of just flagging it.
+#
+# The match is ANCHORED to the start of a line (the pattern is prefixed with
+# a literal newline, so it can never match inside a '#'-prefixed comment)
+# and REQUIRED TO BE UNIQUE: configure fails loudly if zero lines match and
+# equally loudly, with a different message, if two or more do -- an
+# ambiguous match is never resolved by picking the first or the last one.
+# Only when exactly one line matches is its digit trusted. A host test of
+# the OTHER branch flips the generated line; the firmware's value always
+# comes from the Makefile switch, never from here.
 file(READ ${CMAKE_CURRENT_SOURCE_DIR}/shell/Makefile SHELL_MAKEFILE_CONTENTS)
-string(REGEX MATCH "SHELL_TONE_DC[ \t]*\\?=[ \t]*([01])" SHELL_TONE_DC_MATCH
-       "${SHELL_MAKEFILE_CONTENTS}")
-if(NOT SHELL_TONE_DC_MATCH)
+string(REGEX MATCHALL "\nSHELL_TONE_DC[ \t]*\\?=[ \t]*([01])"
+       SHELL_TONE_DC_MATCHES "${SHELL_MAKEFILE_CONTENTS}")
+list(LENGTH SHELL_TONE_DC_MATCHES SHELL_TONE_DC_MATCH_COUNT)
+if(SHELL_TONE_DC_MATCH_COUNT EQUAL 0)
     message(FATAL_ERROR
-        "CMakeLists.txt could not find a 'SHELL_TONE_DC ?= 0' or "
-        "'SHELL_TONE_DC ?= 1' line in shell/Makefile. The host test suite "
-        "derives its SHELL_TONE_DC default from that exact line by regex "
+        "CMakeLists.txt found no 'SHELL_TONE_DC ?= 0' or 'SHELL_TONE_DC ?= "
+        "1' line anchored at the start of a line in shell/Makefile. The "
+        "host test suite derives its SHELL_TONE_DC default from that line "
         "(see the comment above this message in CMakeLists.txt); if "
-        "shell/Makefile's SHELL_TONE_DC default line was reformatted, "
-        "update the regex here to match its new shape.")
+        "shell/Makefile's SHELL_TONE_DC default line was reformatted or "
+        "removed, restore it or update the regex here to match its new "
+        "shape.")
+elseif(NOT SHELL_TONE_DC_MATCH_COUNT EQUAL 1)
+    message(FATAL_ERROR
+        "CMakeLists.txt found ${SHELL_TONE_DC_MATCH_COUNT} lines in "
+        "shell/Makefile anchored at the start of a line and shaped like "
+        "'SHELL_TONE_DC ?= 0' or 'SHELL_TONE_DC ?= 1', and refuses to guess "
+        "which is the real default. The host test suite requires exactly "
+        "one such line (see the comment above this message in "
+        "CMakeLists.txt); remove or reword the extra line(s) so only "
+        "shell/Makefile's actual default assignment matches.")
 endif()
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/host_switches/shell_tone_probe.h
      "#define SHELL_TONE_PROBE 0\n#define SHELL_TONE_DC ${CMAKE_MATCH_1}\n")
