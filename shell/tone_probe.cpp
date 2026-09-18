@@ -274,9 +274,21 @@ struct LevelResult
 // Stopped measurement would report ~100% missed against a check that does
 // not apply to it. G7 only means something while the callback is expected
 // to be alive, i.e. RunningSilent here and Tone in Task 4.
+//
+// `audio_virgin`: true for exactly one pass, taken once per boot before any
+// StartAudio() call anywhere in this image (see run_tone_probe() below) --
+// the only floor comparable to round one's, whose xtalk_probe.cpp never
+// touches audio at all. Every per-block Stopped and RunningSilent call
+// passes false: the per-block Stopped level is reached via StopAudio() on a
+// codec that an EARLIER block has already started and stopped, which is a
+// different history from "never started", and G8 (image floor vs round
+// one's floor, at a 4-count tolerance) must not mix the two. The per-block
+// Stopped level stays -- it is still the right reference for the
+// running-silent DIFFERENCE measured inside the same block -- this flag
+// only marks which lines G8 may read.
 LevelResult measure_level(bench::Board& hw, MuxScan& chain, int block_size, int sr_hz,
                           int case_index, ToneLevel level, const XtalkVictim& v,
-                          uint32_t* missed_blocks)
+                          uint32_t* missed_blocks, bool audio_virgin)
 {
     park_victim(chain, v);
 
@@ -349,11 +361,19 @@ LevelResult measure_level(bench::Board& hw, MuxScan& chain, int block_size, int 
     // all 65 x 64 conversions -- a different scope from n=, exactly as
     // SHELL_XTALK's point line and SHELL_XTALK_STAT's spread differ in
     // scope in round one.
+    //
+    // audio_virgin=%d is appended after the design spec's own field list
+    // (section 8 does not carry it) rather than inserted between existing
+    // fields, so a reader keyed on the spec's names and positions is
+    // unaffected by its presence. Fixed position, last field: Task 6's
+    // reader keys G8 off this and only this.
     hw.PrintLine("SHELL_TONE_LEVEL case=%d level=%d victim_group=%d "
-                 "victim_ch=%d r_src=%d n=%d mean=%d min=%d max=%d",
+                 "victim_ch=%d r_src=%d n=%d mean=%d min=%d max=%d "
+                 "audio_virgin=%d",
                  case_index, static_cast<int>(level), v.group, v.channel,
                  static_cast<int>(v.r_src_ohm), kToneRepeats,
-                 result.p.mean, result.p.min, result.p.max);
+                 result.p.mean, result.p.min, result.p.max,
+                 audio_virgin ? 1 : 0);
     hw.PrintLine("SHELL_TONE_STAT case=%d settled_mean_spread=%d "
                  "widest_sample_band=%d",
                  case_index, result.settled_mean_spread, result.widest_sample_band);
@@ -400,14 +420,47 @@ void run_tone_probe(bench::Board& hw)
     const probe_adc::Clock clk
         = probe_adc::measure_clock(kRepeats, probe_adc::channel_of_group(v0.group));
 
+    // --- The boot-virgin floor: G8's actual reference ---
+    //
+    // Taken ONCE, right here, before ANY StartAudio() call anywhere in this
+    // image -- the audio subsystem has never been started, which is round
+    // one's own condition (xtalk_probe.cpp never calls StartAudio at all).
+    // StopAudio() is deliberately NOT called first: calling it would still
+    // be the first audio-related HAL call this boot, and skipping it keeps
+    // this pass provably untouched rather than "probably a no-op" (see
+    // task-3-report.md's fix-round note on whether Stop() before Start() is
+    // a no-op on this board -- unmeasured this session).
+    //
+    // Printed with audio_virgin=1 on SHELL_TONE_LEVEL/SHELL_TONE_STAT; every
+    // other SHELL_TONE_LEVEL line in this image prints audio_virgin=0. G8 is
+    // an image-vs-image comparison at a 4-count tolerance and must read only
+    // the audio_virgin=1 lines -- see "Controller decisions" in
+    // task-3-report.md for why the per-block Stopped level (StopAudio()
+    // called on a codec an earlier block already started and stopped) is
+    // not the same floor and is kept for a different purpose.
+    for(int v = 0; v < kXtalkVictims; ++v)
+    {
+        (void)measure_level(hw, chain, block_size, sr_hz, v, ToneLevel::Stopped,
+                            kXtalkVictimTable[v], nullptr, true);
+    }
+
     while(1)
     {
         // The configuration line: block_size and sr are READ from the board,
         // never assumed -- see the comment above. adc_khz is the measured
-        // clock, not the nominal one.
-        hw.PrintLine("SHELL_TONE_CFG adc_khz=%d repeats=%d block_size=%d sr=%d git=%s",
-                     clk.measured_adc_khz, kToneRepeats, block_size, sr_hz,
-                     SHELL_GIT_HASH);
+        // clock, not the nominal one. phase_points is Task 2's kTonePhasePoints
+        // -- a compile-time constant, known now even though Task 4 is what
+        // walks the grid. rv4 is a literal 0, not a placeholder: this image
+        // runs no rv4-dependent case (row 6 of kXtalkPlan is the only one,
+        // and this plan's window cases point at row 3), the same reason
+        // Task 1's image printed the same literal. Field list and order are
+        // the design spec's (section 8), not the task brief's -- the brief
+        // did not give this line verbatim and undercounted it; Task 6's
+        // reader parses by name and a missing field is a parse it cannot do.
+        hw.PrintLine("SHELL_TONE_CFG adc_khz=%d repeats=%d phase_points=%d "
+                     "block_size=%d sr=%d rv4=%d git=%s",
+                     clk.measured_adc_khz, kToneRepeats, kTonePhasePoints,
+                     block_size, sr_hz, 0, SHELL_GIT_HASH);
 
         // The two raw spans, unconverted as well as converted, printed every
         // block so the ADC-clock derivation stays independently checkable
@@ -469,14 +522,24 @@ void run_tone_probe(bench::Board& hw)
         {
             const XtalkVictim& vv = kXtalkVictimTable[v];
 
-            // Stopped: the codec idle. This is round one's silent block
-            // repeated in this image, and it is what G8 checks -- an image
-            // whose floor is not round one's floor has had something moved
-            // by the refactor or the linker, and every tone result in it
-            // would be plausible and against the wrong baseline.
+            // Stopped: the codec idle. NOT G8's floor -- see the
+            // audio_virgin=1 pass above run_tone_probe()'s loop for that.
+            // This is StopAudio() called on a codec that (from the second
+            // victim of the first block onward) an EARLIER case has already
+            // started and stopped; it is the right reference for the
+            // running-silent DIFFERENCE measured a few lines below, in the
+            // SAME block, and it is kept for exactly that.
+            //
+            // On the very first victim of the very first block, this is
+            // also the first StopAudio() call this boot on a subsystem that
+            // has never been Start()ed (the audio_virgin pass above does not
+            // call it either). Whether that is a no-op on this board is
+            // UNMEASURED this session -- flagged in task-3-report.md rather
+            // than assumed from reading AudioHandle::Impl::Stop()'s guard on
+            // sai1_/sai2_.IsInitialized().
             hw.StopAudio();
             (void)measure_level(hw, chain, block_size, sr_hz, case_idx,
-                                ToneLevel::Stopped, vv, nullptr);
+                                ToneLevel::Stopped, vv, nullptr, false);
             ++case_idx;
 
             // Running, silent: audio started, the callback writing zeros.
@@ -488,7 +551,7 @@ void run_tone_probe(bench::Board& hw)
             hw.StartAudio(AudioCallback);
             const LevelResult running
                 = measure_level(hw, chain, block_size, sr_hz, case_idx,
-                                ToneLevel::RunningSilent, vv, &missed_blocks);
+                                ToneLevel::RunningSilent, vv, &missed_blocks, false);
             ++case_idx;
 
             if(running.p.mean >= 0)   // -1 means no repeat converted at all
