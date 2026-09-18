@@ -271,6 +271,46 @@ TEST_CASE("xtalk plan: only row 6 needs the pot that is not fitted") {
     }
 }
 
+TEST_CASE("xtalk plan: kind and prints_inline follow the row, not the words") {
+    // Rows 1, 9 and 10 all hold the victim at base(v) with word_a == word_b --
+    // byte-identical chain words. Kind and prints_inline are the ONLY fields
+    // that separate "no chain access at all" (Silent) from "16 bits shifted,
+    // RCLK never pulsed" (ShiftOnly) from "as row 1, but PrintLine after every
+    // grid point" (row 10's Silent + prints_inline). A kind mislabelled
+    // between these three would still build a plausible-looking word.
+    for(int i = 0; i < shell::kXtalkCases; ++i) {
+        const shell::XtalkCase& c = shell::kXtalkPlan[i];
+        CAPTURE(i);
+        shell::XtalkKind expected = shell::XtalkKind::Latch;
+        if(c.row == 1 || c.row == 10)      expected = shell::XtalkKind::Silent;
+        else if(c.row == 8)                expected = shell::XtalkKind::Static;
+        else if(c.row == 9)                expected = shell::XtalkKind::ShiftOnly;
+        // rows 2..7 stay Latch
+        CHECK(c.kind == expected);
+        CHECK(c.prints_inline == (c.row == 10));
+    }
+}
+
+TEST_CASE("xtalk plan: the word builder agrees with the shipping chain_word()") {
+    // xtalk_word() has to re-implement chain_word()'s layout because
+    // chain_word() is not constexpr and kXtalkPlan is built in the constant
+    // evaluator -- but nothing else ties the two together, so a shift or a
+    // polarity that moves in kCouponChain or in step_pattern() would move one
+    // builder and not the other while every assertion that reads only
+    // xtalk_plan.h's own constants kept passing. This is the one place that
+    // checks against the scan's own word, not against itself.
+    for(int v = 0; v < shell::kXtalkVictims; ++v) {
+        const shell::XtalkVictim& vv = shell::kXtalkVictimTable[v];
+        CAPTURE(v);
+        const int step = shell::step_of(shell::kCouponChain, vv.group, vv.channel);
+        REQUIRE(step >= 0);
+        const shell::StepPattern sp = shell::step_pattern(shell::kCouponChain, step);
+        const uint32_t shipping = shell::chain_word(shell::kCouponChain, sp, 0);
+        const uint32_t local = shell::xtalk_word(vv, shell::other_enable_mask(vv.group));
+        CHECK(local == shipping);
+    }
+}
+
 TEST_CASE("xtalk plan: the scan settle delay is the audio block period") {
     // Read from shell/, not chosen here -- see the comment on
     // scan_settle_ns() and Task 5 step 2. The board's own numbers are
