@@ -135,9 +135,10 @@ void select_time(uint32_t channel, uint32_t sampling_time)
     if(HAL_ADC_ConfigChannel(&g_adc, &cfg) != HAL_OK) g_adc_cfg_ok = false;
 }
 
-// select(channel) is the interface Task 5 consumes -- kept to that exact
-// name and signature. It always selects the working sampling time; only the
-// clock-calibration pass below reaches for select_time() directly.
+// select(channel) is the interface Task 5 consumes; it was adc_select(), and
+// kept to that name and signature, until the primitives moved into this file.
+// It always selects the working sampling time; only the clock-calibration
+// pass below reaches for select_time() directly.
 void select(uint32_t channel)
 {
     select_time(channel, kSampleTimeWorking);
@@ -151,7 +152,7 @@ void select(uint32_t channel)
 // Polling happens AFTER the aperture opens, so it costs wall clock and
 // nothing else. The span is what makes section 7a's G4 possible: it
 // brackets the start-to-aperture latency plus the conversion, and the
-// conversion time is computed in run_settle_probe() from the measured ADC
+// conversion time is computed in measure_clock() below from the measured ADC
 // clock (fix round 4; kConversionNs, a fixed literal, is gone) -- but ONLY
 // because this function never calls HAL_ADC_Stop(). Fix round 1: the first cut of this
 // file called HAL_ADC_Stop() at the end of every sample, which clears ADEN;
@@ -338,8 +339,16 @@ Clock measure_clock(int repeats, uint32_t channel)
         c.ok ? static_cast<int32_t>(cycles_to_ns(static_cast<uint32_t>(
                    working_conversion_core_cyc + 0.5)))
              : -1;
+    // adc_khz for SHELL_SETTLE_CFG (fix round 4, item 4): the measured
+    // value, replacing the wrong 12.29 MHz assumption.
     c.measured_adc_khz =
         c.ok ? static_cast<int32_t>(480000.0 / c.core_cyc_per_adc_cyc + 0.5) : -1;
+
+    // The true start-to-aperture overhead, isolated from the sampling
+    // window itself: span_short already includes it plus the working
+    // pass's own 25-cycle conversion, so subtracting that conversion's core
+    // cycles back out leaves just the overhead. Reused by
+    // offset_ns_for_rung() for every pair's offset, not only P0's.
     c.pre_adstart_overhead_core_cyc =
         c.ok ? (static_cast<double>(c.span_short_cyc) - working_conversion_core_cyc)
              : 0.0;

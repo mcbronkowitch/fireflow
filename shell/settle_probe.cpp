@@ -112,8 +112,8 @@ void run_settle_probe(bench::Board& hw)
     // even though it would otherwise leave the board silent -- fix round 2,
     // item 1. ok=0 does not stop the rest of this function: every later ADC
     // access is bounded the same way, so the run continues and reports
-    // whatever it can (see probe_adc::timeouts() in every SHELL_SETTLE_CAL line)
-    // rather than reaching a second unbounded wait.
+    // whatever it can (see probe_adc::timeouts() in every SHELL_SETTLE_CAL
+    // line) rather than reaching a second unbounded wait.
     //
     // init_ok/cal_ok/cfg_ok are the three discarded HAL statuses (see the
     // flags' own comment above probe_adc::init()).
@@ -131,9 +131,9 @@ void run_settle_probe(bench::Board& hw)
     // earliest signal the probe gives, and it costs one PrintLine.
     //
     // cfg_ok here also covers only the configuration calls made BEFORE this
-    // line -- the single probe_adc::select() just above -- because the per-pair rung
-    // selections happen inside the sweep. That is a second, independent
-    // reason the in-loop copy is the one to read.
+    // line -- the single probe_adc::select() just above -- because the
+    // per-pair rung selections happen inside the sweep. That is a second,
+    // independent reason the in-loop copy is the one to read.
     const bool adc_warm_ok = probe_adc::warm_up();
     hw.PrintLine("SHELL_SETTLE_WARMUP ok=%d init_ok=%d cal_ok=%d cfg_ok=%d",
                  adc_warm_ok ? 1 : 0, probe_adc::init_ok() ? 1 : 0,
@@ -260,11 +260,11 @@ void run_settle_probe(bench::Board& hw)
                      static_cast<int>(kParkNs), ascending_this_block ? 0 : 1);
 
         // Printed every pass, beside SHELL_SETTLE_CAL, even though
-        // clk.span_short_cyc/clk.span_long_cyc were measured once at startup and
-        // never change (fix round 3): hw.StartLog(false) does not wait for a
-        // host, so the one-shot print this replaced went out within
-        // milliseconds of boot and no reader could ever open the port in
-        // time -- confirmed absent from 223 captured lines across a normal
+        // clk.span_short_cyc/clk.span_long_cyc were measured once at
+        // startup and never change (fix round 3): hw.StartLog(false) does
+        // not wait for a host, so the one-shot print this replaced went out
+        // within milliseconds of boot and no reader could ever open the port
+        // in time -- confirmed absent from 223 captured lines across a normal
         // run and 110 seconds across a deliberate RESET. A measurement
         // nobody can observe is not a measurement. Do not move this back to
         // a one-shot print before the loop.
@@ -290,13 +290,13 @@ void run_settle_probe(bench::Board& hw)
         // only thing that varies between these conversions is the
         // instrument.
         //
-        // A timed-out repeat (span == probe_adc::kTimeoutSentinel) is excluded from
-        // every one of these reductions rather than folded in: it is not a
-        // measurement of the instrument's latency, it is the instrument
-        // failing to respond, and averaging that in would silently widen
-        // lat_max_ns into something that LOOKS like jitter instead of
-        // reading as the fault it is. valid_n divides the sums, not
-        // kRepeats, for the same reason.
+        // A timed-out repeat (span == probe_adc::kTimeoutSentinel) is
+        // excluded from every one of these reductions rather than folded in:
+        // it is not a measurement of the instrument's latency, it is the
+        // instrument failing to respond, and averaging that in would silently
+        // widen lat_max_ns into something that LOOKS like jitter instead of
+        // reading as the fault it is. valid_n divides the sums, not kRepeats,
+        // for the same reason.
         int32_t lat_min = 0x7FFFFFFF, lat_max = -0x7FFFFFFF;
         int64_t lat_sum = 0;
         int32_t val_min = 0x7FFFFFFF, val_max = -0x7FFFFFFF;
@@ -388,7 +388,8 @@ void run_settle_probe(bench::Board& hw)
         {
             const SettlePair& sp = kSettlePlan[p];
 
-            // This pair's OWN rung (amendment 4), not kSampleTimeWorking.
+            // This pair's OWN rung (amendment 4), not the working sampling
+            // time.
             // rung_idx[p] came from sample_time_index_for() at startup and is
             // reused here, not recomputed (amendment 4).
             probe_adc::select_time(probe_adc::channel_of_group(sp.group),

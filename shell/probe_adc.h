@@ -72,8 +72,12 @@ struct Clock
     int32_t span_short_cyc;          // mean span at the working sampling rung
     int32_t span_long_cyc;           // mean span at the 387.5-cycle rung
     int32_t working_conversion_ns;   // 25 ADC cycles at the measured clock
-    int32_t measured_adc_khz;
-    double  core_cyc_per_adc_cyc;
+    int32_t measured_adc_khz;        // the measured value, not the assumed one
+    double  core_cyc_per_adc_cyc;    // the ratio the two spans differ by
+    // Start-to-ADSTART overhead alone, with the sampling window taken back
+    // out -- the one field here whose correctness is not readable off its own
+    // expression. measure_clock()'s own comment carries the derivation, and
+    // every offset this instrument prints is built on it.
     double  pre_adstart_overhead_core_cyc;
     bool    ok;                      // false -> every derived field reads -1
 };
@@ -82,6 +86,10 @@ struct Clock
 // configured sampling time, so every fixed cost cancels in the difference and
 // only the extra 371 ADC cycles remain. Leaves the working sampling time
 // selected, which every later pass needs.
+//
+// The two raw spans come back unconverted as well as converted, and
+// settle_probe.cpp prints them that way on SHELL_SETTLE_CLK every block (fix
+// round 3), so the derivation stays independently checkable off the log.
 Clock measure_clock(int repeats, uint32_t channel);
 
 // pre-ADSTART overhead plus that rung's sampling window, in ns, or -1 when
