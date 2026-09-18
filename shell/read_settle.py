@@ -1,5 +1,20 @@
 """Reads one SHELL_SETTLE_CFG..SHELL_SETTLE_END block from the board's
-USB-CDC port and writes the grid points as CSV.
+USB-CDC port and writes it out as two CSV files.
+
+`out.csv` carries the grid points, one row per measured point. Everything
+else the block says -- the configuration, the clock spans, the calibration
+pass, the gate verdicts, and each pair's offset, knee, reference and band --
+goes to `out.csv.meta.csv` beside it, as `scope,pair,key,value` rows. Both
+files are needed to reproduce anything: the grid points alone cannot yield
+"true settle = knee + offset" (that needs SHELL_SETTLE_KNEE's `d_settle_ns`
+plus SHELL_SETTLE_OFFSET's `offset_ns`, both in the metadata file) nor the
+gate verdict that says whether a settle time from this run may be quoted at
+all. Those used to reach stderr only, which is not a record.
+
+The long `scope,pair,key,value` shape is deliberate: it carries whatever
+key=value fields the firmware prints without this reader having to know
+their names, so a new field on a printed line lands in the file without a
+code change here -- the same property `_fields()` already gives the parser.
 
 The firmware repeats the block forever with a delay and there is no
 handshake, so this listens until a whole block has arrived. It may NOT
@@ -31,6 +46,10 @@ print([p.device for p in list_ports.comports()])"
 Call:
     python read_settle.py COM4 [out.csv] [timeout_seconds]
 
+Without an out path the grid points go to stdout and the metadata is not
+written anywhere durable -- that mode is for eyeballing and piping, and a
+second table in the same stream would break both.
+
 Exit code is the verdict: 1 when the run's gates did not pass, because a
 run that failed a gate may not have its settle times quoted.
 """
@@ -43,6 +62,17 @@ from collections import Counter
 # descending one, and a CSV that cannot tell them apart cannot reproduce it.
 FIELDS = ("pair", "sense", "from", "to", "d_ns", "n", "mean", "min", "max",
           "sweep_dir")
+
+# The metadata file's columns, and which parsed keys feed them. Block-level
+# lines (one per block) leave the pair column empty; per-pair lines fill it.
+# The `clk` line is listed although _is_complete() does not require it: if it
+# arrived it is part of the record, and if it did not the rows are simply
+# absent rather than faked.
+META_FIELDS = ("scope", "pair", "key", "value")
+_META_BLOCK_SCOPES = (("cfg", "cfg"), ("clk", "clk"), ("cal", "cal"),
+                      ("gates", "gates"))
+_META_PAIR_SCOPES = (("offset", "offsets"), ("knee", "knees"),
+                     ("ref", "refs"), ("band", "bands"))
 
 _GATE_NAMES = {"g1": "reference pairs", "g2": "floor",
                "g3": "settled-region agreement", "g4": "instrument jitter"}
@@ -146,6 +176,29 @@ def format_csv(block):
     return "\n".join(rows) + "\n"
 
 
+def format_meta_csv(block):
+    """Everything in the block that is not a grid point, as
+    `scope,pair,key,value` rows.
+
+    Field order within a scope is the order the firmware printed it, so a
+    reader diffing two captures sees them line up. The pair column is empty
+    for block-level scopes rather than 0, which is a real pair number."""
+    rows = [",".join(META_FIELDS)]
+    for scope, key in _META_BLOCK_SCOPES:
+        entry = block.get(key)
+        if entry is None:
+            continue
+        for name, value in entry.items():
+            rows.append("%s,,%s,%d" % (scope, name, value))
+    for scope, key in _META_PAIR_SCOPES:
+        for entry in sorted(block[key], key=lambda e: e["pair"]):
+            for name, value in entry.items():
+                if name == "pair":
+                    continue
+                rows.append("%s,%d,%s,%d" % (scope, entry["pair"], name, value))
+    return "\n".join(rows) + "\n"
+
+
 def main() -> int:
     # Imported here, not at module scope: parse_block()/format_csv() are the
     # pure parser the guard exercises, and that guard must not need pyserial
@@ -177,8 +230,17 @@ def main() -> int:
     if out:
         with open(out, "w", encoding="utf-8", newline="") as fh:
             fh.write(csv)
+        meta_out = out + ".meta.csv"
+        with open(meta_out, "w", encoding="utf-8", newline="") as fh:
+            fh.write(format_meta_csv(block))
+        print("wrote %s (grid points) and %s (block metadata: gates, "
+              "offsets, knees, refs, bands)" % (out, meta_out),
+              file=sys.stderr)
     else:
         sys.stdout.write(csv)
+        print("no output path given -- the block metadata (gates, offsets, "
+              "knees, refs, bands) was not written; pass one to keep it",
+              file=sys.stderr)
 
     cal = block["cal"]
     print("lat_mean_ns=%d b0=%d gates_ok=%d"
@@ -202,6 +264,18 @@ def main() -> int:
             settle_ns = k["d_settle_ns"] + offset_by_pair[pair]
             print("pair=%d settle_ns=%d predicted_ns=%d%s"
                   % (pair, settle_ns, k["predicted_ns"], tag), file=sys.stderr)
+
+    # Not a gate and deliberately not folded into the exit code: cfg_ok is
+    # the firmware's HAL_ADC_ConfigChannel fold, and the four gates are the
+    # spec's, so turning this into a fifth verdict here would be a spec
+    # change made in the reader. It is loud on stderr instead, because a run
+    # whose ADC channel configuration was rejected has printed numbers from
+    # an ADC that is not configured the way the block header claims.
+    if block["gates"].get("cfg_ok") == 0:
+        print("WARNING: cfg_ok=0 -- the firmware saw HAL_ADC_ConfigChannel "
+              "reject a channel configuration on this run; every count below "
+              "came from an ADC that was not set up as the header says",
+              file=sys.stderr)
 
     if not cal["gates_ok"]:
         failed = [_GATE_NAMES[g] for g in ("g1", "g2", "g3", "g4")

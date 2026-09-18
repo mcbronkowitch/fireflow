@@ -150,12 +150,21 @@ struct RunSummary
     // pair's own knee onward), in raw ADC counts. G3 bounds THIS against
     // kSettleCounts directly.
     //
+    // It is a PEAK-TO-PEAK spread, and it is therefore not the statistic
+    // d_settle_index() decides the knee on -- that one is a deviation from a
+    // reference, |mean[i] - settled| <= kSettleCounts. Same inputs, different
+    // statistic, and a knee already bounds this field at 2 * kSettleCounts by
+    // construction. settle_plan.cpp's G3 comment carries the consequence:
+    // bounding it at kSettleCounts makes G3 about 2x stricter than the spec's
+    // own criterion rather than a restatement of it. Do not describe the two
+    // as the same test.
+    //
     // Fix round 4 (was widest_settled_band, and before that widest_band --
     // see git history for those rounds' own reasoning, both since
     // superseded): that field bounded max-min of the RAW PER-SAMPLE
-    // conversions at each point -- a different statistic from the one
-    // d_settle_index() actually decides on, which is the MEAN of 64
-    // repeats. On the coupon board this mismatch failed three perfectly
+    // conversions at each point -- a different INPUT from the one
+    // d_settle_index() reads, which is the MEAN of 64 repeats. On the
+    // coupon board this mismatch failed three perfectly
     // good knees: pairs 1/2/3 each carried one single-point outlier in an
     // otherwise clean settled region (159, 169, 146 raw counts) that moved
     // that point's OWN MEAN by at most 169/64 ~= 2.6 counts -- comfortably
@@ -170,8 +179,14 @@ struct RunSummary
     // itself, not a b0-scaled floor: the per-point mean is already averaged
     // over 64 samples and is far quieter than a raw single-sample band, so
     // this is not a widening -- the coupon board's own settled regions
-    // measured 2-4 counts of mean spread per pair, comfortably under the
-    // 8-count bound. The raw per-sample band this field used to carry is
+    // measured 2-4 counts of mean spread per pair on the capture this gate
+    // was introduced against, comfortably under the 8-count bound. (On the
+    // two captures that closed the probe this gate FAILED -- the printed G3
+    // verdict is the measured part; the per-pair figures behind it were
+    // recomputed by hand, which is why settle_probe.cpp now prints them on
+    // SHELL_SETTLE_BAND. docs/hardware/settle-measured.md carries what a G3
+    // failure does and does not mean, and what differs between the captures
+    // is not established.) The raw per-sample band this field used to carry is
     // NOT deleted: it is still computed and printed, with its grid
     // position, as an observation (SHELL_SETTLE_BAND in settle_probe.cpp)
     // -- a wide single-point sample spread is informative on its own (see

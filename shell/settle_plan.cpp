@@ -53,14 +53,34 @@ Gates settle_gates(const RunSummary& s)
     // inside the decision threshold.
     g.g2_floor = s.b0 >= 0 && s.b0 <= kFloorMaxCounts;
 
-    // G3 (fix round 4): the per-point MEANS in the settled region must
-    // agree with each other within kSettleCounts -- directly, no b0-scaled
-    // floor, because this is the same statistic d_settle_index() itself
-    // decided the knee on, not a noisier raw-sample quantity that needed a
-    // floor to avoid over-refusing a quiet run. See
-    // RunSummary::settled_mean_spread's comment in settle_plan.h for the
-    // three good knees the OLD (raw-per-sample) version of this gate
-    // refused, and why kSettleCounts alone is tight here, not loose.
+    // G3 (fix round 4): the per-point MEANS in the settled region must agree
+    // with EACH OTHER within kSettleCounts -- peak to peak, directly, with no
+    // b0-scaled floor, because the mean of kRepeats conversions is already
+    // far quieter than the raw single-sample band the old version of this
+    // gate bounded and needs no floor to avoid over-refusing a quiet run.
+    // See RunSummary::settled_mean_spread's comment in settle_plan.h for the
+    // three good knees that raw-per-sample version refused.
+    //
+    // This gate reads the same INPUTS as d_settle_index() -- the per-point
+    // means -- but it is NOT the same statistic, and the difference is not
+    // cosmetic:
+    //   - d_settle_index() bounds |mean[i] - settled| <= kSettleCounts for
+    //     every i >= knee: a deviation from a REFERENCE. That is section 6's
+    //     criterion, half an LSB of 12 bit.
+    //   - this gate bounds mean_max - mean_min over the same region:
+    //     PEAK TO PEAK, with no reference in it.
+    // Finding a knee at all therefore already bounds the peak-to-peak spread
+    // at 2 * kSettleCounts, by construction -- two points can sit at most one
+    // full band apart, at +kSettleCounts and -kSettleCounts from the
+    // reference. So G3 at kSettleCounts is deliberately about 2x STRICTER
+    // than the spec's own criterion, not a restatement of it, and a run that
+    // fails it has still met section 6's criterion at every settled point.
+    // What such a run has not shown is a settled region tighter than half the
+    // band the knee rule allows. Read the failure that way and no other; the
+    // spec's section 7a never defined this gate in terms commensurable with
+    // its own section 6, and reading it as "the board fails the criterion"
+    // is the error that reading produced once already.
+    //
     // settled_mean_spread already excludes the transient before each pair's
     // own knee and is 0 when no pair contributed a settled region, which G1
     // already catches separately.

@@ -56,6 +56,25 @@ int step_of(int group, int ch)
 // re-triggers HAL_ADCEx_Calibration_Start().
 ADC_HandleTypeDef g_adc{};
 
+// The three HAL statuses this file used to throw away. HAL_ADC_Init(),
+// HAL_ADCEx_Calibration_Start() and HAL_ADC_ConfigChannel() each return one,
+// and a failure in any of them stops nothing: the probe goes on to poll a
+// register and print plausible integers taken from an ADC that was never set
+// up, which is exactly the failure an instrument built to refuse its own bad
+// runs must not be able to hide. adc_warm_up() was bounded and given its own
+// `ok=` field for this reason in fix round 2; these three are the rest of
+// that argument.
+//
+// Flags rather than return values: these calls are made from several places
+// that have nothing to do with each other, and the question a reader of the
+// log asks is "did any of this fail on this board", not "which call". cfg_ok
+// is a fold -- it goes false on the first rejected channel configuration and
+// never comes back -- so one flag covers every adc_select_time() the run ever
+// makes, including the per-pair rung selections inside the sweep.
+bool g_adc_init_ok = false;
+bool g_adc_cal_ok  = false;
+bool g_adc_cfg_ok  = true;
+
 void adc_init(bench::Board& hw)
 {
     hw.StopAdc();                    // public on DaisyPatchSM; ADC1 is now free
@@ -75,9 +94,10 @@ void adc_init(bench::Board& hw)
     g_adc.Init.Overrun                  = ADC_OVR_DATA_OVERWRITTEN;
     g_adc.Init.OversamplingMode         = DISABLE;                // OVS_NONE
 
-    HAL_ADC_Init(&g_adc);
-    HAL_ADCEx_Calibration_Start(&g_adc, ADC_CALIB_OFFSET,
-                                ADC_SINGLE_ENDED);   // ONCE, never in the loop
+    g_adc_init_ok = HAL_ADC_Init(&g_adc) == HAL_OK;
+    g_adc_cal_ok  = HAL_ADCEx_Calibration_Start(&g_adc, ADC_CALIB_OFFSET,
+                                                ADC_SINGLE_ENDED)
+                   == HAL_OK;   // ONCE, never in the loop
 }
 
 // The working sampling time -- what run_settle_probe()'s working-conversion
@@ -121,7 +141,7 @@ void adc_select_time(uint32_t channel, uint32_t sampling_time)
     cfg.SingleDiff   = ADC_SINGLE_ENDED;
     cfg.OffsetNumber = ADC_OFFSET_NONE;
     cfg.Offset       = 0;
-    HAL_ADC_ConfigChannel(&g_adc, &cfg);
+    if(HAL_ADC_ConfigChannel(&g_adc, &cfg) != HAL_OK) g_adc_cfg_ok = false;
 }
 
 // adc_select(channel) is the interface Task 5 consumes -- kept to that exact
@@ -386,8 +406,19 @@ void run_settle_probe(bench::Board& hw)
     // access is bounded the same way, so the run continues and reports
     // whatever it can (see g_adc_timeouts in every SHELL_SETTLE_CAL line)
     // rather than reaching a second unbounded wait.
+    //
+    // init_ok/cal_ok/cfg_ok are the three discarded HAL statuses (see the
+    // flags' own comment above adc_init()). init_ok and cal_ok are boot-only
+    // facts and have no other line to live on. cfg_ok here covers only the
+    // configuration calls made BEFORE this line -- the single adc_select()
+    // just above -- because the per-pair rung selections happen inside the
+    // sweep, long after this line has gone out; the same fold is reprinted on
+    // every block's SHELL_SETTLE_GATES line, which is where a rejected
+    // per-pair configuration becomes visible.
     const bool adc_warm_ok = adc_warm_up();
-    hw.PrintLine("SHELL_SETTLE_WARMUP ok=%d", adc_warm_ok ? 1 : 0);
+    hw.PrintLine("SHELL_SETTLE_WARMUP ok=%d init_ok=%d cal_ok=%d cfg_ok=%d",
+                 adc_warm_ok ? 1 : 0, g_adc_init_ok ? 1 : 0,
+                 g_adc_cal_ok ? 1 : 0, g_adc_cfg_ok ? 1 : 0);
 
     park(chain, hw, p0.group, p0.from_ch);
 
@@ -685,6 +716,15 @@ void run_settle_probe(bench::Board& hw)
         // settled region to observe (idx < 0).
         int32_t widest_band_counts[kSettlePairs];
         int32_t widest_band_d_ns[kSettlePairs];
+        // Final-review I2: the per-pair settled-region mean spread -- the
+        // statistic G3 is decided on. summary.settled_mean_spread is the MAX
+        // across pairs and is consumed by settle_gates() without ever being
+        // printed, so the only way to say which pair carried it was to
+        // recompute it by hand from the SHELL_SETTLE rows. A number a
+        // document wants to quote has to leave the board printed. -1 where
+        // the pair has no settled region (idx < 0), same convention as
+        // widest_band_* above.
+        int32_t settled_mean_spread[kSettlePairs];
 
         for(int p = 0; p < kSettlePairs; ++p)
         {
@@ -852,13 +892,15 @@ void run_settle_probe(bench::Board& hw)
                 if(mean_spread > summary.settled_mean_spread)
                     summary.settled_mean_spread = mean_spread;
 
-                widest_band_counts[p] = widest_sample_band;
-                widest_band_d_ns[p]   = widest_sample_band_ns;
+                settled_mean_spread[p] = mean_spread;
+                widest_band_counts[p]  = widest_sample_band;
+                widest_band_d_ns[p]    = widest_sample_band_ns;
             }
             else
             {
-                widest_band_counts[p] = -1;
-                widest_band_d_ns[p]   = -1;
+                settled_mean_spread[p] = -1;
+                widest_band_counts[p]  = -1;
+                widest_band_d_ns[p]    = -1;
             }
         }
 
@@ -919,15 +961,36 @@ void run_settle_probe(bench::Board& hw)
         // an outlier like pair 0's 106-count one (a 0 ohm AGND tie that
         // should read a flat zero) interesting rather than just noise.
         // -1/-1 for a pair with no settled region to observe (idx < 0).
+        //
+        // settled_mean_spread rides here (final-review I2) rather than on
+        // SHELL_SETTLE_REF, whose own comment above forbids growing it back:
+        // it overflowed the 128-byte log buffer once already and was split
+        // for it. This line is the roomy one -- literal 80 bytes and four
+        // fields, so even three int32 extremes leave it inside the buffer,
+        // where SHELL_SETTLE_CAL has only a handful of bytes to spare. It is
+        // also the right neighbour: both fields are settled-region
+        // observations over the same index range, one on the means and one
+        // on the raw samples.
         for(int p = 0; p < kSettlePairs; ++p)
         {
-            hw.PrintLine("SHELL_SETTLE_BAND pair=%d widest_sample_band_counts=%d at_d_ns=%d",
-                         p, widest_band_counts[p], widest_band_d_ns[p]);
+            hw.PrintLine("SHELL_SETTLE_BAND pair=%d widest_sample_band_counts=%d "
+                         "at_d_ns=%d settled_mean_spread=%d",
+                         p, widest_band_counts[p], widest_band_d_ns[p],
+                         settled_mean_spread[p]);
         }
 
-        hw.PrintLine("SHELL_SETTLE_GATES g1=%d g2=%d g3=%d g4=%d",
+        // cfg_ok is the HAL_ADC_ConfigChannel fold (final-review I5), not a
+        // fifth gate -- it is NOT part of Gates::ok() and does not change any
+        // verdict. It rides on this line because the per-pair rung selections
+        // happen inside the sweep, after SHELL_SETTLE_WARMUP has gone out, so
+        // a lifetime fold printed only at boot could never show them; the
+        // lifetime `timeouts` counter on SHELL_SETTLE_CAL is the same shape
+        // of field for the same reason. This line, not that one, because CAL
+        // is within a few bytes of the log buffer already.
+        hw.PrintLine("SHELL_SETTLE_GATES g1=%d g2=%d g3=%d g4=%d cfg_ok=%d",
                      gates.g1_knee ? 1 : 0, gates.g2_floor ? 1 : 0,
-                     gates.g3_band ? 1 : 0, gates.g4_jitter ? 1 : 0);
+                     gates.g3_band ? 1 : 0, gates.g4_jitter ? 1 : 0,
+                     g_adc_cfg_ok ? 1 : 0);
         hw.PrintLine("SHELL_SETTLE_END");
 
         // Sweep state (last pair's channel/sampling time, mux parked on its
