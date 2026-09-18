@@ -576,6 +576,18 @@ void run_tone_probe(bench::Board& hw)
 
     while(1)
     {
+        // MEASURED, per block, not derived: wall-clock milliseconds this
+        // block takes, from daisy::System::GetNow() (HAL_GetTick(), a 1 ms
+        // SysTick counter) rather than the DWT cycle counter this file uses
+        // everywhere else -- cycles_now() is 32 bit at 480 MHz and wraps
+        // roughly every 8.9 s, many times over inside a phase-grid block
+        // that runs into minutes, so a naive `cycles_now() - t0` here would
+        // alias to a small, wrong number. GetNow() wraps at ~49.7 days, far
+        // outside anything this block can take. Printed on SHELL_TONE_GATES
+        // below as block_ms -- the one thing only the firmware can measure,
+        // and the plan names it as a decision input for Bastian.
+        const uint32_t block_start_ms = daisy::System::GetNow();
+
         // The configuration line: block_size and sr are READ from the board,
         // never assumed -- see the comment above. adc_khz is the measured
         // clock, not the nominal one. phase_points is Task 2's kTonePhasePoints
@@ -751,6 +763,34 @@ void run_tone_probe(bench::Board& hw)
             {
                 const XtalkVictim& vv = kXtalkVictimTable[v];
 
+                // Fix 1 (controller ruling, post-board-capture): EVERY tone
+                // case gets this CASE line, the static row included, printed
+                // BEFORE branching on whether there is a grid to walk. Before
+                // this fix the static row printed only SHELL_TONE_LEVEL --
+                // which carries no f_hz and no dbfs field, because that line
+                // shape has neither -- so Task 6's reader could only infer
+                // which table row a level=2 line belonged to from there being
+                // exactly one such row. Now every tone case in the block has
+                // its identity on SHELL_TONE_CASE, keyed uniformly, and a
+                // reader learns the static row has no grid from the simple
+                // absence of SHELL_TONE point lines after it -- not from
+                // counting.
+                //
+                // BYTE BUDGET, and the reason the spec's single SHELL_TONE
+                // line is split in two here: libDaisy's log buffer is 128
+                // bytes (lib/libDaisy/src/hid/logger.h:29) and the spec's
+                // combined line runs about 130 at its widest values --
+                // truncated, and stamped "$$" (measured: exactly once in the
+                // 968-line board capture of commit 438fd51, on case=10's own
+                // phase_idx=2 line -- see task-4-report.md). Same split and
+                // same reason as the crosstalk probe's SHELL_XTALK_CASE. This
+                // line runs 108 bytes; the point line below runs 62.
+                hw.PrintLine("SHELL_TONE_CASE case=%d level=%d f_hz=%d dbfs=%d "
+                             "victim_group=%d victim_ch=%d r_src=%d below_corner=%d",
+                             case_idx, static_cast<int>(ToneLevel::Tone), row.f_hz,
+                             row.dbfs, vv.group, vv.channel,
+                             static_cast<int>(vv.r_src_ohm), row.below_corner ? 1 : 0);
+
                 if(row.f_hz == 0)
                 {
                     // The static row: a tone row by table position (f_hz ==
@@ -760,13 +800,12 @@ void run_tone_probe(bench::Board& hw)
                     // grid. It takes the same whole-block measurement the
                     // Stopped/RunningSilent levels do -- measure_level(),
                     // which parks the victim itself -- printed as
-                    // SHELL_TONE_LEVEL/SHELL_TONE_STAT with level=2 (Tone).
-                    // A reader that assumed every level=2 row carried a
-                    // phase grid would refuse this block on the one row
-                    // that never has one. missed_blocks is tracked here
-                    // (not nullptr): audio is running, same as
-                    // RunningSilent, so G7 applies -- see measure_level()'s
-                    // own comment on this parameter, "and Tone in Task 4".
+                    // SHELL_TONE_LEVEL/SHELL_TONE_STAT with level=2 (Tone),
+                    // immediately after the SHELL_TONE_CASE line just
+                    // printed above. missed_blocks is tracked here (not
+                    // nullptr): audio is running, same as RunningSilent, so
+                    // G7 applies -- see measure_level()'s own comment on
+                    // this parameter, "and Tone in Task 4".
                     (void)measure_level(hw, chain, block_size, sr_hz, case_idx,
                                         ToneLevel::Tone, vv, &missed_blocks, false);
                     ++case_idx;
@@ -778,19 +817,6 @@ void run_tone_probe(bench::Board& hw)
                 // measure_phase_point() below does neither, so it is done
                 // here, once per victim, before the 16-point walk.
                 park_victim(chain, vv);
-
-                // BYTE BUDGET, and the reason the spec's single SHELL_TONE
-                // line is split in two here: libDaisy's log buffer is 128
-                // bytes (lib/libDaisy/src/hid/logger.h:29) and the spec's
-                // combined line runs about 130 at its widest values --
-                // truncated, and stamped "$$". Same split and same reason
-                // as the crosstalk probe's SHELL_XTALK_CASE. This line runs
-                // 108 bytes; the point line below runs 62.
-                hw.PrintLine("SHELL_TONE_CASE case=%d level=%d f_hz=%d dbfs=%d "
-                             "victim_group=%d victim_ch=%d r_src=%d below_corner=%d",
-                             case_idx, static_cast<int>(ToneLevel::Tone), row.f_hz,
-                             row.dbfs, vv.group, vv.channel,
-                             static_cast<int>(vv.r_src_ohm), row.below_corner ? 1 : 0);
 
                 for(int k = 0; k < kTonePhasePoints; ++k)
                 {
@@ -854,21 +880,28 @@ void run_tone_probe(bench::Board& hw)
         // into a literal nobody re-measures -- which is exactly what the
         // deleted kConversionNs was. read_tone.py computes G8 from the two
         // files and folds it into its exit code; gates_ok below excludes it.
-        // phase_timeouts=%d is a Task 4 addition, appended after the design
-        // spec's field list (section 8 predates the phase grid) rather than
-        // inserted between existing fields -- same convention as
-        // audio_virgin on SHELL_TONE_LEVEL/STAT. Lifetime count from
-        // g_phase_timeouts, not reset per block; not folded into gates_ok,
-        // because a lost repeat already shows up as a shorter n on its own
-        // SHELL_TONE line and is not itself a gate.
+        // phase_timeouts=%d and block_ms=%d are Task 4 additions, both
+        // appended after the design spec's field list (section 8 has been
+        // updated -- fix 3, controller ruling -- to carry both, in this
+        // order, at the end) rather than inserted between existing fields --
+        // same convention as audio_virgin on SHELL_TONE_LEVEL/STAT. Neither
+        // is folded into gates_ok: a lost repeat already shows up as a
+        // shorter n on its own SHELL_TONE line, and block duration is not a
+        // pass/fail criterion, it is the one number only the firmware can
+        // measure and the plan needs from Bastian as a decision input.
+        // phase_timeouts is g_phase_timeouts, a lifetime count, not reset
+        // per block. block_ms is MEASURED per block (daisy::System::GetNow()
+        // at the top of this loop iteration, subtracted here) -- not
+        // derived, and not to be confused with any arithmetic estimate.
         hw.PrintLine("SHELL_TONE_GATES g2=%d g4=%d g5=%d g7=%d g8=%d "
-                     "missed_blocks=%d gates_ok=%d phase_timeouts=%d",
+                     "missed_blocks=%d gates_ok=%d phase_timeouts=%d block_ms=%d",
                      gates.g2_floor ? 1 : 0, gates.g4_jitter ? 1 : 0,
                      gates.g5_address ? 1 : 0, missed_blocks == 0 ? 1 : 0,
                      -1, static_cast<int>(missed_blocks),
                      (gates.g2_floor && gates.g4_jitter && gates.g5_address
                       && missed_blocks == 0) ? 1 : 0,
-                     static_cast<int>(g_phase_timeouts));
+                     static_cast<int>(g_phase_timeouts),
+                     static_cast<int>(daisy::System::GetNow() - block_start_ms));
         hw.PrintLine("SHELL_TONE_END");
     }
 }

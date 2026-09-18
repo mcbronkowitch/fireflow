@@ -191,13 +191,23 @@ SHELL_TONE_CLK / _CAL                       (round one's lines, unchanged)
 SHELL_TONE       case=%d level=%d f_hz=%d dbfs=%d victim_group=%d victim_ch=%d r_src=%d phase_idx=%d n=%d mean=%d min=%d max=%d
 SHELL_TONE_LEVEL case=%d level=%d victim_group=%d victim_ch=%d r_src=%d n=%d mean=%d min=%d max=%d   (stopped and running-silent)
 SHELL_TONE_WIN   case=%d victim_group=%d victim_ch=%d r_src=%d word_a=%d word_b=%d d_before_end_ns=%d n=%d mean=%d min=%d max=%d
-SHELL_TONE_GATES g2=%d g4=%d g5=%d g7=%d g8=%d missed_blocks=%d gates_ok=%d
+SHELL_TONE_GATES g2=%d g4=%d g5=%d g7=%d g8=%d missed_blocks=%d gates_ok=%d phase_timeouts=%d block_ms=%d
 SHELL_TONE_END
 ```
 
 `dbfs` is printed as a negative integer; `level` is 0 stopped, 1 running
-silent, 2 tone. `shell/read_tone.py` follows `read_xtalk.py`, computes
-`delta(φ)` and `delta_pp` per tone case, the stopped-versus-running
+silent, 2 tone. `phase_timeouts` (Task 4) is a lifetime count of repeats
+that never saw their target phase, not reset per block; `block_ms` (Task 4)
+is the wall-clock duration of the block that just finished, in
+milliseconds, measured from the board's own millisecond tick and not
+derived from the plan's table constants. Neither is folded into
+`gates_ok`. The static row (present only when Task 1 measured a
+DC-coupled output) prints a `SHELL_TONE_CASE` line, like every other tone
+case, immediately followed by a `SHELL_TONE_LEVEL`/`SHELL_TONE_STAT` pair
+and no `SHELL_TONE` point lines — it has no phase, so there is no grid to
+walk, and a reader keys its identity off `SHELL_TONE_CASE` the same way it
+does for every other case. `shell/read_tone.py` follows `read_xtalk.py`,
+computes `delta(φ)` and `delta_pp` per tone case, the stopped-versus-running
 difference per victim, and the verdict; guard `shell/test_read_tone.py`,
 CTest `read_tone_guard`. G8 needs round one's silent-block numbers as an
 input: the reader takes round one's `xtalk.csv.meta.csv` on the command
