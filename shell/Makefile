@@ -255,6 +255,7 @@ CPP_SOURCES = \
 	xtalk_plan.cpp \
 	xtalk_probe.cpp \
 	tone_probe.cpp \
+	tone_plan.cpp \
 	mux_scan.cpp \
 	../engine/body/mode_bank.cpp \
 	../engine/body/ks_string.cpp \
