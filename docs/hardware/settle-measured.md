@@ -362,6 +362,18 @@ supply ripple, USB DMA activity, the probe's own 595 clocking — then a settled
 region inside 8 counts is achievable and this is too pessimistic. The
 sweep-direction test (§6) rules out sweep-order drift **and nothing else**.
 
+> **Answered on 2026-09-18 by a second instrument.**
+> [`crosstalk-measured.md`](crosstalk-measured.md) §6 holds the same channels
+> with no chain access and no print for a whole grid, and the wander is still
+> there: 10–12 counts on `REF_A`, 6 on `REF_C` and `REF_B`, 0–1 on the two ties,
+> with the board otherwise idle. **So it is neither the probe's own 595 clocking
+> nor its USB traffic** — the two candidates this paragraph names that could be
+> tested from the board. Printing inside the grid moves the statistic by −3…+5
+> counts with no consistent sign, which is the same result from the other
+> direction. Supply ripple remains untested. The comparison is not
+> byte-for-byte this section's statistic — that one runs from each pair's knee,
+> the other over the whole grid — and §6 there carries the reconciliation.
+
 A separate observation, printed but not gated: single-point **raw** sample bands
 of 159, 169 and 146 counts appear in otherwise clean settled regions, and a
 106-count excursion appears on P0 — a channel tied to AGND through 0 Ω, with
@@ -377,6 +389,11 @@ P3, 47…92 on P4 and 10…56 on P5. Both 0 Ω reference pairs show it, so it is
 a property of the divider channels — and it is not visible in their means,
 which hold to 0–1 counts. Whatever this is, it is fast, rare, and it averages
 out; nothing in either capture identifies it.
+
+**It survives silence too.** `crosstalk-measured.md` §6 reproduces the same
+single-point bands on an idle board, per pair — `R_LO3` inside P5's 10…56,
+`REF_B` marginally *above* P3's 53…195. Still unidentified, now also not the
+instrument's own traffic.
 
 ## 6. The sweep-direction confound, and what ruling it out covers
 
