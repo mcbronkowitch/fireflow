@@ -13,6 +13,7 @@
 #include "shell_idle_fill.h"
 #include "shell_coupon_probe.h"
 #include "shell_settle_probe.h"
+#include "shell_xtalk_probe.h"
 #include "hw/board.h"
 #include "sdram_mem.h"
 #include "instrument.h"
@@ -40,12 +41,16 @@ volatile uint32_t g_block_tick = 0;
 #include "settle_probe.h"
 #endif
 
+#if SHELL_XTALK_PROBE
+#include "xtalk_probe.h"
+#endif
+
 #if defined(SHELL_CPU_PROBE)
 #include <cstdint>
 #include "util/CpuLoadMeter.h"
 #endif
 
-#if defined(SHELL_CPU_PROBE) || SHELL_COUPON_PROBE || SHELL_SETTLE_PROBE
+#if defined(SHELL_CPU_PROBE) || SHELL_COUPON_PROBE || SHELL_SETTLE_PROBE || SHELL_XTALK_PROBE
 // libDaisy deklariert diese beiden in src/usbd/usbd_desc.c als
 // `extern const char*` und definiert sie nie -- die Anwendung besitzt ihre
 // eigene USB-Identitaet. Ohne sie scheitert der USB-Zweig beim LINKEN, nicht
@@ -237,6 +242,15 @@ int main(void)
     // BbdLine::Init durch, und die nullen ihre Puffer -- also echte Schreiber
     // in SDRAM, das vor board_init() noch keinen FMC hinter sich hat.
     inst.init(shell::kSampleRate, shell::fx_mem());
+
+#if SHELL_XTALK_PROBE
+    // The board under test is the coupon, and the question is whether the
+    // board's own digital side moves a settled pot reading. No engine, no
+    // audio: StartAudio is deliberately never called here, because the codec
+    // is round two's aggressor and an image that runs it cannot measure
+    // round one's floor.
+    shell::run_xtalk_probe(hw);   // never returns
+#endif
 
 #if SHELL_SETTLE_PROBE
     // The board under test is the coupon, and the question is time, not

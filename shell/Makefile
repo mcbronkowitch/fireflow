@@ -151,6 +151,52 @@ coupon chain profile, and the panel profile has none of its channels)
 endif
 endif
 
+# Position 1 replaces the instrument with the crosstalk probe: one mux
+# channel is held still and one controlled digital event is fired on the same
+# board at a chosen time before the ADC's aperture. It needs the coupon chain
+# profile, so it implies SHELL_COUPON_PROBE's board -- but not its scan, and
+# not the settle probe's sweep either. The two probe switches are mutually
+# exclusive: both dispatch before StartAudio and neither returns, so an image
+# with both set would run whichever main.cpp reaches first and print the other
+# one's name nowhere.
+# Spec:  ../docs/superpowers/specs/2026-09-18-coupon-crosstalk-probe-design.md
+# Plan:  ../docs/superpowers/plans/2026-09-18-coupon-crosstalk-probe.md
+SHELL_XTALK_PROBE ?= 0
+
+ifneq ($(filter $(SHELL_XTALK_PROBE),0 1),$(SHELL_XTALK_PROBE))
+$(error SHELL_XTALK_PROBE must be 0 or 1)
+endif
+
+ifeq ($(SHELL_XTALK_PROBE),1)
+ifneq ($(SHELL_COUPON_PROBE),1)
+$(error SHELL_XTALK_PROBE=1 needs SHELL_COUPON_PROBE=1: the probe drives the \
+coupon chain profile, and the panel profile has none of its channels)
+endif
+ifeq ($(SHELL_SETTLE_PROBE),1)
+$(error SHELL_XTALK_PROBE=1 and SHELL_SETTLE_PROBE=1 are mutually exclusive: \
+both dispatch before StartAudio and neither returns)
+endif
+endif
+
+# Whether RV4 is fitted on the coupon. Spec section 4: with the 16:1 enabled,
+# toggling MUX_A3 moves it between channel 6 -- RV4's wiper, FLOATING until
+# the pot is in -- and channel 14 (AGND). Switching a floating node into
+# ADC_9 is a different experiment, so those four cases are reported as
+# skipped=1 until this says otherwise. A skipped case is a LINE in the
+# output, never a silently shorter table.
+#
+# NOT a -D, and that is the same trap as the switch above: a bare -D is
+# invisible to make's dependency graph and an existing build/ would happily
+# reuse an xtalk_probe.o built with the other value -- an image that reports
+# four cases as skipped when the pot is in, or measures a floating wiper when
+# it is not, and either way looks exactly like a measurement. It rides in the
+# generated header beside SHELL_XTALK_PROBE.
+SHELL_XTALK_RV4 ?= 0
+
+ifneq ($(filter $(SHELL_XTALK_RV4),0 1),$(SHELL_XTALK_RV4))
+$(error SHELL_XTALK_RV4 must be 0 or 1)
+endif
+
 CPP_SOURCES = \
 	main.cpp \
 	sdram_mem.cpp \
@@ -160,6 +206,8 @@ CPP_SOURCES = \
 	settle_plan.cpp \
 	probe_adc.cpp \
 	settle_probe.cpp \
+	xtalk_plan.cpp \
+	xtalk_probe.cpp \
 	mux_scan.cpp \
 	../engine/body/mode_bank.cpp \
 	../engine/body/ks_string.cpp \
@@ -210,7 +258,7 @@ include $(SYSTEM_FILES_DIR)/Makefile
 # Fehler zurueck, und er sieht wie eine Messung aus.
 C_INCLUDES += -I$(BUILD_DIR)
 
-SWITCH_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/probe_adc.o
+SWITCH_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/probe_adc.o $(BUILD_DIR)/xtalk_probe.o
 
 # ZUR PARSE-ZEIT, nicht als Regel, und das ist der Kern der Reparatur vom
 # 2026-08-23. Als Regel mit FORCE hat es ZWEIMAL nicht gehalten:
@@ -233,9 +281,16 @@ SWITCH_HEADERS := \
   $(shell python write_shell_mux_probe.py $(BUILD_DIR)/shell_mux_probe.h $(SHELL_MUX_PROBE) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_idle_fill.py $(BUILD_DIR)/shell_idle_fill.h $(SHELL_IDLE_FILL) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_coupon_probe.py $(BUILD_DIR)/shell_coupon_probe.h $(SHELL_COUPON_PROBE) $(SWITCH_OBJECTS)) \
-  $(shell python write_shell_settle_probe.py $(BUILD_DIR)/shell_settle_probe.h $(SHELL_SETTLE_PROBE) $(SWITCH_OBJECTS))
+  $(shell python write_shell_settle_probe.py $(BUILD_DIR)/shell_settle_probe.h $(SHELL_SETTLE_PROBE) $(SWITCH_OBJECTS)) \
+  $(shell python write_shell_xtalk_probe.py $(BUILD_DIR)/shell_xtalk_probe.h $(SHELL_XTALK_PROBE) $(SHELL_XTALK_RV4) $(SWITCH_OBJECTS)) \
+  $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o)
 
-$(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_selftest.h $(BUILD_DIR)/shell_cpu_probe.h $(BUILD_DIR)/shell_mux_probe.h $(BUILD_DIR)/shell_idle_fill.h $(BUILD_DIR)/shell_coupon_probe.h
+# The git stamp deletes only xtalk_probe.o, because that is the only object
+# that reads it. Listing the whole SWITCH_OBJECTS there would force a full
+# rebuild of six objects on every commit for a string in one format argument.
+
+$(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_selftest.h $(BUILD_DIR)/shell_cpu_probe.h $(BUILD_DIR)/shell_mux_probe.h $(BUILD_DIR)/shell_idle_fill.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_xtalk_probe.h
+$(BUILD_DIR)/xtalk_probe.o: $(BUILD_DIR)/shell_xtalk_probe.h $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/shell_coupon_probe.h
 $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o: $(BUILD_DIR)/shell_coupon_probe.h
 
 .PHONY: FORCE
