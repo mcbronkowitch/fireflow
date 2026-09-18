@@ -14,6 +14,16 @@ one '+' for a dirty tree. libDaisy's log buffer is 128 bytes
 commit count when a tag is in reach -- would silently truncate the line and
 stamp it "$$".
 
+THE BOUND IS IMPOSED, NOT ASSUMED, and the difference is the whole point of
+this file. `git rev-parse --short=7` is documented as a MINIMUM: git lengthens
+the abbreviation as far as uniqueness in the repository requires, so on a big
+enough tree it returns eight or nine characters without warning or error. A
+file whose job is to bound a length must not state the bound in a docstring
+and then take git's word for it -- that is the same shape of mistake as the
+bare -D these generators exist to eliminate. Hence the explicit [:7] slice
+below; truncating an already-unique abbreviation is harmless here because the
+stamp identifies a build, it is not used to look a commit up.
+
 '+' rather than '-dirty' for the same three bytes of reason. A dirty stamp is
 not a failure here: this probe is expected to run from a working tree that
 carries uncommitted hardware work. It only has to be VISIBLE, so a capture is
@@ -39,7 +49,8 @@ def stamp() -> str:
             capture_output=True, text=True, check=True).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         dirty = "?"
-    return head + ("+" if dirty else "")
+    # [:7] because --short=7 is a floor, not a ceiling. See the docstring.
+    return head[:7] + ("+" if dirty else "")
 
 
 def main() -> int:
