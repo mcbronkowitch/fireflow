@@ -260,6 +260,41 @@ struct LevelResult
     int32_t widest_sample_band;
 };
 
+// The two printed lines for one LevelResult, factored out of measure_level()
+// below so fix round 2 can re-emit a CACHED boot-virgin result inside every
+// block without a second, drifting copy of the format strings. Same field
+// order, same line names, for a freshly measured result or a cached one --
+// a reader cannot tell which call site produced a line from its shape, only
+// from `audio_virgin` and (for the boot-virgin lines) `case`'s sign; see the
+// re-emission loop in run_tone_probe() for why that is enough.
+//
+// n= carries kToneRepeats, the per-SUB-MEASUREMENT repeat count -- the
+// brief's own line for this, matching the field settled_mean_spread's
+// peak-to-peak is built from. mean/min/max are the whole level's, over all
+// 65 x 64 conversions -- a different scope from n=, exactly as SHELL_XTALK's
+// point line and SHELL_XTALK_STAT's spread differ in scope in round one.
+//
+// audio_virgin=%d is appended after the design spec's own field list
+// (section 8 does not carry it) rather than inserted between existing
+// fields, so a reader keyed on the spec's names and positions is unaffected
+// by its presence. Fixed position, last field: Task 6's reader keys G8 off
+// this and only this.
+void print_level_lines(bench::Board& hw, int case_index, ToneLevel level,
+                       const XtalkVictim& v, const LevelResult& result,
+                       bool audio_virgin)
+{
+    hw.PrintLine("SHELL_TONE_LEVEL case=%d level=%d victim_group=%d "
+                 "victim_ch=%d r_src=%d n=%d mean=%d min=%d max=%d "
+                 "audio_virgin=%d",
+                 case_index, static_cast<int>(level), v.group, v.channel,
+                 static_cast<int>(v.r_src_ohm), kToneRepeats,
+                 result.p.mean, result.p.min, result.p.max,
+                 audio_virgin ? 1 : 0);
+    hw.PrintLine("SHELL_TONE_STAT case=%d settled_mean_spread=%d "
+                 "widest_sample_band=%d",
+                 case_index, result.settled_mean_spread, result.widest_sample_band);
+}
+
 // ONE DIVERGENCE FROM THE BRIEF'S SKETCH `LevelResult measure_level(MuxScan&,
 // const XtalkVictim&)`: `hw`, `block_size`, `sr_hz`, `case_index`, `level`
 // and `missed_blocks` are added here because the brief's own call site
@@ -355,28 +390,7 @@ LevelResult measure_level(bench::Board& hw, MuxScan& chain, int block_size, int 
     result.settled_mean_spread = (usable_points > 0) ? (mean_hi - mean_lo) : -1;
     result.widest_sample_band  = widest_band;   // already -1 if no point converted
 
-    // n= carries kToneRepeats, the per-SUB-MEASUREMENT repeat count -- the
-    // brief's own line for this, matching the field settle_mean_spread's
-    // peak-to-peak is built from. mean/min/max are the whole level's, over
-    // all 65 x 64 conversions -- a different scope from n=, exactly as
-    // SHELL_XTALK's point line and SHELL_XTALK_STAT's spread differ in
-    // scope in round one.
-    //
-    // audio_virgin=%d is appended after the design spec's own field list
-    // (section 8 does not carry it) rather than inserted between existing
-    // fields, so a reader keyed on the spec's names and positions is
-    // unaffected by its presence. Fixed position, last field: Task 6's
-    // reader keys G8 off this and only this.
-    hw.PrintLine("SHELL_TONE_LEVEL case=%d level=%d victim_group=%d "
-                 "victim_ch=%d r_src=%d n=%d mean=%d min=%d max=%d "
-                 "audio_virgin=%d",
-                 case_index, static_cast<int>(level), v.group, v.channel,
-                 static_cast<int>(v.r_src_ohm), kToneRepeats,
-                 result.p.mean, result.p.min, result.p.max,
-                 audio_virgin ? 1 : 0);
-    hw.PrintLine("SHELL_TONE_STAT case=%d settled_mean_spread=%d "
-                 "widest_sample_band=%d",
-                 case_index, result.settled_mean_spread, result.widest_sample_band);
+    print_level_lines(hw, case_index, level, v, result, audio_virgin);
 
     return result;
 }
@@ -389,6 +403,20 @@ LevelResult measure_level(bench::Board& hw, MuxScan& chain, int block_size, int 
 // conversion at all.
 int32_t g_running_silent_mean[kXtalkVictims];
 bool    g_running_silent_seen[kXtalkVictims];
+
+// The boot-virgin pass's results, one per victim, filled ONCE before
+// run_tone_probe()'s while(1) loop and never touched again.
+//
+// Fix round 2: a host that connects after boot -- which is every host --
+// cannot see a line printed once before the CDC port is realistically open,
+// and StartLog(false) does not wait for one; the logger's accumulation
+// overflow (logger.cpp:78-87) is at its worst at exactly that moment too,
+// with nothing draining. Printing the boot-virgin pass once made its only
+// output structurally unreachable, so this cache exists to let every block
+// RE-EMIT it, verbatim, alongside the block's own live lines -- see the
+// re-emission loop in run_tone_probe() for why re-emitting rather than
+// re-measuring is the whole point.
+LevelResult g_boot_virgin[kXtalkVictims];
 
 } // namespace
 
@@ -431,17 +459,23 @@ void run_tone_probe(bench::Board& hw)
     // task-3-report.md's fix-round note on whether Stop() before Start() is
     // a no-op on this board -- unmeasured this session).
     //
-    // Printed with audio_virgin=1 on SHELL_TONE_LEVEL/SHELL_TONE_STAT; every
-    // other SHELL_TONE_LEVEL line in this image prints audio_virgin=0. G8 is
-    // an image-vs-image comparison at a 4-count tolerance and must read only
-    // the audio_virgin=1 lines -- see "Controller decisions" in
-    // task-3-report.md for why the per-block Stopped level (StopAudio()
-    // called on a codec an earlier block already started and stopped) is
-    // not the same floor and is kept for a different purpose.
+    // Printed with audio_virgin=1 on SHELL_TONE_LEVEL/SHELL_TONE_STAT here,
+    // once -- kept for whoever is watching a fresh boot over SWD or a logic
+    // analyser, but THE READER MUST NEVER NEED THIS PRINT: fix round 2 found
+    // it structurally unreachable by any USB-CDC host, which connects after
+    // reset. The RESULT is cached into g_boot_virgin[] and re-emitted inside
+    // every block below; that re-emission, not this one-shot print, is what
+    // a reader actually sees. G8 is an image-vs-image comparison at a
+    // 4-count tolerance and must read only audio_virgin=1 lines -- see
+    // "Controller decisions" in task-3-report.md for why the per-block
+    // Stopped level (StopAudio() called on a codec an earlier block already
+    // started and stopped) is not the same floor and is kept for a
+    // different purpose.
     for(int v = 0; v < kXtalkVictims; ++v)
     {
-        (void)measure_level(hw, chain, block_size, sr_hz, v, ToneLevel::Stopped,
-                            kXtalkVictimTable[v], nullptr, true);
+        g_boot_virgin[v] = measure_level(hw, chain, block_size, sr_hz, v,
+                                         ToneLevel::Stopped, kXtalkVictimTable[v],
+                                         nullptr, true);
     }
 
     while(1)
@@ -508,6 +542,32 @@ void run_tone_probe(bench::Board& hw)
                      lat_mean, lat_min, lat_max, b0,
                      static_cast<int>(probe_adc::timeouts()));
 
+        // --- Fix round 2: re-emit the boot-virgin floor into THIS block ---
+        //
+        // g_boot_virgin[] was measured exactly ONCE, before the while(1)
+        // loop and before any StartAudio() call this boot (see the comment
+        // there). These lines print the SAME numbers every block -- NOT
+        // re-measured -- because re-measuring here would destroy the one
+        // property audio_virgin=1 exists to assert: "taken before any
+        // StartAudio on this boot". By block N the audio subsystem has
+        // already been started and stopped many times over (every earlier
+        // block's five RunningSilent cases), so a fresh measurement here
+        // would be exactly the per-block Stopped level a few lines below,
+        // under a label that claims otherwise. Re-emission changes when a
+        // reading is PRINTED, never when it was TAKEN.
+        //
+        // case= is NEGATIVE, -(v+1), for these five lines only. Every live
+        // case in this file (this loop's 0..9, and Task 4's phase-grid cases
+        // continuing the same non-negative counter) is >= 0, so a negative
+        // case number can never collide with a live one, and a reader can
+        // tell a cached line from a live one by the SIGN of `case` alone,
+        // with no need to also check audio_virgin.
+        for(int v = 0; v < kXtalkVictims; ++v)
+        {
+            print_level_lines(hw, -(v + 1), ToneLevel::Stopped, kXtalkVictimTable[v],
+                              g_boot_virgin[v], true);
+        }
+
         // --- Step 3/4: the two silent levels, per victim ---
 
         uint32_t missed_blocks = 0;
@@ -534,9 +594,8 @@ void run_tone_probe(bench::Board& hw)
             // also the first StopAudio() call this boot on a subsystem that
             // has never been Start()ed (the audio_virgin pass above does not
             // call it either). Whether that is a no-op on this board is
-            // UNMEASURED this session -- flagged in task-3-report.md rather
-            // than assumed from reading AudioHandle::Impl::Stop()'s guard on
-            // sai1_/sai2_.IsInitialized().
+            // UNMEASURED -- see task-3-report.md; no mechanism is assumed
+            // here.
             hw.StopAudio();
             (void)measure_level(hw, chain, block_size, sr_hz, case_idx,
                                 ToneLevel::Stopped, vv, nullptr, false);
