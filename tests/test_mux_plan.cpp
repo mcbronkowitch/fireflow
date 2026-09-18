@@ -159,3 +159,33 @@ TEST_CASE("mux plan: the coupon's button is the eighth bit shifted out") {
     // The shipping panel has no single button on the chain yet.
     CHECK(shell::button_bit(shell::kPanelChain) == -1);
 }
+
+TEST_CASE("mux plan: step_of is the inverse of group_of_step") {
+    // Not a restatement of the implementation: this walks every step of both
+    // profiles, asks which group and channel it is, and requires step_of()
+    // to hand the same step back. A sign error or an off-by-one in either
+    // direction breaks the round trip.
+    for(const shell::ChainProfile* p : {&shell::kPanelChain, &shell::kCouponChain}) {
+        for(int s = 0; s < shell::scan_steps(*p); ++s) {
+            const int g = shell::group_of_step(*p, s);
+            REQUIRE(g >= 0);
+            int ch = s;
+            for(int i = 0; i < g; ++i) ch -= p->channels[i];
+            CAPTURE(s);
+            CHECK(shell::step_of(*p, g, ch) == s);
+        }
+    }
+}
+
+TEST_CASE("mux plan: step_of answers out of range instead of assuming") {
+    CHECK(shell::step_of(shell::kCouponChain, -1, 0) == -1);
+    CHECK(shell::step_of(shell::kCouponChain, 2, 0) == -1);
+    CHECK(shell::step_of(shell::kCouponChain, 0, -1) == -1);
+    // The coupon's two groups are 16 and 8 channels, so channel 8 exists on
+    // group 0 and does not exist on group 1. A shared bound would pass on
+    // group 0 and hand back step 24 on group 1, past the end of the step
+    // space.
+    CHECK(shell::step_of(shell::kCouponChain, 0, 8) == 8);
+    CHECK(shell::step_of(shell::kCouponChain, 1, 8) == -1);
+    CHECK(shell::step_of(shell::kCouponChain, 1, 7) == 23);
+}

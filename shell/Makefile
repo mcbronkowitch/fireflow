@@ -158,6 +158,7 @@ CPP_SOURCES = \
 	coupon_expect.cpp \
 	coupon_scan.cpp \
 	settle_plan.cpp \
+	probe_adc.cpp \
 	settle_probe.cpp \
 	mux_scan.cpp \
 	../engine/body/mode_bank.cpp \
@@ -209,7 +210,7 @@ include $(SYSTEM_FILES_DIR)/Makefile
 # Fehler zurueck, und er sieht wie eine Messung aus.
 C_INCLUDES += -I$(BUILD_DIR)
 
-SWITCH_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o $(BUILD_DIR)/settle_probe.o
+SWITCH_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/probe_adc.o
 
 # ZUR PARSE-ZEIT, nicht als Regel, und das ist der Kern der Reparatur vom
 # 2026-08-23. Als Regel mit FORCE hat es ZWEIMAL nicht gehalten:

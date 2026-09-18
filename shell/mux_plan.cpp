@@ -21,6 +21,15 @@ int group_of_step(const ChainProfile& p, int step)
     return -1;
 }
 
+int step_of(const ChainProfile& p, int group, int ch)
+{
+    if(group < 0 || group >= p.groups) return -1;
+    if(ch < 0 || ch >= p.channels[group]) return -1;
+    int step = ch;
+    for(int g = 0; g < group; ++g) step += p.channels[g];
+    return step;
+}
+
 StepPattern step_pattern(const ChainProfile& p, int step)
 {
     // A step that does not exist parks the scan with every enable off. An

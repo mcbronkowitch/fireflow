@@ -99,6 +99,18 @@ int group_of_step(const ChainProfile& p, int step);
 // is actually live for a step must read `sense_of_group` themselves.
 int mux_channel(const ChainProfile& p, int step, int sense);
 
+// The scan step that selects channel `ch` on group `group`: group 0's
+// channels occupy the start of the step space, group 1's follow all of
+// group 0's -- the same layout step_pattern() and group_of_step() walk.
+//
+// Out of range returns -1, for the same reason mux_channel() does: a
+// half-seated chip produces indices nobody planned, and an out-of-range
+// address would still select SOME channel and hand back a foreign knob's
+// voltage, which is worse than reading nothing. The two groups do NOT have
+// the same channel count on the coupon (16 and 8), so the bound has to be
+// the group's own.
+int step_of(const ChainProfile& p, int group, int ch);
+
 // The chain word for a step, with `leds` in the LED field.
 uint32_t chain_word(const ChainProfile& p, StepPattern s, uint32_t leds);
 
