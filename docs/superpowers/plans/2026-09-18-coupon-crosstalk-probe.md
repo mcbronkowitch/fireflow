@@ -72,7 +72,7 @@ at every grid point at or past `kScanSettleNs`.
 `kScanSettleNs` is **read from `shell/`** (Task 5, step 2), and it is the
 audio block period, because `MuxScan::step()` reads the sense pins for the
 step it wrote *last* time and only then clocks out the next address
-(`shell/mux_scan.cpp:110-131`); `shell/mux_scan.h`'s header comment says so in
+(`shell/mux_scan.cpp:127-150`); `shell/mux_scan.h`'s header comment says so in
 as many words. At the 96 samples / 48 kHz `src/hw/board.h:69-70` sets, that is
 2 000 000 ns, against a grid that ends at 12 800 ns.
 

@@ -93,6 +93,11 @@ CRITERION_COUNTS = 8
 # has no grid at all. Everything else -- 3, 4, 5, 6, 7, 9 and 10 -- gets a
 # verdict, row 10 included: its aggressor is the probe's own USB-CDC traffic,
 # which spec section 2 lists as an aggressor like any other.
+#
+# Row 10 is Silent, though -- no chain access, no bit change, no event at
+# all -- so its "delta" is not measuring what deltas()'s docstring below
+# claims for the other rows. See deltas()'s docstring for what it actually
+# isolates.
 ROW_FLOOR   = 1
 ROW_CONTROL = 2
 
@@ -298,6 +303,31 @@ def deltas(block):
     the same RCLK pulse as the aggressor case, so the difference isolates the
     bit change. Against the silent curve it would isolate the bit change plus
     the pulse plus the shift, which is three findings folded into one number.
+
+    That "isolates the bit change" reading holds for rows 3-7: each of them
+    changes exactly one thing relative to the control. It does NOT hold for
+    row 9 or row 10.
+
+    Row 9 (ShiftOnly) is spec section 10's own comparison, deliberately: 16
+    bits shifted with RCLK never pulsed, differenced against the control to
+    show the shift alone, without the latch. That one is load-bearing and
+    correct as documented.
+
+    Row 10 is Silent -- no chain access, no bit change, no event at all --
+    so delta(row10) is not "isolating" anything: it is the NEGATED
+    control-vs-silent offset (mean_control(d) - mean_silent(d), i.e. -1 *
+    what G6 computes) plus whatever printing inside the grid does. The 2026-
+    09-18 capture shows this directly: row 10 reports worst_delta=6 on both
+    REF_A and REF_C, matching G6's own recomputed offset for those victims
+    (6-7 counts and 5-6 counts respectively -- see xtalk.csv.meta.csv scope
+    g6), while task-5-report.md measured the printing effect itself at -3 to
+    +5 counts with no consistent sign. A "row 10 PASS at 6 counts" today is
+    G6's offset wearing row 10's label, and a worse day could push it past
+    CRITERION_COUNTS and report a USB-CDC failure that is really the
+    control's own offset from silence -- or a printing effect that happens
+    to cancel the offset could report 0 and hide a real one. Spec section 5
+    mandates this arithmetic for row 10 as for every other row, so the
+    computation below is unchanged; this is a reading caveat, not a bug.
 
     The silent curve is reported beside both, and its own two statistics
     (settled_mean_spread, widest_sample_band) are findings in their own

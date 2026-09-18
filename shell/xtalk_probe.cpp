@@ -62,6 +62,13 @@ constexpr int kQuietMs = 50;
 // It does NOT select the ADC channel -- the caller does, exactly as
 // settle_probe.cpp's park() leaves that to run_settle_probe(). Every call
 // site below says which channel is selected and when.
+//
+// KNOWN GAP: this is the one conversion path in this file that still goes
+// through probe_adc::mean_of_repeats(), not RepeatAccum/take_one() below --
+// so it never got Task 5's timeout exclusion. See the comment ahead of the
+// four calls in measure_span() for what that means for G5. Not exercised on
+// the 2026-09-18 capture (timeouts=0 on all five CAL lines), so this is a
+// comment, not a fix.
 int32_t read_parked(MuxScan& chain, int group, int ch)
 {
     chain.write_chain(chain_word(
@@ -108,6 +115,30 @@ SpanRead measure_span(MuxScan& chain)
     // other's rung behaviour.
     probe_adc::select(probe_adc::channel_of_group(0));
 
+    // KNOWN GAP -- these four reads go through read_parked(), the one
+    // conversion path in this file that never got Task 5's timeout
+    // exclusion (probe_adc::mean_of_repeats() folds a timed-out repeat's 0
+    // into the mean with no way for the caller to detect it; see
+    // probe_adc.h). Every other conversion in this file goes through
+    // RepeatAccum/take_one(), which excludes and counts.
+    //
+    // The failure is asymmetric. A timeout on a HI tie pulls that tie's
+    // mean down by ~1024 counts per lost repeat, which mostly fails closed:
+    // it either blows hi_spread past kTieSpread or drags rail below
+    // kRailFloor, and the span comes back invalid. A timeout on an AGND
+    // (LO) tie is invisible instead -- the true reading is already ~0, and
+    // a zeroed repeat looks the same as a good one, so it can pass a
+    // genuinely bad AGND tie as valid.
+    //
+    // G5 is judged directly against this span, and unlike G6 (which the
+    // reader recomputes independently in read_xtalk.py) there is no
+    // host-side check on G5 -- if this pass is wrong, nothing downstream
+    // catches it.
+    //
+    // Not exercised on the 2026-09-18 capture: timeouts=0 on all five CAL
+    // lines, so this is a comment, not a code change. The fix on the next
+    // rebuild is to route these four reads through RepeatAccum/take_one()
+    // like everything else here, and refuse the span when valid == 0.
     const int32_t hi1 = read_parked(chain, 0, kTieHi1);
     const int32_t hi2 = read_parked(chain, 0, kTieHi2);
     const int32_t lo1 = read_parked(chain, 0, kTieLo1);

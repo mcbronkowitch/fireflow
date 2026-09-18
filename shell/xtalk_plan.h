@@ -54,6 +54,14 @@ inline constexpr int kXtalkVictims = 5;
 // is charge or current arriving at the node; one that is flat across 0, 650
 // and 5150 ohms is in the ground, the reference or the ADC.
 //
+// KNOWN DISCREPANCY, not new: the spec calls this a 0 ohm tie, but the table
+// below carries r_src_ohm=150 for both R_SP10 and R_LO3, and every printed
+// line says r_src=150. The 150 is real -- it is the 4067/4051's own switch
+// Ron, which the wiring itself contributes nothing to remove -- and "0 ohm
+// tie" describes the wiring, not the field. xtalk_probe.cpp's own comment
+// beside kXtalkVictimTable[3]'s use says so; this header should agree with
+// it rather than repeat the spec's simpler framing unqualified.
+//
 // The seven pots being unpopulated does not matter to a victim: a pot at mid
 // travel is a 5 kohm static source, which REF_A already is.
 inline constexpr XtalkVictim kXtalkVictimTable[kXtalkVictims] = {
@@ -136,7 +144,7 @@ extern const XtalkCase kXtalkPlan[kXtalkCases];
 //
 // READ FROM shell/, never chosen here. MuxScan::step() reads the sense pins
 // for the step it wrote LAST time and only then clocks out the next address
-// (mux_scan.cpp:110-131), and mux_scan.h's header comment says so in as many
+// (mux_scan.cpp:127-150), and mux_scan.h's header comment says so in as many
 // words: "the address is clocked out at the end of one audio block and
 // sampled at the start of the next, so the block period IS the settle
 // window". There is no named constant in shell/ to read -- the value IS the

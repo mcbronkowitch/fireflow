@@ -84,6 +84,13 @@ Point measure_point(MuxScan& chain, const SettlePair& sp, uint32_t d_ns)
         // came from the brief's own pseudocode, not a defect introduced
         // here) -- the aperture-jitter measurement that DOES need spans is
         // the lat pass in run_settle_probe(), on the parked reference.
+        //
+        // This also means an undetected timeout can fold a 0 into `sum`
+        // below with nothing printed to say so -- the same gap xtalk_probe.cpp's
+        // take_one() closes for its sibling instrument (see that function's
+        // own comment for the mechanism and the cost). That path is CLOSED
+        // there and still OPEN here: this function has not been touched to
+        // match it.
         const int32_t v = probe_adc::sample_now(nullptr);
         sum += v;
         if(v < lo) lo = v;
@@ -435,6 +442,14 @@ void run_settle_probe(bench::Board& hw)
             {
                 const int i = ascending_this_block ? k : (kGridPoints - 1 - k);
                 pts[i]      = measure_point(chain, sp, grid_ns(i));
+                // n=kRepeats, hardcoded -- unlike xtalk_probe.cpp's point
+                // line, which prints the SURVIVING repeat count (its n can
+                // be < kRepeats when a timeout was excluded). The two
+                // instruments' point lines look identical in the capture
+                // but carry different semantics for `n`: here it is always
+                // the requested count, there it is a measured one. Do not
+                // compare the two files' `n=` fields as if they meant the
+                // same thing.
                 hw.PrintLine("SHELL_SETTLE pair=%d sense=%d from=%d to=%d d_ns=%d "
                              "n=%d mean=%d min=%d max=%d",
                              p, sp.group, sp.from_ch, sp.to_ch,

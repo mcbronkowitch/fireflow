@@ -48,10 +48,17 @@ void select(uint32_t channel);   // the working rung
 // Writes the start-to-EOC span in DWT cycles if asked.
 uint16_t sample_now(uint32_t* span_cycles);
 
-// Mean value / mean span over `repeats` conversions on whatever channel and
-// sampling time is currently selected. Timed-out repeats are excluded from
-// the span reducer and counted; -1 comes back when every repeat timed out.
+// Mean value over `repeats` conversions on whatever channel and sampling
+// time is currently selected. Passes `nullptr` for the span, so it cannot
+// see sample_now()'s timeout sentinel: a timed-out repeat folds its 0 into
+// the sum and divides by `repeats` like any other reading, with nothing in
+// the return value to say a repeat was lost. No exclusion, no count, no -1.
 int32_t mean_of_repeats(int repeats);
+
+// Mean SPAN over `repeats` conversions, in DWT cycles, on whatever channel
+// and sampling time is currently selected. Timed-out repeats ARE excluded
+// from the sum here -- unlike mean_of_repeats() above -- and -1 comes back
+// when every repeat timed out.
 int32_t mean_span_of_repeats(int repeats);
 
 // Lifetime count of timed-out conversions, and the three HAL statuses this
