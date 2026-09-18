@@ -415,6 +415,21 @@ invisible from reading the scripts, and each cost real time.
   found a 650 Ω channel already immune at under 10 counts. The channel reading
   63485 is tied to the rail through **0 Ω**. It cannot be this.
 
+  **And it is not the sampling time either, measured the same day.** libDaisy's
+  own ADC was re-initialised at 8.5, 16.5, 32.5, 64.5 and 387.5 cycles, all
+  twelve channels kept so the DMA rotation stayed the shipping one, and that
+  rail tie read **63485 at every one of them**, flat to within a single count
+  across a 45× range of window. Lengthening the window does not touch the
+  deficit. Two candidates down; do not spend the next session on a third
+  without a probe that prints one.
+
+  The same sweep did find something worth having, on a channel that is *not*
+  0 Ω: see the §7 table in
+  [`settle-measured.md`](hardware/settle-measured.md). A 5150 Ω divider reads
+  19 counts low at libDaisy's default 8.5-cycle window and stops moving after
+  `SPEED_16CYCLES_5` — so the panel's own pots are worth one rung up, and
+  nothing beyond it.
+
   Within libDaisy's configuration the deficit behaves as a gain error rather
   than a zero offset, and the coupon's dividers prove which: three 50/50
   dividers off the same rail read 31716, 31737 and 31758. A gain error predicts

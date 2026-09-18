@@ -493,14 +493,47 @@ It is also why the settled reference is the tail of the curve rather than a
 parked read (§1). Every knee was being judged against that 845-count-wrong
 reference until the round that found this replaced it.
 
-**What is still open:** whether the shipping firmware is exposed to the same
-mechanism. libDaisy's ADC free-runs a circular DMA across twelve channels, so
-every conversion follows one on a different pin at a different voltage. The
-coupon's own data argues against a large effect there — the three 5150 Ω
-dividers read through libDaisy agree with each other to 42 counts
-(`docs/gotchas.md`), which a redistribution term of this size would not allow —
-but that is an inference from readings taken for another purpose, not a
-measurement of this question.
+**And the shipping firmware's exposure, measured the same day.** libDaisy's ADC
+free-runs a circular DMA across twelve channels, so every conversion follows
+one on a different pin at a different voltage — the first-arrival condition, on
+every read. A second throwaway probe re-initialised libDaisy's own ADC at five
+sampling times, keeping all twelve channels so the rotation stayed the shipping
+one, and read three coupon channels that differ only in source impedance:
+
+| libDaisy sampling | 0 Ω rail tie | 0 Ω AGND tie | REF_A, 5150 Ω |
+|---|---:|---:|---:|
+| 8.5 cycles (default) | 63485 | 0 | **31718** |
+| 16.5 cycles | 63485 | 0 | 31736 |
+| 32.5 cycles | 63485 | 0 | 31736 |
+| 64.5 cycles | 63485 | 0 | 31737 |
+| 387.5 cycles | 63485 | 0 | 31738 |
+
+Two answers, and the second one is a setting.
+
+**The 3.1 % deficit is not an acquisition problem.** The rail tie reads 63485
+at every rung, flat to within a single count across a 45× range of sampling
+time. Whatever makes `hw.adc.Get()` read low, lengthening the window does not
+touch it, and `docs/gotchas.md` now says so rather than leaving the next guess
+to go there.
+
+**libDaisy's default window is 19 counts short at pot impedance, and one rung
+fixes it.** REF_A gains 18 counts between 8.5 and 16.5 cycles and then stops
+moving — 31736 to 31738 over the remaining 23× of window is the measurement
+standing still. So the deficit is acquisition, it is fully paid off by
+`SPEED_16CYCLES_5`, and nothing longer buys anything. 19 counts is about 1.2
+LSB of 12 bit: small, but systematic, free to remove, and on the same side for
+every pot on the panel.
+
+That is narrower than `settle-budget.md` finding 4 was before the clock
+correction ("too short in every case") and narrower than it is now ("exactly
+enough at 10 kΩ bare"): at the 5150 Ω source impedance of a 20 kΩ pot at mid
+travel, the default is measurably short. The model's own criterion is 8 counts;
+the default misses it by 19 and the next rung meets it.
+
+**What is still open** is the 3.1 % itself. Redistribution is ruled out (0 Ω is
+immune) and acquisition is ruled out (flat across the ladder). Neither this
+document nor `gotchas.md` offers a third candidate, and neither should until
+something prints one.
 
 ## 8. What this rests on
 
