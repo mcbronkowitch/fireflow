@@ -334,3 +334,102 @@ TEST_CASE("xtalk plan: the scan settle arithmetic does not overflow on the way")
     CHECK(shell::scan_settle_ns(1024, 48000) == 21333333u);
     CHECK(shell::scan_settle_ns(1, 1) == 1000000000u);
 }
+
+namespace {
+
+// A summary that passes every gate, for tests that break exactly one thing.
+shell::XtalkSummary clean_xtalk_summary() {
+    shell::XtalkSummary s{};
+    s.b0                   = 32;    // settle-measured.md section 5 measured 27..40
+    s.lat_min_ns           = 700;
+    s.lat_max_ns           = 800;
+    s.lat_mean_ns          = 747;
+    s.address_ok           = true;
+    s.worst_control_delta  = 3;
+    return s;
+}
+
+} // namespace
+
+TEST_CASE("xtalk gates: a clean run passes all four") {
+    const shell::XtalkGates g = shell::xtalk_gates(clean_xtalk_summary());
+    CHECK(g.g2_floor);
+    CHECK(g.g4_jitter);
+    CHECK(g.g5_address);
+    CHECK(g.g6_control);
+    CHECK(g.ok());
+}
+
+TEST_CASE("xtalk gates: G2 is the settle probe's floor, unchanged") {
+    shell::XtalkSummary s = clean_xtalk_summary();
+    s.b0 = shell::kFloorMaxCounts;
+    CHECK(shell::xtalk_gates(s).g2_floor);
+    s.b0 = shell::kFloorMaxCounts + 1;
+    CHECK_FALSE(shell::xtalk_gates(s).g2_floor);
+    // -1 is the firmware's "every repeat timed out" sentinel, not a floor of
+    // minus one count.
+    s.b0 = -1;
+    CHECK_FALSE(shell::xtalk_gates(s).g2_floor);
+}
+
+TEST_CASE("xtalk gates: G4 is the settle probe's jitter gate, unchanged") {
+    shell::XtalkSummary s = clean_xtalk_summary();
+    s.lat_min_ns = 700;
+    s.lat_max_ns = 700 + shell::kJitterMaxNs;
+    CHECK(shell::xtalk_gates(s).g4_jitter);
+    s.lat_max_ns = 700 + shell::kJitterMaxNs + 1;
+    CHECK_FALSE(shell::xtalk_gates(s).g4_jitter);
+    // A negative mean means the conversion-time subtraction came out larger
+    // than the span it was subtracted from, which invalidates every delay in
+    // the run.
+    s = clean_xtalk_summary();
+    s.lat_mean_ns = -1;
+    CHECK_FALSE(shell::xtalk_gates(s).g4_jitter);
+}
+
+TEST_CASE("xtalk gates: G5 refuses a run whose victims are not where the table says") {
+    // A wrong word here makes every delta a measurement of nothing -- the
+    // reading would be of some other channel, moving for some other reason,
+    // and it would look exactly like a number.
+    shell::XtalkSummary s = clean_xtalk_summary();
+    s.address_ok = false;
+    CHECK_FALSE(shell::xtalk_gates(s).g5_address);
+    CHECK_FALSE(shell::xtalk_gates(s).ok());
+}
+
+TEST_CASE("xtalk gates: G6 refuses a control that is not a control") {
+    // The bound is kSettleCounts, the same half-LSB-of-12-bit criterion the
+    // aggressor verdict uses -- because if a latch pulse with NO bit change
+    // already moves the reading by that much, the aggressor cases cannot be
+    // read as differences at all.
+    shell::XtalkSummary s = clean_xtalk_summary();
+    s.worst_control_delta = shell::kSettleCounts;
+    CHECK(shell::xtalk_gates(s).g6_control);
+    s.worst_control_delta = shell::kSettleCounts + 1;
+    CHECK_FALSE(shell::xtalk_gates(s).g6_control);
+}
+
+TEST_CASE("xtalk gates: G6 takes a magnitude, and a negative one is a fault") {
+    // worst_control_delta is filled from max |mean_control(d) -
+    // mean_silent(d)|, so it cannot be negative unless the firmware never
+    // filled it. A gate that passed an unfilled field would pass a run in
+    // which the control curve was never taken.
+    shell::XtalkSummary s = clean_xtalk_summary();
+    s.worst_control_delta = -1;
+    CHECK_FALSE(shell::xtalk_gates(s).g6_control);
+}
+
+TEST_CASE("xtalk gates: ok() is the conjunction and nothing else") {
+    // Each gate alone must be able to refuse the run. A fold that dropped
+    // one would leave that gate printed and toothless, which is worse than
+    // not having it.
+    for(int which = 0; which < 4; ++which) {
+        shell::XtalkSummary s = clean_xtalk_summary();
+        if(which == 0) s.b0 = shell::kFloorMaxCounts + 1;
+        if(which == 1) s.lat_mean_ns = -1;
+        if(which == 2) s.address_ok = false;
+        if(which == 3) s.worst_control_delta = shell::kSettleCounts + 1;
+        CAPTURE(which);
+        CHECK_FALSE(shell::xtalk_gates(s).ok());
+    }
+}

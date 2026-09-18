@@ -154,4 +154,44 @@ constexpr uint32_t scan_settle_ns(int block_size, int sample_rate_hz)
         / static_cast<uint64_t>(sample_rate_hz));
 }
 
+// What a completed block reduces to before it is judged. Spec section 7.
+//
+// G1 and G3 do not carry over from the settle probe: there is no knee here,
+// and the settled region's width is a REPORTED QUANTITY in this instrument
+// (spec section 5's settled_mean_spread and widest_sample_band), not a gate.
+// Gating it would refuse the very run that answers the question.
+struct XtalkSummary
+{
+    int32_t b0;                    // spread of a 0 ohm victim's 64 settled
+                                   // conversions; -1 = every repeat timed out
+    int32_t lat_min_ns;
+    int32_t lat_max_ns;
+    int32_t lat_mean_ns;
+    bool    address_ok;            // every victim read inside its coupon_expect
+                                   // band in its Silent case
+    int32_t worst_control_delta;   // max |mean_control(d) - mean_silent(d)|
+                                   // over every victim and every grid point
+};
+
+struct XtalkGates
+{
+    bool g2_floor;
+    bool g4_jitter;
+    bool g5_address;
+    bool g6_control;
+
+    bool ok() const { return g2_floor && g4_jitter && g5_address && g6_control; }
+};
+
+// A run that fails any gate prints every number and refuses the verdict; the
+// reader exits 1. Failing a gate is never a statement that the board is
+// defective -- with one honest exception, and the exception is G6.
+//
+// G6 failing may well be a real result rather than a broken instrument: a
+// latch pulse alone moving a 5150 ohm channel by 8 counts would be a finding
+// about this board. The gate still refuses the PER-AGGRESSOR verdict in that
+// case, because the differences stop being interpretable; what the run then
+// reports is the control curve, which is its result.
+XtalkGates xtalk_gates(const XtalkSummary& s);
+
 } // namespace shell

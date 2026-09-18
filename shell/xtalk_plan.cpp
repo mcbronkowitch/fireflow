@@ -147,4 +147,33 @@ const XtalkCase kXtalkPlan[kXtalkCases] = {
     one(10, L, base(L), XtalkKind::Silent, true),
 };
 
+XtalkGates xtalk_gates(const XtalkSummary& s)
+{
+    XtalkGates g{};
+
+    // G2, unchanged from the settle probe: the measured noise floor must
+    // leave the mean's own uncertainty well inside the decision threshold.
+    // 64 counts peak to peak across 64 samples is about 5.1 sigma, which
+    // puts the spread of a 64-sample mean near a fifth of the 8-count
+    // criterion.
+    g.g2_floor = s.b0 >= 0 && s.b0 <= kFloorMaxCounts;
+
+    // G4, unchanged: aperture jitter inside one grid step, and a latency the
+    // conversion model does not forbid.
+    g.g4_jitter = s.lat_mean_ns >= 0 && s.lat_max_ns >= s.lat_min_ns
+                  && (s.lat_max_ns - s.lat_min_ns) <= kJitterMaxNs;
+
+    // G5, new: the mux is where the table says and is enabled. Computed on
+    // the board against coupon_expect()'s bands and the span the probe's own
+    // tie reads give it; this function only folds the verdict in, because
+    // the bands need a hardware read and this file may not hold one.
+    g.g5_address = s.address_ok;
+
+    // G6, new: the control must be a control.
+    g.g6_control = s.worst_control_delta >= 0
+                   && s.worst_control_delta <= kSettleCounts;
+
+    return g;
+}
+
 } // namespace shell
