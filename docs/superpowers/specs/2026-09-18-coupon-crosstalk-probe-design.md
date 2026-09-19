@@ -277,6 +277,15 @@ number and refuses the verdict; the reader exits 1.
 | **G5** address | in its Silent case each victim reads inside its `coupon_expect` band (`Mid` for the dividers, `Low` for the ties, judged against the span the two ties give) | new — proves the mux is where the table says and is enabled; a wrong word here makes every `delta` a measurement of nothing |
 | **G6** control | for each victim, `|mean_control(d) − mean_silent(d)| ≤ 8` at every `d` | new — the control must be a control: if a latch with no bit change already moves the reading past the criterion, the aggressor cases cannot be read as differences and the finding is G6 itself |
 
+G6 is judged over **comparisons and not over victims**, and a victim counts as
+compared only once a majority of the grid's control-vs-silent point pairs have
+survived the exclusion — 33 of 65. G6 is an envelope over `d`, not a
+statistic, so a handful of surviving pairs can all sit in a quiet stretch of
+the transient and report 0 counts; below half the grid, "at every `d`" stops
+being an honest description of what was measured. The firmware and
+`read_xtalk.py` hold the same minimum, the reader deriving it from the block's
+own `points` field rather than carrying its own 33.
+
 G6 failing is the one that may well be a real result rather than a broken
 instrument — a latch pulse alone moving a 5150 Ω channel by 8 counts would be
 a finding about the board. The gate still refuses the *per-aggressor* verdict
@@ -292,19 +301,71 @@ quantity here, not a gate.
 Integers only, `PrintLine`, one block repeating forever with the same cadence
 and the same `_END` marker discipline as the settle probe:
 
+**Transcribed from `xtalk_probe.cpp`'s `PrintLine` calls on 2026-09-19, not
+from this section's own history.** What stood here was the design's single
+combined `SHELL_XTALK` line and nothing else; the firmware had since split it
+into a `_CASE` line and a point line (libDaisy's log buffer is 128 bytes and
+the combined line ran about 150, which would have been truncated and stamped
+`$$`), and had added `_RATE`, `_STAT`, `_SPAN` and `_G5`. `read_xtalk.py`
+parses this format by field name, and three separate fix rounds in the
+codec-tone plan were caused by a spec section that had drifted from the
+firmware, so it is brought level here rather than appended to.
+
 ```
-SHELL_XTALK_CFG  adc_khz=%d repeats=%d grid_ns=%d points=%d park_ns=%d scan_settle_ns=%d rv4=%d git=%s
-SHELL_XTALK_CLK  ...                          (the settle probe's line, unchanged)
-SHELL_XTALK_CAL  lat_mean_ns=%d lat_min_ns=%d lat_max_ns=%d b0=%d
-SHELL_XTALK      case=%d kind=%d victim_group=%d victim_ch=%d r_src=%d word_a=%d word_b=%d d_ns=%d n=%d mean=%d min=%d max=%d skipped=%d
-SHELL_XTALK_STATIC case=%d victim_group=%d victim_ch=%d r_src=%d word=%d n=%d mean=%d min=%d max=%d
-SHELL_XTALK_GATES g2=%d g4=%d g5=%d g6=%d init_ok=%d cal_ok=%d cfg_ok=%d gates_ok=%d
+SHELL_XTALK_WARMUP  ok=%d init_ok=%d cal_ok=%d cfg_ok=%d      (once at boot, outside the block)
+SHELL_XTALK_CFG     adc_khz=%d repeats=%d grid_ns=%d points=%d park_ns=%d scan_settle_ns=%d rv4=%d git=%s
+SHELL_XTALK_RATE    block_size=%d sr_hz=%d cases=%d victims=%d
+SHELL_XTALK_CLK     span_short_cyc=%d span_long_cyc=%d smp_short_tenths=%d smp_long_tenths=%d
+SHELL_XTALK_CAL     lat_mean_ns=%d lat_min_ns=%d lat_max_ns=%d b0=%d timeouts=%d
+SHELL_XTALK_CASE    case=%d row=%d kind=%d victim_group=%d victim_ch=%d r_src=%d word_a=%d word_b=%d skipped=%d
+SHELL_XTALK         case=%d d_ns=%d n=%d mean=%d min=%d max=%d
+SHELL_XTALK_STAT    case=%d settled_mean_spread=%d widest_sample_band=%d at_d_ns=%d
+SHELL_XTALK_G6      case=%d victim_group=%d victim_ch=%d pairs=%d worst=%d compared=%d
+SHELL_XTALK_NOVICTIM case=%d row=%d victim_group=%d victim_ch=%d
+SHELL_XTALK_STATIC  case=%d victim_group=%d victim_ch=%d r_src=%d word=%d n=%d mean=%d min=%d max=%d
+SHELL_XTALK_SPAN    zero=%d rail=%d hi_spread=%d lo_spread=%d lost=%d n_min=%d valid=%d
+SHELL_XTALK_G5      victim_group=%d victim_ch=%d expect=%d mean=%d ok=%d
+SHELL_XTALK_GATES   g2=%d g4=%d g5=%d g6=%d init_ok=%d cal_ok=%d cfg_ok=%d gates_ok=%d
 SHELL_XTALK_END
 ```
+
+Per case the block carries either `_CASE`, its `points` point lines and
+`_STAT` for a grid case — with `_G6` behind the `_STAT` when that case is its
+victim's control — or `_CASE` and `_STATIC` for a static case, or `_CASE`
+alone for a skipped one, or `_CASE` and `_NOVICTIM` for a case naming no
+victim. `_STAT` is emitted for **every** grid case and not only the Silent
+ones; its two numbers mean different things depending on whose curve they
+describe, and `read_xtalk.py` files them under separate scopes accordingly.
 
 Silent cases are printed after their grid completes, in the same line format;
 case 10 prints as it goes. The reader cannot tell the two apart from the
 lines, which is deliberate — the firmware's `kind` field is the record.
+
+Three of these fields close round one's own KNOWN GAPs and were added
+2026-09-19. A block missing `_G6` or `_NOVICTIM` is refused — the firmware
+emits both from paths every block runs, so their absence is transit loss. A
+`_SPAN` line missing **both** `lost=` and `n_min=` is a different thing: a
+**pre-fix capture**, which `read_xtalk.py` reads and labels
+`span_format=pre-fix` in the metadata, with a `g5_risk` row saying what that
+block's G5 gives up. Refusing it would not be more rigorous — every published
+number in `docs/hardware/crosstalk-measured.md` came from a pre-fix capture,
+and a reader that cannot re-read it makes that document unreproducible. A
+`_SPAN` line carrying exactly one of the two is a shape no image prints, i.e.
+a damaged line, and is refused.
+
+- `_SPAN`'s `lost=` and `n_min=` — the repeats the four 0 Ω tie reads lost,
+  and the smallest surviving count on any one tie. The four tie reads used to
+  run through `probe_adc::mean_of_repeats()`, which folds a timed-out
+  repeat's `0` into the mean with nothing in the return value to say so; on
+  an AGND tie, whose true reading is already ~0, that was completely
+  invisible and could pass a broken tie as the yardstick G5 is judged
+  against. The span is now refused outright when any repeat is lost.
+- `_G6`'s `pairs=` and `compared=` — how many control-vs-silent point pairs
+  survived per victim, and whether that cleared a majority of the grid. The
+  gate used to count victims rather than comparisons, so a victim whose every
+  pair was excluded still counted and handed G6 a worst delta of `0`.
+- `_NOVICTIM` — a case whose `(group, channel)` is in no victim table row.
+  It used to print nothing at all.
 
 `shell/read_xtalk.py` follows `read_settle.py`: accumulate to `_END`, discard
 an incomplete block, tolerate the `$$`-marked spliced lines USB-CDC produces

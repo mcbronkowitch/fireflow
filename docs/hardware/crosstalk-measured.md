@@ -440,10 +440,24 @@ which is why §6 carries the `d=0`-dropped column.
    zeroed repeat is indistinguishable. G5 is judged against that span and,
    unlike G6, the reader does not recompute it independently. Not exercised —
    `timeouts=0` on every CAL line of every capture — and recorded in the source.
+   **Closed 2026-09-19** (the four reads go through `RepeatAccum`/`take_one()`
+   and the span is refused outright when any repeat is lost; `lost=` and
+   `n_min=` ride on `SHELL_XTALK_SPAN`). Flashed the same day and captured over
+   10 complete blocks: `lost=0 n_min=64 valid=1` in every one, so **no tie lost
+   a repeat and the refusal path did not fire.** It is therefore present and
+   printing but **unproven on hardware**. Every number in the tables above
+   still comes from the 2026-09-18 image, which carries the defect.
 6. **G6's `controls_compared` counts victims, not points.** A control curve
    whose every point pair was excluded would leave `worst = 0` and print `g6=1`.
    The reader refuses it (`points_compared == 0` → disagreement → exit 1), so the
    deliverable cannot pass on it, but the firmware bit can be wrong.
+   **Closed 2026-09-19**: the count is of surviving point pairs, a victim
+   counts as compared only past a majority of the grid, and the pair count is
+   printed per victim on `SHELL_XTALK_G6`. The reader holds the same minimum,
+   so it now also refuses a thin comparison and not only an empty one. The
+   2026-09-19 capture reports `pairs=65 compared=1` for all five victims in
+   all 10 blocks, so every comparison in that run was complete — which is what
+   rules out a vacuous pass as the explanation of its G6 failure (§13).
 7. **The 3.1 % `hw.adc.Get()` discrepancy of `docs/gotchas.md` is localised, not
    explained.** The rail tie reads **65 531–65 533 through this probe against
    63 485 through libDaisy** on the same net. That puts the difference in the
@@ -533,17 +547,82 @@ victim's recomputed G6 magnitude — as `scope,key,value` rows. §4's verdict ta
 cannot be rebuilt from the grid points alone.
 
 The reader accumulates to the end marker and discards an incomplete block. It
-exits 1 when a gate failed **or** when a verdict failed, and it distinguishes the
-two in words — a gate failure prints *"no crosstalk verdict from this run may be
-quoted"* and stops. Its guard is `shell/test_read_xtalk.py`, registered in CTest
+exits 1 when a gate failed, when a verdict failed, or when a case named a victim
+the table does not have, and it distinguishes them in words — a gate failure
+prints *"no crosstalk verdict from this run may be quoted"* and stops. Its guard is `shell/test_read_xtalk.py`, registered in CTest
 as `read_xtalk_guard`; it needs no board and no pyserial.
 
 **A block is 9.07 s and prints ~2 984 lines.** A fused or truncated line can
 appear anywhere in it — `$$` is libDaisy's marker, and the mechanism is an
 accumulation overflow when the host is not draining (`logger.cpp:78-87`), not a
 single line being too long. The completeness rules are what protect the verdict:
-five of them, each refusing a corruption the other four cannot see.
+eight of them since 2026-09-19 (0, 0a, 1–6), each refusing a corruption the
+others cannot see.
 
 **Do not expect `SHELL_XTALK_WARMUP` to arrive.** It is printed once before the
 forever loop and `StartLog(false)` does not wait for a host. Everything on it
 that matters is reprinted inside the loop on `SHELL_XTALK_GATES`.
+
+## 13. The 2026-09-19 re-measurement, which fails G6
+
+Everything above this section comes from the **2026-09-18** capture. This
+section is a **different run on a different image** and does not revise a
+single number above it.
+
+The image is the one that closes §9's items 5 and 6: 254 276 B, md5
+`0cdc73ee04a34b128a7c0477df59b362`, git stamp `80e94db+`, flashed 2026-09-19.
+The capture is 31 500 lines over 95 s: 12 `_CFG`, 11 `_END`, two `$$`. The
+first `_CFG`…`_END` pair spans 678 lines rather than ~2 989 — the capture
+opened inside a block, and both `$$` land in it, one of them fusing that
+`_CFG` line itself — so the reader rejects it; the last `_CFG` has no `_END`.
+**Ten complete blocks.**
+
+`SHELL_XTALK_GATES g2=1 g4=1 g5=1 g6=0 … gates_ok=0`, identically in all ten.
+G6's bound is `kSettleCounts = 8` (`xtalk_plan.cpp:173-174`).
+
+Worst `|mean_control(d) − mean_silent(d)|` per victim, one column per block,
+**recomputed from the raw point lines** and found equal to the firmware's own
+printed `worst` in all 50 victim-blocks:
+
+| victim | R_src | 2026-09-19, ten blocks | 2026-09-18 (§4 row 1) |
+|---|---:|---|---|
+| `REF_A` g0.ch8 | 5150 Ω | 10, 12, 9, 9, 9, 10, 9, 9, 10, 11 | 6 / 7 / 7 / 7 |
+| `REF_C` g1.ch6 | 5150 Ω | 12, 11, 10, 11, 11, 11, 11, 10, 12, 11 | 6 / 7 / 6 / 6 |
+| `REF_B` g0.ch9 | 650 Ω | 10, 9, 12, 8, 9, 9, 9, 10, 10, 9 | 5 / 5 / 6 / 5 |
+| `R_SP10` g0.ch10 | 150 Ω | 1, 1, 1, 1, 1, 0, 1, 2, 1, 1 | 1 |
+| `R_LO3` g1.ch3 | 150 Ω | 0, 0, 1, 0, 1, 0, 1, 0, 0, 0 | 0 |
+
+Three facts, and nothing beyond them.
+
+**The three higher-impedance victims moved from 5–7 to 8–12. The two 150 Ω
+ties did not move.** Whatever this is, it is not global to the instrument.
+
+**The comparison was complete, so this is not a gate passing on no data.**
+Every victim in every block reports `pairs=65 compared=1`: all 65 point pairs
+survived the exclusion on both curves. That is the whole reason §9 item 6's
+fix is worth having — the *old* firmware could not have told this apart from a
+victim compared at no points at all. Nor did that fix cause the numbers: the
+2026-09-19 diff adds a pair counter and a printed line and leaves the
+exclusion test, the per-point difference, the absolute value, the max-over-grid
+fold and the `worst_control` fold untouched, and with 65 pairs everywhere the
+new guard is transparent — the old code, given these readings, prints the same
+worst values and the same `g6=0`.
+
+**§3 anticipated this range in writing, and that is not permission.** It says a
+G6 failure at 7–9 counts "would be partly correct, not a misattribution", and
+in the same breath that **the bound must not be widened without measuring it.**
+Nineteen of these thirty higher-impedance readings sit at 10 or above, past
+even that range. The bound stays at 8.
+
+**No mechanism is offered, and none may be inferred from this section.** What
+differs between the two runs is not a list of candidates, it is a list of
+things that were not controlled: the board has been handled, power-cycled and
+reflashed many times since 2026-09-18, the codec-tone image ran on it for
+hours, and ambient conditions were recorded in neither run. None of that is
+evidence for anything. A second board, or this board re-measured under
+recorded conditions, is what would turn this into a finding.
+
+The first complete block of this capture is committed beside this document as
+`2026-09-19-xtalk.csv` and `2026-09-19-xtalk.csv.meta.csv` — the first
+`xtalk.csv.meta.csv` this repository has ever held. Both carry
+`gates,,gates_ok,0`: they are the evidence for this section, not a passing run.

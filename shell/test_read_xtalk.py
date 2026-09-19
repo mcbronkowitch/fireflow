@@ -36,11 +36,22 @@ firmware prints only the bit: |control(d) - silent(d)| per victim, from the
 row-1 and row-2 curves every block already carries, asserted against the
 printed g6. Per-victim beats the firmware's single folded scalar, and unlike
 a firmware field it can go red on a fixture -- which is what case 18 does.
+
+Cases 21-23 are Task 7's three round-one fixes, one section each, and case 22
+is the one that matters most. The defect it closes is a GATE THAT PASSES ON
+NO DATA: the firmware counted victims where it should have counted
+comparisons, so a control curve whose every point pair was excluded still
+counted as compared and handed G6 a worst delta of 0. A perfect score out of
+zero comparisons does not look like an error, it looks like a clean result,
+and `compared > 0` on this side had the same weakness. Every check in that
+section was watched going red against the unfixed reader before it was left
+green.
 """
 import sys
 
 from read_xtalk import (parse_block, format_csv, format_meta_csv, deltas,
-                        verdicts, control_deltas, g6_disagreement)
+                        verdicts, control_deltas, g6_disagreement,
+                        span_is_prefix)
 
 FAILURES = []
 
@@ -53,7 +64,9 @@ def check(label, cond):
 def build_block(scan_settle_ns=2000000, grid_points=2, gates_ok=1,
                 aggressor_means=(100, 100), control_means=(100, 100),
                 silent_means=(100, 100), g6=None, aggressor_n=64,
-                orphan_victim=False):
+                control_n=64, orphan_victim=False, fw_pairs=None,
+                span_lost=0, span_n_min=64, span_valid=1,
+                span_fields=("lost", "n_min"), no_victim_case=False):
     """Two victims (one 5150 ohm divider, one 150 ohm tie), twelve cases:
     silent, control and one LED aggressor per victim, two static cases per
     victim, and one SKIPPED case per victim -- every real block has four of
@@ -69,13 +82,54 @@ def build_block(scan_settle_ns=2000000, grid_points=2, gates_ok=1,
     `orphan_victim` adds a third victim that appears in a skipped case and in
     nothing else -- no floor curve, no control curve. G6 cannot be computed
     for it at all, and it is the one shape in which a skipped case reaches
-    the per-victim arithmetic."""
+    the per-victim arithmetic.
+
+    TASK 7 ADDED FIVE MORE LEVERS, one per thing its three fixes made
+    printable:
+
+    `control_n` is the row-2 point lines' surviving repeat count, the same
+    shape as `aggressor_n`. It is the lever the gate-passing-on-no-data
+    fixture needs: with it at 0 the control curve has every point pair
+    excluded, which is the run the old `++controls_compared` counted as a
+    comparison and scored 0.
+
+    `fw_pairs` overrides the pair count the firmware's own _G6 line prints,
+    leaving this reader's recomputation untouched, so the two can be made to
+    disagree. They read the same curves with the same exclusion and cannot
+    honestly differ.
+
+    `span_lost`, `span_n_min` and `span_valid` are the _SPAN line's Task 7
+    fields: the tie repeats lost, the worst surviving count on one tie, and
+    the validity bit the firmware derives from them.
+
+    `span_fields` chooses WHICH of the two loss fields the _SPAN line carries
+    at all. `()` is a pre-fix block -- a real round-one capture, which this
+    reader must still be able to read, because every published number in
+    docs/hardware/crosstalk-measured.md came from one. A one-element tuple is
+    a shape no image has ever printed: a line that arrived damaged.
+
+    `no_victim_case` appends a case whose (group, channel) is in no victim
+    table row -- a _CASE line with skipped=1 and a _NOVICTIM line behind it.
+    It names a channel no G5 line does, which is the whole point of it."""
     if g6 is None:
         g6 = gates_ok
     if not isinstance(aggressor_n, tuple):
         aggressor_n = (aggressor_n,) * grid_points
+    if not isinstance(control_n, tuple):
+        control_n = (control_n,) * grid_points
     n_victims = 3 if orphan_victim else 2
-    n_cases = 13 if orphan_victim else 12
+    n_cases = 12 + (1 if orphan_victim else 0) + (1 if no_victim_case else 0)
+
+    # What the firmware's _G6 line reports, derived from this fixture's own
+    # curves exactly as the firmware derives it from the board's: a pair
+    # survives where both curves converted, `worst` is the envelope over the
+    # survivors, and `compared` is that count against a majority of the grid.
+    g6_pairs = sum(1 for k in range(grid_points) if control_n[k] > 0)
+    g6_worst = max((abs(control_means[k] - silent_means[k])
+                    for k in range(grid_points) if control_n[k] > 0),
+                   default=0)
+    g6_compared = 1 if g6_pairs >= grid_points // 2 + 1 else 0
+    printed_pairs = g6_pairs if fw_pairs is None else fw_pairs
     lines = [
         "SHELL_XTALK_CFG adc_khz=6146 repeats=64 grid_ns=200 points=%d "
         "park_ns=20000 scan_settle_ns=%d rv4=0 git=4a7800f+"
@@ -86,7 +140,11 @@ def build_block(scan_settle_ns=2000000, grid_points=2, gates_ok=1,
         "smp_short_tenths=165 smp_long_tenths=3875",
         "SHELL_XTALK_CAL lat_mean_ns=747 lat_min_ns=700 lat_max_ns=800 "
         "b0=32 timeouts=0",
-        "SHELL_XTALK_SPAN zero=0 rail=63485 hi_spread=1 lo_spread=1 valid=1",
+        "SHELL_XTALK_SPAN zero=0 rail=63485 hi_spread=1 lo_spread=1%s "
+        "valid=%d"
+        % ("".join(" %s=%d" % (f, {"lost": span_lost,
+                                   "n_min": span_n_min}[f])
+                   for f in span_fields), span_valid),
     ]
     victims = ((0, 8, 5150), (1, 3, 150))
     g5_victims = victims + (((1, 5, 650),) if orphan_victim else ())
@@ -109,7 +167,12 @@ def build_block(scan_settle_ns=2000000, grid_points=2, gates_ok=1,
             # path, so n < 64 is a mean over fewer real conversions and is
             # good data, while n == 0 is not a reading at all.
             for k in range(grid_points):
-                n = aggressor_n[k] if row == 7 else 64
+                if row == 7:
+                    n = aggressor_n[k]
+                elif row == 2:
+                    n = control_n[k]
+                else:
+                    n = 64
                 lines.append("SHELL_XTALK case=%d d_ns=%d n=%d mean=%d "
                              "min=%d max=%d"
                              % (case, k * 200, n, means[k], means[k] - 2,
@@ -122,6 +185,15 @@ def build_block(scan_settle_ns=2000000, grid_points=2, gates_ok=1,
             spread = (9 + vi) if row == 1 else (30 + case)
             lines.append("SHELL_XTALK_STAT case=%d settled_mean_spread=%d "
                          "widest_sample_band=44 at_d_ns=0" % (case, spread))
+            # The control case carries G6's evidence behind its STAT, which
+            # is where the firmware prints it: the row-2 branch is where the
+            # numbers exist. One per victim that has a control case -- never
+            # per victim, which is the distinction the whole fix is about.
+            if row == 2:
+                lines.append("SHELL_XTALK_G6 case=%d victim_group=%d "
+                             "victim_ch=%d pairs=%d worst=%d compared=%d"
+                             % (case, g, ch, printed_pairs, g6_worst,
+                                g6_compared))
             case += 1
 
     for vi, (g, ch, r) in enumerate(victims):
@@ -150,6 +222,19 @@ def build_block(scan_settle_ns=2000000, grid_points=2, gates_ok=1,
         lines.append("SHELL_XTALK_CASE case=%d row=6 kind=1 victim_group=%d "
                      "victim_ch=%d r_src=%d word_a=%d word_b=%d skipped=1"
                      % (case, og, och, orr, 0x28, 0x2C))
+        case += 1
+
+    # A case naming no victim. channel 9 of group 1 appears in no G5 line
+    # here and in no victim table row on the board, which is exactly the
+    # condition victim_index_of() returns -1 for. It gets a CASE line with
+    # skipped=1 so the block stays complete, and a _NOVICTIM line so it is
+    # distinguishable from the rv4 skips above it.
+    if no_victim_case:
+        lines.append("SHELL_XTALK_CASE case=%d row=7 kind=1 victim_group=1 "
+                     "victim_ch=9 r_src=650 word_a=%d word_b=%d skipped=1"
+                     % (case, 0x28, 0x3FE8))
+        lines.append("SHELL_XTALK_NOVICTIM case=%d row=7 victim_group=1 "
+                     "victim_ch=9" % case)
         case += 1
 
     # gates_ok is the FOLD, not a free field: xtalk_gates()::ok() is the AND
@@ -512,6 +597,145 @@ check("a fusion in the middle of a block does not crash it either, "
 # the firmware repeats forever and the reader keeps listening.
 check("a corrupted block does not poison the block that follows it",
       parse_block(mid + base) is not None)
+
+# --- 21: the span's exclusion fields (Task 7 step 1) ---
+# A _SPAN line with NEITHER field is a pre-fix block: an image from before the
+# four tie reads got their timeout exclusion. It is READ, not refused. Every
+# published number in docs/hardware/crosstalk-measured.md came from such a
+# capture, and a reader that cannot re-read it makes that document
+# unreproducible -- refusing an old capture is not more rigorous than reading
+# it and saying what it gives up.
+prefix_block = parse_block(build_block(span_fields=()))
+check("a pre-fix capture is still readable", prefix_block is not None)
+check("and the reader knows it is one", prefix_block is not None
+      and span_is_prefix(prefix_block))
+check("a post-fix capture is not mistaken for a pre-fix one",
+      block is not None and not span_is_prefix(block))
+check("a pre-fix block is still usable end to end",
+      prefix_block is not None
+      and len(control_deltas(prefix_block)) == 2
+      and len(verdicts(prefix_block)) == 2)
+# ONE of the two fields is a shape no image has ever printed: a line that
+# arrived damaged, which is what every other rule here exists to catch.
+for _only in ("lost", "n_min"):
+    check("a SPAN line carrying only %s is refused as damaged" % _only,
+          parse_block(build_block(span_fields=(_only,))) is None)
+# THE LABEL IS ASSERTED IN BOTH DIRECTIONS. A marker written only for the bad
+# case is one a reader must know to look for, and a marker that quietly
+# stopped being written would look exactly like a good block.
+meta_prefix = {(r[0], r[1], r[2]): r[3]
+               for r in [x.split(",") for x in
+                         format_meta_csv(prefix_block).strip().split("\n")[1:]]}
+check("a pre-fix block is labelled PRE-FIX in the metadata",
+      meta_prefix.get(("span", "", "span_format")) == "pre-fix")
+check("and the file says plainly what that block's G5 is missing",
+      "AGND" in (meta_prefix.get(("span", "", "g5_risk")) or ""))
+check("a post-fix block carries the other label and no risk row",
+      meta.get(("span", "", "span_format")) == "task7-exclusion"
+      and meta.get(("span", "", "g5_risk")) is None)
+check("the span's exclusion fields reach the metadata file",
+      meta.get(("span", "", "lost")) == "0"
+      and meta.get(("span", "", "n_min")) == "64")
+# A lossy span: the firmware refuses it, and the refusal survives into the
+# file with the evidence beside it rather than as a bare valid=0.
+lossy = parse_block(build_block(span_lost=3, span_n_min=61, span_valid=0,
+                                gates_ok=0))
+check("a span that lost tie repeats is carried with its counts",
+      lossy and lossy["span"]["lost"] == 3 and lossy["span"]["n_min"] == 61
+      and lossy["span"]["valid"] == 0)
+meta_lossy = {(r[0], r[1], r[2]): r[3]
+              for r in [x.split(",") for x in
+                        format_meta_csv(lossy).strip().split("\n")[1:]]}
+check("and the loss is in the metadata beside the refusal, not only in it",
+      meta_lossy.get(("span", "", "lost")) == "3"
+      and meta_lossy.get(("span", "", "valid")) == "0")
+
+# --- 22: G6 counts comparisons, not victims (Task 7 step 2) ---
+# THE BUG THIS CLOSES IS A GATE THAT PASSES ON NO DATA. The firmware used to
+# increment controls_compared for any victim that had a floor curve at all,
+# whether or not one single point pair survived the exclusion -- so a control
+# curve with every pair excluded left `worst` at 0 and still counted, and G6
+# reported a worst delta of 0: a perfect score out of zero comparisons. It
+# does not look like an error, it looks like a clean result, and that is the
+# failure mode this project treats as most serious.
+#
+# `compared > 0` on this side had exactly the same weakness.
+starved = parse_block(build_block(control_n=0, g6=1,
+                                  silent_means=(100, 100),
+                                  control_means=(100, 100)))
+cd_starved = control_deltas(starved)
+check("a control curve with every pair excluded is compared at no points",
+      cd_starved and all(r["points_compared"] == 0 for r in cd_starved))
+check("a gate with no surviving pair is NOT within bound",
+      cd_starved and not any(r["within_bound"] for r in cd_starved))
+check("and a g6=1 over it is a disagreement, not a pass",
+      g6_disagreement(starved) is not None)
+# The firmware's own line agrees it compared nothing, which is the number the
+# gate now rests on.
+check("the firmware's own pair count reaches the metadata as zero",
+      cd_starved and all(r["fw_pairs"] == 0 and r["fw_compared"] == 0
+                         for r in cd_starved))
+# One surviving pair of two is not a majority of the grid, and one pair is
+# not evidence for an envelope over 65 delays. Discriminates the threshold
+# from "anything above zero": this block HAS data and is still refused.
+thin_control = parse_block(build_block(control_n=(64, 0), g6=1,
+                                       silent_means=(100, 100),
+                                       control_means=(106, 100)))
+cd_thin = control_deltas(thin_control)
+check("a control compared on fewer pairs than the grid needs is refused",
+      cd_thin and all(r["points_compared"] == 1
+                      and r["min_points_required"] == 2
+                      and not r["within_bound"] for r in cd_thin))
+check("a g6=1 over a control compared on too few pairs is a disagreement",
+      g6_disagreement(thin_control) is not None)
+# And the same curves with every pair surviving DO pass, so the three checks
+# above are about the pair count and not about the bound.
+fat_control = parse_block(build_block(g6=1, silent_means=(100, 100),
+                                      control_means=(106, 100)))
+cd_fat = control_deltas(fat_control)
+check("the same curves with a whole grid of pairs are compared and in bound",
+      cd_fat and all(r["points_compared"] == 2 and r["within_bound"]
+                     for r in cd_fat)
+      and g6_disagreement(fat_control) is None)
+# Rule 6: a lost _G6 line is invisible to every other completeness rule.
+check("a block missing one victim's G6 line is refused",
+      parse_block(drop_first(base, "SHELL_XTALK_G6")) is None)
+# The firmware and this reader apply the same exclusion to the same two
+# curves, so their pair counts cannot honestly differ.
+check("the firmware's pair count is carried beside the reader's own",
+      all(r["fw_pairs"] == r["points_compared"] and r["fw_pairs_agree"]
+          for r in cd_fat))
+mismatch = control_deltas(parse_block(build_block(fw_pairs=1)))
+check("a firmware pair count the reader cannot reproduce is flagged",
+      mismatch and not any(r["fw_pairs_agree"] for r in mismatch))
+
+# --- 23: a case naming no victim (Task 7 step 3) ---
+# It used to print nothing at all: the block came up short, rule 1 discarded
+# it, and the log said only that a block was short -- not which case went
+# missing or why. Now it is a CASE line plus its own diagnosis, so the block
+# is complete AND the defect is named.
+nv_block = parse_block(build_block(no_victim_case=True))
+check("a block carrying a no-victim case is complete, not short",
+      nv_block is not None and len(nv_block["cases"]) == 13)
+check("and the diagnosis is carried with the case that caused it",
+      nv_block and len(nv_block["novictim"]) == 1
+      and nv_block["novictim"][0]["case"] == 12
+      and nv_block["novictim"][0]["victim_ch"] == 9)
+# The CASE line alone cannot tell it from an rv4 skip -- both read skipped=1
+# -- so the metadata needs its own scope or the file loses the distinction.
+meta_nv = {(r[0], r[1], r[2]): r[3]
+           for r in [x.split(",") for x in
+                     format_meta_csv(nv_block).strip().split("\n")[1:]]}
+check("a no-victim case is distinguishable from an rv4 skip in the file",
+      meta_nv.get(("novictim", "12", "victim_ch")) == "9"
+      and meta_nv.get(("case", "12", "skipped")) == "1"
+      and meta_nv.get(("novictim", "10", "victim_ch")) is None
+      and meta_nv.get(("case", "10", "skipped")) == "1")
+# It is skipped, so it is not differenced and not judged -- which is exactly
+# why it has to be reported: verdicts() drops it silently otherwise.
+check("a no-victim case yields no delta and no verdict",
+      all(row["case"] != 12 for row in deltas(nv_block))
+      and all(row["case"] != 12 for row in verdicts(nv_block)))
 
 if FAILURES:
     for f in FAILURES:

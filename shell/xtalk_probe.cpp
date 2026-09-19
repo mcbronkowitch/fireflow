@@ -17,6 +17,70 @@ namespace shell {
 
 namespace {
 
+// --- The one reducer every conversion in this file goes through ---
+//
+// MOVED TO THE TOP OF THE FILE by the Task 7 round-one fixes, from below
+// measure_span(), for one reason: read_parked() now returns a CountedPoint.
+// Nothing about these three definitions changed in the move.
+
+// A grid point plus the count of repeats that actually produced a
+// conversion. Point itself (settle_plan.h) carries no such field and is not
+// getting one: it is host-compiled, host-tested and shared with the settle
+// probe, so the count rides beside it here instead.
+//
+// Named for what it is rather than for the row that first needed it. Task 5
+// called this SilentPoint when Silent was the only kind this file measured;
+// Latch, ShiftOnly and Static all carry the same count now, for the same
+// reason -- see measure_silent_point().
+struct CountedPoint
+{
+    Point p;
+    int   valid;   // kRepeats unless a conversion timed out; 0 -> p is -1/-1/-1
+};
+
+// The reduction of kRepeats conversions into one point, written ONCE because
+// Task 6 gives it four call sites -- five since Task 7 routed read_parked()
+// through it too. "A timed-out repeat is excluded and the survivors are
+// counted" has to hold identically at all of them, or the n= field stops
+// meaning the same thing from one printed line to the next -- and n= is the
+// only place in the capture where a timeout becomes visible.
+struct RepeatAccum
+{
+    int64_t sum = 0;
+    int32_t lo  = 0x7FFFFFFF;
+    int32_t hi  = -0x7FFFFFFF;
+    int     n   = 0;
+
+    CountedPoint finish() const
+    {
+        // -1 rather than a divide by zero or the 0x7FFFFFFF init values
+        // leaking into print, and n dividing the sum rather than kRepeats --
+        // the same shape as the latency pass, for the same reason.
+        if(n == 0) return CountedPoint{Point{-1, -1, -1}, 0};
+        return CountedPoint{Point{static_cast<int32_t>(sum / n), lo, hi}, n};
+    }
+};
+
+// One conversion, folded in unless it timed out.
+//
+// probe_adc::sample_now() returns 0 on a timeout (probe_adc.cpp:236) and with
+// `nullptr` passed for the span the caller cannot tell that from a channel
+// reading zero -- so one timeout on a 32500-count divider would pull a point's
+// mean down by about 508 counts and set its `min` to 0, with nothing printed
+// to say so. probe_adc::timeouts() is a LIFETIME counter printed on the NEXT
+// block's CAL line, which leaves the last complete block of any capture
+// covered by no printed counter at all.
+void take_one(RepeatAccum& acc)
+{
+    uint32_t      span = 0;
+    const int32_t v    = probe_adc::sample_now(&span);
+    if(span == probe_adc::kTimeoutSentinel) return;
+    acc.sum += v;
+    if(v < acc.lo) acc.lo = v;
+    if(v > acc.hi) acc.hi = v;
+    ++acc.n;
+}
+
 // --- Step 3: the span, and G5's yardstick ---
 
 // The four 0 R tie channels on the 4067, from netlist.py's NEIGHBOURS and
@@ -63,19 +127,29 @@ constexpr int kQuietMs = 50;
 // settle_probe.cpp's park() leaves that to run_settle_probe(). Every call
 // site below says which channel is selected and when.
 //
-// KNOWN GAP: this is the one conversion path in this file that still goes
-// through probe_adc::mean_of_repeats(), not RepeatAccum/take_one() below --
-// so it never got Task 5's timeout exclusion. See the comment ahead of the
-// four calls in measure_span() for what that means for G5. Not exercised on
-// the 2026-09-18 capture (timeouts=0 on all five CAL lines), so this is a
-// comment, not a fix.
-int32_t read_parked(MuxScan& chain, int group, int ch)
+// TASK 7 CLOSED THE KNOWN GAP THAT STOOD HERE. This used to be the one
+// conversion path in this file that went through
+// probe_adc::mean_of_repeats(), which folds a timed-out repeat's 0 into the
+// sum and divides by `repeats` like any other reading, with nothing in the
+// return value to say a repeat was lost (probe_adc.h:53-56). It now runs the
+// same RepeatAccum/take_one() reduction as every other conversion here, so a
+// timeout is excluded from the mean and counted in `valid`, and the count
+// reaches the caller.
+//
+// probe_adc::mean_of_repeats() itself is deliberately NOT changed: it is used
+// elsewhere and its documented behaviour is relied on. The header is the
+// authority, not the name -- and note that mean_span_of_repeats() beside it
+// DOES exclude timeouts, which is precisely why reading the names is not a
+// substitute for reading the header.
+CountedPoint read_parked(MuxScan& chain, int group, int ch)
 {
     chain.write_chain(chain_word(
         kCouponChain, step_pattern(kCouponChain, step_of(kCouponChain, group, ch)), 0u));
     const uint32_t t0 = cycles_now();
     while(cycles_now() - t0 < ns_to_cycles(kParkNs)) { }
-    return probe_adc::mean_of_repeats(kRepeats);
+    RepeatAccum acc;
+    for(int r = 0; r < kRepeats; ++r) take_one(acc);
+    return acc.finish();
 }
 
 // coupon_span()'s semantics from four reads instead of twenty-four, plus the
@@ -88,7 +162,49 @@ struct SpanRead
     Span    span;
     int32_t hi_spread;
     int32_t lo_spread;
+    // Task 7: what the four tie reads lost, so a loss is a printed number
+    // rather than an absence. `lost` is the total repeats excluded across all
+    // four ties (0 on a clean pass, 4 * kRepeats if the ADC answered nothing
+    // at all); `worst_valid` is the smallest surviving count on any ONE tie,
+    // because "four lost, one from each tie" and "four lost, all from the
+    // same tie" are different events and the total cannot tell them apart.
+    int32_t lost;
+    int32_t worst_valid;
 };
+
+// How many repeats a tie read may lose and still be used. ZERO -- the span is
+// refused unless all four ties converted all kRepeats.
+//
+// THIS IS NOT AN ACCURACY ARGUMENT. take_one() excludes a timed-out repeat
+// rather than folding its 0 in, so a mean over the survivors is unbiased and
+// 63 of 64 repeats would be plenty of precision against kTieSpread (328
+// counts). The argument is about what a timeout on THESE four channels means.
+// They are 0 R links to A+3V3 and AGND through the mux switch alone -- the
+// lowest-impedance, quietest nodes this instrument ever reads, and the ones
+// it reads last, after the whole table has run and the board has been left
+// alone for kQuietMs. An ADC that cannot complete a conversion there is not
+// meeting a difficult channel; it is misbehaving, and the span is the
+// yardstick every victim in the block is then judged against.
+//
+// The asymmetry is what settles it. G5 is judged directly against this span
+// and, unlike G6, read_xtalk.py does not recompute it -- nothing downstream
+// catches a span that was wrong. Meanwhile the block repeats forever with no
+// inter-block delay, so refusing a span costs ONE block (MEASURED 9.07 s,
+// 2026-09-18) and prints lost= and n_min= saying exactly why.
+//
+// COST IF THIS IS WRONG, i.e. if it is too strict: a single spurious timeout
+// anywhere in the 4 * kRepeats conversions of the span pass invalidates the
+// span and fails G5 for all five victims, throwing away an otherwise good
+// block. That failure is loud, correctly labelled and self-explaining on the
+// SPAN line, and the next block is 9 s away. The opposite error -- tolerating
+// losses -- yields a plausible span and a silent G5 pass, which is the shape
+// this project treats as worst because it does not look like an error at all.
+// Refusing too much is visible; refusing too little is not.
+//
+// Whoever loosens this must keep the invariant below it: a tie that lost
+// EVERY repeat has no mean at all and must never reach the rail/zero
+// arithmetic, whatever the threshold is.
+constexpr int kMaxTieLoss = 0;
 
 SpanRead measure_span(MuxScan& chain)
 {
@@ -115,41 +231,76 @@ SpanRead measure_span(MuxScan& chain)
     // other's rung behaviour.
     probe_adc::select(probe_adc::channel_of_group(0));
 
-    // KNOWN GAP -- these four reads go through read_parked(), the one
-    // conversion path in this file that never got Task 5's timeout
-    // exclusion (probe_adc::mean_of_repeats() folds a timed-out repeat's 0
-    // into the mean with no way for the caller to detect it; see
-    // probe_adc.h). Every other conversion in this file goes through
-    // RepeatAccum/take_one(), which excludes and counts.
+    // TASK 7 CLOSED THE KNOWN GAP THAT STOOD HERE. These four reads used to
+    // go through probe_adc::mean_of_repeats(), the one conversion path in
+    // this file that never got Task 5's timeout exclusion: it folds a
+    // timed-out repeat's 0 into the mean with no way for the caller to
+    // detect it (probe_adc.h:53-56). read_parked() now runs the same
+    // RepeatAccum/take_one() reduction as every other conversion here.
     //
-    // The failure is asymmetric. A timeout on a HI tie pulls that tie's
-    // mean down by ~1024 counts per lost repeat, which mostly fails closed:
-    // it either blows hi_spread past kTieSpread or drags rail below
-    // kRailFloor, and the span comes back invalid. A timeout on an AGND
-    // (LO) tie is invisible instead -- the true reading is already ~0, and
-    // a zeroed repeat looks the same as a good one, so it can pass a
-    // genuinely bad AGND tie as valid.
+    // WHY IT MATTERED, kept because it is the argument for the refusal
+    // below and not a historical note. The failure was asymmetric. A timeout
+    // on a HI tie pulled that tie's mean down by ~1024 counts per lost
+    // repeat, which mostly failed closed: it either blew hi_spread past
+    // kTieSpread or dragged rail below kRailFloor, and the span came back
+    // invalid. A timeout on an AGND (LO) tie was invisible instead -- the
+    // true reading is already ~0, and a zeroed repeat looks the same as a
+    // good one, so it could pass a genuinely bad AGND tie as valid.
+    //
+    // Excluding alone would not have been a fix. It removes the bias and
+    // leaves the loss unsaid, which moves the silence rather than removing
+    // it -- so the span is REFUSED when a tie lost more than kMaxTieLoss
+    // repeats (see there for the threshold and what it costs), and lost= and
+    // n_min= ride on the SHELL_XTALK_SPAN line every block so a clean pass
+    // is distinguishable from a lucky one.
     //
     // G5 is judged directly against this span, and unlike G6 (which the
     // reader recomputes independently in read_xtalk.py) there is no
     // host-side check on G5 -- if this pass is wrong, nothing downstream
-    // catches it.
+    // catches it. That is why this one refuses rather than reports.
     //
     // Not exercised on the 2026-09-18 capture: timeouts=0 on all five CAL
-    // lines, so this is a comment, not a code change. The fix on the next
-    // rebuild is to route these four reads through RepeatAccum/take_one()
-    // like everything else here, and refuse the span when valid == 0.
-    const int32_t hi1 = read_parked(chain, 0, kTieHi1);
-    const int32_t hi2 = read_parked(chain, 0, kTieHi2);
-    const int32_t lo1 = read_parked(chain, 0, kTieLo1);
-    const int32_t lo2 = read_parked(chain, 0, kTieLo2);
+    // lines. So the refusal path is UNMEASURED on hardware -- the numbers
+    // above are the old path's arithmetic, not a reading of the new one.
+    const CountedPoint hi1 = read_parked(chain, 0, kTieHi1);
+    const CountedPoint hi2 = read_parked(chain, 0, kTieHi2);
+    const CountedPoint lo1 = read_parked(chain, 0, kTieLo1);
+    const CountedPoint lo2 = read_parked(chain, 0, kTieLo2);
 
     SpanRead r{};
-    r.hi_spread = (hi1 > hi2) ? (hi1 - hi2) : (hi2 - hi1);
-    r.lo_spread = (lo1 > lo2) ? (lo1 - lo2) : (lo2 - lo1);
+    r.lost = 4 * kRepeats
+             - (hi1.valid + hi2.valid + lo1.valid + lo2.valid);
+    r.worst_valid = hi1.valid;
+    if(hi2.valid < r.worst_valid) r.worst_valid = hi2.valid;
+    if(lo1.valid < r.worst_valid) r.worst_valid = lo1.valid;
+    if(lo2.valid < r.worst_valid) r.worst_valid = lo2.valid;
 
-    const int32_t rail = (hi1 + hi2) / 2;
-    const int32_t zero = (lo1 + lo2) / 2;
+    // A tie that lost EVERY repeat has no mean at all: finish() returns -1,
+    // which is not a level and must never enter the arithmetic below. Its
+    // spread would be a difference of a sentinel and its rail a plausible
+    // half of one, and the whole defect this fix closes is a tie read that
+    // comes back looking like a measurement. So this returns before any of
+    // it happens, with zero/rail at 0 and both spreads at -1: nothing in the
+    // printed line is then a number that could be read as a reading.
+    //
+    // Unreachable while kMaxTieLoss is 0 -- the threshold below already
+    // refuses far less than this. It is here because the threshold is a
+    // judgement someone may revisit and this invariant is not.
+    if(r.worst_valid == 0)
+    {
+        r.hi_spread  = -1;
+        r.lo_spread  = -1;
+        r.span.valid = false;
+        return r;
+    }
+
+    r.hi_spread = (hi1.p.mean > hi2.p.mean) ? (hi1.p.mean - hi2.p.mean)
+                                            : (hi2.p.mean - hi1.p.mean);
+    r.lo_spread = (lo1.p.mean > lo2.p.mean) ? (lo1.p.mean - lo2.p.mean)
+                                            : (lo2.p.mean - lo1.p.mean);
+
+    const int32_t rail = (hi1.p.mean + hi2.p.mean) / 2;
+    const int32_t zero = (lo1.p.mean + lo2.p.mean) / 2;
     r.span.rail  = static_cast<uint16_t>(rail);
     r.span.zero  = static_cast<uint16_t>(zero);
     // ALL FIVE of coupon_span()'s validity conditions, in the same order it
@@ -170,7 +321,14 @@ SpanRead measure_span(MuxScan& chain)
     //                   is here so it cannot fire unseen later.
     //   ordered      -- the rail must sit above the zero, or swapped nets
     //                   would still span, just backwards
-    r.span.valid = r.hi_spread <= static_cast<int32_t>(kTieSpread)
+    //
+    // AND A SIXTH, WHICH IS NOT coupon_span()'s: no tie may have lost more
+    // than kMaxTieLoss repeats. It is first in the expression because it is
+    // the condition on whether the other five were computed from four whole
+    // readings at all, and last in coupon_span()'s list because coupon_span()
+    // is handed raw values and never sees a repeat.
+    r.span.valid = r.lost <= kMaxTieLoss
+                   && r.hi_spread <= static_cast<int32_t>(kTieSpread)
                    && r.lo_spread <= static_cast<int32_t>(kTieSpread)
                    && rail >= static_cast<int32_t>(kRailFloor)
                    && zero <= static_cast<int32_t>(kRailMargin)
@@ -178,64 +336,7 @@ SpanRead measure_span(MuxScan& chain)
     return r;
 }
 
-// --- The grid point, and the one reducer every kind's repeats go through ---
-
-// A grid point plus the count of repeats that actually produced a
-// conversion. Point itself (settle_plan.h) carries no such field and is not
-// getting one: it is host-compiled, host-tested and shared with the settle
-// probe, so the count rides beside it here instead.
-//
-// Named for what it is rather than for the row that first needed it. Task 5
-// called this SilentPoint when Silent was the only kind this file measured;
-// Latch, ShiftOnly and Static all carry the same count now, for the same
-// reason -- see measure_silent_point().
-struct CountedPoint
-{
-    Point p;
-    int   valid;   // kRepeats unless a conversion timed out; 0 -> p is -1/-1/-1
-};
-
-// The reduction of kRepeats conversions into one point, written ONCE because
-// Task 6 gives it four call sites. "A timed-out repeat is excluded and the
-// survivors are counted" has to hold identically at all of them, or the n=
-// field stops meaning the same thing from one printed line to the next -- and
-// n= is the only place in the capture where a timeout becomes visible.
-struct RepeatAccum
-{
-    int64_t sum = 0;
-    int32_t lo  = 0x7FFFFFFF;
-    int32_t hi  = -0x7FFFFFFF;
-    int     n   = 0;
-
-    CountedPoint finish() const
-    {
-        // -1 rather than a divide by zero or the 0x7FFFFFFF init values
-        // leaking into print, and n dividing the sum rather than kRepeats --
-        // the same shape as the latency pass, for the same reason.
-        if(n == 0) return CountedPoint{Point{-1, -1, -1}, 0};
-        return CountedPoint{Point{static_cast<int32_t>(sum / n), lo, hi}, n};
-    }
-};
-
-// One conversion, folded in unless it timed out.
-//
-// probe_adc::sample_now() returns 0 on a timeout (probe_adc.cpp:236) and with
-// `nullptr` passed for the span the caller cannot tell that from a channel
-// reading zero -- so one timeout on a 32500-count divider would pull a point's
-// mean down by about 508 counts and set its `min` to 0, with nothing printed
-// to say so. probe_adc::timeouts() is a LIFETIME counter printed on the NEXT
-// block's CAL line, which leaves the last complete block of any capture
-// covered by no printed counter at all.
-void take_one(RepeatAccum& acc)
-{
-    uint32_t      span = 0;
-    const int32_t v    = probe_adc::sample_now(&span);
-    if(span == probe_adc::kTimeoutSentinel) return;
-    acc.sum += v;
-    if(v < acc.lo) acc.lo = v;
-    if(v > acc.hi) acc.hi = v;
-    ++acc.n;
-}
+// --- The grid point ---
 
 // One grid point of a Silent case. There is no latch, so there is no t0 from
 // the chain -- the repeat takes its own, spins the SAME park + d it would
@@ -366,6 +467,48 @@ int victim_index_of(const XtalkCase& c)
 CountedPoint g_silent_pts[kXtalkVictims][kGridPoints];
 int32_t g_silent_mean[kXtalkVictims];
 bool    g_silent_seen[kXtalkVictims];
+
+// How many surviving control-vs-silent point pairs a victim needs before G6
+// may call it compared. A MAJORITY OF THE GRID -- 33 of 65 -- and the reason
+// is what G6 is.
+//
+// G6 is not a statistic over the grid, it is an ENVELOPE: the maximum of
+// |mean_control(d) - mean_silent(d)| over every d, and the spec defines it
+// "at every d". What it is looking for is a transient -- the 16-bit shift and
+// the RCLK pulse disturbing a parked victim -- whose magnitude depends
+// entirely on where in the 12.8 us grid you sample it. A handful of surviving
+// pairs can all sit in a quiet stretch of that transient and report 0, which
+// is the same "perfect score from almost no data" this fix exists to stop,
+// only one step further along. One pair is emphatically not enough, and it is
+// not chosen here merely because it is the smallest number above zero.
+//
+// A majority is the WEAKEST threshold under which "over the grid" is still an
+// honest description of what was measured: below half, the gate is making a
+// claim about a grid it saw less of than it missed. That is the whole
+// argument for the number -- it is not tuned to any measurement, and it must
+// not be quoted as one.
+//
+// It is also nearly free in practice. A pair drops out only when every one of
+// kRepeats conversions timed out at that delay on one of the two curves; the
+// 2026-09-18 capture reports timeouts=0 on all five CAL lines, so losing even
+// ONE pair is already an abnormal run and losing 33 is a broken one. A
+// threshold that never fires on a healthy board and fires loudly on a sick
+// one is doing its job.
+//
+// COST IF THIS IS WRONG:
+//  - too high: a run that lost most of a victim's grid is refused. G6 comes
+//    back -1, the gates fail, no aggressor verdict may be quoted, and the
+//    SHELL_XTALK_G6 line names the victim and prints pairs= so the operator
+//    can see it was 20 of 65 and not a real excursion. One block, 9 s, and a
+//    correctly labelled refusal.
+//  - too low: G6 passes on a thin sample of an envelope, and G6 is the gate
+//    that licenses EVERY aggressor delta in the run. read_xtalk.py recomputes
+//    G6 per victim and would catch a magnitude the curves contradict, but it
+//    cannot invent the points that were never measured -- it would agree with
+//    a firmware that also looked at four pairs. Both sides therefore hold the
+//    same minimum; see MIN_CONTROL_PAIRS in read_xtalk.py, which derives it
+//    from the block's own `points` field rather than copying 33.
+constexpr int kMinControlPairs = kGridPoints / 2 + 1;
 
 // The scratch curve every case that is NOT row 1 measures into. One buffer and
 // not fifty-three: the only curve that has to outlive its own case is row 1's,
@@ -751,8 +894,45 @@ void run_xtalk_probe(bench::Board& hw)
                 continue;   // no SHELL_XTALK points, no SHELL_XTALK_STATIC
             }
 
+            // --- Task 7: a case naming no victim is a diagnosis, not a gap ---
+            //
+            // This used to be a bare `continue`. It printed nothing at all --
+            // no SHELL_XTALK_CASE line, no marker -- so the case simply was
+            // not in the block. read_xtalk.py caught that (its completeness
+            // rule 1 counts the firmware's own `cases=` against the CASE
+            // lines it saw) and discarded the whole block, which is the right
+            // outcome; but the log then said only that a block was short, not
+            // WHICH case went missing or why, and a reader had to diff the
+            // capture against the plan table to find out.
+            //
+            // It gets the rv4 path's treatment four lines above -- a CASE
+            // line with skipped=1, so the block stays complete and the case
+            // is visible -- PLUS its own line, because an rv4-skipped case
+            // and a case naming no victim are different events and a reader
+            // must not have to guess which one is in front of them. The rv4
+            // skip is an expected configuration; this one is a defect in
+            // kXtalkPlan or kXtalkVictimTable, and victim_index_of()'s own
+            // comment already calls it "a defect worth seeing rather than an
+            // array index".
+            //
+            // The (group, channel) that matched no table row rides on the
+            // line so the diagnosis is readable without joining back to the
+            // CASE line above it. UNREACHABLE with the table as it stands --
+            // all kXtalkCases entries name a victim -- which is exactly why
+            // it must print rather than vanish if that ever stops being true.
+            //
+            // BYTE BUDGET: DERIVED 63 characters at the widest (case 57, a
+            // two-digit row and channel), 65 with CRLF, against the 128-byte
+            // log buffer. Not measured on hardware: nothing reaches it.
             const int v = victim_index_of(c);
-            if(v < 0) continue;   // a case naming no victim: see victim_index_of()
+            if(v < 0)
+            {
+                print_case_line(hw, i, c, true);
+                hw.PrintLine("SHELL_XTALK_NOVICTIM case=%d row=%d "
+                             "victim_group=%d victim_ch=%d",
+                             i, static_cast<int>(c.row), c.group, c.channel);
+                continue;   // no points, no _STAT, no _STATIC
+            }
 
             if(c.kind == XtalkKind::Static)
             {
@@ -796,23 +976,65 @@ void run_xtalk_probe(bench::Board& hw)
                 // which is why row 1's five are held rather than reduced to a
                 // remembered scalar. A curve against a memory is not the
                 // quantity spec section 7 defines.
+                // TASK 7: `pairs` COUNTS THE COMPARISONS, AND THE COUNT IS
+                // WHAT GATES THE INCREMENT. Until this fix,
+                // ++controls_compared ran whenever g_silent_seen[v] was true,
+                // regardless of whether a single point pair had survived the
+                // exclusion immediately below. A victim whose 65 pairs were
+                // all excluded left `worst` at 0, left worst_control
+                // untouched, and still counted -- so controls_compared
+                // reached kXtalkVictims, the summary took worst_control
+                // instead of -1, and G6 passed with a worst_control_delta of
+                // 0. A perfect score out of zero comparisons: not an error a
+                // reader would notice, a clean result.
+                int32_t worst = 0;
+                int     pairs = 0;
                 if(g_silent_seen[v])
                 {
-                    int32_t worst = 0;
                     for(int k = 0; k < kGridPoints; ++k)
                     {
                         // A point no repeat converted at is not a reading and
                         // its -1 mean is not a level. Excluded on both sides.
                         if(g_silent_pts[v][k].valid <= 0 || pts[k].valid <= 0)
                             continue;
+                        ++pairs;
                         const int32_t d
                             = pts[k].p.mean - g_silent_pts[v][k].p.mean;
                         const int32_t a = (d < 0) ? -d : d;
                         if(a > worst) worst = a;
                     }
+                }
+                const bool compared = pairs >= kMinControlPairs;
+                if(compared)
+                {
+                    // `worst` is kept out of the fold when the victim was not
+                    // compared, rather than folded in as a conservative
+                    // guess: a magnitude from a sample too thin to support
+                    // the gate is not evidence for it either way, and
+                    // controls_compared below already fails the gate.
                     if(worst > worst_control) worst_control = worst;
                     ++controls_compared;
                 }
+
+                // UNCONDITIONAL, and outside the g_silent_seen test on
+                // purpose: one line per victim that has a control case, every
+                // block, so read_xtalk.py can require exactly that many and
+                // catch a lost one. A victim with no floor curve prints
+                // pairs=0 compared=0, which is the honest answer and not an
+                // absence.
+                //
+                // Here rather than beside the G5 lines because this is where
+                // the numbers exist -- carrying them to that loop would need
+                // two more per-victim arrays in .bss for nothing. The block's
+                // line order is fixed either way.
+                //
+                // BYTE BUDGET: DERIVED 88 characters at the widest (case 57,
+                // a five-digit worst), 90 with CRLF, against the 128-byte log
+                // buffer. Not measured on hardware yet.
+                hw.PrintLine("SHELL_XTALK_G6 case=%d victim_group=%d "
+                             "victim_ch=%d pairs=%d worst=%d compared=%d",
+                             i, c.group, c.channel, pairs, worst,
+                             compared ? 1 : 0);
             }
         }
 
@@ -821,12 +1043,26 @@ void run_xtalk_probe(bench::Board& hw)
         // Measured after the cases, not before: it parks the chain on four
         // tie channels, which is exactly the traffic a Silent grid must not
         // have in it.
+        //
+        // lost= and n_min= are Task 7's: the repeats the four tie reads lost
+        // in total, and the smallest surviving count on any one tie. A clean
+        // pass prints lost=0 n_min=64 and is the only shape that can yield
+        // valid=1 while kMaxTieLoss is 0 -- which is the point. Before this,
+        // a lost repeat on an AGND tie changed nothing visible in the whole
+        // block.
+        //
+        // BYTE BUDGET: this line was 78 characters at its widest before the
+        // two fields (five-digit zero, rail, hi_spread and lo_spread) and is
+        // DERIVED at 95, 97 with CRLF, against the 128-byte log buffer. Not
+        // measured on hardware yet -- the capture that measures it is the
+        // one this image has not taken.
         const SpanRead sr = measure_span(chain);
         hw.PrintLine("SHELL_XTALK_SPAN zero=%d rail=%d hi_spread=%d "
-                     "lo_spread=%d valid=%d",
+                     "lo_spread=%d lost=%d n_min=%d valid=%d",
                      static_cast<int>(sr.span.zero),
                      static_cast<int>(sr.span.rail),
-                     sr.hi_spread, sr.lo_spread, sr.span.valid ? 1 : 0);
+                     sr.hi_spread, sr.lo_spread, sr.lost, sr.worst_valid,
+                     sr.span.valid ? 1 : 0);
 
         bool address_ok = true;
         for(int v = 0; v < kXtalkVictims; ++v)
@@ -864,6 +1100,12 @@ void run_xtalk_probe(bench::Board& hw)
         // difference the gate is DEFINED as was never computed, and it is what
         // stops a reordered plan table from turning a missing comparison into
         // a pass.
+        //
+        // TASK 7: controls_compared now counts COMPARISONS AND NOT VICTIMS.
+        // It used to increment for any victim that had a floor curve at all,
+        // so five victims whose every point pair was excluded still reached
+        // kXtalkVictims here and handed the gate a worst_control of 0. See
+        // the counting site above.
         summary.worst_control_delta
             = (controls_compared == kXtalkVictims) ? worst_control : -1;
 
