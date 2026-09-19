@@ -589,7 +589,8 @@ def control_deltas(block):
     is per-victim rather than the single folded maximum `XtalkSummary` holds,
     and -- unlike a firmware field -- can be made to go red on a fixture.
 
-    Same exclusions as the firmware's own loop (xtalk_probe.cpp:768-783): a
+    Same exclusions as the firmware's own loop (the G6 pair loop in
+    run_xtalk_probe(), xtalk_probe.cpp:1000-1011 as of 2026-09-19): a
     point where either curve has no converted repeat is not compared.
     """
     by_case = _points_by_case(block)

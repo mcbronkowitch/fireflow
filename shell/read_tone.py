@@ -127,15 +127,22 @@ BOOT_VIRGIN_FLOOR = OrderedDict((
 # Why G8's round-one half carries no bound. Printed with the report so the
 # reason travels with the numbers rather than living in a review thread.
 G8_NOT_LIKE_FOR_LIKE = (
+    # Cited by FUNCTION NAME and not by line number. This string is printed
+    # to stderr on every run, and its line numbers went stale inside one
+    # branch when a later task added code above the functions it names -- an
+    # operator following them landed in an unrelated comment and had every
+    # reason to think the justification was invented. g8()'s docstring below
+    # carries the line numbers; a docstring is read next to the file, a
+    # printed string is read hours later and somewhere else.
     "NOT LIKE-FOR-LIKE: round one's settled_mean_spread "
-    "(xtalk_probe.cpp measure_silent_point(d_ns):250-266, reduced in "
-    "reduce_and_emit():440-468) is a peak-to-peak across 65 grid points that "
+    "(xtalk_probe.cpp measure_silent_point(d_ns), reduced in "
+    "reduce_and_emit()) is a peak-to-peak across 65 grid points that "
     "carry 65 DIFFERENT pre-conversion delays -- each repeat spins "
     "park_cycles + d_cycles first, and d runs 0..12800 ns. This image's "
-    "(tone_probe.cpp measure_level():557-601) has no spin and varies nothing: "
+    "(tone_probe.cpp measure_level()) has no spin and varies nothing: "
     "its 65 points are 65x64 calls to sample_now() under one identical "
     "condition, so it is repeat-to-repeat noise on the mean. Same count "
-    "(65x64), different content. tone_plan.h:82-85 states the requirement in "
+    "(65x64), different content. tone_plan.h:79-84 states the requirement in "
     "its own words -- the two must be the same shape 'or the 4-count bound "
     "compares two differently-shaped spreads and means nothing' -- and it "
     "matched the count and missed the content. Reported only; never a verdict."
@@ -289,7 +296,8 @@ def _is_complete(block):
 
     # 4. Every level measurement has its statistic and every statistic has
     #    its level measurement. They are printed as a pair
-    #    (tone_probe.cpp:389-391) and settled_mean_spread is what G8 reads,
+    #    (print_level_lines(), tone_probe.cpp:530-544) and
+    #    settled_mean_spread is what G8 reads,
     #    so a STAT without its LEVEL is a floor with no victim attached.
     if {lv["case"] for lv in block["levels"]} != {s["case"]
                                                   for s in block["stats"]}:
@@ -648,17 +656,22 @@ def g8(block, xtalk_meta):
     code compute and is checkable from their source, not a claim about
     physics:
 
-      * `shell/xtalk_probe.cpp` `measure_silent_point(d_ns)` (:250-266) spins
+      * `shell/xtalk_probe.cpp` `measure_silent_point(d_ns)` (:357-374) spins
         `park_cycles + d_cycles` before every conversion, and its 65 grid
         points carry 65 different `d` values, 0 to 12800 ns
         (`settle_plan.h:89-93`, `grid_ns(i) = i * 200`). Its
-        `settled_mean_spread` (`reduce_and_emit()` :440-468) is therefore a
+        `settled_mean_spread` (`reduce_and_emit()` :589-616) is therefore a
         peak-to-peak ACROSS 65 DIFFERENT PRE-CONVERSION DELAYS.
-      * `shell/tone_probe.cpp` `measure_level()` (:557-601) has no spin and
+      * `shell/tone_probe.cpp` `measure_level()` (:572-638) has no spin and
         varies nothing across its 65 points. Its `settled_mean_spread` is
         repeat-to-repeat noise on the mean.
 
-    Same count, different content. `shell/tone_plan.h:82-85` states the
+    THE LINE NUMBERS ABOVE ARE 2026-09-19'S and the function names are what
+    to trust if they disagree. The previous four went stale inside a single
+    branch, because a later task added code above both cited functions in
+    `xtalk_probe.cpp`.
+
+    Same count, different content. `shell/tone_plan.h:79-84` states the
     requirement in its own words and then matches only the count. By the
     spec's own condition the comparison means nothing, so it is printed and
     never gated.

@@ -256,7 +256,8 @@ from round one's pass. `SHELL_TONE_G5` is the per-victim G5 address
 verdict, one line per victim, also copied from round one's pass.
 
 `SHELL_TONE_STAT` is printed immediately after every `SHELL_TONE_LEVEL` line
-(`shell/tone_probe.cpp:389-391`), the two forming the pair the prose below
+(`print_level_lines()`, `shell/tone_probe.cpp:530-544`), the two forming
+the pair the prose below
 refers to. `settled_mean_spread` is the quantity G8 reads; `widest_sample_band`
 is the per-conversion band.
 

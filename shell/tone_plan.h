@@ -78,10 +78,21 @@ inline constexpr int kToneRepeats = kRepeats;
 
 // How many sub-measurements the Stopped and RunningSilent levels take, each
 // of kToneRepeats conversions. It is round one's grid point count, and that
-// is G8's whole premise: round one's settled_mean_spread is the peak-to-peak
-// of 65 means of 64 conversions, so this level's has to be the peak-to-peak
-// of 65 means of 64 conversions or the 4-count bound compares two
-// differently-shaped spreads and means nothing.
+// was G8's original premise: round one's settled_mean_spread is the
+// peak-to-peak of 65 means of 64 conversions, so this level's has to be the
+// peak-to-peak of 65 means of 64 conversions or the 4-count bound compares
+// two differently-shaped spreads and means nothing.
+//
+// THE CONDITION IN THOSE FOUR LINES IS THE RIGHT ONE AND THIS CODE DOES NOT
+// MEET IT. It matched the count and missed the content: round one's 65
+// points carry 65 different pre-conversion delays, this level's 65 points
+// vary nothing. read_tone.py quotes this very passage as the requirement
+// that was stated and then not met, and its g8() docstring carries the
+// source reading. By this passage's own words the round-one comparison
+// means nothing, so it is printed and never gated; the gate compares this
+// image's floor against this campaign's own recorded boot-virgin floors,
+// which ARE the same statistic. Do not re-gate on the round-one
+// comparison.
 inline constexpr int kToneLevelPoints = kGridPoints;
 
 // How far the accumulator moves per output sample.

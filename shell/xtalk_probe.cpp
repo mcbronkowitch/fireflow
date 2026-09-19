@@ -259,9 +259,15 @@ SpanRead measure_span(MuxScan& chain)
     // host-side check on G5 -- if this pass is wrong, nothing downstream
     // catches it. That is why this one refuses rather than reports.
     //
-    // Not exercised on the 2026-09-18 capture: timeouts=0 on all five CAL
-    // lines. So the refusal path is UNMEASURED on hardware -- the numbers
-    // above are the old path's arithmetic, not a reading of the new one.
+    // STILL NOT EXERCISED ON HARDWARE after the fix was flashed. The
+    // 2026-09-19 capture that carries this code prints
+    // `lost=0 n_min=64 valid=1` on every one of its eleven
+    // SHELL_XTALK_SPAN lines, and `timeouts=0` on every one of its eleven
+    // SHELL_XTALK_CAL lines -- one of each per block, not five. No tie lost
+    // a repeat, so kMaxTieLoss=0 never fired. The refusal path is
+    // UNMEASURED, and the count arithmetic above is the OLD path's, not a
+    // reading of the new one. (The pre-flash note here cited the
+    // 2026-09-18 capture, which was taken before this code existed.)
     const CountedPoint hi1 = read_parked(chain, 0, kTieHi1);
     const CountedPoint hi2 = read_parked(chain, 0, kTieHi2);
     const CountedPoint lo1 = read_parked(chain, 0, kTieLo1);

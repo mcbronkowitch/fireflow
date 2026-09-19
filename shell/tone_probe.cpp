@@ -476,13 +476,28 @@ struct RepeatAccum
 // A whole-block measurement: no phase, because there is no phase in
 // silence.
 //
-// ITS SHAPE IS ROUND ONE'S SILENT CURVE AND NOT AN ARBITRARY RUN, and that
-// is G8's whole premise. Round one's settled_mean_spread is the peak-to-peak
-// of 65 means of 64 conversions each; this takes exactly the same -- 65
-// sub-measurements of kToneRepeats conversions -- so the two are the same
-// statistic and the 4-count bound compares like with like. A shorter run
-// here would make G8 a comparison between two differently-shaped spreads,
-// which is a bound with no meaning behind it.
+// ITS SHAPE WAS MEANT TO BE ROUND ONE'S SILENT CURVE, and that was G8's
+// premise. Round one's settled_mean_spread is the peak-to-peak of 65 means
+// of 64 conversions each; this takes 65 sub-measurements of kToneRepeats
+// conversions, which is the same COUNT.
+//
+// IT IS NOT THE SAME STATISTIC, and the original sentence here said it was.
+// Round one's measure_silent_point() spins park + d before EVERY conversion
+// and its 65 grid points carry 65 DIFFERENT d values, 0 to 12800 ns, so its
+// spread is a peak-to-peak across 65 different pre-conversion delays.
+// measure_level() below spins nothing and varies nothing across its 65
+// points: its spread is repeat-to-repeat noise on the mean. Same count,
+// different content -- a statement about what two pieces of code compute,
+// checkable from their source, and no claim about what causes the
+// difference. read_tone.py's g8() docstring is the authority and carries
+// the line numbers; G8 was split there into a report-only round-one
+// comparison and a real gate against this campaign's own boot-virgin
+// floors.
+//
+// So DO NOT TRIM the 65 for block time on the grounds that it buys
+// like-for-like with round one. It never did. What it does buy is a spread
+// of the same count as the campaign's four recorded boot-virgin floors,
+// which IS what G8 gates on.
 //
 // It costs 65 x 64 conversions at about 2.5 us each, roughly 10 ms per level
 // per victim: nothing against a block that takes minutes.
@@ -1184,13 +1199,21 @@ void run_tone_probe(bench::Board& hw)
 
         const XtalkGates gates = xtalk_gates(summary);
 
-        // g8=-1 means NOT EVALUATED HERE, and it is not a failure. G8
-        // compares this image's floor against round one's silent block, and
-        // round one's numbers are in xtalk.csv.meta.csv, not in this
-        // firmware. Baking them in as constants would turn a measurement
-        // into a literal nobody re-measures -- which is exactly what the
-        // deleted kConversionNs was. read_tone.py computes G8 from the two
-        // files and folds it into its exit code; gates_ok below excludes it.
+        // g8=-1 means NOT EVALUATED HERE, and it is not a failure. G8 is
+        // host-side because its baseline is not in this firmware: baking
+        // numbers in as constants would turn a measurement into a literal
+        // nobody re-measures -- which is exactly what the deleted
+        // kConversionNs was. read_tone.py computes G8 and folds it into its
+        // exit code; gates_ok below excludes it.
+        //
+        // G8 IS TWO THINGS AND ONLY ONE OF THEM GATES. The half that gates
+        // compares this image's boot-virgin floor against THIS CAMPAIGN's
+        // four recorded boot-virgin floors, per victim, which is a
+        // comparison of a quantity against itself. The half that compares
+        // against round one's silent block -- the one in xtalk.csv.meta.csv
+        // -- is REPORT ONLY and carries no bound, because the two spreads
+        // have the same count and different content. See read_tone.py's
+        // g8() docstring.
         // phase_timeouts and block_ms were Task 4 additions to THIS line and
         // now live on SHELL_TONE_HEALTH below -- see the byte-budget note
         // ahead of the two PrintLine calls for why they moved; their
