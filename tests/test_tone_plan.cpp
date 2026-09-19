@@ -54,11 +54,21 @@ TEST_CASE("tone rows: the frequency ladder spans a decade and a half, at three p
 }
 
 TEST_CASE("tone rows: the level ladder is a linearity check, at three points") {
+    // The static row is skipped for the same reason its neighbour above
+    // skips it: it is not a rung of the level ladder whose linearity these
+    // three points establish. It was NOT skipped here originally, and the
+    // test passed only because the static row's dbfs happens to be -6, which
+    // is already a rung -- so changing that one value would have reddened
+    // the level ladder's own test for a reason that has nothing to do with
+    // the level ladder.
     int distinct = 0;
     for(int i = 0; i < shell::kToneRowCount; ++i) {
+        if(shell::kToneRows[i].f_hz == 0) continue;
         bool seen = false;
-        for(int j = 0; j < i; ++j)
+        for(int j = 0; j < i; ++j) {
+            if(shell::kToneRows[j].f_hz == 0) continue;
             if(shell::kToneRows[j].dbfs == shell::kToneRows[i].dbfs) seen = true;
+        }
         if(!seen) ++distinct;
     }
     CHECK(distinct == 3);
@@ -122,19 +132,33 @@ TEST_CASE("tone rows: the table is the full cross product, plus the static row w
     }
 }
 
-TEST_CASE("tone rows: a row below the coupling corner is flagged, not deleted") {
-    // Spec section 9's other branch. A row below an AC-coupled output's
-    // corner still runs -- its result is a real measurement of what that
-    // output does at that frequency -- but the reader must not read its
-    // level as part of the capacitive slope, because the attenuation is the
-    // coupling network's and not the board's.
+TEST_CASE("tone rows: this image has no coupling corner, so no row is flagged") {
+    // RENAMED TO WHAT IT ASSERTS. It used to be called "a row below the
+    // coupling corner is flagged, not deleted", and it cannot observe that:
+    // kToneCornerHz is an unconditional `inline constexpr int ... = 0` in
+    // tone_plan.h -- NOT switched on SHELL_TONE_DC -- so below_corner() in
+    // tone_plan.cpp short-circuits on `kToneCornerHz > 0` in every build
+    // that exists, and both sides of the comparison below are false on every
+    // row. The flagging branch is UNTESTED and is named here rather than
+    // implied by a passing check.
+    //
+    // It is not vacuous: setting a row's below_corner true by hand reddens
+    // it, which is the property that actually matters today -- a DC-coupled
+    // output must flag nothing, because a flagged row is one the reader
+    // drops from the capacitive slope.
+    //
+    // below_corner() is file-local to tone_plan.cpp, so this duplicates its
+    // rule rather than calling it. That is a known maintenance seam and the
+    // reason the test states the corner condition in full.
+    CHECK(shell::kToneCornerHz == 0);  // the premise of everything below
     for(int i = 0; i < shell::kToneRowCount; ++i) {
         CAPTURE(i);
         const int f = shell::kToneRows[i].f_hz;
-        // f > 0 in the condition, and it is not redundant: the static row is
-        // f_hz = 0, and a bare `f < corner` would flag a constant as being
-        // below the corner of a network a constant does not pass through at
-        // all. A DC-coupled output is the only reason that row exists.
+        // f > 0 in the condition, and it is not redundant on a board that
+        // MEASURES a corner: the static row is f_hz = 0, and a bare
+        // `f < corner` would flag a constant as being below the corner of a
+        // network a constant does not pass through at all. On this image it
+        // is unreachable, like the rest of the condition.
         CHECK(shell::kToneRows[i].below_corner
               == (shell::kToneCornerHz > 0 && f > 0 && f < shell::kToneCornerHz));
     }

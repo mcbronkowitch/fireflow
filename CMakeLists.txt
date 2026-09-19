@@ -204,9 +204,14 @@ add_test(NAME spky_tests COMMAND spky_tests)
 # and REQUIRED TO BE UNIQUE: configure fails loudly if zero lines match and
 # equally loudly, with a different message, if two or more do -- an
 # ambiguous match is never resolved by picking the first or the last one.
-# Only when exactly one line matches is its digit trusted. A host test of
-# the OTHER branch flips the generated line; the firmware's value always
-# comes from the Makefile switch, never from here.
+# Only when exactly one line matches is its digit trusted.
+#
+# NOTE FOR A FUTURE MAINTAINER, not a description of what exists: NO
+# SHELL_TONE_DC=0 host test is registered anywhere, so the AC-coupled branch
+# of tone_plan.h is unbuilt on the host. To exercise it, flip the generated
+# line -- do not flip it here, and do not hand-edit the generated header; the
+# firmware's value always comes from the Makefile switch, never from this
+# file.
 file(READ ${CMAKE_CURRENT_SOURCE_DIR}/shell/Makefile SHELL_MAKEFILE_CONTENTS)
 string(REGEX MATCHALL "\nSHELL_TONE_DC[ \t]*\\?=[ \t]*([01])"
        SHELL_TONE_DC_MATCHES "${SHELL_MAKEFILE_CONTENTS}")
