@@ -29,6 +29,47 @@ problem that moved the whole floor would otherwise produce tone results that
 are plausible in every digit with nothing here able to notice. So the file
 stays mandatory and this reader refuses to run without it.
 
+**THE ONLY SUCH FILE IN THIS REPOSITORY IS THE ANOMALOUS RUN.** It is
+`docs/hardware/2026-09-19-xtalk.csv.meta.csv`, the first complete block of
+the 2026-09-19 re-measurement -- the run in which G6 fails in every block,
+8-12 counts against a bound of 8, and which
+`docs/hardware/crosstalk-measured.md` section 13 explicitly quarantines as
+"a different run on a different image" that revises none of round one's
+published numbers. Its row-1 silent spreads are `REF_A` 15, `REF_C` **14**,
+`REF_B` 5, `R_SP10` 1, `R_LO3` 0, and the `REF_C` figure CONTRADICTS the
+10/11/12 that the codec-tone spec's section 7 transcribes from round one's
+2026-09-18 capture. So G8(a)'s `round_one` column and that spec's table are
+two different baselines. **The disagreement is unexplained and nothing here
+explains it.** G8(a) gates nothing, which is why this is a labelling problem
+and not a correctness one -- but a column headed "round one" must not be
+read as round one's published numbers.
+
+REPRODUCING THE CAMPAIGN'S NUMBERS FROM THE REPOSITORY ALONE. The
+2026-09-18/19 codec-tone campaign's own write-up is not in `docs/hardware/`
+and its captures live under `.superpowers/sdd/`, which is gitignored -- but
+one complete block of the campaign's final image is vendored as
+`shell/testdata/tone-block-86070d9.txt`, and this reader is committed beside
+it, so the analysis is reproducible from committed inputs. From the
+repository root:
+
+    python -c "import sys; sys.path.insert(0, 'shell'); import read_tone as r; raise SystemExit(r.report(r.parse_block(open('shell/testdata/tone-block-86070d9.txt')), open('docs/hardware/2026-09-19-xtalk.csv.meta.csv').read(), 'tone.csv'))"
+
+That prints the whole report -- the four-boot G8(b) table, G8(a)'s
+report-only column, the 45-row `delta_pp` table with each victim's own floor
+beside it, the level diffs and the static rows -- and writes `tone.csv` and
+`tone.csv.meta.csv`. **It exits 1, and that is the expected result**: ten
+rows fail the criterion, nine of them `REF_A` with seven flagged as within
+its own 14-count boot-virgin floor. Drop the `'tone.csv'` argument to get
+the report without the files.
+
+THE FREQUENCY ANSWER IS PER-VICTIM AND MUST BE QUOTED THAT WAY. "No slope,
+4 counts or less over a 50x span" is `REF_A` ONLY. Worst span over
+100 Hz -> 5 kHz at a fixed level, from the block above: `REF_A` **4**,
+`REF_C` **7**, `REF_B` **9**, and 0 on both 150 ohm ties at all nine rows.
+The negative conclusion is unaffected -- a linear law over a 50x span needs
+far more than nine counts, and `REF_C`'s and `REF_B`'s largest movements run
+DOWNWARD with frequency -- and it is not to be strengthened to compensate.
+
 Default timeout: 600 s. A block is dominated by the phase waits and not by
 the conversions -- every repeat waits for the next crossing of its target
 phase, and at 100 Hz that is up to 10 ms each. The measured block duration on
@@ -36,9 +77,17 @@ this board is `block_ms=170657` (`SHELL_TONE_HEALTH`, 2026-09-19 capture),
 i.e. about 171 s; 600 s is that with room for the window sweep and for a
 host that starts listening mid-block and has to wait for the next _CFG.
 
-The block format below is `tone_probe.cpp`'s `hw.PrintLine()` calls, as spec
-section 8 of `docs/superpowers/specs/2026-09-18-coupon-codec-tone-probe-design.md`
-records them after the Task 5 audit. In print order:
+The block format below was transcribed from `tone_probe.cpp`'s
+`hw.PrintLine()` format strings, not from the spec, and then checked field
+for field against spec section 8 of
+`docs/superpowers/specs/2026-09-18-coupon-codec-tone-probe-design.md`. The
+fields agree; the ORDER below is the stream's and section 8 originally
+listed `CASE`/`TONE` ahead of `LEVEL`/`STAT`, which a block does not do -- it
+opens with fifteen `LEVEL`/`STAT` pairs, five boot-virgin and ten ladder,
+before its first `CASE`. Section 8 now carries the stream's order and says
+that it is not a unique one: the static row prints `CASE` before its own
+`LEVEL`/`STAT`, so the two tags interleave both ways over a whole block.
+Transcribe from the firmware, in reading order:
 
     SHELL_TONE_CFG     adc_khz repeats phase_points block_size sr rv4 git
     SHELL_TONE_CLK     span_short_cyc span_long_cyc smp_short_tenths smp_long_tenths
@@ -660,7 +709,7 @@ def g8(block, xtalk_meta):
         `park_cycles + d_cycles` before every conversion, and its 65 grid
         points carry 65 different `d` values, 0 to 12800 ns
         (`settle_plan.h:89-93`, `grid_ns(i) = i * 200`). Its
-        `settled_mean_spread` (`reduce_and_emit()` :589-616) is therefore a
+        `settled_mean_spread` (`reduce_and_emit()` :594-621) is therefore a
         peak-to-peak ACROSS 65 DIFFERENT PRE-CONVERSION DELAYS.
       * `shell/tone_probe.cpp` `measure_level()` (:572-638) has no spin and
         varies nothing across its 65 points. Its `settled_mean_spread` is

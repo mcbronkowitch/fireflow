@@ -249,6 +249,15 @@ def _is_complete(block):
     #     span_format / g5_risk rows in the metadata file -- rather than
     #     hidden behind a refusal.
     #
+    #     WHEN TO DELETE THIS PATH, because it is the one thing three other
+    #     write-ups of it do not say. No live image will ever reach it again
+    #     -- only test_read_xtalk.py's span_fields=() fixture does -- so it
+    #     decays silently the day the format moves. DELETE IT, with its
+    #     fixture and its span_format/g5_risk rows, once
+    #     docs/hardware/crosstalk-measured.md's numbers are superseded by a
+    #     POST-FIX capture. At that point nothing published rests on a
+    #     pre-fix block and the only reason to keep reading one is gone.
+    #
     #     ONE of the two is neither shape. It is a line that arrived damaged,
     #     which is what the rest of these rules exist to catch, and no image
     #     has ever printed it: refused.
@@ -590,7 +599,7 @@ def control_deltas(block):
     and -- unlike a firmware field -- can be made to go red on a fixture.
 
     Same exclusions as the firmware's own loop (the G6 pair loop in
-    run_xtalk_probe(), xtalk_probe.cpp:1000-1011 as of 2026-09-19): a
+    run_xtalk_probe(), xtalk_probe.cpp:1005-1016 as of 2026-09-19): a
     point where either curve has no converted repeat is not compared.
     """
     by_case = _points_by_case(block)

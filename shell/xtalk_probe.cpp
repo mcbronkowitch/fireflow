@@ -532,8 +532,13 @@ CountedPoint g_case_pts[kGridPoints];
 // BYTE BUDGET, and this is why spec section 8's single SHELL_XTALK line is
 // split into a CASE line and a point line here. libDaisy's log buffer is 128
 // bytes (lib/libDaisy/src/hid/logger.h:29); the spec's combined line runs
-// about 150 and would be truncated and stamped "$$", which is how
-// settle_probe.cpp lost two fields before anyone noticed.
+// 148 characters, 150 with CRLF, at its DATA-widest values (case=57 kind=3
+// victim_group=1 victim_ch=15 r_src=5150 both words 16383 d_ns=12800 n=64
+// the three readings 65535 skipped=1) -- 20 past the buffer, so it would be
+// truncated and stamped "$$", which is how settle_probe.cpp lost two fields
+// before anyone noticed. DERIVED, not measured: no image ever printed that
+// line. Type-widest, every %d a full negative int32, is 248/250; the two
+// bounds are a hundred characters apart, so "widest" alone is not a figure.
 //
 // MEASURED on the board 2026-09-18 across three whole blocks of rows 1 and 10:
 // 106 characters, 108 with CRLF. Those rows' chain words are two digits. Rows

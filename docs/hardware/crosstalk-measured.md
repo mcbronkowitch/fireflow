@@ -458,6 +458,19 @@ which is why §6 carries the `d=0`-dropped column.
    2026-09-19 capture reports `pairs=65 compared=1` for all five victims in
    all 10 blocks, so every comparison in that run was complete — which is what
    rules out a vacuous pass as the explanation of its G6 failure (§13).
+   **The two halves of this fix are not equally proven, and item 5's label
+   applies to one of them.** The *counting* half is demonstrated: the field
+   prints, and the reader's independent recomputation of `worst` from the raw
+   point lines agrees with the firmware in all 50 victim-blocks. The *refusal*
+   half — a victim below the majority threshold being excluded — is **unproven
+   on hardware**: no comparison in any capture has ever fallen short, so that
+   branch has never run on the board. It could not be red-proven against the
+   reader either, because `compared > 0` already rejected the empty case; the
+   shape this closes was firmware-only.
+   The `SHELL_XTALK_NOVICTIM` line added in the same commit is in the same
+   position: **zero lines in 31 500**, which is the correct and expected
+   result for a table in which every case names a victim, but expected is not
+   the same word as exercised, and that path is **unproven on hardware** too.
 7. **The 3.1 % `hw.adc.Get()` discrepancy of `docs/gotchas.md` is localised, not
    explained.** The rail tie reads **65 531–65 533 through this probe against
    63 485 through libDaisy** on the same net. That puts the difference in the
@@ -626,3 +639,41 @@ The first complete block of this capture is committed beside this document as
 `2026-09-19-xtalk.csv` and `2026-09-19-xtalk.csv.meta.csv` — the first
 `xtalk.csv.meta.csv` this repository has ever held. Both carry
 `gates,,gates_ok,0`: they are the evidence for this section, not a passing run.
+
+**Their provenance, in full, because the build stamp does not carry it.**
+Both files record `cfg,,git,80e94db+` and that stamp names **neither** the
+commit that holds the source nor a tree anyone can rebuild:
+
+- `80e94db` is the HEAD the image was *built against*, which is the commit
+  before the one carrying this code. Build-then-commit makes the stamp name
+  the parent; the commit that ships this image is **`7404756`**
+  ("fix(shell): close round one's three crosstalk-probe gaps"). Trace that
+  one.
+- The trailing `+` is `hardware/coupon/`'s twelve uncommitted files, which
+  are unrelated to the probe and were dirty throughout the session. So **no
+  commit's tree reproduces this image byte for byte**, and none ever will.
+  What *is* checkable is that the difference is confined to that directory:
+  `git diff --stat 80e94db 7404756` lists only `shell/` and `docs/` paths,
+  and `git status --short` at the time of the build showed the twelve
+  `hardware/coupon/` files and nothing else.
+- The raw 31 500-line capture these two files were reduced from lives in
+  `.superpowers/sdd/2026-09-18-coupon-codec-tone-probe/task-7-board-capture.txt`,
+  which is **gitignored**. These CSVs are the committed remainder of it.
+  They were produced by `shell/read_xtalk.py`, whose `main()` writes both
+  files *before* the gates check and returns 1 after — so a live run would
+  have written exactly these files and exited 1, and no refusal was
+  overridden to obtain them.
+- The naming departs from this repo's precedent. All 61 other tracked CSVs
+  are `docs/bench/<date>-<hash>.csv`; these are `docs/hardware/<date>-xtalk.csv`,
+  and the hash is the part that would have carried the provenance. It is
+  carried by this note instead.
+
+**`shell/read_tone.py` consumes `2026-09-19-xtalk.csv.meta.csv`** — it is the
+only `xtalk.csv.meta.csv` in the repository, and that reader refuses to run
+without one. So the codec-tone probe's round-one comparison is against **this
+section's anomalous run**, not against §4's published numbers. Its row-1
+silent spreads are `REF_A` 15, `REF_C` **14**, `REF_B` 5, `R_SP10` 1,
+`R_LO3` 0; §4's whole-grid column for `REF_C` is 10/11/12. That comparison
+gates nothing (it is printed as report-only and labelled not-like-for-like),
+but a column headed "round one" must not be read as §4's numbers. **The
+disagreement is unexplained, and this section does not explain it.**

@@ -1,7 +1,10 @@
 # The coupon crosstalk probe — design
 
 **Date:** 2026-09-18
-**Status:** design, unbuilt
+**Status:** BUILT, flashed and measured. Results in
+[`docs/hardware/crosstalk-measured.md`](../../hardware/crosstalk-measured.md)
+(2026-09-18 capture; §13 is a 2026-09-19 re-measurement on a later image
+that fails G6 and revises none of the numbers above it)
 **Closes:** the first item on `settle-budget.md` §5's list of what the model
 cannot see — crosstalk from the board's own switching into a settled mux
 channel — and the attribution of the two open observations in
@@ -304,9 +307,20 @@ and the same `_END` marker discipline as the settle probe:
 **Transcribed from `xtalk_probe.cpp`'s `PrintLine` calls on 2026-09-19, not
 from this section's own history.** What stood here was the design's single
 combined `SHELL_XTALK` line and nothing else; the firmware had since split it
-into a `_CASE` line and a point line (libDaisy's log buffer is 128 bytes and
-the combined line ran about 150, which would have been truncated and stamped
-`$$`), and had added `_RATE`, `_STAT`, `_SPAN` and `_G5`. `read_xtalk.py`
+into a `_CASE` line and a point line, and had added `_RATE`, `_STAT`,
+`_SPAN` and `_G5`. Why the split: libDaisy's log buffer is 128 bytes
+(`lib/libDaisy/src/hid/logger.h:29`) and the combined line
+`SHELL_XTALK case= kind= victim_group= victim_ch= r_src= word_a= word_b=
+d_ns= n= mean= min= max= skipped=` runs **148 characters, 150 with CRLF, at
+its DATA-widest values** — `case=57`, `kind=3`, `victim_group=1`,
+`victim_ch=15`, `r_src=5150`, both words at 16383 (4 address + 2 enable + 8
+LED bits), `d_ns=12800`, `n=64`, the three 16-bit readings at 65535,
+`skipped=1`. That is 20 bytes past the buffer, so it would truncate and be
+stamped `$$` on every point line. (Type-widest, every `%d` at a full
+negative `int32`, is 248/250 — the two bounds are a hundred characters
+apart, which is why "widest" alone is not a figure. Neither is a board
+measurement: no image ever printed this line. The **measured** figures are
+the split lines', in `print_case_line()`'s comment.) `read_xtalk.py`
 parses this format by field name, and three separate fix rounds in the
 codec-tone plan were caused by a spec section that had drifted from the
 firmware, so it is brought level here rather than appended to.

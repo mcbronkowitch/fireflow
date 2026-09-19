@@ -36,7 +36,33 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-09-03 (**the coupon is fully ordered — boards and
+- **Last updated:** 2026-09-19 (**the coupon has been built, populated and
+  measured twice, and both rounds returned a NEGATIVE result on the question
+  they were built to ask.** Round one, the crosstalk probe, pits the board's
+  own digital edges against a settled mux channel:
+  [`docs/hardware/crosstalk-measured.md`](hardware/crosstalk-measured.md),
+  spec `docs/superpowers/specs/2026-09-18-coupon-crosstalk-probe-design.md`.
+  The only aggressor that breaks the criterion is the LED word; everything
+  else sits at the floor. Its §13 is a **2026-09-19 re-measurement that fails
+  G6** at 8–12 counts against a bound of 8 on the three higher-impedance
+  victims while the two 150 Ω ties do not move at all — recorded, quarantined
+  from the published numbers, **no mechanism attached**, and a second board
+  or this one under recorded conditions is what would turn it into a finding.
+  Round two, the codec-tone probe, pits the submodule's own audio output
+  against the same channel: spec
+  `docs/superpowers/specs/2026-09-18-coupon-codec-tone-probe-design.md`, whose
+  §8 carries the command that reproduces the campaign's numbers from the
+  committed fixture and the committed reader. Its answer is the falsification
+  criterion coming back negative — no frequency slope, no level slope, and
+  the 5150/650 ratio spanning 0.29 to 7.00 with **no ordering by impedance**
+  — with the attribution axis alive, both 150 Ω ties reading exactly 0 at
+  every gated row. `REF_A` fails the `delta_pp ≤ 8` criterion at all nine
+  rows and seven of those nine sit at or below its own 14-count boot-virgin
+  floor: **the criterion is reading the floor on that victim.** One row out
+  of nine is clearly outside its floor — `REF_C` at 100 Hz running 2 → 6 → 11
+  across the level ladder — and it is recorded **unlabelled**. Still owed:
+  the `docs/hardware/` write-up of round two, which is separate work);
+  earlier, 2026-09-03 (**the coupon is fully ordered — boards and
   parts**: JLCPCB, five bare 4-layer boards, $22.02 all in, and one Reichelt
   order at 14.19 € plus 5.95 € shipping, both placed. The next move on M6 is a
   soldering iron, not a screen —

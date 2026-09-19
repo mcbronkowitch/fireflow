@@ -13,8 +13,9 @@
 # git=86070d9+ lands on the pre-commit HEAD and finds no tone_probe.cpp
 # matching this output. Trace 52843e0 instead.
 #
-# HOW MUCH OF THAT IS CHECKABLE, and how much is not. Two commands settle
-# the part that matters, and both are worth running rather than believed:
+# HOW MUCH OF THAT IS CHECKABLE, and how much is not. Three commands settle
+# the part that matters, and all three are worth running rather than
+# believed:
 #
 #   git diff --stat 86070d9 52843e0     -> tone_probe.cpp, tone_plan.h, spec
 #   git diff 1125ee0 52843e0            -> EMPTY: identical trees
