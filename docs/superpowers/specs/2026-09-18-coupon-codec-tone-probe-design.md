@@ -160,8 +160,10 @@ poll EOC, read
 ```
 
 Grid: `d_before_end` from 0 to 12.8 µs in 200 ns, the same 65 points, so the
-two instruments' curves line up end to end — round one's `d` after the edge
-continues where this one's `d_before_end` stops. `t0` here is the conversion
+two instruments' `d` **axes** line up end to end — round one's `d` after the
+edge continues where this one's `d_before_end` stops. **That is a statement
+about the axes and not about the curves, and the 2026-09-19 capture measured
+the difference: see §8's note on the junction.** `t0` here is the conversion
 start, not a latch edge; the window's length is derived from the measured
 clock, as every window in `settle-measured.md` is, and the calibration pass
 that measures start-to-aperture latency runs unchanged.
@@ -239,10 +241,13 @@ SHELL_TONE_CASE  case=%d level=%d f_hz=%d dbfs=%d victim_group=%d victim_ch=%d r
 SHELL_TONE       case=%d phase_idx=%d n=%d mean=%d min=%d max=%d
 SHELL_TONE_LEVEL case=%d level=%d victim_group=%d victim_ch=%d r_src=%d n=%d mean=%d min=%d max=%d audio_virgin=%d   (stopped and running-silent)
 SHELL_TONE_STAT  case=%d settled_mean_spread=%d widest_sample_band=%d
-SHELL_TONE_WIN   case=%d victim_group=%d victim_ch=%d r_src=%d word_a=%d word_b=%d d_before_end_ns=%d n=%d mean=%d min=%d max=%d
 SHELL_TONE_SPAN  zero=%d rail=%d hi_spread=%d lo_spread=%d valid=%d
 SHELL_TONE_G5    victim_group=%d victim_ch=%d expect=%d mean=%d ok=%d
-SHELL_TONE_GATES g2=%d g4=%d g5=%d g7=%d g8=%d missed_blocks=%d gates_ok=%d phase_timeouts=%d block_ms=%d
+SHELL_TONE_WINDOW  window_ns=%d nominal_ns=%d grid_end_ns=%d fits=%d
+SHELL_TONE_WINCASE case=%d xtalk_case=%d victim_group=%d victim_ch=%d r_src=%d word_a=%d word_b=%d codec=%d
+SHELL_TONE_WIN     case=%d d_before_end_ns=%d n=%d mean=%d min=%d max=%d
+SHELL_TONE_GATES  g2=%d g4=%d g5=%d g7=%d g8=%d gates_ok=%d
+SHELL_TONE_HEALTH missed_blocks=%d phase_timeouts=%d win_timeouts=%d block_ms=%d
 SHELL_TONE_END
 ```
 
@@ -268,6 +273,81 @@ changes per phase point. Every tone case is split this way, not only the
 static one below. Same decision and same reason as round one's
 `SHELL_XTALK_CASE`/point-line split.
 
+**The window sweep's lines above are not this spec's original one either
+(Task 5).** This section listed §6's sweep as a single combined
+`SHELL_TONE_WIN` carrying the case, the victim identity, both chain words
+and one window point together. That form runs **143 characters**, past the
+same 128-byte log buffer — every window point would
+have been truncated and stamped `"$$"`. The principle this section already
+states for the tone lines ("Every tone case is split this way") was simply
+never applied to it, so the split is made here and for the same reason,
+citing the plan's [decision 1](2026-09-18-coupon-codec-tone-probe.md): the
+identity fields that do not change across a case's 65 window points —
+`xtalk_case`, `victim_group`, `victim_ch`, `r_src`, `word_a`, `word_b`,
+`codec` — move to `SHELL_TONE_WINCASE`, printed once per window case, and
+`SHELL_TONE_WIN` carries only what changes per point. The two lines run
+**112** and **79** characters.
+
+**Which bound those figures are**, because “widest” admits two and they are
+far apart. They are **data-widest**: the widest rendering reachable with
+this board's own tables (`xtalk_case` ≤ 57, `victim_ch` ≤ 15, `r_src` ≤ 5150,
+16-bit chain words, 16-bit ADC readings, `d_before_end_ns` ≤ 12800, `n` ≤ 64).
+The 143 is at `victim_ch=8`; at `victim_ch=15` it is 144, and the two lines
+as actually printed in the capture are 104 and up to 79. **Type-widest** —
+every `%d` at the 11 characters a negative `int` can print — is much larger
+(179 for `SHELL_TONE_WINCASE`, 225 for the combined form) and is unreachable
+from these tables. Ruling 18 holds under either bound: the combined line is
+over the 125-byte payload both ways. `SHELL_TONE_GATES`/`SHELL_TONE_HEALTH`
+below are quoted at **type-widest** (53 and 116; 112 at ten digits), which is
+the right bound there because those counters are unbounded lifetime counts.
+
+**The split addresses only the
+too-long-line failure**; `logger.cpp:78-87`'s accumulation overflow strikes
+a line of any length when the host does not drain fast enough, and nothing
+here changes that.
+
+`SHELL_TONE_WINDOW` is printed once per block, immediately before the two
+window cases, and is the refusal gate: `window_ns` is 387.5 sampling cycles
+at **this boot's measured** ADC clock, `nominal_ns` is the
+`kToneWinWindowNsNominal` constant the host asserts against, `grid_end_ns`
+is the last grid point, and `fits` is 1 only when the grid is strictly
+shorter than the measured window. `fits=0` means the sweep did not run and
+no `SHELL_TONE_WINCASE`/`SHELL_TONE_WIN` lines follow — a failed clock pass
+reaches the same place, because an unmeasured clock leaves `window_ns` at 0.
+`codec` on `SHELL_TONE_WINCASE` is 0 because the sweep runs with the codec
+**stopped**: it is a round-one aggressor and the tone is not part of the
+question. `xtalk_case` is the index into `kXtalkPlan` the aggressor came
+from.
+
+**Window case indices are their own namespace.** `case` on
+`SHELL_TONE_WINCASE` and `SHELL_TONE_WIN` is the index into the window-case
+table, numbered from 0, independently of the tone case indices — it is not a
+continuation of the counter `SHELL_TONE_CASE` and `SHELL_TONE_LEVEL` share,
+so `case=0` and `case=1` exist under both sets of tags and mean different
+things. **A reader keys on the pair (tag, case), never on `case` alone**;
+keying on `case` across different tags was never valid here. The
+boot-virgin lines' negative numbering is not a precedent for doing the same
+to these: that exists because boot-virgin and live level measurements share
+one tag (`SHELL_TONE_LEVEL`), so nothing but the number could separate them,
+whereas here the tags themselves differ. `codec` is still a printed field
+rather than a remark in the prose, because the codec state genuinely differs
+between the window sweep and every tone case and a reader must not have to
+infer it.
+`d_before_end_ns` counts backwards from the **end** of the acquisition
+window, so this sweep's `d` **axis** and round one's `d`-after-the-edge axis
+line up end to end.
+
+**The axes line up; the curves do not, and that is measured (2026-09-19,
+`task-5-board-capture.txt`).** This sweep's `d_before_end = 0` point on
+`REF_A` reads 32760–32764 against round one's absolute grid mean of **32495**
+for the same victim (`crosstalk-measured.md` §7) — a step of roughly **265**
+counts, or **280** against round one's own `d = 0` point once §8's ~13-count
+first-arrival depression is included. The two instruments also do not
+publish the same quantity: round one's per-point statistic is a `delta`
+against a control case, and this sweep has no control case at all, so it
+reports an absolute mean. A reader must not take “line up end to end” as
+“are comparable”. No account of the step is offered here.
+
 **`audio_virgin` on `SHELL_TONE_LEVEL`/`SHELL_TONE_STAT` (Task 3, missing
 from this section until Task 4 fix round 3) is what G8 reads.** `1` marks
 the boot-virgin floor: measured exactly once per boot, before any
@@ -289,8 +369,38 @@ silent, 2 tone. `phase_timeouts` (Task 4) is a lifetime count of repeats
 that never saw their target phase, not reset per block; `block_ms` (Task 4)
 is the wall-clock duration of the block that just finished, in
 milliseconds, measured from the board's own millisecond tick and not
-derived from the plan's table constants. Neither is folded into
-`gates_ok`. The static row (present only when Task 1 measured a
+derived from the plan's table constants. `win_timeouts` (Task 5) is the
+window sweep's own lifetime count of repeats whose EOC poll never saw the
+conversion end — a separate counter because that sweep polls EOC itself and
+never goes through `probe_adc::sample_now()`. None of the three is folded
+into `gates_ok`.
+
+**Those four fields are on `SHELL_TONE_HEALTH` and not on
+`SHELL_TONE_GATES` (Task 5 fix round).** The combined line was measured, not
+estimated, at **117 bytes** on a healthy run, **124 bytes** at ordinary
+failure-run counter values (`missed_blocks=12`, `phase_timeouts=4096`,
+`win_timeouts=8320`), **144 bytes** with the three counters at ten digits
+and a realistic `block_ms` (170123), and **148 bytes** only when
+`block_ms` is at ten digits as well — against the same 128-byte log
+buffer. It therefore
+truncated and was stamped `"$$"` precisely in the runs whose counters were
+large, which is to say precisely when these four fields were the ones
+anyone needed; a diagnostic that hides itself when things go wrong reads as
+health. The split is the same move as `SHELL_TONE_CASE`/`SHELL_TONE` and
+`SHELL_TONE_WINCASE`/`SHELL_TONE_WIN`, for the same buffer and the same plan
+[decision 1](2026-09-18-coupon-codec-tone-probe.md). Measured widths of the
+two lines: **53** and **112** bytes at ten-digit `uint32` values, **116** for
+`SHELL_TONE_HEALTH` at type-widest (its counters are `static_cast<int>`-ed,
+so a value above `INT_MAX` prints as 11 characters). `SHELL_TONE_HEALTH`
+is printed immediately after `SHELL_TONE_GATES`, every block. **Fields moved,
+nothing was recomputed**: `gates_ok` is still the AND of the same **four**
+terms — `g2_floor`, `g4_jitter`, `g5_address` and `missed_blocks == 0`,
+which *is* `g7`, so it is one term and not two, while `g8` is the literal
+`-1` and has never been in it — the three counters are still lifetime
+counts that are not reset per block, and `block_ms` is still the same
+measured wall-clock subtraction.
+
+The static row (present only when Task 1 measured a
 DC-coupled output) is a tone case like any other for this purpose: it
 prints its own `SHELL_TONE_CASE` line (`f_hz=0`, its `dbfs`), immediately
 followed by a `SHELL_TONE_LEVEL`/`SHELL_TONE_STAT` pair and no `SHELL_TONE`

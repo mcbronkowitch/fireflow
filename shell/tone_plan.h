@@ -143,9 +143,20 @@ inline constexpr int kToneWinRung = 6;
 inline constexpr uint32_t kToneWinWindowNsNominal = 63050;
 
 // The same 65 points at 200 ns as round one's grid, counted backwards from
-// the end of the window, so the two instruments' curves line up end to end:
-// round one's d after the edge continues where this one's d_before_end
-// stops.
+// the end of the window, so that the two instruments' d AXES meet: round
+// one's d after the edge continues where this one's d_before_end stops.
+//
+// THAT IS A STATEMENT ABOUT THE AXES AND NOTHING MORE, and it was written
+// before either instrument had run. MEASURED 2026-09-19
+// (task-5-board-capture.txt): the CURVES do not meet. This sweep's
+// d_before_end=0 point on REF_A reads 32760-32764 against round one's
+// absolute grid mean of 32495 for the same victim
+// (crosstalk-measured.md section 7) -- a step of roughly 265 counts, or 280
+// against round one's own d=0 point once section 8's ~13-count first-arrival
+// depression is included. The two also do not publish the same quantity:
+// round one's per-point statistic is a delta against a control case and this
+// sweep has no control case at all. Do not read "line up" as "are
+// comparable". No account of the step is offered here.
 inline constexpr int kToneWinPoints = kGridPoints;
 inline constexpr int kToneWinStepNs = kGridStepNs;
 

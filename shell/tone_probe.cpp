@@ -18,6 +18,14 @@
 #include "tone_plan.h"
 #include "xtalk_plan.h"
 
+// Raw HAL, not libDaisy's AdcHandle -- the same note probe_adc.cpp carries
+// above its own include of this header. Needed here for ADC1,
+// ADC_CR_ADSTART and ADC_ISR_EOC, used by measure_window_point() below and
+// by nothing else in this file: that function is the one place in either
+// probe that drives ADC1's registers outside probe_adc, and its own comment
+// says why it cannot go through probe_adc::sample_now().
+#include <stm32h7xx_hal.h>
+
 namespace shell {
 
 namespace {
@@ -146,12 +154,23 @@ constexpr uint32_t kPhaseWaitTimeoutCycles = 9600000u;
 // average: a run that lost repeats must say so rather than report a
 // quieter n that looks like a cleaner measurement. Lifetime count, like
 // probe_adc::timeouts() -- not reset per block or per case -- and printed
-// on SHELL_TONE_GATES below: a Task 4 addition, appended after the design
-// spec's own field list for the same reason audio_virgin was appended to
-// SHELL_TONE_LEVEL/STAT in Task 3 (see print_level_lines()'s comment) -- a
-// reader keyed on the spec's names and positions is unaffected by a field
-// added at the end.
+// on SHELL_TONE_HEALTH below. A Task 4 addition, it was appended to
+// SHELL_TONE_GATES at the time for the same reason audio_virgin was
+// appended to SHELL_TONE_LEVEL/STAT in Task 3 (see print_level_lines()'s
+// comment); Task 5's fix round moved it, with the three other counters,
+// onto its own line -- see the byte-budget note beside the two PrintLine
+// calls at the end of the block.
 uint32_t g_phase_timeouts = 0;
+
+// Repeats of the window sweep whose EOC poll never saw the conversion end.
+// Printed, never folded into an average: a run that lost repeats must say so
+// rather than report a quieter n that looks like a cleaner measurement.
+// Lifetime count, like g_phase_timeouts above and probe_adc::timeouts() --
+// not reset per block or per case -- and printed on SHELL_TONE_HEALTH
+// below, beside phase_timeouts. It has to be its own counter and cannot be
+// probe_adc::timeouts(): measure_window_point() polls EOC itself and never
+// calls sample_now(), so that counter cannot see these.
+uint32_t g_win_timeouts = 0;
 
 // One phase point of one tone row against one victim.
 //
@@ -303,6 +322,124 @@ void park_victim(MuxScan& chain, const XtalkVictim& v)
         probe_adc::channel_of_group(v.group),
         probe_adc::sample_time_for_rung(sample_time_index_for(v.r_src_ohm)));
     spin_ns(kParkNs);
+}
+
+// --- Task 5: the edge inside the sampling window (spec section 6) ---
+
+// The EOC-poll bound for the window sweep. NOT a second number invented
+// here: it is probe_adc's own kPollTimeoutCycles (probe_adc.cpp:211),
+// 300 us at 480 MHz, sized there to clear 396 ADC cycles even if the real
+// ADC clock turned out as slow as 3 MHz -- and the long, 387.5-cycle rung
+// this sweep runs at is exactly the case that sizing was chosen for. It is
+// carried as a literal because that constant has internal linkage in
+// probe_adc.cpp and there is no expression this file could write that tracks
+// it; a change there needs this one changed by hand alongside it, and this
+// comment is the citation rather than a claim that the two are linked.
+constexpr uint32_t kWinPollTimeoutCycles = 144000u;  // 300 us at 480 MHz
+
+// One point of the window sweep.
+//
+// The order is the reverse of every other measurement in these two probes:
+// the conversion starts FIRST and the aggressor edge lands inside its
+// acquisition window. The sample-and-hold tracks the node through the whole
+// window and the aperture closes at its end, so a transient whose remainder
+// at the aperture is still above the criterion shows as a function of how
+// long before the end it was fired.
+//
+// t0 here is the CONVERSION START, not a latch edge. That is the difference
+// from round one, and it is why this cannot be a case in round one's table.
+// It deliberately does NOT call probe_adc::sample_now(): that function owns
+// the whole start-to-read span, and this sequence has to act in the middle
+// of it. Do not "unify" the two -- doing so removes the measurement.
+Point measure_window_point(MuxScan& chain, const XtalkCase& c,
+                           uint32_t window_cycles, uint32_t d_before_end_ns,
+                           int* n_out)
+{
+    const uint32_t d_cycles = ns_to_cycles(d_before_end_ns);
+    // The edge is fired when this much of the window has already elapsed.
+    // A d_before_end longer than the window would mean firing before the
+    // conversion started, which is round one's measurement at an
+    // uncommanded delay; the caller has already refused that, and this is
+    // the belt.
+    if(d_cycles >= window_cycles) return Point{-1, -1, -1};
+    const uint32_t fire_at = window_cycles - d_cycles;
+
+    int64_t sum   = 0;
+    int32_t lo    = 0x7FFFFFFF, hi = -0x7FFFFFFF;
+    int     valid = 0;
+    for(int r = 0; r < kToneRepeats; ++r)
+    {
+        chain.write_chain(c.word_a);
+        // The file's shared park spin. It is NOT part of the measurement --
+        // it only lets word_a settle before the conversion starts -- which
+        // is why it may be a helper that re-reads the clock, and why the
+        // in-window wait below deliberately is not.
+        spin_ns(kParkNs);
+
+        // Interrupts masked across the whole sequence, not just the
+        // conversion: the edge's position INSIDE the window is the
+        // measurement, and a block interrupt landing between the start and
+        // the latch would move it by microseconds. The mask is saved and
+        // restored rather than cleared and set, so this cannot turn
+        // interrupts on if it was called with them off -- same discipline as
+        // probe_adc::sample_now().
+        //
+        // WHAT THE MASK COSTS, AND WHAT DOES NOT WATCH IT. The task brief's
+        // own sentence here read "it costs the callback one window, ~63 us,
+        // well inside a 2 ms block, and G7 is what notices if that ever
+        // stops being true". That is false for this sweep as it is actually
+        // called, and the thing that falsified it is the StopAudio() at the
+        // call site: during the sweep there is no callback at all, so there
+        // is nothing to cost a window and nothing to starve. G7 could not
+        // notice either way -- missed_blocks is accumulated only inside
+        // measure_level(), which this function never calls, and g_blocks is
+        // frozen while the codec is stopped. Stated plainly rather than left
+        // as a guard that cannot go red.
+        //
+        // The conditional half of it is still worth keeping: IF this
+        // function were ever called with audio running, the masked region is
+        // ~63 us of a 2 ms block and G7 would then be the thing that sees a
+        // starved callback -- but only because measure_level() runs in that
+        // arrangement, not because of anything here.
+        const uint32_t primask = __get_PRIMASK();
+        __disable_irq();
+
+        const uint32_t t0 = cycles_now();
+        ADC1->CR |= ADC_CR_ADSTART;    // the same direct start probe_adc uses
+
+        // Timed against the conversion's OWN t0 and written out here rather
+        // than routed through spin_ns(): that helper takes its own clock
+        // reading, which would move the edge off the conversion start by
+        // however long the call and the second read take. This loop IS the
+        // measurement.
+        while(cycles_now() - t0 < fire_at) { }
+        (void)chain.write_chain_timed(c.word_b);
+
+        // KNOWN, NOT FIXED HERE: the timeout path does not read ADC1->DR, so
+        // an EOC arriving just after kWinPollTimeoutCycles expires leaves the
+        // flag set into the next repeat, which would then see it immediately
+        // and read a stale DR. This is the same shape probe_adc::sample_now()
+        // has (probe_adc.cpp:218-243) -- a replicated pre-existing pattern,
+        // not something this sequence introduced -- and a fix belongs in both
+        // copies at once or they stop being the same construction.
+        // win_timeouts was 0 in both complete blocks of
+        // task-5-board-capture.txt, so no repeat on record took that path.
+        bool timed_out = true;
+        while((cycles_now() - t0) < kWinPollTimeoutCycles)
+            if((ADC1->ISR & ADC_ISR_EOC) != 0u) { timed_out = false; break; }
+        const int32_t v = timed_out ? -1 : static_cast<int32_t>(ADC1->DR);
+
+        __set_PRIMASK(primask);
+
+        if(timed_out) { ++g_win_timeouts; continue; }
+        sum += v;
+        if(v < lo) lo = v;
+        if(v > hi) hi = v;
+        ++valid;
+    }
+    if(n_out) *n_out = valid;
+    return valid > 0 ? Point{static_cast<int32_t>(sum / valid), lo, hi}
+                     : Point{-1, -1, -1};
 }
 
 // --- Step 4: the two silent levels ---
@@ -583,7 +720,7 @@ void run_tone_probe(bench::Board& hw)
         // roughly every 8.9 s, many times over inside a phase-grid block
         // that runs into minutes, so a naive `cycles_now() - t0` here would
         // alias to a small, wrong number. GetNow() wraps at ~49.7 days, far
-        // outside anything this block can take. Printed on SHELL_TONE_GATES
+        // outside anything this block can take. Printed on SHELL_TONE_HEALTH
         // below as block_ms -- the one thing only the firmware can measure,
         // and the plan names it as a decision input for Bastian.
         const uint32_t block_start_ms = daisy::System::GetNow();
@@ -871,6 +1008,164 @@ void run_tone_probe(bench::Board& hw)
                          g_running_silent_mean[v], ok ? 1 : 0);
         }
 
+        // --- Task 5: the edge inside the sampling window (spec section 6) ---
+        //
+        // WHERE THIS SITS. The brief does not place the sweep; the
+        // controller's range is "after the tone-case loop, before
+        // SHELL_TONE_GATES", and it is put at the END of that range, after
+        // the span/G5 pass rather than before it. The span calibration and
+        // the per-victim G5 verdict have always run with the codec in
+        // whatever state the tone-case loop left it in, and putting a
+        // StopAudio() ahead of them would have changed the conditions of two
+        // measurements this task is not about.
+        //
+        // THE CODEC IS STOPPED for this sequence, and StopAudio() is called
+        // here explicitly because the tone-case loop above leaves it RUNNING
+        // -- the last row's step and amplitude are still in the callback.
+        // This is a round-one aggressor, a chain word pair, and the tone is
+        // not part of the question. codec=0 is printed on every
+        // SHELL_TONE_WINCASE line below because that is then true, and
+        // because the case index on that line is a small integer that also
+        // exists among the tone cases: a reader has to be told the codec
+        // state differed rather than be left to infer it.
+        //
+        // Audio is deliberately NOT restarted afterwards. ONE CONSEQUENCE
+        // WORTH STATING rather than leaving implied: the NEXT block's
+        // SHELL_TONE_CLK/SHELL_TONE_CAL pass now runs with the codec
+        // stopped, where before this task it ran with the codec still
+        // playing the last tone row.
+        //
+        // What can be said without measuring is structural only. Block 1's
+        // CLK/CAL has always run before any StartAudio() call this boot (the
+        // clock pass sits above run_tone_probe()'s while(1) loop and the
+        // boot-virgin pass calls no audio function), so every later block
+        // ran under a different condition from block 1. After this change
+        // every block's condition is identical to block 1's, rather than
+        // block 1 being the odd one out among all the others.
+        //
+        // THE EFFECT ON THE NUMBERS IS UNMEASURED. No mechanism is claimed,
+        // no direction is expected and no size is implied; it cannot be
+        // checked against the captures on record either, because
+        // task-4-board-capture-c5631f4.txt carries two blocks' GATES/END
+        // lines but only one CFG/CLK/CAL -- the host attached mid-block, so
+        // the one codec-never-started CAL that exists was never captured.
+        // The next capture is what makes it measurable, because it will
+        // carry consecutive blocks' CAL lines under the same condition.
+        hw.StopAudio();
+
+        // 387.5 sampling cycles at THIS boot's measured ADC clock. Not
+        // kToneWinWindowNsNominal -- that constant exists for the host
+        // assertion that the grid fits inside the window, and a firmware
+        // that used it would be back to assuming a clock the probe can
+        // measure, which is the mistake settle-measured.md section 1 records
+        // costing three fix rounds.
+        //
+        // No separate clk.ok guard is needed below: measure_clock() sets
+        // core_cyc_per_adc_cyc to 0.0 when the clock pass failed
+        // (probe_adc.cpp:330-332), so window_cycles and window_ns come out 0
+        // and the fits test refuses the sweep on its own.
+        const uint32_t window_cycles = static_cast<uint32_t>(
+            (static_cast<double>(kSamplingLadderTenths[kToneWinRung]) / 10.0)
+            * clk.core_cyc_per_adc_cyc + 0.5);
+        const uint32_t window_ns = cycles_to_ns(window_cycles);
+
+        // A window shorter than the grid means the last points would fire
+        // before the conversion started. Refuse the sweep and say so rather
+        // than print points measured at a delay nobody commanded.
+        //
+        // THE REFUSAL IS ONE-SIDED, and that is worth saying out loud. It
+        // bounds window_ns from BELOW only, which is what the brief asked
+        // for. An over-measured ADC clock would make window_cycles
+        // arbitrarily large, fits would still read 1, and the in-window wait
+        // -- which has no bound of its own, because the conversion's own
+        // start is its reference -- would spin with interrupts masked for as
+        // long as that window claims to be. Not a defect against the spec;
+        // simply not guarded, and not previously written down.
+        hw.PrintLine("SHELL_TONE_WINDOW window_ns=%d nominal_ns=%d "
+                     "grid_end_ns=%d fits=%d",
+                     static_cast<int>(window_ns),
+                     static_cast<int>(kToneWinWindowNsNominal),
+                     static_cast<int>(tone_win_ns(kToneWinPoints - 1)),
+                     (window_ns > tone_win_ns(kToneWinPoints - 1)) ? 1 : 0);
+
+        if(window_ns > tone_win_ns(kToneWinPoints - 1))
+        {
+            for(int i = 0; i < kToneWinCaseCount; ++i)
+            {
+                const ToneWinCase& w = kToneWinCases[i];
+                const XtalkCase&   c = kXtalkPlan[w.xtalk_case];
+
+                // The LONG rung, picked by kToneWinRung and not by the
+                // victim's impedance: the acquisition window is the axis
+                // this sweep walks inside, so sample_time_index_for(r_src)
+                // -- what park_victim() would have chosen -- is the wrong
+                // rung here by construction. That is also why this does not
+                // call park_victim(): measure_window_point() writes word_a
+                // and does its own park on every repeat.
+                probe_adc::select_time(
+                    probe_adc::channel_of_group(c.group),
+                    probe_adc::sample_time_for_rung(kToneWinRung));
+
+                // BYTE BUDGET, and the reason the design spec's single
+                // combined SHELL_TONE_WIN line is split in two here:
+                // libDaisy's log buffer is 128 bytes
+                // (lib/libDaisy/src/hid/logger.h:29) and the spec's combined
+                // form -- case, victim identity, both chain words and one
+                // window point together -- runs 143 characters, past the
+                // buffer, truncated and stamped "$$". Same split and same
+                // reason as round one's SHELL_XTALK_CASE (plan decision 1,
+                // cited in spec section 8, not re-argued here) and as this
+                // file's own SHELL_TONE_CASE above. This line runs 112
+                // characters; the point line below runs 79.
+                //
+                // WHICH BOUND THOSE NUMBERS ARE, because "at its widest
+                // values" does not say and two different bounds exist. They
+                // are DATA-widest: the widest rendering reachable with this
+                // board's own tables (xtalk_case <= 57, victim_ch <= 15,
+                // r_src <= 5150, 16-bit chain words, 16-bit ADC readings,
+                // d_before_end_ns <= 12800, n <= 64). The 143 is at
+                // victim_ch=8; at victim_ch=15 it is 144. TYPE-widest -- every
+                // %d at the 11 characters a negative int can print -- is far
+                // larger (179 for this line, 225 for the spec's combined
+                // form) and is unreachable from these tables. Ruling 18 holds
+                // under either bound: the combined line is over the 125-byte
+                // payload both ways.
+                //
+                // TWO DIFFERENT FAILURES, ONE VISIBLE SYMPTOM -- do not
+                // conflate them; the tone-case loop's own BYTE BUDGET
+                // comment above carries the full argument and is not
+                // repeated. The split fixes the too-long-line failure only.
+                // logger.cpp:78-87's ACCUMULATION overflow strikes a line of
+                // ANY length whenever the host does not drain fast enough,
+                // and shortening a line does not buy immunity from it -- it
+                // only moves where the damage lands. Nothing here fixes, or
+                // was meant to fix, that one. The lever it responds to is
+                // total volume per run, and this sweep adds 1 + 2 + 130
+                // lines to a block that MEASURED 821 lines before it
+                // (task-4-board-capture-c5631f4.txt, the one complete block
+                // it carries, lines 775-1595) -- about +16 %. The 968 cited
+                // a few comments above is a capture FILE's length, not a
+                // block's; do not reuse it as one.
+                hw.PrintLine("SHELL_TONE_WINCASE case=%d xtalk_case=%d victim_group=%d "
+                             "victim_ch=%d r_src=%d word_a=%d word_b=%d codec=%d",
+                             i, w.xtalk_case, c.group, c.channel,
+                             static_cast<int>(c.r_src_ohm),
+                             static_cast<int>(c.word_a), static_cast<int>(c.word_b),
+                             0);
+
+                for(int k = 0; k < kToneWinPoints; ++k)
+                {
+                    int         n = 0;
+                    const Point p = measure_window_point(chain, c, window_cycles,
+                                                         tone_win_ns(k), &n);
+                    hw.PrintLine("SHELL_TONE_WIN case=%d d_before_end_ns=%d n=%d mean=%d "
+                                 "min=%d max=%d",
+                                 i, static_cast<int>(tone_win_ns(k)), n,
+                                 p.mean, p.min, p.max);
+                }
+            }
+        }
+
         XtalkSummary summary{};
         summary.b0          = b0;
         summary.lat_min_ns  = lat_min;
@@ -896,27 +1191,68 @@ void run_tone_probe(bench::Board& hw)
         // into a literal nobody re-measures -- which is exactly what the
         // deleted kConversionNs was. read_tone.py computes G8 from the two
         // files and folds it into its exit code; gates_ok below excludes it.
-        // phase_timeouts=%d and block_ms=%d are Task 4 additions, both
-        // appended after the design spec's field list (section 8 has been
-        // updated -- fix 3, controller ruling -- to carry both, in this
-        // order, at the end) rather than inserted between existing fields --
-        // same convention as audio_virgin on SHELL_TONE_LEVEL/STAT. Neither
-        // is folded into gates_ok: a lost repeat already shows up as a
-        // shorter n on its own SHELL_TONE line, and block duration is not a
-        // pass/fail criterion, it is the one number only the firmware can
-        // measure and the plan needs from Bastian as a decision input.
+        // phase_timeouts and block_ms were Task 4 additions to THIS line and
+        // now live on SHELL_TONE_HEALTH below -- see the byte-budget note
+        // ahead of the two PrintLine calls for why they moved; their
+        // semantics did not. Neither is folded into gates_ok: a lost repeat
+        // already shows up as a shorter n on its own SHELL_TONE line, and
+        // block duration is not a pass/fail criterion, it is the one number
+        // only the firmware can measure and the plan needs from Bastian as a
+        // decision input.
         // phase_timeouts is g_phase_timeouts, a lifetime count, not reset
         // per block. block_ms is MEASURED per block (daisy::System::GetNow()
         // at the top of this loop iteration, subtracted here) -- not
         // derived, and not to be confused with any arithmetic estimate.
-        hw.PrintLine("SHELL_TONE_GATES g2=%d g4=%d g5=%d g7=%d g8=%d "
-                     "missed_blocks=%d gates_ok=%d phase_timeouts=%d block_ms=%d",
+        // win_timeouts=%d is a Task 5 addition and is g_win_timeouts: the
+        // window sweep's own lifetime timeout count, separate from
+        // phase_timeouts and from probe_adc::timeouts() because
+        // measure_window_point() polls EOC itself. It is not folded into
+        // gates_ok either -- a lost repeat already shows as a shorter n on
+        // its own SHELL_TONE_WIN line.
+        //
+        // BYTE BUDGET, and the reason the four counters are on their own
+        // SHELL_TONE_HEALTH line rather than appended to SHELL_TONE_GATES:
+        // the combined form was MEASURED, not estimated, at
+        //     117 bytes on a healthy run,
+        //     124 bytes at missed_blocks=12 phase_timeouts=4096
+        //         win_timeouts=8320 -- ordinary failure-run values,
+        //     144 bytes with the three counters at ten digits and a
+        //         realistic block_ms (170123), and
+        //     148 bytes with the three counters AND block_ms all at ten
+        //         digits -- the condition matters, so it is stated rather
+        //         than folded into "at full width",
+        // against libDaisy's 128-byte buffer (lib/libDaisy/src/hid/logger.h:29;
+        // AppendNewLine() at logger.cpp:104 only fits its 2-byte newline
+        // below 126, so the usable payload is 125). The combined line
+        // therefore truncated and stamped "$$" precisely in the runs whose
+        // counters were large -- which is to say precisely when these four
+        // fields were the ones anyone needed. A diagnostic that hides itself
+        // when things go wrong is worse than no diagnostic, because its
+        // silence reads as health. Split the same way, and for the same
+        // buffer, as SHELL_TONE_CASE/SHELL_TONE and
+        // SHELL_TONE_WINCASE/SHELL_TONE_WIN above. Measured widths of the
+        // two lines below at full uint32 values: 53 and 112 bytes.
+        //
+        // FIELDS MOVED, NOTHING RECOMPUTED: gates_ok is still the AND of the
+        // same FOUR terms -- g2_floor, g4_jitter, g5_address and
+        // missed_blocks == 0, which is what g7 is, so it is one term and not
+        // two; g8 is the literal -1 and has never been in it -- the three
+        // counters are still lifetime counts that are not reset per block,
+        // and block_ms is still the same GetNow() subtraction. See the "two different failures" note in the
+        // tone-case loop above: this split, like the others, addresses only
+        // the too-long-line failure and buys no immunity from
+        // logger.cpp:78-87's accumulation overflow.
+        hw.PrintLine("SHELL_TONE_GATES g2=%d g4=%d g5=%d g7=%d g8=%d gates_ok=%d",
                      gates.g2_floor ? 1 : 0, gates.g4_jitter ? 1 : 0,
                      gates.g5_address ? 1 : 0, missed_blocks == 0 ? 1 : 0,
-                     -1, static_cast<int>(missed_blocks),
+                     -1,
                      (gates.g2_floor && gates.g4_jitter && gates.g5_address
-                      && missed_blocks == 0) ? 1 : 0,
+                      && missed_blocks == 0) ? 1 : 0);
+        hw.PrintLine("SHELL_TONE_HEALTH missed_blocks=%d phase_timeouts=%d "
+                     "win_timeouts=%d block_ms=%d",
+                     static_cast<int>(missed_blocks),
                      static_cast<int>(g_phase_timeouts),
+                     static_cast<int>(g_win_timeouts),
                      static_cast<int>(daisy::System::GetNow() - block_start_ms));
         hw.PrintLine("SHELL_TONE_END");
     }
