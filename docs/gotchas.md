@@ -90,6 +90,49 @@ by ear are a different list: [`docs/by-ear-decisions.md`](by-ear-decisions.md).
   `docs/bench/2026-08-20-e122e6e-system-axi-o2-usb.md`; after capture:
   `docs/bench/2026-08-20-48f8665-system-axi-o2-usb.md`.
 
+- **A probe spec's output section drifts from its firmware as a rule, and a
+  host reader written from the spec parses lines the board does not print.**
+  Confirmed on all three instruments — settle, crosstalk, codec-tone — and it
+  is the most expensive recurring defect two rounds of coupon work produced:
+  four fix rounds in one task alone, and by the end the crosstalk spec's §8
+  had drifted past five whole tags (`_RATE`, `_CASE`, `_STAT`, `_SPAN`,
+  `_G5`) while the codec-tone spec was missing `audio_virgin` — the single
+  field its G8 gate depends on entirely. It is not three accidents: a task
+  that adds a `PrintLine` is looking at the firmware, and the spec is a
+  different file nobody's diff contains.
+
+  **Two rules, and they are the whole entry:**
+
+  1. *A task that adds or changes a `PrintLine` updates the spec's output
+     section in the SAME commit.* Not afterwards, not when a reviewer finds
+     it. The fix travels with the task that creates the line.
+  2. *A task that writes a host reader transcribes the format from the
+     firmware's format strings, not from the spec — and says in the spec's
+     output section that it did, with the date.* Then diff the two field by
+     field; where they disagree, the firmware wins and the spec gets fixed in
+     that commit.
+
+  **How to check it in one pass, before dispatching a reader task:** list
+  every tag the firmware prints and every tag the section documents, and
+  compare the sets.
+
+  ```
+  grep -o 'SHELL_[A-Z0-9_]*' shell/<probe>_probe.cpp | sort -u
+  grep -o 'SHELL_[A-Z0-9_]*' docs/superpowers/specs/<spec>.md | sort -u
+  ```
+
+  The `0-9` in the class is not decoration: without it `SHELL_TONE_G5` and
+  `SHELL_XTALK_G6` truncate to `..._G` on both sides and compare equal.
+
+  A tag in the first list and not the second is the defect. Then read the
+  format strings for the tags that ARE in both, field by field — the tag
+  being present is not the same as its field list being current, which is how
+  `phase_timeouts`, `audio_virgin`, `below_corner`, `_SPAN` and `_G5` each
+  went missing individually. **The print ORDER is a separate claim**: if the
+  section says "in print order", check it against a real capture, because a
+  block can open with fifteen lines of one tag before the first line of
+  another. (2026-09-19, from the coupon probe campaigns.)
+
 ## Modulation layer (`engine/mod/`)
 
 - **The lane phase accumulator has a hard slow-rate cliff no rate observer can
