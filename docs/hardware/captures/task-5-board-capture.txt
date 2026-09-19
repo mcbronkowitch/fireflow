@@ -1,0 +1,2013 @@
+Daisy is online
+===============
+SHELL_TONE_LEVEL case=0 level=0 victim_group=0 victim_ch=8 r_src=5150 n=64 mean=32514 min=31$$SHELL_TONE case=10 phase_idx=1 n=64 mean=31665 min=31639 max=32294
+SHELL_TONE case=10 phase_idx=2 n=64 mean=31665 min=31639 m$$SHELL_TONE case=11 phase_idx=10 n=64 mean=31939 min=31919 max=32431
+SHELL_TONE case=11 phase_idx=11 n=64 mean=31939 min=31921 max=32446
+SHELL_TONE case=11 phase_idx=12 n=64 mean=31939 min=31923 max=32435
+SHELL_TONE case=11 phase_idx=13 n=64 mean=31939 min=31918 max=32432
+SHELL_TONE case=11 phase_idx=14 n=64 mean=31939 min=31921 max=32444
+SHELL_TONE case=11 phase_idx=15 n=64 mean=31940 min=31925 max=32447
+SHELL_TONE_CASE case=12 level=2 f_hz=100 dbfs=-20 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE case=12 phase_idx=0 n=64 mean=32748 min=32733 max=32768
+SHELL_TONE case=12 phase_idx=1 n=64 mean=32751 min=32730 max=32772
+SHELL_TONE case=12 phase_idx=2 n=64 mean=32750 min=32728 max=32770
+SHELL_TONE case=12 phase_idx=3 n=64 mean=32749 min=32736 max=32769
+SHELL_TONE case=12 phase_idx=4 n=64 mean=32749 min=32732 max=32795
+SHELL_TONE case=12 phase_idx=5 n=64 mean=32748 min=32734 max=32770
+SHELL_TONE case=12 phase_idx=6 n=64 mean=32747 min=32735 max=32772
+SHELL_TONE case=12 phase_idx=7 n=64 mean=32750 min=32728 max=32770
+SHELL_TONE case=12 phase_idx=8 n=64 mean=32751 min=32731 max=32772
+SHELL_TONE case=12 phase_idx=9 n=64 mean=32739 min=32724 max=32778
+SHELL_TONE case=12 phase_idx=10 n=64 mean=32750 min=32733 max=32785
+SHELL_TONE case=12 phase_idx=11 n=64 mean=32751 min=32732 max=32776
+SHELL_TONE case=12 phase_idx=12 n=64 mean=32749 min=32735 max=32777
+SHELL_TONE case=12 phase_idx=13 n=64 mean=32748 min=32735 max=32768
+SHELL_TONE case=12 phase_idx=14 n=64 mean=32748 min=32734 max=32768
+SHELL_TONE case=12 phase_idx=15 n=64 mean=32750 min=32733 max=32772
+SHELL_TONE_CASE case=13 level=2 f_hz=100 dbfs=-20 victim_group=0 victim_ch=10 r_src=150 below_corner=0
+SHELL_TONE case=13 phase_idx=0 n=64 mean=0 min=0 max=8
+SHELL_TONE case=13 phase_idx=1 n=64 mean=0 min=0 max=4
+SHELL_TONE case=13 phase_idx=2 n=64 mean=0 min=0 max=9
+SHELL_TONE case=13 phase_idx=3 n=64 mean=0 min=0 max=8
+SHELL_TONE case=13 phase_idx=4 n=64 mean=0 min=0 max=9
+SHELL_TONE case=13 phase_idx=5 n=64 mean=0 min=0 max=11
+SHELL_TONE case=13 phase_idx=6 n=64 mean=0 min=0 max=12
+SHELL_TONE case=13 phase_idx=7 n=64 mean=0 min=0 max=8
+SHELL_TONE case=13 phase_idx=8 n=64 mean=0 min=0 max=8
+SHELL_TONE case=13 phase_idx=9 n=64 mean=0 min=0 max=10
+SHELL_TONE case=13 phase_idx=10 n=64 mean=0 min=0 max=8
+SHELL_TONE case=13 phase_idx=11 n=64 mean=0 min=0 max=6
+SHELL_TONE case=13 phase_idx=12 n=64 mean=0 min=0 max=12
+SHELL_TONE case=13 phase_idx=13 n=64 mean=0 min=0 max=8
+SHELL_TONE case=13 phase_idx=14 n=64 mean=0 min=0 max=9
+SHELL_TONE case=13 phase_idx=15 n=64 mean=0 min=0 max=16
+SHELL_TONE_CASE case=14 level=2 f_hz=100 dbfs=-20 victim_group=1 victim_ch=3 r_src=150 below_corner=0
+SHELL_TONE case=14 phase_idx=0 n=64 mean=0 min=0 max=1
+SHELL_TONE case=14 phase_idx=1 n=64 mean=0 min=0 max=2
+SHELL_TONE case=14 phase_idx=2 n=64 mean=0 min=0 max=2
+SHELL_TONE case=14 phase_idx=3 n=64 mean=0 min=0 max=2
+SHELL_TONE case=14 phase_idx=4 n=64 mean=0 min=0 max=2
+SHELL_TONE case=14 phase_idx=5 n=64 mean=0 min=0 max=6
+SHELL_TONE case=14 phase_idx=6 n=64 mean=0 min=0 max=5
+SHELL_TONE case=14 phase_idx=7 n=64 mean=0 min=0 max=3
+SHELL_TONE case=14 phase_idx=8 n=64 mean=0 min=0 max=1
+SHELL_TONE case=14 phase_idx=9 n=64 mean=0 min=0 max=4
+SHELL_TONE case=14 phase_idx=10 n=64 mean=0 min=0 max=2
+SHELL_TONE case=14 phase_idx=11 n=64 mean=0 min=0 max=2
+SHELL_TONE case=14 phase_idx=12 n=64 mean=0 min=0 max=2
+SHELL_TONE case=14 phase_idx=13 n=64 mean=0 min=0 max=4
+SHELL_TONE case=14 phase_idx=14 n=64 mean=0 min=0 max=2
+SHELL_TONE case=14 phase_idx=15 n=64 mean=0 min=0 max=2
+SHELL_TONE_CASE case=15 level=2 f_hz=100 dbfs=-6 victim_group=0 victim_ch=8 r_src=5150 below_corner=0
+SHELL_TONE case=15 phase_idx=0 n=64 mean=31654 min=31638 max=31675
+SHELL_TONE case=15 phase_idx=1 n=64 mean=31663 min=31640 max=32296
+SHELL_TONE case=15 phase_idx=2 n=64 mean=31665 min=31638 max=32289
+SHELL_TONE case=15 phase_idx=3 n=64 mean=31662 min=31639 max=32282
+SHELL_TONE case=15 phase_idx=4 n=64 mean=31662 min=31639 max=32289
+SHELL_TONE case=15 phase_idx=5 n=64 mean=31663 min=31637 max=32280
+SHELL_TONE case=15 phase_idx=6 n=64 mean=31665 min=31641 max=32290
+SHELL_TONE case=15 phase_idx=7 n=64 mean=31663 min=31643 max=32278
+SHELL_TONE case=15 phase_idx=8 n=64 mean=31662 min=31639 max=32290
+SHELL_TONE case=15 phase_idx=9 n=64 mean=31663 min=31633 max=32298
+SHELL_TONE case=15 phase_idx=10 n=64 mean=31663 min=31638 max=32299
+SHELL_TONE case=15 phase_idx=11 n=64 mean=31663 min=31638 max=32284
+SHELL_TONE case=15 phase_idx=12 n=64 mean=31663 min=31636 max=32275
+SHELL_TONE case=15 phase_idx=13 n=64 mean=31664 min=31634 max=32291
+SHELL_TONE case=15 phase_idx=14 n=64 mean=31663 min=31639 max=32275
+SHELL_TONE case=15 phase_idx=15 n=64 mean=31664 min=31637 max=32303
+SHELL_TONE_CASE case=16 level=2 f_hz=100 dbfs=-6 victim_group=1 victim_ch=6 r_src=5150 below_corner=0
+SHELL_TONE case=16 phase_idx=0 n=64 mean=31939 min=31919 max=32426
+SHELL_TONE case=16 phase_idx=1 n=64 mean=31939 min=31919 max=32437
+SHELL_TONE case=16 phase_idx=2 n=64 mean=31938 min=31898 max=32434
+SHELL_TONE case=16 phase_idx=3 n=64 mean=31938 min=31923 max=32422
+SHELL_TONE case=16 phase_idx=4 n=64 mean=31939 min=31921 max=32429
+SHELL_TONE case=16 phase_idx=5 n=64 mean=31939 min=31924 max=32421
+SHELL_TONE case=16 phase_idx=6 n=64 mean=31940 min=31921 max=32445
+SHELL_TONE case=16 phase_idx=7 n=64 mean=31940 min=31921 max=32436
+SHELL_TONE case=16 phase_idx=8 n=64 mean=31933 min=31911 max=32425
+SHELL_TONE case=16 phase_idx=9 n=64 mean=31939 min=31923 max=32425
+SHELL_TONE case=16 phase_idx=10 n=64 mean=31938 min=31890 max=32433
+SHELL_TONE case=16 phase_idx=11 n=64 mean=31938 min=31914 max=32438
+SHELL_TONE case=16 phase_idx=12 n=64 mean=31940 min=31924 max=32438
+SHELL_TONE case=16 phase_idx=13 n=64 mean=31939 min=31919 max=32440
+SHELL_TONE case=16 phase_idx=14 n=64 mean=31939 min=31920 max=32431
+SHELL_TONE case=16 phase_idx=15 n=64 mean=31939 min=31923 max=32436
+SHELL_TONE_CASE case=17 level=2 f_hz=100 dbfs=-6 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE case=17 phase_idx=0 n=64 mean=32748 min=32739 max=32768
+SHELL_TONE case=17 phase_idx=1 n=64 mean=32749 min=32735 max=32771
+SHELL_TONE case=17 phase_idx=2 n=64 mean=32750 min=32734 max=32770
+SHELL_TONE case=17 phase_idx=3 n=64 mean=32750 min=32733 max=32768
+SHELL_TONE case=17 phase_idx=4 n=64 mean=32751 min=32734 max=32770
+SHELL_TONE case=17 phase_idx=5 n=64 mean=32750 min=32731 max=32776
+SHELL_TONE case=17 phase_idx=6 n=64 mean=32749 min=32734 max=32770
+SHELL_TONE case=17 phase_idx=7 n=64 mean=32751 min=32734 max=32769
+SHELL_TONE case=17 phase_idx=8 n=64 mean=32749 min=32734 max=32772
+SHELL_TONE case=17 phase_idx=9 n=64 mean=32749 min=32736 max=32770
+SHELL_TONE case=17 phase_idx=10 n=64 mean=32750 min=32730 max=32788
+SHELL_TONE case=17 phase_idx=11 n=64 mean=32746 min=32671 max=32768
+SHELL_TONE case=17 phase_idx=12 n=64 mean=32749 min=32731 max=32770
+SHELL_TONE case=17 phase_idx=13 n=64 mean=32747 min=32733 max=32772
+SHELL_TONE case=17 phase_idx=14 n=64 mean=32749 min=32737 max=32772
+SHELL_TONE case=17 phase_idx=15 n=64 mean=32749 min=32733 max=32770
+SHELL_TONE_CASE case=18 level=2 f_hz=100 dbfs=-6 victim_group=0 victim_ch=10 r_src=150 below_corner=0
+SHELL_TONE case=18 phase_idx=0 n=64 mean=0 min=0 max=9
+SHELL_TONE case=18 phase_idx=1 n=64 mean=0 min=0 max=10
+SHELL_TONE case=18 phase_idx=2 n=64 mean=0 min=0 max=10
+SHELL_TONE case=18 phase_idx=3 n=64 mean=0 min=0 max=7
+SHELL_TONE case=18 phase_idx=4 n=64 mean=0 min=0 max=9
+SHELL_TONE case=18 phase_idx=5 n=64 mean=0 min=0 max=1
+SHELL_TONE case=18 phase_idx=6 n=64 mean=0 min=0 max=10
+SHELL_TONE case=18 phase_idx=7 n=64 mean=0 min=0 max=8
+SHELL_TONE case=18 phase_idx=8 n=64 mean=0 min=0 max=8
+SHELL_TONE case=18 phase_idx=9 n=64 mean=0 min=0 max=5
+SHELL_TONE case=18 phase_idx=10 n=64 mean=0 min=0 max=9
+SHELL_TONE case=18 phase_idx=11 n=64 mean=0 min=0 max=8
+SHELL_TONE case=18 phase_idx=12 n=64 mean=0 min=0 max=10
+SHELL_TONE case=18 phase_idx=13 n=64 mean=0 min=0 max=14
+SHELL_TONE case=18 phase_idx=14 n=64 mean=0 min=0 max=8
+SHELL_TONE case=18 phase_idx=15 n=64 mean=0 min=0 max=5
+SHELL_TONE_CASE case=19 level=2 f_hz=100 dbfs=-6 victim_group=1 victim_ch=3 r_src=150 below_corner=0
+SHELL_TONE case=19 phase_idx=0 n=64 mean=0 min=0 max=4
+SHELL_TONE case=19 phase_idx=1 n=64 mean=0 min=0 max=0
+SHELL_TONE case=19 phase_idx=2 n=64 mean=0 min=0 max=1
+SHELL_TONE case=19 phase_idx=3 n=64 mean=0 min=0 max=1
+SHELL_TONE case=19 phase_idx=4 n=64 mean=0 min=0 max=1
+SHELL_TONE case=19 phase_idx=5 n=64 mean=0 min=0 max=2
+SHELL_TONE case=19 phase_idx=6 n=64 mean=0 min=0 max=2
+SHELL_TONE case=19 phase_idx=7 n=64 mean=0 min=0 max=0
+SHELL_TONE case=19 phase_idx=8 n=64 mean=0 min=0 max=4
+SHELL_TONE case=19 phase_idx=9 n=64 mean=0 min=0 max=0
+SHELL_TONE case=19 phase_idx=10 n=64 mean=0 min=0 max=1
+SHELL_TONE case=19 phase_idx=11 n=64 mean=0 min=0 max=6
+SHELL_TONE case=19 phase_idx=12 n=64 mean=0 min=0 max=2
+SHELL_TONE case=19 phase_idx=13 n=64 mean=0 min=0 max=3
+SHELL_TONE case=19 phase_idx=14 n=64 mean=0 min=0 max=1
+SHELL_TONE case=19 phase_idx=15 n=64 mean=0 min=0 max=2
+SHELL_TONE_CASE case=20 level=2 f_hz=100 dbfs=0 victim_group=0 victim_ch=8 r_src=5150 below_corner=0
+SHELL_TONE case=20 phase_idx=0 n=64 mean=31653 min=31637 max=31673
+SHELL_TONE case=20 phase_idx=1 n=64 mean=31663 min=31634 max=32319
+SHELL_TONE case=20 phase_idx=2 n=64 mean=31663 min=31642 max=32277
+SHELL_TONE case=20 phase_idx=3 n=64 mean=31663 min=31639 max=32299
+SHELL_TONE case=20 phase_idx=4 n=64 mean=31663 min=31631 max=32303
+SHELL_TONE case=20 phase_idx=5 n=64 mean=31664 min=31639 max=32297
+SHELL_TONE case=20 phase_idx=6 n=64 mean=31664 min=31637 max=32283
+SHELL_TONE case=20 phase_idx=7 n=64 mean=31658 min=31633 max=32279
+SHELL_TONE case=20 phase_idx=8 n=64 mean=31664 min=31644 max=32306
+SHELL_TONE case=20 phase_idx=9 n=64 mean=31664 min=31642 max=32292
+SHELL_TONE case=20 phase_idx=10 n=64 mean=31663 min=31616 max=32280
+SHELL_TONE case=20 phase_idx=11 n=64 mean=31663 min=31639 max=32304
+SHELL_TONE case=20 phase_idx=12 n=64 mean=31664 min=31642 max=32285
+SHELL_TONE case=20 phase_idx=13 n=64 mean=31664 min=31639 max=32284
+SHELL_TONE case=20 phase_idx=14 n=64 mean=31662 min=31641 max=32288
+SHELL_TONE case=20 phase_idx=15 n=64 mean=31662 min=31637 max=32285
+SHELL_TONE_CASE case=21 level=2 f_hz=100 dbfs=0 victim_group=1 victim_ch=6 r_src=5150 below_corner=0
+SHELL_TONE case=21 phase_idx=0 n=64 mean=31939 min=31921 max=32425
+SHELL_TONE case=21 phase_idx=1 n=64 mean=31938 min=31924 max=32439
+SHELL_TONE case=21 phase_idx=2 n=64 mean=31939 min=31923 max=32434
+SHELL_TONE case=21 phase_idx=3 n=64 mean=31938 min=31921 max=32430
+SHELL_TONE case=21 phase_idx=4 n=64 mean=31939 min=31923 max=32436
+SHELL_TONE case=21 phase_idx=5 n=64 mean=31940 min=31923 max=32433
+SHELL_TONE case=21 phase_idx=6 n=64 mean=31939 min=31921 max=32435
+SHELL_TONE case=21 phase_idx=7 n=64 mean=31939 min=31924 max=32433
+SHELL_TONE case=21 phase_idx=8 n=64 mean=31939 min=31921 max=32430
+SHELL_TONE case=21 phase_idx=9 n=64 mean=31940 min=31922 max=32437
+SHELL_TONE case=21 phase_idx=10 n=64 mean=31938 min=31918 max=32426
+SHELL_TONE case=21 phase_idx=11 n=64 mean=31940 min=31921 max=32428
+SHELL_TONE case=21 phase_idx=12 n=64 mean=31939 min=31922 max=32435
+SHELL_TONE case=21 phase_idx=13 n=64 mean=31939 min=31921 max=32426
+SHELL_TONE case=21 phase_idx=14 n=64 mean=31938 min=31922 max=32440
+SHELL_TONE case=21 phase_idx=15 n=64 mean=31940 min=31921 max=32435
+SHELL_TONE_CASE case=22 level=2 f_hz=100 dbfs=0 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE case=22 phase_idx=0 n=64 mean=32749 min=32736 max=32770
+SHELL_TONE case=22 phase_idx=1 n=64 mean=32748 min=32731 max=32773
+SHELL_TONE case=22 phase_idx=2 n=64 mean=32748 min=32726 max=32772
+SHELL_TONE case=22 phase_idx=3 n=64 mean=32750 min=32735 max=32775
+SHELL_TONE case=22 phase_idx=4 n=64 mean=32749 min=32724 max=32774
+SHELL_TONE case=22 phase_idx=5 n=64 mean=32748 min=32737 max=32769
+SHELL_TONE case=22 phase_idx=6 n=64 mean=32751 min=32738 max=32769
+SHELL_TONE case=22 phase_idx=7 n=64 mean=32751 min=32738 max=32772
+SHELL_TONE case=22 phase_idx=8 n=64 mean=32749 min=32738 max=32780
+SHELL_TONE case=22 phase_idx=9 n=64 mean=32749 min=32736 max=32777
+SHELL_TONE case=22 phase_idx=10 n=64 mean=32749 min=32729 max=32779
+SHELL_TONE case=22 phase_idx=11 n=64 mean=32749 min=32733 max=32768
+SHELL_TONE case=22 phase_idx=12 n=64 mean=32749 min=32733 max=32773
+SHELL_TONE case=22 phase_idx=13 n=64 mean=32748 min=32735 max=32768
+SHELL_TONE case=22 phase_idx=14 n=64 mean=32749 min=32739 max=32772
+SHELL_TONE case=22 phase_idx=15 n=64 mean=32749 min=32734 max=32772
+SHELL_TONE_CASE case=23 level=2 f_hz=100 dbfs=0 victim_group=0 victim_ch=10 r_src=150 below_corner=0
+SHELL_TONE case=23 phase_idx=0 n=64 mean=0 min=0 max=10
+SHELL_TONE case=23 phase_idx=1 n=64 mean=0 min=0 max=10
+SHELL_TONE case=23 phase_idx=2 n=64 mean=0 min=0 max=6
+SHELL_TONE case=23 phase_idx=3 n=64 mean=0 min=0 max=6
+SHELL_TONE case=23 phase_idx=4 n=64 mean=0 min=0 max=9
+SHELL_TONE case=23 phase_idx=5 n=64 mean=0 min=0 max=8
+SHELL_TONE case=23 phase_idx=6 n=64 mean=0 min=0 max=7
+SHELL_TONE case=23 phase_idx=7 n=64 mean=0 min=0 max=4
+SHELL_TONE case=23 phase_idx=8 n=64 mean=0 min=0 max=8
+SHELL_TONE case=23 phase_idx=9 n=64 mean=0 min=0 max=5
+SHELL_TONE case=23 phase_idx=10 n=64 mean=0 min=0 max=16
+SHELL_TONE case=23 phase_idx=11 n=64 mean=0 min=0 max=9
+SHELL_TONE case=23 phase_idx=12 n=64 mean=0 min=0 max=7
+SHELL_TONE case=23 phase_idx=13 n=64 mean=0 min=0 max=10
+SHELL_TONE case=23 phase_idx=14 n=64 mean=0 min=0 max=8
+SHELL_TONE case=23 phase_idx=15 n=64 mean=0 min=0 max=8
+SHELL_TONE_CASE case=24 level=2 f_hz=100 dbfs=0 victim_group=1 victim_ch=3 r_src=150 below_corner=0
+SHELL_TONE case=24 phase_idx=0 n=64 mean=0 min=0 max=47
+SHELL_TONE case=24 phase_idx=1 n=64 mean=0 min=0 max=1
+SHELL_TONE case=24 phase_idx=2 n=64 mean=0 min=0 max=3
+SHELL_TONE case=24 phase_idx=3 n=64 mean=0 min=0 max=2
+SHELL_TONE case=24 phase_idx=4 n=64 mean=0 min=0 max=4
+SHELL_TONE case=24 phase_idx=5 n=64 mean=0 min=0 max=2
+SHELL_TONE case=24 phase_idx=6 n=64 mean=0 min=0 max=3
+SHELL_TONE case=24 phase_idx=7 n=64 mean=0 min=0 max=3
+SHELL_TONE case=24 phase_idx=8 n=64 mean=0 min=0 max=1
+SHELL_TONE case=24 phase_idx=9 n=64 mean=0 min=0 max=4
+SHELL_TONE case=24 phase_idx=10 n=64 mean=0 min=0 max=1
+SHELL_TONE case=24 phase_idx=11 n=64 mean=0 min=0 max=4
+SHELL_TONE case=24 phase_idx=12 n=64 mean=0 min=0 max=0
+SHELL_TONE case=24 phase_idx=13 n=64 mean=0 min=0 max=2
+SHELL_TONE case=24 phase_idx=14 n=64 mean=0 min=0 max=0
+SHELL_TONE case=24 phase_idx=15 n=64 mean=0 min=0 max=2
+SHELL_TONE_CASE case=25 level=2 f_hz=1000 dbfs=-20 victim_group=0 victim_ch=8 r_src=5150 below_corner=0
+SHELL_TONE case=25 phase_idx=0 n=64 mean=32194 min=31648 max=32219
+SHELL_TONE case=25 phase_idx=1 n=64 mean=32206 min=32185 max=32477
+SHELL_TONE case=25 phase_idx=2 n=64 mean=32204 min=32174 max=32478
+SHELL_TONE case=25 phase_idx=3 n=64 mean=32203 min=32163 max=32475
+SHELL_TONE case=25 phase_idx=4 n=64 mean=32204 min=32185 max=32481
+SHELL_TONE case=25 phase_idx=5 n=64 mean=32203 min=32182 max=32477
+SHELL_TONE case=25 phase_idx=6 n=64 mean=32204 min=32185 max=32490
+SHELL_TONE case=25 phase_idx=7 n=64 mean=32204 min=32186 max=32485
+SHELL_TONE case=25 phase_idx=8 n=64 mean=32205 min=32182 max=32473
+SHELL_TONE case=25 phase_idx=9 n=64 mean=32205 min=32186 max=32478
+SHELL_TONE case=25 phase_idx=10 n=64 mean=32205 min=32187 max=32486
+SHELL_TONE case=25 phase_idx=11 n=64 mean=32206 min=32183 max=32474
+SHELL_TONE case=25 phase_idx=12 n=64 mean=32205 min=32173 max=32455
+SHELL_TONE case=25 phase_idx=13 n=64 mean=32202 min=32063 max=32477
+SHELL_TONE case=25 phase_idx=14 n=64 mean=32204 min=32186 max=32471
+SHELL_TONE case=25 phase_idx=15 n=64 mean=32205 min=32186 max=32477
+SHELL_TONE_CASE case=26 level=2 f_hz=1000 dbfs=-20 victim_group=1 victim_ch=6 r_src=5150 below_corner=0
+SHELL_TONE case=26 phase_idx=0 n=64 mean=32352 min=32338 max=32371
+SHELL_TONE case=26 phase_idx=1 n=64 mean=32354 min=32341 max=32563
+SHELL_TONE case=26 phase_idx=2 n=64 mean=32355 min=32341 max=32572
+SHELL_TONE case=26 phase_idx=3 n=64 mean=32354 min=32341 max=32564
+SHELL_TONE case=26 phase_idx=4 n=64 mean=32354 min=32301 max=32565
+SHELL_TONE case=26 phase_idx=5 n=64 mean=32355 min=32341 max=32563
+SHELL_TONE case=26 phase_idx=6 n=64 mean=32355 min=32341 max=32564
+SHELL_TONE case=26 phase_idx=7 n=64 mean=32356 min=32337 max=32568
+SHELL_TONE case=26 phase_idx=8 n=64 mean=32356 min=32335 max=32567
+SHELL_TONE case=26 phase_idx=9 n=64 mean=32355 min=32335 max=32564
+SHELL_TONE case=26 phase_idx=10 n=64 mean=32355 min=32338 max=32563
+SHELL_TONE case=26 phase_idx=11 n=64 mean=32356 min=32343 max=32569
+SHELL_TONE case=26 phase_idx=12 n=64 mean=32351 min=32311 max=32558
+SHELL_TONE case=26 phase_idx=13 n=64 mean=32354 min=32337 max=32576
+SHELL_TONE case=26 phase_idx=14 n=64 mean=32355 min=32336 max=32564
+SHELL_TONE case=26 phase_idx=15 n=64 mean=32356 min=32342 max=32563
+SHELL_TONE_CASE case=27 level=2 f_hz=1000 dbfs=-20 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE case=27 phase_idx=0 n=64 mean=32754 min=32740 max=32771
+SHELL_TONE case=27 phase_idx=1 n=64 mean=32756 min=32739 max=32777
+SHELL_TONE case=27 phase_idx=2 n=64 mean=32757 min=32739 max=32777
+SHELL_TONE case=27 phase_idx=3 n=64 mean=32758 min=32743 max=32773
+SHELL_TONE case=27 phase_idx=4 n=64 mean=32755 min=32741 max=32774
+SHELL_TONE case=27 phase_idx=5 n=64 mean=32754 min=32741 max=32772
+SHELL_TONE case=27 phase_idx=6 n=64 mean=32755 min=32739 max=32771
+SHELL_TONE case=27 phase_idx=7 n=64 mean=32755 min=32742 max=32773
+SHELL_TONE case=27 phase_idx=8 n=64 mean=32755 min=32742 max=32776
+SHELL_TONE case=27 phase_idx=9 n=64 mean=32755 min=32740 max=32783
+SHELL_TONE case=27 phase_idx=10 n=64 mean=32753 min=32734 max=32772
+SHELL_TONE case=27 phase_idx=11 n=64 mean=32755 min=32743 max=32778
+SHELL_TONE case=27 phase_idx=12 n=64 mean=32753 min=32733 max=32777
+SHELL_TONE case=27 phase_idx=13 n=64 mean=32753 min=32742 max=32777
+SHELL_TONE case=27 phase_idx=14 n=64 mean=32756 min=32741 max=32777
+SHELL_TONE case=27 phase_idx=15 n=64 mean=32756 min=32735 max=32772
+SHELL_TONE_CASE case=28 level=2 f_hz=1000 dbfs=-20 victim_group=0 victim_ch=10 r_src=150 below_corner=0
+SHELL_TONE case=28 phase_idx=0 n=64 mean=0 min=0 max=2
+SHELL_TONE case=28 phase_idx=1 n=64 mean=0 min=0 max=4
+SHELL_TONE case=28 phase_idx=2 n=64 mean=0 min=0 max=12
+SHELL_TONE case=28 phase_idx=3 n=64 mean=0 min=0 max=8
+SHELL_TONE case=28 phase_idx=4 n=64 mean=0 min=0 max=4
+SHELL_TONE case=28 phase_idx=5 n=64 mean=0 min=0 max=8
+SHELL_TONE case=28 phase_idx=6 n=64 mean=0 min=0 max=9
+SHELL_TONE case=28 phase_idx=7 n=64 mean=0 min=0 max=8
+SHELL_TONE case=28 phase_idx=8 n=64 mean=0 min=0 max=8
+SHELL_TONE case=28 phase_idx=9 n=64 mean=0 min=0 max=16
+SHELL_TONE case=28 phase_idx=10 n=64 mean=0 min=0 max=4
+SHELL_TONE case=28 phase_idx=11 n=64 mean=0 min=0 max=4
+SHELL_TONE case=28 phase_idx=12 n=64 mean=0 min=0 max=13
+SHELL_TONE case=28 phase_idx=13 n=64 mean=0 min=0 max=8
+SHELL_TONE case=28 phase_idx=14 n=64 mean=0 min=0 max=5
+SHELL_TONE case=28 phase_idx=15 n=64 mean=0 min=0 max=5
+SHELL_TONE_CASE case=29 level=2 f_hz=1000 dbfs=-20 victim_group=1 victim_ch=3 r_src=150 below_corner=0
+SHELL_TONE case=29 phase_idx=0 n=64 mean=0 min=0 max=2
+SHELL_TONE case=29 phase_idx=1 n=64 mean=0 min=0 max=1
+SHELL_TONE case=29 phase_idx=2 n=64 mean=0 min=0 max=1
+SHELL_TONE case=29 phase_idx=3 n=64 mean=0 min=0 max=0
+SHELL_TONE case=29 phase_idx=4 n=64 mean=0 min=0 max=1
+SHELL_TONE case=29 phase_idx=5 n=64 mean=0 min=0 max=8
+SHELL_TONE case=29 phase_idx=6 n=64 mean=0 min=0 max=2
+SHELL_TONE case=29 phase_idx=7 n=64 mean=0 min=0 max=2
+SHELL_TONE case=29 phase_idx=8 n=64 mean=0 min=0 max=0
+SHELL_TONE case=29 phase_idx=9 n=64 mean=0 min=0 max=4
+SHELL_TONE case=29 phase_idx=10 n=64 mean=0 min=0 max=2
+SHELL_TONE case=29 phase_idx=11 n=64 mean=0 min=0 max=0
+SHELL_TONE case=29 phase_idx=12 n=64 mean=0 min=0 max=0
+SHELL_TONE case=29 phase_idx=13 n=64 mean=0 min=0 max=6
+SHELL_TONE case=29 phase_idx=14 n=64 mean=0 min=0 max=3
+SHELL_TONE case=29 phase_idx=15 n=64 mean=0 min=0 max=5
+SHELL_TONE_CASE case=30 level=2 f_hz=1000 dbfs=-6 victim_group=0 victim_ch=8 r_src=5150 below_corner=0
+SHELL_TONE case=30 phase_idx=0 n=64 mean=32193 min=31656 max=32222
+SHELL_TONE case=30 phase_idx=1 n=64 mean=32207 min=32186 max=32474
+SHELL_TONE case=30 phase_idx=2 n=64 mean=32206 min=32186 max=32486
+SHELL_TONE case=30 phase_idx=3 n=64 mean=32206 min=32186 max=32484
+SHELL_TONE case=30 phase_idx=4 n=64 mean=32208 min=32184 max=32472
+SHELL_TONE case=30 phase_idx=5 n=64 mean=32206 min=32182 max=32493
+SHELL_TONE case=30 phase_idx=6 n=64 mean=32206 min=32188 max=32481
+SHELL_TONE case=30 phase_idx=7 n=64 mean=32206 min=32187 max=32487
+SHELL_TONE case=30 phase_idx=8 n=64 mean=32206 min=32085 max=32477
+SHELL_TONE case=30 phase_idx=9 n=64 mean=32209 min=32186 max=32490
+SHELL_TONE case=30 phase_idx=10 n=64 mean=32210 min=32189 max=32471
+SHELL_TONE case=30 phase_idx=11 n=64 mean=32206 min=32187 max=32484
+SHELL_TONE case=30 phase_idx=12 n=64 mean=32206 min=32169 max=32462
+SHELL_TONE case=30 phase_idx=13 n=64 mean=32206 min=32188 max=32477
+SHELL_TONE case=30 phase_idx=14 n=64 mean=32207 min=32184 max=32490
+SHELL_TONE case=30 phase_idx=15 n=64 mean=32207 min=32188 max=32470
+SHELL_TONE_CASE case=31 level=2 f_hz=1000 dbfs=-6 victim_group=1 victim_ch=6 r_src=5150 below_corner=0
+SHELL_TONE case=31 phase_idx=0 n=64 mean=32351 min=32330 max=32361
+SHELL_TONE case=31 phase_idx=1 n=64 mean=32357 min=32344 max=32570
+SHELL_TONE case=31 phase_idx=2 n=64 mean=32357 min=32343 max=32564
+SHELL_TONE case=31 phase_idx=3 n=64 mean=32355 min=32339 max=32566
+SHELL_TONE case=31 phase_idx=4 n=64 mean=32357 min=32344 max=32570
+SHELL_TONE case=31 phase_idx=5 n=64 mean=32357 min=32343 max=32567
+SHELL_TONE case=31 phase_idx=6 n=64 mean=32357 min=32341 max=32578
+SHELL_TONE case=31 phase_idx=7 n=64 mean=32355 min=32291 max=32565
+SHELL_TONE case=31 phase_idx=8 n=64 mean=32358 min=32341 max=32556
+SHELL_TONE case=31 phase_idx=9 n=64 mean=32355 min=32339 max=32561
+SHELL_TONE case=31 phase_idx=10 n=64 mean=32358 min=32342 max=32565
+SHELL_TONE case=31 phase_idx=11 n=64 mean=32356 min=32343 max=32570
+SHELL_TONE case=31 phase_idx=12 n=64 mean=32351 min=32327 max=32548
+SHELL_TONE case=31 phase_idx=13 n=64 mean=32356 min=32338 max=32564
+SHELL_TONE case=31 phase_idx=14 n=64 mean=32357 min=32340 max=32579
+SHELL_TONE case=31 phase_idx=15 n=64 mean=32358 min=32343 max=32581
+SHELL_TONE_CASE case=32 level=2 f_hz=1000 dbfs=-6 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE case=32 phase_idx=0 n=64 mean=32755 min=32743 max=32776
+SHELL_TONE case=32 phase_idx=1 n=64 mean=32755 min=32742 max=32780
+SHELL_TONE case=32 phase_idx=2 n=64 mean=32758 min=32738 max=32787
+SHELL_TONE case=32 phase_idx=3 n=64 mean=32757 min=32742 max=32775
+SHELL_TONE case=32 phase_idx=4 n=64 mean=32755 min=32741 max=32776
+SHELL_TONE case=32 phase_idx=5 n=64 mean=32756 min=32740 max=32773
+SHELL_TONE case=32 phase_idx=6 n=64 mean=32756 min=32743 max=32773
+SHELL_TONE case=32 phase_idx=7 n=64 mean=32755 min=32738 max=32773
+SHELL_TONE case=32 phase_idx=8 n=64 mean=32754 min=32740 max=32772
+SHELL_TONE case=32 phase_idx=9 n=64 mean=32755 min=32728 max=32776
+SHELL_TONE case=32 phase_idx=10 n=64 mean=32754 min=32736 max=32776
+SHELL_TONE case=32 phase_idx=11 n=64 mean=32755 min=32743 max=32776
+SHELL_TONE case=32 phase_idx=12 n=64 mean=32754 min=32731 max=32776
+SHELL_TONE case=32 phase_idx=13 n=64 mean=32755 min=32733 max=32774
+SHELL_TONE case=32 phase_idx=14 n=64 mean=32758 min=32744 max=32778
+SHELL_TONE case=32 phase_idx=15 n=64 mean=32755 min=32732 max=32782
+SHELL_TONE_CASE case=33 level=2 f_hz=1000 dbfs=-6 victim_group=0 victim_ch=10 r_src=150 below_corner=0
+SHELL_TONE case=33 phase_idx=0 n=64 mean=0 min=0 max=5
+SHELL_TONE case=33 phase_idx=1 n=64 mean=0 min=0 max=12
+SHELL_TONE case=33 phase_idx=2 n=64 mean=0 min=0 max=5
+SHELL_TONE case=33 phase_idx=3 n=64 mean=0 min=0 max=8
+SHELL_TONE case=33 phase_idx=4 n=64 mean=0 min=0 max=8
+SHELL_TONE case=33 phase_idx=5 n=64 mean=0 min=0 max=2
+SHELL_TONE case=33 phase_idx=6 n=64 mean=0 min=0 max=4
+SHELL_TONE case=33 phase_idx=7 n=64 mean=0 min=0 max=8
+SHELL_TONE case=33 phase_idx=8 n=64 mean=0 min=0 max=6
+SHELL_TONE case=33 phase_idx=9 n=64 mean=0 min=0 max=8
+SHELL_TONE case=33 phase_idx=10 n=64 mean=0 min=0 max=5
+SHELL_TONE case=33 phase_idx=11 n=64 mean=0 min=0 max=5
+SHELL_TONE case=33 phase_idx=12 n=64 mean=0 min=0 max=25
+SHELL_TONE case=33 phase_idx=13 n=64 mean=1 min=0 max=57
+SHELL_TONE case=33 phase_idx=14 n=64 mean=0 min=0 max=2
+SHELL_TONE case=33 phase_idx=15 n=64 mean=0 min=0 max=5
+SHELL_TONE_CASE case=34 level=2 f_hz=1000 dbfs=-6 victim_group=1 victim_ch=3 r_src=150 below_corner=0
+SHELL_TONE case=34 phase_idx=0 n=64 mean=0 min=0 max=4
+SHELL_TONE case=34 phase_idx=1 n=64 mean=0 min=0 max=0
+SHELL_TONE case=34 phase_idx=2 n=64 mean=0 min=0 max=0
+SHELL_TONE case=34 phase_idx=3 n=64 mean=0 min=0 max=3
+SHELL_TONE case=34 phase_idx=4 n=64 mean=0 min=0 max=4
+SHELL_TONE case=34 phase_idx=5 n=64 mean=0 min=0 max=1
+SHELL_TONE case=34 phase_idx=6 n=64 mean=0 min=0 max=0
+SHELL_TONE case=34 phase_idx=7 n=64 mean=0 min=0 max=2
+SHELL_TONE case=34 phase_idx=8 n=64 mean=0 min=0 max=2
+SHELL_TONE case=34 phase_idx=9 n=64 mean=0 min=0 max=0
+SHELL_TONE case=34 phase_idx=10 n=64 mean=0 min=0 max=4
+SHELL_TONE case=34 phase_idx=11 n=64 mean=0 min=0 max=1
+SHELL_TONE case=34 phase_idx=12 n=64 mean=0 min=0 max=0
+SHELL_TONE case=34 phase_idx=13 n=64 mean=0 min=0 max=2
+SHELL_TONE case=34 phase_idx=14 n=64 mean=0 min=0 max=4
+SHELL_TONE case=34 phase_idx=15 n=64 mean=0 min=0 max=4
+SHELL_TONE_CASE case=35 level=2 f_hz=1000 dbfs=0 victim_group=0 victim_ch=8 r_src=5150 below_corner=0
+SHELL_TONE case=35 phase_idx=0 n=64 mean=32196 min=31645 max=32224
+SHELL_TONE case=35 phase_idx=1 n=64 mean=32208 min=32191 max=32476
+SHELL_TONE case=35 phase_idx=2 n=64 mean=32209 min=32184 max=32481
+SHELL_TONE case=35 phase_idx=3 n=64 mean=32208 min=32191 max=32491
+SHELL_TONE case=35 phase_idx=4 n=64 mean=32207 min=32187 max=32495
+SHELL_TONE case=35 phase_idx=5 n=64 mean=32209 min=32188 max=32497
+SHELL_TONE case=35 phase_idx=6 n=64 mean=32209 min=32188 max=32489
+SHELL_TONE case=35 phase_idx=7 n=64 mean=32210 min=32184 max=32483
+SHELL_TONE case=35 phase_idx=8 n=64 mean=32210 min=32188 max=32478
+SHELL_TONE case=35 phase_idx=9 n=64 mean=32210 min=32191 max=32484
+SHELL_TONE case=35 phase_idx=10 n=64 mean=32211 min=32191 max=32482
+SHELL_TONE case=35 phase_idx=11 n=64 mean=32209 min=32028 max=32489
+SHELL_TONE case=35 phase_idx=12 n=64 mean=32208 min=32175 max=32463
+SHELL_TONE case=35 phase_idx=13 n=64 mean=32207 min=32189 max=32472
+SHELL_TONE case=35 phase_idx=14 n=64 mean=32207 min=32188 max=32490
+SHELL_TONE case=35 phase_idx=15 n=64 mean=32210 min=32190 max=32479
+SHELL_TONE_CASE case=36 level=2 f_hz=1000 dbfs=0 victim_group=1 victim_ch=6 r_src=5150 below_corner=0
+SHELL_TONE case=36 phase_idx=0 n=64 mean=32353 min=32327 max=32369
+SHELL_TONE case=36 phase_idx=1 n=64 mean=32357 min=32344 max=32571
+SHELL_TONE case=36 phase_idx=2 n=64 mean=32357 min=32346 max=32567
+SHELL_TONE case=36 phase_idx=3 n=64 mean=32357 min=32340 max=32576
+SHELL_TONE case=36 phase_idx=4 n=64 mean=32356 min=32340 max=32563
+SHELL_TONE case=36 phase_idx=5 n=64 mean=32358 min=32343 max=32564
+SHELL_TONE case=36 phase_idx=6 n=64 mean=32358 min=32343 max=32567
+SHELL_TONE case=36 phase_idx=7 n=64 mean=32358 min=32345 max=32568
+SHELL_TONE case=36 phase_idx=8 n=64 mean=32357 min=32340 max=32568
+SHELL_TONE case=36 phase_idx=9 n=64 mean=32358 min=32345 max=32560
+SHELL_TONE case=36 phase_idx=10 n=64 mean=32357 min=32341 max=32564
+SHELL_TONE case=36 phase_idx=11 n=64 mean=32358 min=32346 max=32576
+SHELL_TONE case=36 phase_idx=12 n=64 mean=32355 min=32329 max=32547
+SHELL_TONE case=36 phase_idx=13 n=64 mean=32357 min=32339 max=32567
+SHELL_TONE case=36 phase_idx=14 n=64 mean=32358 min=32342 max=32571
+SHELL_TONE case=36 phase_idx=15 n=64 mean=32359 min=32345 max=32566
+SHELL_TONE_CASE case=37 level=2 f_hz=1000 dbfs=0 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE case=37 phase_idx=0 n=64 mean=32756 min=32743 max=32770
+SHELL_TONE case=37 phase_idx=1 n=64 mean=32755 min=32738 max=32772
+SHELL_TONE case=37 phase_idx=2 n=64 mean=32758 min=32744 max=32776
+SHELL_TONE case=37 phase_idx=3 n=64 mean=32757 min=32741 max=32777
+SHELL_TONE case=37 phase_idx=4 n=64 mean=32757 min=32742 max=32776
+SHELL_TONE case=37 phase_idx=5 n=64 mean=32756 min=32742 max=32773
+SHELL_TONE case=37 phase_idx=6 n=64 mean=32755 min=32737 max=32776
+SHELL_TONE case=37 phase_idx=7 n=64 mean=32756 min=32738 max=32772
+SHELL_TONE case=37 phase_idx=8 n=64 mean=32755 min=32742 max=32777
+SHELL_TONE case=37 phase_idx=9 n=64 mean=32753 min=32709 max=32772
+SHELL_TONE case=37 phase_idx=10 n=64 mean=32756 min=32743 max=32781
+SHELL_TONE case=37 phase_idx=11 n=64 mean=32756 min=32745 max=32776
+SHELL_TONE case=37 phase_idx=12 n=64 mean=32755 min=32734 max=32778
+SHELL_TONE case=37 phase_idx=13 n=64 mean=32755 min=32742 max=32776
+SHELL_TONE case=37 phase_idx=14 n=64 mean=32757 min=32744 max=32777
+SHELL_TONE case=37 phase_idx=15 n=64 mean=32756 min=32741 max=32772
+SHELL_TONE_CASE case=38 level=2 f_hz=1000 dbfs=0 victim_group=0 victim_ch=10 r_src=150 below_corner=0
+SHELL_TONE case=38 phase_idx=0 n=64 mean=0 min=0 max=9
+SHELL_TONE case=38 phase_idx=1 n=64 mean=0 min=0 max=8
+SHELL_TONE case=38 phase_idx=2 n=64 mean=0 min=0 max=6
+SHELL_TONE case=38 phase_idx=3 n=64 mean=0 min=0 max=8
+SHELL_TONE case=38 phase_idx=4 n=64 mean=0 min=0 max=5
+SHELL_TONE case=38 phase_idx=5 n=64 mean=0 min=0 max=9
+SHELL_TONE case=38 phase_idx=6 n=64 mean=0 min=0 max=7
+SHELL_TONE case=38 phase_idx=7 n=64 mean=0 min=0 max=10
+SHELL_TONE case=38 phase_idx=8 n=64 mean=0 min=0 max=9
+SHELL_TONE case=38 phase_idx=9 n=64 mean=0 min=0 max=10
+SHELL_TONE case=38 phase_idx=10 n=64 mean=0 min=0 max=3
+SHELL_TONE case=38 phase_idx=11 n=64 mean=0 min=0 max=9
+SHELL_TONE case=38 phase_idx=12 n=64 mean=0 min=0 max=8
+SHELL_TONE case=38 phase_idx=13 n=64 mean=0 min=0 max=4
+SHELL_TONE case=38 phase_idx=14 n=64 mean=0 min=0 max=7
+SHELL_TONE case=38 phase_idx=15 n=64 mean=0 min=0 max=5
+SHELL_TONE_CASE case=39 level=2 f_hz=1000 dbfs=0 victim_group=1 victim_ch=3 r_src=150 below_corner=0
+SHELL_TONE case=39 phase_idx=0 n=64 mean=0 min=0 max=1
+SHELL_TONE case=39 phase_idx=1 n=64 mean=0 min=0 max=0
+SHELL_TONE case=39 phase_idx=2 n=64 mean=0 min=0 max=0
+SHELL_TONE case=39 phase_idx=3 n=64 mean=0 min=0 max=1
+SHELL_TONE case=39 phase_idx=4 n=64 mean=0 min=0 max=1
+SHELL_TONE case=39 phase_idx=5 n=64 mean=0 min=0 max=26
+SHELL_TONE case=39 phase_idx=6 n=64 mean=0 min=0 max=4
+SHELL_TONE case=39 phase_idx=7 n=64 mean=0 min=0 max=4
+SHELL_TONE case=39 phase_idx=8 n=64 mean=0 min=0 max=1
+SHELL_TONE case=39 phase_idx=9 n=64 mean=0 min=0 max=3
+SHELL_TONE case=39 phase_idx=10 n=64 mean=0 min=0 max=4
+SHELL_TONE case=39 phase_idx=11 n=64 mean=0 min=0 max=1
+SHELL_TONE case=39 phase_idx=12 n=64 mean=0 min=0 max=0
+SHELL_TONE case=39 phase_idx=13 n=64 mean=0 min=0 max=4
+SHELL_TONE case=39 phase_idx=14 n=64 mean=0 min=0 max=0
+SHELL_TONE case=39 phase_idx=15 n=64 mean=0 min=0 max=1
+SHELL_TONE_CASE case=40 level=2 f_hz=5000 dbfs=-20 victim_group=0 victim_ch=8 r_src=5150 below_corner=0
+SHELL_TONE case=40 phase_idx=0 n=64 mean=32428 min=31652 max=32462
+SHELL_TONE case=40 phase_idx=1 n=64 mean=32441 min=32421 max=32490
+SHELL_TONE case=40 phase_idx=2 n=64 mean=32439 min=32419 max=32458
+SHELL_TONE case=40 phase_idx=3 n=64 mean=32440 min=32425 max=32459
+SHELL_TONE case=40 phase_idx=4 n=64 mean=32439 min=32422 max=32460
+SHELL_TONE case=40 phase_idx=5 n=64 mean=32440 min=32417 max=32456
+SHELL_TONE case=40 phase_idx=6 n=64 mean=32442 min=32423 max=32458
+SHELL_TONE case=40 phase_idx=7 n=64 mean=32440 min=32422 max=32464
+SHELL_TONE case=40 phase_idx=8 n=64 mean=32440 min=32417 max=32464
+SHELL_TONE case=40 phase_idx=9 n=64 mean=32440 min=32419 max=32464
+SHELL_TONE case=40 phase_idx=10 n=64 mean=32440 min=32422 max=32461
+SHELL_TONE case=40 phase_idx=11 n=64 mean=32439 min=32400 max=32464
+SHELL_TONE case=40 phase_idx=12 n=64 mean=32442 min=32424 max=32464
+SHELL_TONE case=40 phase_idx=13 n=64 mean=32439 min=32423 max=32466
+SHELL_TONE case=40 phase_idx=14 n=64 mean=32438 min=32411 max=32460
+SHELL_TONE case=40 phase_idx=15 n=64 mean=32438 min=32420 max=32456
+SHELL_TONE_CASE case=41 level=2 f_hz=5000 dbfs=-20 victim_group=1 victim_ch=6 r_src=5150 below_corner=0
+SHELL_TONE case=41 phase_idx=0 n=64 mean=32537 min=32505 max=32548
+SHELL_TONE case=41 phase_idx=1 n=64 mean=32536 min=32522 max=32577
+SHELL_TONE case=41 phase_idx=2 n=64 mean=32536 min=32523 max=32550
+SHELL_TONE case=41 phase_idx=3 n=64 mean=32537 min=32524 max=32556
+SHELL_TONE case=41 phase_idx=4 n=64 mean=32535 min=32522 max=32548
+SHELL_TONE case=41 phase_idx=5 n=64 mean=32536 min=32525 max=32550
+SHELL_TONE case=41 phase_idx=6 n=64 mean=32537 min=32525 max=32552
+SHELL_TONE case=41 phase_idx=7 n=64 mean=32536 min=32523 max=32554
+SHELL_TONE case=41 phase_idx=8 n=64 mean=32536 min=32518 max=32553
+SHELL_TONE case=41 phase_idx=9 n=64 mean=32537 min=32525 max=32554
+SHELL_TONE case=41 phase_idx=10 n=64 mean=32536 min=32523 max=32549
+SHELL_TONE case=41 phase_idx=11 n=64 mean=32537 min=32514 max=32556
+SHELL_TONE case=41 phase_idx=12 n=64 mean=32536 min=32518 max=32558
+SHELL_TONE case=41 phase_idx=13 n=64 mean=32536 min=32512 max=32558
+SHELL_TONE case=41 phase_idx=14 n=64 mean=32534 min=32521 max=32552
+SHELL_TONE case=41 phase_idx=15 n=64 mean=32534 min=32517 max=32549
+SHELL_TONE_CASE case=42 level=2 f_hz=5000 dbfs=-20 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE case=42 phase_idx=0 n=64 mean=32758 min=32743 max=32776
+SHELL_TONE case=42 phase_idx=1 n=64 mean=32758 min=32734 max=32776
+SHELL_TONE case=42 phase_idx=2 n=64 mean=32758 min=32745 max=32778
+SHELL_TONE case=42 phase_idx=3 n=64 mean=32759 min=32740 max=32778
+SHELL_TONE case=42 phase_idx=4 n=64 mean=32758 min=32748 max=32777
+SHELL_TONE case=42 phase_idx=5 n=64 mean=32759 min=32746 max=32786
+SHELL_TONE case=42 phase_idx=6 n=64 mean=32758 min=32741 max=32781
+SHELL_TONE case=42 phase_idx=7 n=64 mean=32759 min=32744 max=32778
+SHELL_TONE case=42 phase_idx=8 n=64 mean=32758 min=32721 max=32780
+SHELL_TONE case=42 phase_idx=9 n=64 mean=32758 min=32743 max=32776
+SHELL_TONE case=42 phase_idx=10 n=64 mean=32759 min=32743 max=32778
+SHELL_TONE case=42 phase_idx=11 n=64 mean=32758 min=32739 max=32774
+SHELL_TONE case=42 phase_idx=12 n=64 mean=32757 min=32743 max=32776
+SHELL_TONE case=42 phase_idx=13 n=64 mean=32758 min=32739 max=32779
+SHELL_TONE case=42 phase_idx=14 n=64 mean=32757 min=32735 max=32778
+SHELL_TONE case=42 phase_idx=15 n=64 mean=32757 min=32741 max=32780
+SHELL_TONE_CASE case=43 level=2 f_hz=5000 dbfs=-20 victim_group=0 victim_ch=10 r_src=150 below_corner=0
+SHELL_TONE case=43 phase_idx=0 n=64 mean=0 min=0 max=7
+SHELL_TONE case=43 phase_idx=1 n=64 mean=0 min=0 max=6
+SHELL_TONE case=43 phase_idx=2 n=64 mean=0 min=0 max=12
+SHELL_TONE case=43 phase_idx=3 n=64 mean=0 min=0 max=9
+SHELL_TONE case=43 phase_idx=4 n=64 mean=0 min=0 max=4
+SHELL_TONE case=43 phase_idx=5 n=64 mean=0 min=0 max=4
+SHELL_TONE case=43 phase_idx=6 n=64 mean=0 min=0 max=8
+SHELL_TONE case=43 phase_idx=7 n=64 mean=0 min=0 max=5
+SHELL_TONE case=43 phase_idx=8 n=64 mean=0 min=0 max=5
+SHELL_TONE case=43 phase_idx=9 n=64 mean=0 min=0 max=10
+SHELL_TONE case=43 phase_idx=10 n=64 mean=0 min=0 max=8
+SHELL_TONE case=43 phase_idx=11 n=64 mean=0 min=0 max=5
+SHELL_TONE case=43 phase_idx=12 n=64 mean=0 min=0 max=8
+SHELL_TONE case=43 phase_idx=13 n=64 mean=0 min=0 max=5
+SHELL_TONE case=43 phase_idx=14 n=64 mean=0 min=0 max=5
+SHELL_TONE case=43 phase_idx=15 n=64 mean=0 min=0 max=40
+SHELL_TONE_CASE case=44 level=2 f_hz=5000 dbfs=-20 victim_group=1 victim_ch=3 r_src=150 below_corner=0
+SHELL_TONE case=44 phase_idx=0 n=64 mean=0 min=0 max=0
+SHELL_TONE case=44 phase_idx=1 n=64 mean=0 min=0 max=0
+SHELL_TONE case=44 phase_idx=2 n=64 mean=0 min=0 max=1
+SHELL_TONE case=44 phase_idx=3 n=64 mean=0 min=0 max=0
+SHELL_TONE case=44 phase_idx=4 n=64 mean=0 min=0 max=1
+SHELL_TONE case=44 phase_idx=5 n=64 mean=0 min=0 max=1
+SHELL_TONE case=44 phase_idx=6 n=64 mean=0 min=0 max=0
+SHELL_TONE case=44 phase_idx=7 n=64 mean=0 min=0 max=2
+SHELL_TONE case=44 phase_idx=8 n=64 mean=0 min=0 max=0
+SHELL_TONE case=44 phase_idx=9 n=64 mean=0 min=0 max=4
+SHELL_TONE case=44 phase_idx=10 n=64 mean=0 min=0 max=1
+SHELL_TONE case=44 phase_idx=11 n=64 mean=0 min=0 max=1
+SHELL_TONE case=44 phase_idx=12 n=64 mean=0 min=0 max=0
+SHELL_TONE case=44 phase_idx=13 n=64 mean=0 min=0 max=0
+SHELL_TONE case=44 phase_idx=14 n=64 mean=0 min=0 max=1
+SHELL_TONE case=44 phase_idx=15 n=64 mean=0 min=0 max=1
+SHELL_TONE_CASE case=45 level=2 f_hz=5000 dbfs=-6 victim_group=0 victim_ch=8 r_src=5150 below_corner=0
+SHELL_TONE case=45 phase_idx=0 n=64 mean=32428 min=31661 max=32456
+SHELL_TONE case=45 phase_idx=1 n=64 mean=32443 min=32427 max=32503
+SHELL_TONE case=45 phase_idx=2 n=64 mean=32440 min=32422 max=32465
+SHELL_TONE case=45 phase_idx=3 n=64 mean=32439 min=32419 max=32462
+SHELL_TONE case=45 phase_idx=4 n=64 mean=32440 min=32414 max=32458
+SHELL_TONE case=45 phase_idx=5 n=64 mean=32440 min=32417 max=32465
+SHELL_TONE case=45 phase_idx=6 n=64 mean=32440 min=32422 max=32458
+SHELL_TONE case=45 phase_idx=7 n=64 mean=32439 min=32424 max=32460
+SHELL_TONE case=45 phase_idx=8 n=64 mean=32440 min=32419 max=32464
+SHELL_TONE case=45 phase_idx=9 n=64 mean=32439 min=32421 max=32460
+SHELL_TONE case=45 phase_idx=10 n=64 mean=32440 min=32419 max=32459
+SHELL_TONE case=45 phase_idx=11 n=64 mean=32438 min=32409 max=32459
+SHELL_TONE case=45 phase_idx=12 n=64 mean=32439 min=32383 max=32463
+SHELL_TONE case=45 phase_idx=13 n=64 mean=32440 min=32405 max=32461
+SHELL_TONE case=45 phase_idx=14 n=64 mean=32439 min=32420 max=32471
+SHELL_TONE case=45 phase_idx=15 n=64 mean=32440 min=32421 max=32460
+SHELL_TONE_CASE case=46 level=2 f_hz=5000 dbfs=-6 victim_group=1 victim_ch=6 r_src=5150 below_corner=0
+SHELL_TONE case=46 phase_idx=0 n=64 mean=32536 min=32521 max=32558
+SHELL_TONE case=46 phase_idx=1 n=64 mean=32536 min=32519 max=32552
+SHELL_TONE case=46 phase_idx=2 n=64 mean=32535 min=32500 max=32550
+SHELL_TONE case=46 phase_idx=3 n=64 mean=32536 min=32520 max=32556
+SHELL_TONE case=46 phase_idx=4 n=64 mean=32537 min=32523 max=32556
+SHELL_TONE case=46 phase_idx=5 n=64 mean=32535 min=32497 max=32550
+SHELL_TONE case=46 phase_idx=6 n=64 mean=32536 min=32514 max=32548
+SHELL_TONE case=46 phase_idx=7 n=64 mean=32536 min=32518 max=32547
+SHELL_TONE case=46 phase_idx=8 n=64 mean=32537 min=32516 max=32554
+SHELL_TONE case=46 phase_idx=9 n=64 mean=32535 min=32522 max=32548
+SHELL_TONE case=46 phase_idx=10 n=64 mean=32536 min=32522 max=32550
+SHELL_TONE case=46 phase_idx=11 n=64 mean=32535 min=32507 max=32566
+SHELL_TONE case=46 phase_idx=12 n=64 mean=32536 min=32524 max=32551
+SHELL_TONE case=46 phase_idx=13 n=64 mean=32536 min=32522 max=32553
+SHELL_TONE case=46 phase_idx=14 n=64 mean=32534 min=32514 max=32558
+SHELL_TONE case=46 phase_idx=15 n=64 mean=32533 min=32520 max=32552
+SHELL_TONE_CASE case=47 level=2 f_hz=5000 dbfs=-6 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE case=47 phase_idx=0 n=64 mean=32758 min=32739 max=32773
+SHELL_TONE case=47 phase_idx=1 n=64 mean=32758 min=32745 max=32776
+SHELL_TONE case=47 phase_idx=2 n=64 mean=32758 min=32741 max=32780
+SHELL_TONE case=47 phase_idx=3 n=64 mean=32757 min=32743 max=32778
+SHELL_TONE case=47 phase_idx=4 n=64 mean=32758 min=32745 max=32777
+SHELL_TONE case=47 phase_idx=5 n=64 mean=32758 min=32739 max=32775
+SHELL_TONE case=47 phase_idx=6 n=64 mean=32757 min=32742 max=32774
+SHELL_TONE case=47 phase_idx=7 n=64 mean=32758 min=32742 max=32775
+SHELL_TONE case=47 phase_idx=8 n=64 mean=32756 min=32740 max=32776
+SHELL_TONE case=47 phase_idx=9 n=64 mean=32758 min=32739 max=32779
+SHELL_TONE case=47 phase_idx=10 n=64 mean=32758 min=32732 max=32780
+SHELL_TONE case=47 phase_idx=11 n=64 mean=32759 min=32741 max=32776
+SHELL_TONE case=47 phase_idx=12 n=64 mean=32757 min=32740 max=32773
+SHELL_TONE case=47 phase_idx=13 n=64 mean=32758 min=32742 max=32777
+SHELL_TONE case=47 phase_idx=14 n=64 mean=32757 min=32740 max=32778
+SHELL_TONE case=47 phase_idx=15 n=64 mean=32756 min=32735 max=32772
+SHELL_TONE_CASE case=48 level=2 f_hz=5000 dbfs=-6 victim_group=0 victim_ch=10 r_src=150 below_corner=0
+SHELL_TONE case=48 phase_idx=0 n=64 mean=0 min=0 max=11
+SHELL_TONE case=48 phase_idx=1 n=64 mean=0 min=0 max=11
+SHELL_TONE case=48 phase_idx=2 n=64 mean=0 min=0 max=6
+SHELL_TONE case=48 phase_idx=3 n=64 mean=0 min=0 max=9
+SHELL_TONE case=48 phase_idx=4 n=64 mean=0 min=0 max=5
+SHELL_TONE case=48 phase_idx=5 n=64 mean=0 min=0 max=5
+SHELL_TONE case=48 phase_idx=6 n=64 mean=0 min=0 max=4
+SHELL_TONE case=48 phase_idx=7 n=64 mean=1 min=0 max=90
+SHELL_TONE case=48 phase_idx=8 n=64 mean=0 min=0 max=3
+SHELL_TONE case=48 phase_idx=9 n=64 mean=0 min=0 max=1
+SHELL_TONE case=48 phase_idx=10 n=64 mean=2 min=0 max=102
+SHELL_TONE case=48 phase_idx=11 n=64 mean=0 min=0 max=8
+SHELL_TONE case=48 phase_idx=12 n=64 mean=0 min=0 max=4
+SHELL_TONE case=48 phase_idx=13 n=64 mean=0 min=0 max=8
+SHELL_TONE case=48 phase_idx=14 n=64 mean=0 min=0 max=8
+SHELL_TONE case=48 phase_idx=15 n=64 mean=0 min=0 max=5
+SHELL_TONE_CASE case=49 level=2 f_hz=5000 dbfs=-6 victim_group=1 victim_ch=3 r_src=150 below_corner=0
+SHELL_TONE case=49 phase_idx=0 n=64 mean=0 min=0 max=9
+SHELL_TONE case=49 phase_idx=1 n=64 mean=0 min=0 max=3
+SHELL_TONE case=49 phase_idx=2 n=64 mean=0 min=0 max=1
+SHELL_TONE case=49 phase_idx=3 n=64 mean=0 min=0 max=2
+SHELL_TONE case=49 phase_idx=4 n=64 mean=0 min=0 max=1
+SHELL_TONE case=49 phase_idx=5 n=64 mean=0 min=0 max=1
+SHELL_TONE case=49 phase_idx=6 n=64 mean=0 min=0 max=4
+SHELL_TONE case=49 phase_idx=7 n=64 mean=0 min=0 max=1
+SHELL_TONE case=49 phase_idx=8 n=64 mean=0 min=0 max=3
+SHELL_TONE case=49 phase_idx=9 n=64 mean=0 min=0 max=0
+SHELL_TONE case=49 phase_idx=10 n=64 mean=0 min=0 max=3
+SHELL_TONE case=49 phase_idx=11 n=64 mean=0 min=0 max=2
+SHELL_TONE case=49 phase_idx=12 n=64 mean=0 min=0 max=1
+SHELL_TONE case=49 phase_idx=13 n=64 mean=0 min=0 max=0
+SHELL_TONE case=49 phase_idx=14 n=64 mean=0 min=0 max=1
+SHELL_TONE case=49 phase_idx=15 n=64 mean=0 min=0 max=0
+SHELL_TONE_CASE case=50 level=2 f_hz=5000 dbfs=0 victim_group=0 victim_ch=8 r_src=5150 below_corner=0
+SHELL_TONE case=50 phase_idx=0 n=64 mean=32427 min=31649 max=32460
+SHELL_TONE case=50 phase_idx=1 n=64 mean=32439 min=32421 max=32460
+SHELL_TONE case=50 phase_idx=2 n=64 mean=32441 min=32417 max=32464
+SHELL_TONE case=50 phase_idx=3 n=64 mean=32440 min=32416 max=32460
+SHELL_TONE case=50 phase_idx=4 n=64 mean=32440 min=32423 max=32459
+SHELL_TONE case=50 phase_idx=5 n=64 mean=32439 min=32413 max=32458
+SHELL_TONE case=50 phase_idx=6 n=64 mean=32440 min=32418 max=32463
+SHELL_TONE case=50 phase_idx=7 n=64 mean=32440 min=32423 max=32460
+SHELL_TONE case=50 phase_idx=8 n=64 mean=32442 min=32418 max=32464
+SHELL_TONE case=50 phase_idx=9 n=64 mean=32440 min=32423 max=32460
+SHELL_TONE case=50 phase_idx=10 n=64 mean=32439 min=32422 max=32464
+SHELL_TONE case=50 phase_idx=11 n=64 mean=32441 min=32415 max=32469
+SHELL_TONE case=50 phase_idx=12 n=64 mean=32438 min=32416 max=32460
+SHELL_TONE case=50 phase_idx=13 n=64 mean=32438 min=32414 max=32463
+SHELL_TONE case=50 phase_idx=14 n=64 mean=32439 min=32409 max=32458
+SHELL_TONE case=50 phase_idx=15 n=64 mean=32439 min=32388 max=32460
+SHELL_TONE_CASE case=51 level=2 f_hz=5000 dbfs=0 victim_group=1 victim_ch=6 r_src=5150 below_corner=0
+SHELL_TONE case=51 phase_idx=0 n=64 mean=32535 min=32497 max=32549
+SHELL_TONE case=51 phase_idx=1 n=64 mean=32538 min=32528 max=32585
+SHELL_TONE case=51 phase_idx=2 n=64 mean=32535 min=32524 max=32548
+SHELL_TONE case=51 phase_idx=3 n=64 mean=32536 min=32525 max=32552
+SHELL_TONE case=51 phase_idx=4 n=64 mean=32537 min=32525 max=32551
+SHELL_TONE case=51 phase_idx=5 n=64 mean=32538 min=32523 max=32552
+SHELL_TONE case=51 phase_idx=6 n=64 mean=32537 min=32518 max=32553
+SHELL_TONE case=51 phase_idx=7 n=64 mean=32535 min=32523 max=32554
+SHELL_TONE case=51 phase_idx=8 n=64 mean=32537 min=32523 max=32554
+SHELL_TONE case=51 phase_idx=9 n=64 mean=32536 min=32521 max=32550
+SHELL_TONE case=51 phase_idx=10 n=64 mean=32536 min=32524 max=32551
+SHELL_TONE case=51 phase_idx=11 n=64 mean=32535 min=32515 max=32552
+SHELL_TONE case=51 phase_idx=12 n=64 mean=32536 min=32516 max=32553
+SHELL_TONE case=51 phase_idx=13 n=64 mean=32537 min=32523 max=32552
+SHELL_TONE case=51 phase_idx=14 n=64 mean=32534 min=32516 max=32551
+SHELL_TONE case=51 phase_idx=15 n=64 mean=32535 min=32515 max=32548
+SHELL_TONE_CASE case=52 level=2 f_hz=5000 dbfs=0 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE case=52 phase_idx=0 n=64 mean=32758 min=32745 max=32777
+SHELL_TONE case=52 phase_idx=1 n=64 mean=32761 min=32747 max=32777
+SHELL_TONE case=52 phase_idx=2 n=64 mean=32759 min=32741 max=32775
+SHELL_TONE case=52 phase_idx=3 n=64 mean=32758 min=32743 max=32779
+SHELL_TONE case=52 phase_idx=4 n=64 mean=32758 min=32741 max=32784
+SHELL_TONE case=52 phase_idx=5 n=64 mean=32758 min=32735 max=32773
+SHELL_TONE case=52 phase_idx=6 n=64 mean=32759 min=32745 max=32776
+SHELL_TONE case=52 phase_idx=7 n=64 mean=32757 min=32730 max=32778
+SHELL_TONE case=52 phase_idx=8 n=64 mean=32758 min=32744 max=32782
+SHELL_TONE case=52 phase_idx=9 n=64 mean=32758 min=32746 max=32773
+SHELL_TONE case=52 phase_idx=10 n=64 mean=32758 min=32740 max=32780
+SHELL_TONE case=52 phase_idx=11 n=64 mean=32757 min=32747 max=32776
+SHELL_TONE case=52 phase_idx=12 n=64 mean=32758 min=32741 max=32778
+SHELL_TONE case=52 phase_idx=13 n=64 mean=32757 min=32738 max=32777
+SHELL_TONE case=52 phase_idx=14 n=64 mean=32757 min=32743 max=32776
+SHELL_TONE case=52 phase_idx=15 n=64 mean=32757 min=32691 max=32777
+SHELL_TONE_CASE case=53 level=2 f_hz=5000 dbfs=0 victim_group=0 victim_ch=10 r_src=150 below_corner=0
+SHELL_TONE case=53 phase_idx=0 n=64 mean=0 min=0 max=4
+SHELL_TONE case=53 phase_idx=1 n=64 mean=0 min=0 max=8
+SHELL_TONE case=53 phase_idx=2 n=64 mean=0 min=0 max=8
+SHELL_TONE case=53 phase_idx=3 n=64 mean=0 min=0 max=7
+SHELL_TONE case=53 phase_idx=4 n=64 mean=0 min=0 max=6
+SHELL_TONE case=53 phase_idx=5 n=64 mean=0 min=0 max=10
+SHELL_TONE case=53 phase_idx=6 n=64 mean=0 min=0 max=8
+SHELL_TONE case=53 phase_idx=7 n=64 mean=0 min=0 max=11
+SHELL_TONE case=53 phase_idx=8 n=64 mean=1 min=0 max=96
+SHELL_TONE case=53 phase_idx=9 n=64 mean=0 min=0 max=5
+SHELL_TONE case=53 phase_idx=10 n=64 mean=0 min=0 max=12
+SHELL_TONE case=53 phase_idx=11 n=64 mean=0 min=0 max=8
+SHELL_TONE case=53 phase_idx=12 n=64 mean=0 min=0 max=8
+SHELL_TONE case=53 phase_idx=13 n=64 mean=0 min=0 max=11
+SHELL_TONE case=53 phase_idx=14 n=64 mean=0 min=0 max=10
+SHELL_TONE case=53 phase_idx=15 n=64 mean=0 min=0 max=6
+SHELL_TONE_CASE case=54 level=2 f_hz=5000 dbfs=0 victim_group=1 victim_ch=3 r_src=150 below_corner=0
+SHELL_TONE case=54 phase_idx=0 n=64 mean=0 min=0 max=2
+SHELL_TONE case=54 phase_idx=1 n=64 mean=0 min=0 max=2
+SHELL_TONE case=54 phase_idx=2 n=64 mean=0 min=0 max=1
+SHELL_TONE case=54 phase_idx=3 n=64 mean=0 min=0 max=1
+SHELL_TONE case=54 phase_idx=4 n=64 mean=0 min=0 max=4
+SHELL_TONE case=54 phase_idx=5 n=64 mean=0 min=0 max=2
+SHELL_TONE case=54 phase_idx=6 n=64 mean=0 min=0 max=0
+SHELL_TONE case=54 phase_idx=7 n=64 mean=0 min=0 max=2
+SHELL_TONE case=54 phase_idx=8 n=64 mean=0 min=0 max=0
+SHELL_TONE case=54 phase_idx=9 n=64 mean=0 min=0 max=1
+SHELL_TONE case=54 phase_idx=10 n=64 mean=0 min=0 max=2
+SHELL_TONE case=54 phase_idx=11 n=64 mean=0 min=0 max=1
+SHELL_TONE case=54 phase_idx=12 n=64 mean=0 min=0 max=4
+SHELL_TONE case=54 phase_idx=13 n=64 mean=0 min=0 max=1
+SHELL_TONE case=54 phase_idx=14 n=64 mean=0 min=0 max=0
+SHELL_TONE case=54 phase_idx=15 n=64 mean=0 min=0 max=0
+SHELL_TONE_CASE case=55 level=2 f_hz=0 dbfs=-6 victim_group=0 victim_ch=8 r_src=5150 below_corner=0
+SHELL_TONE_LEVEL case=55 level=2 victim_group=0 victim_ch=8 r_src=5150 n=64 mean=32514 min=31661 max=32552 audio_virgin=0
+SHELL_TONE_STAT case=55 settled_mean_spread=17 widest_sample_band=878
+SHELL_TONE_CASE case=56 level=2 f_hz=0 dbfs=-6 victim_group=1 victim_ch=6 r_src=5150 below_corner=0
+SHELL_TONE_LEVEL case=56 level=2 victim_group=1 victim_ch=6 r_src=5150 n=64 mean=32610 min=32465 max=32632 audio_virgin=0
+SHELL_TONE_STAT case=56 settled_mean_spread=4 widest_sample_band=161
+SHELL_TONE_CASE case=57 level=2 f_hz=0 dbfs=-6 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE_LEVEL case=57 level=2 victim_group=0 victim_ch=9 r_src=650 n=64 mean=32766 min=32627 max=32799 audio_virgin=0
+SHELL_TONE_STAT case=57 settled_mean_spread=4 widest_sample_band=157
+SHELL_TONE_CASE case=58 level=2 f_hz=0 dbfs=-6 victim_group=0 victim_ch=10 r_src=150 below_corner=0
+SHELL_TONE_LEVEL case=58 level=2 victim_group=0 victim_ch=10 r_src=150 n=64 mean=0 min=0 max=53 audio_virgin=0
+SHELL_TONE_STAT case=58 settled_mean_spread=1 widest_sample_band=53
+SHELL_TONE_CASE case=59 level=2 f_hz=0 dbfs=-6 victim_group=1 victim_ch=3 r_src=150 below_corner=0
+SHELL_TONE_LEVEL case=59 level=2 victim_group=1 victim_ch=3 r_src=150 n=64 mean=0 min=0 max=41 audio_virgin=0
+SHELL_TONE_STAT case=59 settled_mean_spread=0 widest_sample_band=41
+SHELL_TONE_SPAN zero=0 rail=65532 hi_spread=1 lo_spread=0 valid=1
+SHELL_TONE_G5 victim_group=0 victim_ch=8 expect=2 mean=32513 ok=1
+SHELL_TONE_G5 victim_group=1 victim_ch=6 expect=2 mean=32610 ok=1
+SHELL_TONE_G5 victim_group=0 victim_ch=9 expect=2 mean=32765 ok=1
+SHELL_TONE_G5 victim_group=0 victim_ch=10 expect=0 mean=0 ok=1
+SHELL_TONE_G5 victim_group=1 victim_ch=3 expect=0 mean=0 ok=1
+SHELL_TONE_WINDOW window_ns=63047 nominal_ns=63050 grid_end_ns=12800 fits=1
+SHELL_TONE_WINCASE case=0 xtalk_case=10 victim_group=0 victim_ch=8 r_src=5150 word_a=8 word_b=40 codec=0
+SHELL_TONE_WIN case=0 d_before_end_ns=0 n=64 mean=32762 min=32735 max=32818
+SHELL_TONE_WIN case=0 d_before_end_ns=200 n=64 mean=32760 min=32713 max=32811
+SHELL_TONE_WIN case=0 d_before_end_ns=400 n=64 mean=32757 min=32707 max=32821
+SHELL_TONE_WIN case=0 d_before_end_ns=600 n=64 mean=32757 min=32636 max=32795
+SHELL_TONE_WIN case=0 d_before_end_ns=800 n=64 mean=32762 min=32712 max=32804
+SHELL_TONE_WIN case=0 d_before_end_ns=1000 n=64 mean=32757 min=32706 max=32807
+SHELL_TONE_WIN case=0 d_before_end_ns=1200 n=64 mean=32757 min=32722 max=32781
+SHELL_TONE_WIN case=0 d_before_end_ns=1400 n=64 mean=32756 min=32710 max=32790
+SHELL_TONE_WIN case=0 d_before_end_ns=1600 n=64 mean=32753 min=32712 max=32788
+SHELL_TONE_WIN case=0 d_before_end_ns=1800 n=64 mean=32756 min=32715 max=32794
+SHELL_TONE_WIN case=0 d_before_end_ns=2000 n=64 mean=32757 min=32712 max=32799
+SHELL_TONE_WIN case=0 d_before_end_ns=2200 n=64 mean=32751 min=32739 max=32771
+SHELL_TONE_WIN case=0 d_before_end_ns=2400 n=64 mean=32754 min=32737 max=32772
+SHELL_TONE_WIN case=0 d_before_end_ns=2600 n=64 mean=32755 min=32733 max=32777
+SHELL_TONE_WIN case=0 d_before_end_ns=2800 n=64 mean=32754 min=32737 max=32772
+SHELL_TONE_WIN case=0 d_before_end_ns=3000 n=64 mean=32753 min=32737 max=32776
+SHELL_TONE_WIN case=0 d_before_end_ns=3200 n=64 mean=32754 min=32740 max=32774
+SHELL_TONE_WIN case=0 d_before_end_ns=3400 n=64 mean=32752 min=32739 max=32769
+SHELL_TONE_WIN case=0 d_before_end_ns=3600 n=64 mean=32753 min=32739 max=32771
+SHELL_TONE_WIN case=0 d_before_end_ns=3800 n=64 mean=32753 min=32729 max=32776
+SHELL_TONE_WIN case=0 d_before_end_ns=4000 n=64 mean=32753 min=32738 max=32772
+SHELL_TONE_WIN case=0 d_before_end_ns=4200 n=64 mean=32752 min=32739 max=32766
+SHELL_TONE_WIN case=0 d_before_end_ns=4400 n=64 mean=32750 min=32735 max=32764
+SHELL_TONE_WIN case=0 d_before_end_ns=4600 n=64 mean=32750 min=32730 max=32766
+SHELL_TONE_WIN case=0 d_before_end_ns=4800 n=64 mean=32751 min=32736 max=32763
+SHELL_TONE_WIN case=0 d_before_end_ns=5000 n=64 mean=32751 min=32735 max=32772
+SHELL_TONE_WIN case=0 d_before_end_ns=5200 n=64 mean=32750 min=32742 max=32767
+SHELL_TONE_WIN case=0 d_before_end_ns=5400 n=64 mean=32751 min=32737 max=32772
+SHELL_TONE_WIN case=0 d_before_end_ns=5600 n=64 mean=32751 min=32736 max=32766
+SHELL_TONE_WIN case=0 d_before_end_ns=5800 n=64 mean=32752 min=32737 max=32766
+SHELL_TONE_WIN case=0 d_before_end_ns=6000 n=64 mean=32752 min=32734 max=32772
+SHELL_TONE_WIN case=0 d_before_end_ns=6200 n=64 mean=32751 min=32738 max=32766
+SHELL_TONE_WIN case=0 d_before_end_ns=6400 n=64 mean=32752 min=32737 max=32769
+SHELL_TONE_WIN case=0 d_before_end_ns=6600 n=64 mean=32752 min=32737 max=32766
+SHELL_TONE_WIN case=0 d_before_end_ns=6800 n=64 mean=32752 min=32736 max=32768
+SHELL_TONE_WIN case=0 d_before_end_ns=7000 n=64 mean=32753 min=32737 max=32768
+SHELL_TONE_WIN case=0 d_before_end_ns=7200 n=64 mean=32752 min=32737 max=32767
+SHELL_TONE_WIN case=0 d_before_end_ns=7400 n=64 mean=32754 min=32743 max=32776
+SHELL_TONE_WIN case=0 d_before_end_ns=7600 n=64 mean=32754 min=32741 max=32770
+SHELL_TONE_WIN case=0 d_before_end_ns=7800 n=64 mean=32753 min=32735 max=32770
+SHELL_TONE_WIN case=0 d_before_end_ns=8000 n=64 mean=32753 min=32737 max=32769
+SHELL_TONE_WIN case=0 d_before_end_ns=8200 n=64 mean=32755 min=32736 max=32776
+SHELL_TONE_WIN case=0 d_before_end_ns=8400 n=64 mean=32753 min=32742 max=32767
+SHELL_TONE_WIN case=0 d_before_end_ns=8600 n=64 mean=32756 min=32741 max=32772
+SHELL_TONE_WIN case=0 d_before_end_ns=8800 n=64 mean=32755 min=32743 max=32771
+SHELL_TONE_WIN case=0 d_before_end_ns=9000 n=64 mean=32754 min=32738 max=32771
+SHELL_TONE_WIN case=0 d_before_end_ns=9200 n=64 mean=32755 min=32740 max=32774
+SHELL_TONE_WIN case=0 d_before_end_ns=9400 n=64 mean=32758 min=32744 max=32778
+SHELL_TONE_WIN case=0 d_before_end_ns=9600 n=64 mean=32758 min=32708 max=32772
+SHELL_TONE_WIN case=0 d_before_end_ns=9800 n=64 mean=32759 min=32741 max=32777
+SHELL_TONE_WIN case=0 d_before_end_ns=10000 n=64 mean=32759 min=32739 max=32778
+SHELL_TONE_WIN case=0 d_before_end_ns=10200 n=64 mean=32760 min=32744 max=32788
+SHELL_TONE_WIN case=0 d_before_end_ns=10400 n=64 mean=32761 min=32742 max=32777
+SHELL_TONE_WIN case=0 d_before_end_ns=10600 n=64 mean=32763 min=32747 max=32780
+SHELL_TONE_WIN case=0 d_before_end_ns=10800 n=64 mean=32760 min=32747 max=32776
+SHELL_TONE_WIN case=0 d_before_end_ns=11000 n=64 mean=32761 min=32747 max=32784
+SHELL_TONE_WIN case=0 d_before_end_ns=11200 n=64 mean=32761 min=32747 max=32788
+SHELL_TONE_WIN case=0 d_before_end_ns=11400 n=64 mean=32763 min=32746 max=32776
+SHELL_TONE_WIN case=0 d_before_end_ns=11600 n=64 mean=32766 min=32752 max=32792
+SHELL_TONE_WIN case=0 d_before_end_ns=11800 n=64 mean=32764 min=32743 max=32780
+SHELL_TONE_WIN case=0 d_before_end_ns=12000 n=64 mean=32766 min=32745 max=32786
+SHELL_TONE_WIN case=0 d_before_end_ns=12200 n=64 mean=32765 min=32750 max=32786
+SHELL_TONE_WIN case=0 d_before_end_ns=12400 n=64 mean=32767 min=32749 max=32791
+SHELL_TONE_WIN case=0 d_before_end_ns=12600 n=64 mean=32767 min=32743 max=32786
+SHELL_TONE_WIN case=0 d_before_end_ns=12800 n=64 mean=32768 min=32753 max=32787
+SHELL_TONE_WINCASE case=1 xtalk_case=11 victim_group=0 victim_ch=8 r_src=5150 word_a=40 word_b=8 codec=0
+SHELL_TONE_WIN case=1 d_before_end_ns=0 n=64 mean=32764 min=32703 max=32818
+SHELL_TONE_WIN case=1 d_before_end_ns=200 n=64 mean=32760 min=32715 max=32800
+SHELL_TONE_WIN case=1 d_before_end_ns=400 n=64 mean=32759 min=32696 max=32798
+SHELL_TONE_WIN case=1 d_before_end_ns=600 n=64 mean=32766 min=32704 max=32820
+SHELL_TONE_WIN case=1 d_before_end_ns=800 n=64 mean=32765 min=32742 max=32800
+SHELL_TONE_WIN case=1 d_before_end_ns=1000 n=64 mean=32755 min=32703 max=32804
+SHELL_TONE_WIN case=1 d_before_end_ns=1200 n=64 mean=32756 min=32715 max=32783
+SHELL_TONE_WIN case=1 d_before_end_ns=1400 n=64 mean=32758 min=32699 max=32797
+SHELL_TONE_WIN case=1 d_before_end_ns=1600 n=64 mean=32759 min=32723 max=32802
+SHELL_TONE_WIN case=1 d_before_end_ns=1800 n=64 mean=32758 min=32730 max=32794
+SHELL_TONE_WIN case=1 d_before_end_ns=2000 n=64 mean=32759 min=32731 max=32810
+SHELL_TONE_WIN case=1 d_before_end_ns=2200 n=64 mean=32758 min=32745 max=32777
+SHELL_TONE_WIN case=1 d_before_end_ns=2400 n=64 mean=32756 min=32739 max=32774
+SHELL_TONE_WIN case=1 d_before_end_ns=2600 n=64 mean=32754 min=32741 max=32770
+SHELL_TONE_WIN case=1 d_before_end_ns=2800 n=64 mean=32755 min=32742 max=32773
+SHELL_TONE_WIN case=1 d_before_end_ns=3000 n=64 mean=32754 min=32735 max=32772
+SHELL_TONE_WIN case=1 d_before_end_ns=3200 n=64 mean=32755 min=32743 max=32772
+SHELL_TONE_WIN case=1 d_before_end_ns=3400 n=64 mean=32754 min=32734 max=32768
+SHELL_TONE_WIN case=1 d_before_end_ns=3600 n=64 mean=32752 min=32739 max=32770
+SHELL_TONE_WIN case=1 d_before_end_ns=3800 n=64 mean=32750 min=32735 max=32772
+SHELL_TONE_WIN case=1 d_before_end_ns=4000 n=64 mean=32752 min=32739 max=32772
+SHELL_TONE_WIN case=1 d_before_end_ns=4200 n=64 mean=32752 min=32729 max=32770
+SHELL_TONE_WIN case=1 d_before_end_ns=4400 n=64 mean=32750 min=32738 max=32767
+SHELL_TONE_WIN case=1 d_before_end_ns=4600 n=64 mean=32751 min=32738 max=32765
+SHELL_TONE_WIN case=1 d_before_end_ns=4800 n=64 mean=32752 min=32733 max=32769
+SHELL_TONE_WIN case=1 d_before_end_ns=5000 n=64 mean=32751 min=32731 max=32773
+SHELL_TONE_WIN case=1 d_before_end_ns=5200 n=64 mean=32752 min=32728 max=32772
+SHELL_TONE_WIN case=1 d_before_end_ns=5400 n=64 mean=32751 min=32734 max=32767
+SHELL_TONE_WIN case=1 d_before_end_ns=5600 n=64 mean=32752 min=32728 max=32766
+SHELL_TONE_WIN case=1 d_before_end_ns=5800 n=64 mean=32751 min=32736 max=32765
+SHELL_TONE_WIN case=1 d_before_end_ns=6000 n=64 mean=32752 min=32735 max=32771
+SHELL_TONE_WIN case=1 d_before_end_ns=6200 n=64 mean=32751 min=32729 max=32764
+SHELL_TONE_WIN case=1 d_before_end_ns=6400 n=64 mean=32751 min=32739 max=32768
+SHELL_TONE_WIN case=1 d_before_end_ns=6600 n=64 mean=32753 min=32739 max=32768
+SHELL_TONE_WIN case=1 d_before_end_ns=6800 n=64 mean=32750 min=32740 max=32766
+SHELL_TONE_WIN case=1 d_before_end_ns=7000 n=64 mean=32752 min=32740 max=32772
+SHELL_TONE_WIN case=1 d_before_end_ns=7200 n=64 mean=32753 min=32736 max=32774
+SHELL_TONE_WIN case=1 d_before_end_ns=7400 n=64 mean=32752 min=32738 max=32768
+SHELL_TONE_WIN case=1 d_before_end_ns=7600 n=64 mean=32752 min=32740 max=32767
+SHELL_TONE_WIN case=1 d_before_end_ns=7800 n=64 mean=32754 min=32742 max=32768
+SHELL_TONE_WIN case=1 d_before_end_ns=8000 n=64 mean=32755 min=32739 max=32777
+SHELL_TONE_WIN case=1 d_before_end_ns=8200 n=64 mean=32753 min=32743 max=32771
+SHELL_TONE_WIN case=1 d_before_end_ns=8400 n=64 mean=32755 min=32745 max=32772
+SHELL_TONE_WIN case=1 d_before_end_ns=8600 n=64 mean=32756 min=32739 max=32778
+SHELL_TONE_WIN case=1 d_before_end_ns=8800 n=64 mean=32755 min=32737 max=32772
+SHELL_TONE_WIN case=1 d_before_end_ns=9000 n=64 mean=32756 min=32740 max=32773
+SHELL_TONE_WIN case=1 d_before_end_ns=9200 n=64 mean=32757 min=32742 max=32772
+SHELL_TONE_WIN case=1 d_before_end_ns=9400 n=64 mean=32757 min=32731 max=32777
+SHELL_TONE_WIN case=1 d_before_end_ns=9600 n=64 mean=32756 min=32734 max=32770
+SHELL_TONE_WIN case=1 d_before_end_ns=9800 n=64 mean=32759 min=32744 max=32776
+SHELL_TONE_WIN case=1 d_before_end_ns=10000 n=64 mean=32757 min=32660 max=32776
+SHELL_TONE_WIN case=1 d_before_end_ns=10200 n=64 mean=32760 min=32741 max=32782
+SHELL_TONE_WIN case=1 d_before_end_ns=10400 n=64 mean=32759 min=32744 max=32780
+SHELL_TONE_WIN case=1 d_before_end_ns=10600 n=64 mean=32760 min=32740 max=32776
+SHELL_TONE_WIN case=1 d_before_end_ns=10800 n=64 mean=32763 min=32742 max=32786
+SHELL_TONE_WIN case=1 d_before_end_ns=11000 n=64 mean=32764 min=32745 max=32782
+SHELL_TONE_WIN case=1 d_before_end_ns=11200 n=64 mean=32764 min=32743 max=32784
+SHELL_TONE_WIN case=1 d_before_end_ns=11400 n=64 mean=32760 min=32615 max=32784
+SHELL_TONE_WIN case=1 d_before_end_ns=11600 n=64 mean=32765 min=32747 max=32784
+SHELL_TONE_WIN case=1 d_before_end_ns=11800 n=64 mean=32764 min=32747 max=32787
+SHELL_TONE_WIN case=1 d_before_end_ns=12000 n=64 mean=32766 min=32752 max=32785
+SHELL_TONE_WIN case=1 d_before_end_ns=12200 n=64 mean=32767 min=32751 max=32789
+SHELL_TONE_WIN case=1 d_before_end_ns=12400 n=64 mean=32767 min=32754 max=32790
+SHELL_TONE_WIN case=1 d_before_end_ns=12600 n=64 mean=32768 min=32755 max=32792
+SHELL_TONE_WIN case=1 d_before_end_ns=12800 n=64 mean=32768 min=32750 max=32785
+SHELL_TONE_GATES g2=1 g4=1 g5=1 g7=1 g8=-1 gates_ok=1
+SHELL_TONE_HEALTH missed_blocks=0 phase_timeouts=0 win_timeouts=0 block_ms=170657
+SHELL_TONE_END
+SHELL_TONE_CFG adc_khz=6146 repeats=64 phase_points=16 block_size=96 sr=48000 rv4=0 git=86070d9+
+SHELL_TONE_CLK span_short_cyc=2311 span_long_cyc=31285 smp_short_tenths=165 smp_long_tenths=3875
+SHELL_TONE_CAL lat_mean_ns=689 lat_min_ns=644 lat_max_ns=773 b0=17 timeouts=0
+SHELL_TONE_LEVEL case=-1 level=0 victim_group=0 victim_ch=8 r_src=5150 n=64 mean=32514 min=31649 max=32552 audio_virgin=1
+SHELL_TONE_STAT case=-1 settled_mean_spread=14 widest_sample_band=895
+SHELL_TONE_LEVEL case=-2 level=0 victim_group=1 victim_ch=6 r_src=5150 n=64 mean=32611 min=32557 max=32631 audio_virgin=1
+SHELL_TONE_STAT case=-2 settled_mean_spread=4 widest_sample_band=72
+SHELL_TONE_LEVEL case=-3 level=0 victim_group=0 victim_ch=9 r_src=650 n=64 mean=32766 min=32590 max=32808 audio_virgin=1
+SHELL_TONE_STAT case=-3 settled_mean_spread=5 widest_sample_band=199
+SHELL_TONE_LEVEL case=-4 level=0 victim_group=0 victim_ch=10 r_src=150 n=64 mean=0 min=0 max=27 audio_virgin=1
+SHELL_TONE_STAT case=-4 settled_mean_spread=0 widest_sample_band=27
+SHELL_TONE_LEVEL case=-5 level=0 victim_group=1 victim_ch=3 r_src=150 n=64 mean=0 min=0 max=37 audio_virgin=1
+SHELL_TONE_STAT case=-5 settled_mean_spread=0 widest_sample_band=37
+SHELL_TONE_LEVEL case=0 level=0 victim_group=0 victim_ch=8 r_src=5150 n=64 mean=32513 min=31648 max=32553 audio_virgin=0
+SHELL_TONE_STAT case=0 settled_mean_spread=15 widest_sample_band=898
+SHELL_TONE_LEVEL case=1 level=1 victim_group=0 victim_ch=8 r_src=5150 n=64 mean=32514 min=32337 max=32550 audio_virgin=0
+SHELL_TONE_STAT case=1 settled_mean_spread=7 widest_sample_band=208
+SHELL_TONE_LEVEL case=2 level=0 victim_group=1 victim_ch=6 r_src=5150 n=64 mean=32610 min=32484 max=32633 audio_virgin=0
+SHELL_TONE_STAT case=2 settled_mean_spread=3 widest_sample_band=140
+SHELL_TONE_LEVEL case=3 level=1 victim_group=1 victim_ch=6 r_src=5150 n=64 mean=32609 min=32427 max=32632 audio_virgin=0
+SHELL_TONE_STAT case=3 settled_mean_spread=4 widest_sample_band=200
+SHELL_TONE_LEVEL case=4 level=0 victim_group=0 victim_ch=9 r_src=650 n=64 mean=32765 min=32590 max=32794 audio_virgin=0
+SHELL_TONE_STAT case=4 settled_mean_spread=4 widest_sample_band=202
+SHELL_TONE_LEVEL case=5 level=1 victim_group=0 victim_ch=9 r_src=650 n=64 mean=32766 min=32699 max=32796 audio_virgin=0
+SHELL_TONE_STAT case=5 settled_mean_spread=4 widest_sample_band=87
+SHELL_TONE_LEVEL case=6 level=0 victim_group=0 victim_ch=10 r_src=150 n=64 mean=0 min=0 max=113 audio_virgin=0
+SHELL_TONE_STAT case=6 settled_mean_spread=1 widest_sample_band=113
+SHELL_TONE_LEVEL case=7 level=1 victim_group=0 victim_ch=10 r_src=150 n=64 mean=0 min=0 max=109 audio_virgin=0
+SHELL_TONE_STAT case=7 settled_mean_spread=2 widest_sample_band=109
+SHELL_TONE_LEVEL case=8 level=0 victim_group=1 victim_ch=3 r_src=150 n=64 mean=0 min=0 max=48 audio_virgin=0
+SHELL_TONE_STAT case=8 settled_mean_spread=0 widest_sample_band=48
+SHELL_TONE_LEVEL case=9 level=1 victim_group=1 victim_ch=3 r_src=150 n=64 mean=0 min=0 max=4 audio_virgin=0
+SHELL_TONE_STAT case=9 settled_mean_spread=0 widest_sample_band=4
+SHELL_TONE_CASE case=10 level=2 f_hz=100 dbfs=-20 victim_group=0 victim_ch=8 r_src=5150 below_corner=0
+SHELL_TONE case=10 phase_idx=0 n=64 mean=31655 min=31641 max=31672
+SHELL_TONE case=10 phase_idx=1 n=64 mean=31662 min=31639 max=32289
+SHELL_TONE case=10 phase_idx=2 n=64 mean=31663 min=31641 max=32289
+SHELL_TONE case=10 phase_idx=3 n=64 mean=31663 min=31640 max=32293
+SHELL_TONE case=10 phase_idx=4 n=64 mean=31663 min=31640 max=32286
+SHELL_TONE case=10 phase_idx=5 n=64 mean=31664 min=31637 max=32295
+SHELL_TONE case=10 phase_idx=6 n=64 mean=31661 min=31483 max=32288
+SHELL_TONE case=10 phase_idx=7 n=64 mean=31664 min=31639 max=32290
+SHELL_TONE case=10 phase_idx=8 n=64 mean=31662 min=31641 max=32297
+SHELL_TONE case=10 phase_idx=9 n=64 mean=31664 min=31642 max=32309
+SHELL_TONE case=10 phase_idx=10 n=64 mean=31663 min=31639 max=32296
+SHELL_TONE case=10 phase_idx=11 n=64 mean=31663 min=31638 max=32293
+SHELL_TONE case=10 phase_idx=12 n=64 mean=31663 min=31638 max=32283
+SHELL_TONE case=10 phase_idx=13 n=64 mean=31663 min=31639 max=32292
+SHELL_TONE case=10 phase_idx=14 n=64 mean=31660 min=31510 max=32280
+SHELL_TONE case=10 phase_idx=15 n=64 mean=31652 min=31628 max=32259
+SHELL_TONE_CASE case=11 level=2 f_hz=100 dbfs=-20 victim_group=1 victim_ch=6 r_src=5150 below_corner=0
+SHELL_TONE case=11 phase_idx=0 n=64 mean=31939 min=31921 max=32427
+SHELL_TONE case=11 phase_idx=1 n=64 mean=31938 min=31919 max=32431
+SHELL_TONE case=11 phase_idx=2 n=64 mean=31938 min=31921 max=32427
+SHELL_TONE case=11 phase_idx=3 n=64 mean=31938 min=31919 max=32433
+SHELL_TONE case=11 phase_idx=4 n=64 mean=31938 min=31921 max=32438
+SHELL_TONE case=11 phase_idx=5 n=64 mean=31937 min=31920 max=32429
+SHELL_TONE case=11 phase_idx=6 n=64 mean=31938 min=31922 max=32431
+SHELL_TONE case=11 phase_idx=7 n=64 mean=31939 min=31922 max=32434
+SHELL_TONE case=11 phase_idx=8 n=64 mean=31939 min=31921 max=32430
+SHELL_TONE case=11 phase_idx=9 n=64 mean=31938 min=31917 max=32444
+SHELL_TONE case=11 phase_idx=10 n=64 mean=31938 min=31924 max=32434
+SHELL_TONE case=11 phase_idx=11 n=64 mean=31939 min=31920 max=32437
+SHELL_TONE case=11 phase_idx=12 n=64 mean=31938 min=31919 max=32437
+SHELL_TONE case=11 phase_idx=13 n=64 mean=31938 min=31921 max=32440
+SHELL_TONE case=11 phase_idx=14 n=64 mean=31938 min=31920 max=32423
+SHELL_TONE case=11 phase_idx=15 n=64 mean=31938 min=31922 max=32441
+SHELL_TONE_CASE case=12 level=2 f_hz=100 dbfs=-20 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE case=12 phase_idx=0 n=64 mean=32749 min=32731 max=32768
+SHELL_TONE case=12 phase_idx=1 n=64 mean=32747 min=32736 max=32768
+SHELL_TONE case=12 phase_idx=2 n=64 mean=32748 min=32734 max=32770
+SHELL_TONE case=12 phase_idx=3 n=64 mean=32749 min=32734 max=32768
+SHELL_TONE case=12 phase_idx=4 n=64 mean=32748 min=32734 max=32768
+SHELL_TONE case=12 phase_idx=5 n=64 mean=32742 min=32725 max=32768
+SHELL_TONE case=12 phase_idx=6 n=64 mean=32748 min=32733 max=32768
+SHELL_TONE case=12 phase_idx=7 n=64 mean=32744 min=32612 max=32762
+SHELL_TONE case=12 phase_idx=8 n=64 mean=32748 min=32730 max=32772
+SHELL_TONE case=12 phase_idx=9 n=64 mean=32749 min=32724 max=32780
+SHELL_TONE case=12 phase_idx=10 n=64 mean=32749 min=32735 max=32774
+SHELL_TONE case=12 phase_idx=11 n=64 mean=32747 min=32705 max=32773
+SHELL_TONE case=12 phase_idx=12 n=64 mean=32748 min=32733 max=32768
+SHELL_TONE case=12 phase_idx=13 n=64 mean=32747 min=32729 max=32768
+SHELL_TONE case=12 phase_idx=14 n=64 mean=32749 min=32731 max=32770
+SHELL_TONE case=12 phase_idx=15 n=64 mean=32747 min=32730 max=32771
+SHELL_TONE_CASE case=13 level=2 f_hz=100 dbfs=-20 victim_group=0 victim_ch=10 r_src=150 below_corner=0
+SHELL_TONE case=13 phase_idx=0 n=64 mean=0 min=0 max=3
+SHELL_TONE case=13 phase_idx=1 n=64 mean=0 min=0 max=8
+SHELL_TONE case=13 phase_idx=2 n=64 mean=0 min=0 max=5
+SHELL_TONE case=13 phase_idx=3 n=64 mean=0 min=0 max=8
+SHELL_TONE case=13 phase_idx=4 n=64 mean=0 min=0 max=4
+SHELL_TONE case=13 phase_idx=5 n=64 mean=0 min=0 max=4
+SHELL_TONE case=13 phase_idx=6 n=64 mean=0 min=0 max=9
+SHELL_TONE case=13 phase_idx=7 n=64 mean=0 min=0 max=4
+SHELL_TONE case=13 phase_idx=8 n=64 mean=0 min=0 max=8
+SHELL_TONE case=13 phase_idx=9 n=64 mean=0 min=0 max=12
+SHELL_TONE case=13 phase_idx=10 n=64 mean=0 min=0 max=6
+SHELL_TONE case=13 phase_idx=11 n=64 mean=0 min=0 max=5
+SHELL_TONE case=13 phase_idx=12 n=64 mean=0 min=0 max=19
+SHELL_TONE case=13 phase_idx=13 n=64 mean=0 min=0 max=9
+SHELL_TONE case=13 phase_idx=14 n=64 mean=0 min=0 max=4
+SHELL_TONE case=13 phase_idx=15 n=64 mean=0 min=0 max=10
+SHELL_TONE_CASE case=14 level=2 f_hz=100 dbfs=-20 victim_group=1 victim_ch=3 r_src=150 below_corner=0
+SHELL_TONE case=14 phase_idx=0 n=64 mean=0 min=0 max=2
+SHELL_TONE case=14 phase_idx=1 n=64 mean=0 min=0 max=3
+SHELL_TONE case=14 phase_idx=2 n=64 mean=0 min=0 max=4
+SHELL_TONE case=14 phase_idx=3 n=64 mean=0 min=0 max=2
+SHELL_TONE case=14 phase_idx=4 n=64 mean=0 min=0 max=4
+SHELL_TONE case=14 phase_idx=5 n=64 mean=0 min=0 max=2
+SHELL_TONE case=14 phase_idx=6 n=64 mean=0 min=0 max=2
+SHELL_TONE case=14 phase_idx=7 n=64 mean=0 min=0 max=0
+SHELL_TONE case=14 phase_idx=8 n=64 mean=0 min=0 max=2
+SHELL_TONE case=14 phase_idx=9 n=64 mean=0 min=0 max=3
+SHELL_TONE case=14 phase_idx=10 n=64 mean=0 min=0 max=2
+SHELL_TONE case=14 phase_idx=11 n=64 mean=0 min=0 max=0
+SHELL_TONE case=14 phase_idx=12 n=64 mean=0 min=0 max=2
+SHELL_TONE case=14 phase_idx=13 n=64 mean=0 min=0 max=1
+SHELL_TONE case=14 phase_idx=14 n=64 mean=0 min=0 max=4
+SHELL_TONE case=14 phase_idx=15 n=64 mean=0 min=0 max=1
+SHELL_TONE_CASE case=15 level=2 f_hz=100 dbfs=-6 victim_group=0 victim_ch=8 r_src=5150 below_corner=0
+SHELL_TONE case=15 phase_idx=0 n=64 mean=31653 min=31637 max=31672
+SHELL_TONE case=15 phase_idx=1 n=64 mean=31663 min=31638 max=32270
+SHELL_TONE case=15 phase_idx=2 n=64 mean=31661 min=31579 max=32294
+SHELL_TONE case=15 phase_idx=3 n=64 mean=31661 min=31633 max=32292
+SHELL_TONE case=15 phase_idx=4 n=64 mean=31661 min=31640 max=32288
+SHELL_TONE case=15 phase_idx=5 n=64 mean=31664 min=31637 max=32296
+SHELL_TONE case=15 phase_idx=6 n=64 mean=31663 min=31597 max=32297
+SHELL_TONE case=15 phase_idx=7 n=64 mean=31661 min=31637 max=32293
+SHELL_TONE case=15 phase_idx=8 n=64 mean=31662 min=31638 max=32301
+SHELL_TONE case=15 phase_idx=9 n=64 mean=31663 min=31640 max=32290
+SHELL_TONE case=15 phase_idx=10 n=64 mean=31663 min=31637 max=32279
+SHELL_TONE case=15 phase_idx=11 n=64 mean=31662 min=31641 max=32285
+SHELL_TONE case=15 phase_idx=12 n=64 mean=31663 min=31631 max=32308
+SHELL_TONE case=15 phase_idx=13 n=64 mean=31663 min=31641 max=32287
+SHELL_TONE case=15 phase_idx=14 n=64 mean=31662 min=31640 max=32288
+SHELL_TONE case=15 phase_idx=15 n=64 mean=31664 min=31642 max=32292
+SHELL_TONE_CASE case=16 level=2 f_hz=100 dbfs=-6 victim_group=1 victim_ch=6 r_src=5150 below_corner=0
+SHELL_TONE case=16 phase_idx=0 n=64 mean=31939 min=31921 max=32426
+SHELL_TONE case=16 phase_idx=1 n=64 mean=31939 min=31921 max=32422
+SHELL_TONE case=16 phase_idx=2 n=64 mean=31938 min=31918 max=32426
+SHELL_TONE case=16 phase_idx=3 n=64 mean=31939 min=31918 max=32439
+SHELL_TONE case=16 phase_idx=4 n=64 mean=31933 min=31905 max=32422
+SHELL_TONE case=16 phase_idx=5 n=64 mean=31939 min=31923 max=32435
+SHELL_TONE case=16 phase_idx=6 n=64 mean=31938 min=31923 max=32440
+SHELL_TONE case=16 phase_idx=7 n=64 mean=31939 min=31923 max=32430
+SHELL_TONE case=16 phase_idx=8 n=64 mean=31939 min=31922 max=32438
+SHELL_TONE case=16 phase_idx=9 n=64 mean=31939 min=31923 max=32441
+SHELL_TONE case=16 phase_idx=10 n=64 mean=31938 min=31920 max=32429
+SHELL_TONE case=16 phase_idx=11 n=64 mean=31939 min=31920 max=32428
+SHELL_TONE case=16 phase_idx=12 n=64 mean=31939 min=31921 max=32438
+SHELL_TONE case=16 phase_idx=13 n=64 mean=31939 min=31922 max=32423
+SHELL_TONE case=16 phase_idx=14 n=64 mean=31938 min=31921 max=32427
+SHELL_TONE case=16 phase_idx=15 n=64 mean=31939 min=31920 max=32437
+SHELL_TONE_CASE case=17 level=2 f_hz=100 dbfs=-6 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE case=17 phase_idx=0 n=64 mean=32749 min=32736 max=32770
+SHELL_TONE case=17 phase_idx=1 n=64 mean=32750 min=32729 max=32769
+SHELL_TONE case=17 phase_idx=2 n=64 mean=32748 min=32736 max=32769
+SHELL_TONE case=17 phase_idx=3 n=64 mean=32748 min=32726 max=32768
+SHELL_TONE case=17 phase_idx=4 n=64 mean=32749 min=32733 max=32768
+SHELL_TONE case=17 phase_idx=5 n=64 mean=32748 min=32733 max=32768
+SHELL_TONE case=17 phase_idx=6 n=64 mean=32749 min=32733 max=32768
+SHELL_TONE case=17 phase_idx=7 n=64 mean=32739 min=32724 max=32756
+SHELL_TONE case=17 phase_idx=8 n=64 mean=32747 min=32732 max=32769
+SHELL_TONE case=17 phase_idx=9 n=64 mean=32750 min=32732 max=32770
+SHELL_TONE case=17 phase_idx=10 n=64 mean=32747 min=32735 max=32769
+SHELL_TONE case=17 phase_idx=11 n=64 mean=32747 min=32725 max=32772
+SHELL_TONE case=17 phase_idx=12 n=64 mean=32749 min=32733 max=32768
+SHELL_TONE case=17 phase_idx=13 n=64 mean=32748 min=32735 max=32768
+SHELL_TONE case=17 phase_idx=14 n=64 mean=32747 min=32733 max=32768
+SHELL_TONE case=17 phase_idx=15 n=64 mean=32747 min=32732 max=32770
+SHELL_TONE_CASE case=18 level=2 f_hz=100 dbfs=-6 victim_group=0 victim_ch=10 r_src=150 below_corner=0
+SHELL_TONE case=18 phase_idx=0 n=64 mean=0 min=0 max=2
+SHELL_TONE case=18 phase_idx=1 n=64 mean=0 min=0 max=2
+SHELL_TONE case=18 phase_idx=2 n=64 mean=0 min=0 max=4
+SHELL_TONE case=18 phase_idx=3 n=64 mean=0 min=0 max=2
+SHELL_TONE case=18 phase_idx=4 n=64 mean=0 min=0 max=4
+SHELL_TONE case=18 phase_idx=5 n=64 mean=0 min=0 max=9
+SHELL_TONE case=18 phase_idx=6 n=64 mean=0 min=0 max=8
+SHELL_TONE case=18 phase_idx=7 n=64 mean=0 min=0 max=10
+SHELL_TONE case=18 phase_idx=8 n=64 mean=0 min=0 max=8
+SHELL_TONE case=18 phase_idx=9 n=64 mean=0 min=0 max=10
+SHELL_TONE case=18 phase_idx=10 n=64 mean=0 min=0 max=10
+SHELL_TONE case=18 phase_idx=11 n=64 mean=0 min=0 max=4
+SHELL_TONE case=18 phase_idx=12 n=64 mean=0 min=0 max=3
+SHELL_TONE case=18 phase_idx=13 n=64 mean=0 min=0 max=8
+SHELL_TONE case=18 phase_idx=14 n=64 mean=0 min=0 max=7
+SHELL_TONE case=18 phase_idx=15 n=64 mean=0 min=0 max=8
+SHELL_TONE_CASE case=19 level=2 f_hz=100 dbfs=-6 victim_group=1 victim_ch=3 r_src=150 below_corner=0
+SHELL_TONE case=19 phase_idx=0 n=64 mean=0 min=0 max=0
+SHELL_TONE case=19 phase_idx=1 n=64 mean=0 min=0 max=2
+SHELL_TONE case=19 phase_idx=2 n=64 mean=0 min=0 max=23
+SHELL_TONE case=19 phase_idx=3 n=64 mean=0 min=0 max=2
+SHELL_TONE case=19 phase_idx=4 n=64 mean=0 min=0 max=0
+SHELL_TONE case=19 phase_idx=5 n=64 mean=0 min=0 max=4
+SHELL_TONE case=19 phase_idx=6 n=64 mean=0 min=0 max=4
+SHELL_TONE case=19 phase_idx=7 n=64 mean=0 min=0 max=3
+SHELL_TONE case=19 phase_idx=8 n=64 mean=0 min=0 max=4
+SHELL_TONE case=19 phase_idx=9 n=64 mean=0 min=0 max=4
+SHELL_TONE case=19 phase_idx=10 n=64 mean=0 min=0 max=3
+SHELL_TONE case=19 phase_idx=11 n=64 mean=0 min=0 max=2
+SHELL_TONE case=19 phase_idx=12 n=64 mean=0 min=0 max=3
+SHELL_TONE case=19 phase_idx=13 n=64 mean=0 min=0 max=1
+SHELL_TONE case=19 phase_idx=14 n=64 mean=0 min=0 max=0
+SHELL_TONE case=19 phase_idx=15 n=64 mean=0 min=0 max=4
+SHELL_TONE_CASE case=20 level=2 f_hz=100 dbfs=0 victim_group=0 victim_ch=8 r_src=5150 below_corner=0
+SHELL_TONE case=20 phase_idx=0 n=64 mean=31653 min=31634 max=31672
+SHELL_TONE case=20 phase_idx=1 n=64 mean=31661 min=31633 max=32297
+SHELL_TONE case=20 phase_idx=2 n=64 mean=31662 min=31636 max=32302
+SHELL_TONE case=20 phase_idx=3 n=64 mean=31662 min=31636 max=32289
+SHELL_TONE case=20 phase_idx=4 n=64 mean=31664 min=31636 max=32297
+SHELL_TONE case=20 phase_idx=5 n=64 mean=31663 min=31640 max=32277
+SHELL_TONE case=20 phase_idx=6 n=64 mean=31662 min=31633 max=32290
+SHELL_TONE case=20 phase_idx=7 n=64 mean=31662 min=31635 max=32289
+SHELL_TONE case=20 phase_idx=8 n=64 mean=31662 min=31637 max=32282
+SHELL_TONE case=20 phase_idx=9 n=64 mean=31660 min=31584 max=32300
+SHELL_TONE case=20 phase_idx=10 n=64 mean=31661 min=31632 max=32288
+SHELL_TONE case=20 phase_idx=11 n=64 mean=31663 min=31642 max=32278
+SHELL_TONE case=20 phase_idx=12 n=64 mean=31663 min=31635 max=32285
+SHELL_TONE case=20 phase_idx=13 n=64 mean=31662 min=31641 max=32296
+SHELL_TONE case=20 phase_idx=14 n=64 mean=31663 min=31638 max=32295
+SHELL_TONE case=20 phase_idx=15 n=64 mean=31662 min=31639 max=32287
+SHELL_TONE_CASE case=21 level=2 f_hz=100 dbfs=0 victim_group=1 victim_ch=6 r_src=5150 below_corner=0
+SHELL_TONE case=21 phase_idx=0 n=64 mean=31939 min=31921 max=32431
+SHELL_TONE case=21 phase_idx=1 n=64 mean=31939 min=31919 max=32430
+SHELL_TONE case=21 phase_idx=2 n=64 mean=31938 min=31922 max=32440
+SHELL_TONE case=21 phase_idx=3 n=64 mean=31938 min=31899 max=32430
+SHELL_TONE case=21 phase_idx=4 n=64 mean=31936 min=31918 max=32418
+SHELL_TONE case=21 phase_idx=5 n=64 mean=31938 min=31921 max=32429
+SHELL_TONE case=21 phase_idx=6 n=64 mean=31928 min=31903 max=32389
+SHELL_TONE case=21 phase_idx=7 n=64 mean=31939 min=31923 max=32425
+SHELL_TONE case=21 phase_idx=8 n=64 mean=31937 min=31919 max=32438
+SHELL_TONE case=21 phase_idx=9 n=64 mean=31939 min=31924 max=32439
+SHELL_TONE case=21 phase_idx=10 n=64 mean=31938 min=31920 max=32430
+SHELL_TONE case=21 phase_idx=11 n=64 mean=31938 min=31923 max=32439
+SHELL_TONE case=21 phase_idx=12 n=64 mean=31938 min=31922 max=32435
+SHELL_TONE case=21 phase_idx=13 n=64 mean=31938 min=31921 max=32426
+SHELL_TONE case=21 phase_idx=14 n=64 mean=31939 min=31919 max=32427
+SHELL_TONE case=21 phase_idx=15 n=64 mean=31939 min=31923 max=32433
+SHELL_TONE_CASE case=22 level=2 f_hz=100 dbfs=0 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE case=22 phase_idx=0 n=64 mean=32749 min=32733 max=32772
+SHELL_TONE case=22 phase_idx=1 n=64 mean=32747 min=32727 max=32768
+SHELL_TONE case=22 phase_idx=2 n=64 mean=32746 min=32719 max=32769
+SHELL_TONE case=22 phase_idx=3 n=64 mean=32748 min=32732 max=32768
+SHELL_TONE case=22 phase_idx=4 n=64 mean=32747 min=32732 max=32768
+SHELL_TONE case=22 phase_idx=5 n=64 mean=32748 min=32735 max=32772
+SHELL_TONE case=22 phase_idx=6 n=64 mean=32748 min=32736 max=32768
+SHELL_TONE case=22 phase_idx=7 n=64 mean=32747 min=32726 max=32770
+SHELL_TONE case=22 phase_idx=8 n=64 mean=32749 min=32733 max=32768
+SHELL_TONE case=22 phase_idx=9 n=64 mean=32748 min=32731 max=32781
+SHELL_TONE case=22 phase_idx=10 n=64 mean=32747 min=32731 max=32772
+SHELL_TONE case=22 phase_idx=11 n=64 mean=32749 min=32734 max=32770
+SHELL_TONE case=22 phase_idx=12 n=64 mean=32745 min=32726 max=32768
+SHELL_TONE case=22 phase_idx=13 n=64 mean=32748 min=32736 max=32772
+SHELL_TONE case=22 phase_idx=14 n=64 mean=32751 min=32733 max=32772
+SHELL_TONE case=22 phase_idx=15 n=64 mean=32747 min=32729 max=32770
+SHELL_TONE_CASE case=23 level=2 f_hz=100 dbfs=0 victim_group=0 victim_ch=10 r_src=150 below_corner=0
+SHELL_TONE case=23 phase_idx=0 n=64 mean=0 min=0 max=7
+SHELL_TONE case=23 phase_idx=1 n=64 mean=0 min=0 max=13
+SHELL_TONE case=23 phase_idx=2 n=64 mean=0 min=0 max=9
+SHELL_TONE case=23 phase_idx=3 n=64 mean=0 min=0 max=9
+SHELL_TONE case=23 phase_idx=4 n=64 mean=0 min=0 max=6
+SHELL_TONE case=23 phase_idx=5 n=64 mean=0 min=0 max=5
+SHELL_TONE case=23 phase_idx=6 n=64 mean=0 min=0 max=22
+SHELL_TONE case=23 phase_idx=7 n=64 mean=0 min=0 max=2
+SHELL_TONE case=23 phase_idx=8 n=64 mean=0 min=0 max=6
+SHELL_TONE case=23 phase_idx=9 n=64 mean=0 min=0 max=4
+SHELL_TONE case=23 phase_idx=10 n=64 mean=0 min=0 max=4
+SHELL_TONE case=23 phase_idx=11 n=64 mean=0 min=0 max=4
+SHELL_TONE case=23 phase_idx=12 n=64 mean=0 min=0 max=8
+SHELL_TONE case=23 phase_idx=13 n=64 mean=0 min=0 max=8
+SHELL_TONE case=23 phase_idx=14 n=64 mean=0 min=0 max=8
+SHELL_TONE case=23 phase_idx=15 n=64 mean=0 min=0 max=4
+SHELL_TONE_CASE case=24 level=2 f_hz=100 dbfs=0 victim_group=1 victim_ch=3 r_src=150 below_corner=0
+SHELL_TONE case=24 phase_idx=0 n=64 mean=0 min=0 max=3
+SHELL_TONE case=24 phase_idx=1 n=64 mean=0 min=0 max=1
+SHELL_TONE case=24 phase_idx=2 n=64 mean=0 min=0 max=2
+SHELL_TONE case=24 phase_idx=3 n=64 mean=0 min=0 max=2
+SHELL_TONE case=24 phase_idx=4 n=64 mean=0 min=0 max=0
+SHELL_TONE case=24 phase_idx=5 n=64 mean=0 min=0 max=2
+SHELL_TONE case=24 phase_idx=6 n=64 mean=0 min=0 max=2
+SHELL_TONE case=24 phase_idx=7 n=64 mean=0 min=0 max=1
+SHELL_TONE case=24 phase_idx=8 n=64 mean=0 min=0 max=0
+SHELL_TONE case=24 phase_idx=9 n=64 mean=0 min=0 max=1
+SHELL_TONE case=24 phase_idx=10 n=64 mean=0 min=0 max=8
+SHELL_TONE case=24 phase_idx=11 n=64 mean=0 min=0 max=2
+SHELL_TONE case=24 phase_idx=12 n=64 mean=0 min=0 max=1
+SHELL_TONE case=24 phase_idx=13 n=64 mean=0 min=0 max=1
+SHELL_TONE case=24 phase_idx=14 n=64 mean=0 min=0 max=4
+SHELL_TONE case=24 phase_idx=15 n=64 mean=0 min=0 max=2
+SHELL_TONE_CASE case=25 level=2 f_hz=1000 dbfs=-20 victim_group=0 victim_ch=8 r_src=5150 below_corner=0
+SHELL_TONE case=25 phase_idx=0 n=64 mean=32194 min=31650 max=32224
+SHELL_TONE case=25 phase_idx=1 n=64 mean=32206 min=32183 max=32469
+SHELL_TONE case=25 phase_idx=2 n=64 mean=32200 min=32034 max=32481
+SHELL_TONE case=25 phase_idx=3 n=64 mean=32204 min=32181 max=32475
+SHELL_TONE case=25 phase_idx=4 n=64 mean=32206 min=32188 max=32487
+SHELL_TONE case=25 phase_idx=5 n=64 mean=32205 min=32178 max=32493
+SHELL_TONE case=25 phase_idx=6 n=64 mean=32206 min=32184 max=32479
+SHELL_TONE case=25 phase_idx=7 n=64 mean=32206 min=32187 max=32484
+SHELL_TONE case=25 phase_idx=8 n=64 mean=32206 min=32188 max=32488
+SHELL_TONE case=25 phase_idx=9 n=64 mean=32207 min=32181 max=32470
+SHELL_TONE case=25 phase_idx=10 n=64 mean=32208 min=32190 max=32485
+SHELL_TONE case=25 phase_idx=11 n=64 mean=32205 min=32182 max=32480
+SHELL_TONE case=25 phase_idx=12 n=64 mean=32208 min=32190 max=32486
+SHELL_TONE case=25 phase_idx=13 n=64 mean=32208 min=32187 max=32478
+SHELL_TONE case=25 phase_idx=14 n=64 mean=32207 min=32186 max=32471
+SHELL_TONE case=25 phase_idx=15 n=64 mean=32202 min=32176 max=32486
+SHELL_TONE_CASE case=26 level=2 f_hz=1000 dbfs=-20 victim_group=1 victim_ch=6 r_src=5150 below_corner=0
+SHELL_TONE case=26 phase_idx=0 n=64 mean=32353 min=32341 max=32368
+SHELL_TONE case=26 phase_idx=1 n=64 mean=32356 min=32342 max=32559
+SHELL_TONE case=26 phase_idx=2 n=64 mean=32356 min=32339 max=32573
+SHELL_TONE case=26 phase_idx=3 n=64 mean=32356 min=32335 max=32576
+SHELL_TONE case=26 phase_idx=4 n=64 mean=32356 min=32342 max=32571
+SHELL_TONE case=26 phase_idx=5 n=64 mean=32356 min=32342 max=32571
+SHELL_TONE case=26 phase_idx=6 n=64 mean=32357 min=32341 max=32562
+SHELL_TONE case=26 phase_idx=7 n=64 mean=32357 min=32340 max=32559
+SHELL_TONE case=26 phase_idx=8 n=64 mean=32356 min=32340 max=32562
+SHELL_TONE case=26 phase_idx=9 n=64 mean=32356 min=32340 max=32560
+SHELL_TONE case=26 phase_idx=10 n=64 mean=32357 min=32344 max=32558
+SHELL_TONE case=26 phase_idx=11 n=64 mean=32356 min=32337 max=32567
+SHELL_TONE case=26 phase_idx=12 n=64 mean=32354 min=32320 max=32564
+SHELL_TONE case=26 phase_idx=13 n=64 mean=32356 min=32340 max=32578
+SHELL_TONE case=26 phase_idx=14 n=64 mean=32355 min=32345 max=32565
+SHELL_TONE case=26 phase_idx=15 n=64 mean=32351 min=32333 max=32570
+SHELL_TONE_CASE case=27 level=2 f_hz=1000 dbfs=-20 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE case=27 phase_idx=0 n=64 mean=32754 min=32729 max=32775
+SHELL_TONE case=27 phase_idx=1 n=64 mean=32757 min=32745 max=32777
+SHELL_TONE case=27 phase_idx=2 n=64 mean=32755 min=32740 max=32772
+SHELL_TONE case=27 phase_idx=3 n=64 mean=32756 min=32740 max=32781
+SHELL_TONE case=27 phase_idx=4 n=64 mean=32756 min=32738 max=32777
+SHELL_TONE case=27 phase_idx=5 n=64 mean=32755 min=32742 max=32772
+SHELL_TONE case=27 phase_idx=6 n=64 mean=32755 min=32744 max=32776
+SHELL_TONE case=27 phase_idx=7 n=64 mean=32753 min=32741 max=32770
+SHELL_TONE case=27 phase_idx=8 n=64 mean=32754 min=32739 max=32775
+SHELL_TONE case=27 phase_idx=9 n=64 mean=32753 min=32741 max=32773
+SHELL_TONE case=27 phase_idx=10 n=64 mean=32753 min=32740 max=32773
+SHELL_TONE case=27 phase_idx=11 n=64 mean=32753 min=32741 max=32772
+SHELL_TONE case=27 phase_idx=12 n=64 mean=32753 min=32737 max=32770
+SHELL_TONE case=27 phase_idx=13 n=64 mean=32755 min=32738 max=32774
+SHELL_TONE case=27 phase_idx=14 n=64 mean=32756 min=32743 max=32779
+SHELL_TONE case=27 phase_idx=15 n=64 mean=32748 min=32727 max=32777
+SHELL_TONE_CASE case=28 level=2 f_hz=1000 dbfs=-20 victim_group=0 victim_ch=10 r_src=150 below_corner=0
+SHELL_TONE case=28 phase_idx=0 n=64 mean=0 min=0 max=8
+SHELL_TONE case=28 phase_idx=1 n=64 mean=0 min=0 max=20
+SHELL_TONE case=28 phase_idx=2 n=64 mean=0 min=0 max=6
+SHELL_TONE case=28 phase_idx=3 n=64 mean=0 min=0 max=2
+SHELL_TONE case=28 phase_idx=4 n=64 mean=0 min=0 max=5
+SHELL_TONE case=28 phase_idx=5 n=64 mean=0 min=0 max=10
+SHELL_TONE case=28 phase_idx=6 n=64 mean=0 min=0 max=5
+SHELL_TONE case=28 phase_idx=7 n=64 mean=0 min=0 max=11
+SHELL_TONE case=28 phase_idx=8 n=64 mean=0 min=0 max=3
+SHELL_TONE case=28 phase_idx=9 n=64 mean=0 min=0 max=4
+SHELL_TONE case=28 phase_idx=10 n=64 mean=0 min=0 max=4
+SHELL_TONE case=28 phase_idx=11 n=64 mean=0 min=0 max=5
+SHELL_TONE case=28 phase_idx=12 n=64 mean=0 min=0 max=4
+SHELL_TONE case=28 phase_idx=13 n=64 mean=0 min=0 max=6
+SHELL_TONE case=28 phase_idx=14 n=64 mean=0 min=0 max=6
+SHELL_TONE case=28 phase_idx=15 n=64 mean=0 min=0 max=8
+SHELL_TONE_CASE case=29 level=2 f_hz=1000 dbfs=-20 victim_group=1 victim_ch=3 r_src=150 below_corner=0
+SHELL_TONE case=29 phase_idx=0 n=64 mean=0 min=0 max=1
+SHELL_TONE case=29 phase_idx=1 n=64 mean=0 min=0 max=1
+SHELL_TONE case=29 phase_idx=2 n=64 mean=0 min=0 max=1
+SHELL_TONE case=29 phase_idx=3 n=64 mean=0 min=0 max=0
+SHELL_TONE case=29 phase_idx=4 n=64 mean=0 min=0 max=5
+SHELL_TONE case=29 phase_idx=5 n=64 mean=0 min=0 max=2
+SHELL_TONE case=29 phase_idx=6 n=64 mean=0 min=0 max=2
+SHELL_TONE case=29 phase_idx=7 n=64 mean=0 min=0 max=2
+SHELL_TONE case=29 phase_idx=8 n=64 mean=0 min=0 max=2
+SHELL_TONE case=29 phase_idx=9 n=64 mean=0 min=0 max=0
+SHELL_TONE case=29 phase_idx=10 n=64 mean=0 min=0 max=1
+SHELL_TONE case=29 phase_idx=11 n=64 mean=0 min=0 max=1
+SHELL_TONE case=29 phase_idx=12 n=64 mean=0 min=0 max=0
+SHELL_TONE case=29 phase_idx=13 n=64 mean=0 min=0 max=2
+SHELL_TONE case=29 phase_idx=14 n=64 mean=0 min=0 max=0
+SHELL_TONE case=29 phase_idx=15 n=64 mean=0 min=0 max=0
+SHELL_TONE_CASE case=30 level=2 f_hz=1000 dbfs=-6 victim_group=0 victim_ch=8 r_src=5150 below_corner=0
+SHELL_TONE case=30 phase_idx=0 n=64 mean=32194 min=31658 max=32221
+SHELL_TONE case=30 phase_idx=1 n=64 mean=32207 min=32186 max=32476
+SHELL_TONE case=30 phase_idx=2 n=64 mean=32205 min=32185 max=32490
+SHELL_TONE case=30 phase_idx=3 n=64 mean=32202 min=32071 max=32479
+SHELL_TONE case=30 phase_idx=4 n=64 mean=32206 min=32187 max=32501
+SHELL_TONE case=30 phase_idx=5 n=64 mean=32204 min=32177 max=32481
+SHELL_TONE case=30 phase_idx=6 n=64 mean=32205 min=32186 max=32478
+SHELL_TONE case=30 phase_idx=7 n=64 mean=32206 min=32183 max=32482
+SHELL_TONE case=30 phase_idx=8 n=64 mean=32205 min=32186 max=32485
+SHELL_TONE case=30 phase_idx=9 n=64 mean=32208 min=32187 max=32477
+SHELL_TONE case=30 phase_idx=10 n=64 mean=32208 min=32189 max=32491
+SHELL_TONE case=30 phase_idx=11 n=64 mean=32207 min=32188 max=32490
+SHELL_TONE case=30 phase_idx=12 n=64 mean=32209 min=32186 max=32476
+SHELL_TONE case=30 phase_idx=13 n=64 mean=32207 min=32185 max=32489
+SHELL_TONE case=30 phase_idx=14 n=64 mean=32204 min=32183 max=32481
+SHELL_TONE case=30 phase_idx=15 n=64 mean=32200 min=32179 max=32470
+SHELL_TONE_CASE case=31 level=2 f_hz=1000 dbfs=-6 victim_group=1 victim_ch=6 r_src=5150 below_corner=0
+SHELL_TONE case=31 phase_idx=0 n=64 mean=32351 min=32274 max=32364
+SHELL_TONE case=31 phase_idx=1 n=64 mean=32355 min=32339 max=32565
+SHELL_TONE case=31 phase_idx=2 n=64 mean=32355 min=32341 max=32570
+SHELL_TONE case=31 phase_idx=3 n=64 mean=32356 min=32339 max=32574
+SHELL_TONE case=31 phase_idx=4 n=64 mean=32356 min=32341 max=32573
+SHELL_TONE case=31 phase_idx=5 n=64 mean=32355 min=32335 max=32565
+SHELL_TONE case=31 phase_idx=6 n=64 mean=32356 min=32342 max=32568
+SHELL_TONE case=31 phase_idx=7 n=64 mean=32355 min=32342 max=32565
+SHELL_TONE case=31 phase_idx=8 n=64 mean=32356 min=32341 max=32572
+SHELL_TONE case=31 phase_idx=9 n=64 mean=32356 min=32338 max=32558
+SHELL_TONE case=31 phase_idx=10 n=64 mean=32356 min=32339 max=32560
+SHELL_TONE case=31 phase_idx=11 n=64 mean=32355 min=32342 max=32555
+SHELL_TONE case=31 phase_idx=12 n=64 mean=32355 min=32337 max=32571
+SHELL_TONE case=31 phase_idx=13 n=64 mean=32355 min=32341 max=32573
+SHELL_TONE case=31 phase_idx=14 n=64 mean=32355 min=32342 max=32570
+SHELL_TONE case=31 phase_idx=15 n=64 mean=32351 min=32333 max=32579
+SHELL_TONE_CASE case=32 level=2 f_hz=1000 dbfs=-6 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE case=32 phase_idx=0 n=64 mean=32753 min=32732 max=32773
+SHELL_TONE case=32 phase_idx=1 n=64 mean=32755 min=32741 max=32774
+SHELL_TONE case=32 phase_idx=2 n=64 mean=32755 min=32740 max=32776
+SHELL_TONE case=32 phase_idx=3 n=64 mean=32755 min=32736 max=32780
+SHELL_TONE case=32 phase_idx=4 n=64 mean=32755 min=32740 max=32776
+SHELL_TONE case=32 phase_idx=5 n=64 mean=32755 min=32740 max=32781
+SHELL_TONE case=32 phase_idx=6 n=64 mean=32755 min=32740 max=32772
+SHELL_TONE case=32 phase_idx=7 n=64 mean=32754 min=32741 max=32778
+SHELL_TONE case=32 phase_idx=8 n=64 mean=32753 min=32737 max=32772
+SHELL_TONE case=32 phase_idx=9 n=64 mean=32754 min=32740 max=32770
+SHELL_TONE case=32 phase_idx=10 n=64 mean=32754 min=32737 max=32776
+SHELL_TONE case=32 phase_idx=11 n=64 mean=32753 min=32730 max=32769
+SHELL_TONE case=32 phase_idx=12 n=64 mean=32753 min=32739 max=32778
+SHELL_TONE case=32 phase_idx=13 n=64 mean=32755 min=32734 max=32776
+SHELL_TONE case=32 phase_idx=14 n=64 mean=32757 min=32735 max=32776
+SHELL_TONE case=32 phase_idx=15 n=64 mean=32747 min=32727 max=32776
+SHELL_TONE_CASE case=33 level=2 f_hz=1000 dbfs=-6 victim_group=0 victim_ch=10 r_src=150 below_corner=0
+SHELL_TONE case=33 phase_idx=0 n=64 mean=0 min=0 max=5
+SHELL_TONE case=33 phase_idx=1 n=64 mean=0 min=0 max=4
+SHELL_TONE case=33 phase_idx=2 n=64 mean=0 min=0 max=4
+SHELL_TONE case=33 phase_idx=3 n=64 mean=0 min=0 max=3
+SHELL_TONE case=33 phase_idx=4 n=64 mean=0 min=0 max=10
+SHELL_TONE case=33 phase_idx=5 n=64 mean=0 min=0 max=8
+SHELL_TONE case=33 phase_idx=6 n=64 mean=0 min=0 max=7
+SHELL_TONE case=33 phase_idx=7 n=64 mean=0 min=0 max=9
+SHELL_TONE case=33 phase_idx=8 n=64 mean=0 min=0 max=9
+SHELL_TONE case=33 phase_idx=9 n=64 mean=0 min=0 max=8
+SHELL_TONE case=33 phase_idx=10 n=64 mean=0 min=0 max=7
+SHELL_TONE case=33 phase_idx=11 n=64 mean=0 min=0 max=9
+SHELL_TONE case=33 phase_idx=12 n=64 mean=0 min=0 max=9
+SHELL_TONE case=33 phase_idx=13 n=64 mean=0 min=0 max=13
+SHELL_TONE case=33 phase_idx=14 n=64 mean=0 min=0 max=1
+SHELL_TONE case=33 phase_idx=15 n=64 mean=0 min=0 max=2
+SHELL_TONE_CASE case=34 level=2 f_hz=1000 dbfs=-6 victim_group=1 victim_ch=3 r_src=150 below_corner=0
+SHELL_TONE case=34 phase_idx=0 n=64 mean=0 min=0 max=1
+SHELL_TONE case=34 phase_idx=1 n=64 mean=0 min=0 max=0
+SHELL_TONE case=34 phase_idx=2 n=64 mean=0 min=0 max=0
+SHELL_TONE case=34 phase_idx=3 n=64 mean=0 min=0 max=0
+SHELL_TONE case=34 phase_idx=4 n=64 mean=0 min=0 max=4
+SHELL_TONE case=34 phase_idx=5 n=64 mean=0 min=0 max=50
+SHELL_TONE case=34 phase_idx=6 n=64 mean=0 min=0 max=2
+SHELL_TONE case=34 phase_idx=7 n=64 mean=0 min=0 max=4
+SHELL_TONE case=34 phase_idx=8 n=64 mean=0 min=0 max=4
+SHELL_TONE case=34 phase_idx=9 n=64 mean=0 min=0 max=2
+SHELL_TONE case=34 phase_idx=10 n=64 mean=0 min=0 max=6
+SHELL_TONE case=34 phase_idx=11 n=64 mean=0 min=0 max=0
+SHELL_TONE case=34 phase_idx=12 n=64 mean=0 min=0 max=0
+SHELL_TONE case=34 phase_idx=13 n=64 mean=0 min=0 max=0
+SHELL_TONE case=34 phase_idx=14 n=64 mean=0 min=0 max=0
+SHELL_TONE case=34 phase_idx=15 n=64 mean=0 min=0 max=2
+SHELL_TONE_CASE case=35 level=2 f_hz=1000 dbfs=0 victim_group=0 victim_ch=8 r_src=5150 below_corner=0
+SHELL_TONE case=35 phase_idx=0 n=64 mean=32193 min=31651 max=32217
+SHELL_TONE case=35 phase_idx=1 n=64 mean=32206 min=32188 max=32475
+SHELL_TONE case=35 phase_idx=2 n=64 mean=32205 min=32187 max=32472
+SHELL_TONE case=35 phase_idx=3 n=64 mean=32203 min=32181 max=32468
+SHELL_TONE case=35 phase_idx=4 n=64 mean=32199 min=32028 max=32469
+SHELL_TONE case=35 phase_idx=5 n=64 mean=32203 min=32181 max=32479
+SHELL_TONE case=35 phase_idx=6 n=64 mean=32204 min=32178 max=32477
+SHELL_TONE case=35 phase_idx=7 n=64 mean=32203 min=32184 max=32489
+SHELL_TONE case=35 phase_idx=8 n=64 mean=32205 min=32184 max=32480
+SHELL_TONE case=35 phase_idx=9 n=64 mean=32204 min=32187 max=32475
+SHELL_TONE case=35 phase_idx=10 n=64 mean=32206 min=32182 max=32476
+SHELL_TONE case=35 phase_idx=11 n=64 mean=32203 min=32057 max=32473
+SHELL_TONE case=35 phase_idx=12 n=64 mean=32204 min=32180 max=32469
+SHELL_TONE case=35 phase_idx=13 n=64 mean=32206 min=32185 max=32479
+SHELL_TONE case=35 phase_idx=14 n=64 mean=32205 min=32187 max=32492
+SHELL_TONE case=35 phase_idx=15 n=64 mean=32200 min=32176 max=32485
+SHELL_TONE_CASE case=36 level=2 f_hz=1000 dbfs=0 victim_group=1 victim_ch=6 r_src=5150 below_corner=0
+SHELL_TONE case=36 phase_idx=0 n=64 mean=32351 min=32336 max=32364
+SHELL_TONE case=36 phase_idx=1 n=64 mean=32354 min=32339 max=32565
+SHELL_TONE case=36 phase_idx=2 n=64 mean=32355 min=32341 max=32567
+SHELL_TONE case=36 phase_idx=3 n=64 mean=32357 min=32339 max=32563
+SHELL_TONE case=36 phase_idx=4 n=64 mean=32357 min=32340 max=32569
+SHELL_TONE case=36 phase_idx=5 n=64 mean=32356 min=32341 max=32564
+SHELL_TONE case=36 phase_idx=6 n=64 mean=32356 min=32340 max=32564
+SHELL_TONE case=36 phase_idx=7 n=64 mean=32356 min=32340 max=32580
+SHELL_TONE case=36 phase_idx=8 n=64 mean=32355 min=32330 max=32581
+SHELL_TONE case=36 phase_idx=9 n=64 mean=32355 min=32337 max=32566
+SHELL_TONE case=36 phase_idx=10 n=64 mean=32356 min=32342 max=32576
+SHELL_TONE case=36 phase_idx=11 n=64 mean=32356 min=32341 max=32565
+SHELL_TONE case=36 phase_idx=12 n=64 mean=32355 min=32341 max=32555
+SHELL_TONE case=36 phase_idx=13 n=64 mean=32355 min=32338 max=32564
+SHELL_TONE case=36 phase_idx=14 n=64 mean=32355 min=32340 max=32563
+SHELL_TONE case=36 phase_idx=15 n=64 mean=32349 min=32330 max=32561
+SHELL_TONE_CASE case=37 level=2 f_hz=1000 dbfs=0 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE case=37 phase_idx=0 n=64 mean=32756 min=32741 max=32784
+SHELL_TONE case=37 phase_idx=1 n=64 mean=32755 min=32741 max=32773
+SHELL_TONE case=37 phase_idx=2 n=64 mean=32754 min=32738 max=32770
+SHELL_TONE case=37 phase_idx=3 n=64 mean=32757 min=32743 max=32777
+SHELL_TONE case=37 phase_idx=4 n=64 mean=32754 min=32738 max=32775
+SHELL_TONE case=37 phase_idx=5 n=64 mean=32756 min=32743 max=32774
+SHELL_TONE case=37 phase_idx=6 n=64 mean=32753 min=32735 max=32775
+SHELL_TONE case=37 phase_idx=7 n=64 mean=32754 min=32742 max=32772
+SHELL_TONE case=37 phase_idx=8 n=64 mean=32752 min=32735 max=32774
+SHELL_TONE case=37 phase_idx=9 n=64 mean=32754 min=32741 max=32776
+SHELL_TONE case=37 phase_idx=10 n=64 mean=32752 min=32737 max=32773
+SHELL_TONE case=37 phase_idx=11 n=64 mean=32753 min=32738 max=32776
+SHELL_TONE case=37 phase_idx=12 n=64 mean=32754 min=32662 max=32774
+SHELL_TONE case=37 phase_idx=13 n=64 mean=32755 min=32743 max=32780
+SHELL_TONE case=37 phase_idx=14 n=64 mean=32756 min=32742 max=32778
+SHELL_TONE case=37 phase_idx=15 n=64 mean=32749 min=32732 max=32774
+SHELL_TONE_CASE case=38 level=2 f_hz=1000 dbfs=0 victim_group=0 victim_ch=10 r_src=150 below_corner=0
+SHELL_TONE case=38 phase_idx=0 n=64 mean=0 min=0 max=7
+SHELL_TONE case=38 phase_idx=1 n=64 mean=0 min=0 max=1
+SHELL_TONE case=38 phase_idx=2 n=64 mean=0 min=0 max=8
+SHELL_TONE case=38 phase_idx=3 n=64 mean=0 min=0 max=10
+SHELL_TONE case=38 phase_idx=4 n=64 mean=0 min=0 max=3
+SHELL_TONE case=38 phase_idx=5 n=64 mean=0 min=0 max=12
+SHELL_TONE case=38 phase_idx=6 n=64 mean=0 min=0 max=10
+SHELL_TONE case=38 phase_idx=7 n=64 mean=0 min=0 max=9
+SHELL_TONE case=38 phase_idx=8 n=64 mean=0 min=0 max=8
+SHELL_TONE case=38 phase_idx=9 n=64 mean=0 min=0 max=2
+SHELL_TONE case=38 phase_idx=10 n=64 mean=0 min=0 max=8
+SHELL_TONE case=38 phase_idx=11 n=64 mean=0 min=0 max=11
+SHELL_TONE case=38 phase_idx=12 n=64 mean=0 min=0 max=4
+SHELL_TONE case=38 phase_idx=13 n=64 mean=0 min=0 max=5
+SHELL_TONE case=38 phase_idx=14 n=64 mean=0 min=0 max=5
+SHELL_TONE case=38 phase_idx=15 n=64 mean=0 min=0 max=6
+SHELL_TONE_CASE case=39 level=2 f_hz=1000 dbfs=0 victim_group=1 victim_ch=3 r_src=150 below_corner=0
+SHELL_TONE case=39 phase_idx=0 n=64 mean=0 min=0 max=0
+SHELL_TONE case=39 phase_idx=1 n=64 mean=0 min=0 max=0
+SHELL_TONE case=39 phase_idx=2 n=64 mean=0 min=0 max=3
+SHELL_TONE case=39 phase_idx=3 n=64 mean=0 min=0 max=2
+SHELL_TONE case=39 phase_idx=4 n=64 mean=0 min=0 max=2
+SHELL_TONE case=39 phase_idx=5 n=64 mean=0 min=0 max=1
+SHELL_TONE case=39 phase_idx=6 n=64 mean=0 min=0 max=0
+SHELL_TONE case=39 phase_idx=7 n=64 mean=0 min=0 max=0
+SHELL_TONE case=39 phase_idx=8 n=64 mean=0 min=0 max=4
+SHELL_TONE case=39 phase_idx=9 n=64 mean=0 min=0 max=4
+SHELL_TONE case=39 phase_idx=10 n=64 mean=0 min=0 max=0
+SHELL_TONE case=39 phase_idx=11 n=64 mean=0 min=0 max=0
+SHELL_TONE case=39 phase_idx=12 n=64 mean=0 min=0 max=2
+SHELL_TONE case=39 phase_idx=13 n=64 mean=0 min=0 max=18
+SHELL_TONE case=39 phase_idx=14 n=64 mean=0 min=0 max=0
+SHELL_TONE case=39 phase_idx=15 n=64 mean=0 min=0 max=0
+SHELL_TONE_CASE case=40 level=2 f_hz=5000 dbfs=-20 victim_group=0 victim_ch=8 r_src=5150 below_corner=0
+SHELL_TONE case=40 phase_idx=0 n=64 mean=32426 min=31661 max=32456
+SHELL_TONE case=40 phase_idx=1 n=64 mean=32438 min=32410 max=32502
+SHELL_TONE case=40 phase_idx=2 n=64 mean=32437 min=32417 max=32460
+SHELL_TONE case=40 phase_idx=3 n=64 mean=32440 min=32420 max=32464
+SHELL_TONE case=40 phase_idx=4 n=64 mean=32437 min=32358 max=32461
+SHELL_TONE case=40 phase_idx=5 n=64 mean=32437 min=32415 max=32456
+SHELL_TONE case=40 phase_idx=6 n=64 mean=32439 min=32418 max=32454
+SHELL_TONE case=40 phase_idx=7 n=64 mean=32434 min=32294 max=32458
+SHELL_TONE case=40 phase_idx=8 n=64 mean=32438 min=32414 max=32464
+SHELL_TONE case=40 phase_idx=9 n=64 mean=32438 min=32421 max=32457
+SHELL_TONE case=40 phase_idx=10 n=64 mean=32439 min=32412 max=32462
+SHELL_TONE case=40 phase_idx=11 n=64 mean=32437 min=32417 max=32452
+SHELL_TONE case=40 phase_idx=12 n=64 mean=32437 min=32414 max=32460
+SHELL_TONE case=40 phase_idx=13 n=64 mean=32434 min=32254 max=32460
+SHELL_TONE case=40 phase_idx=14 n=64 mean=32439 min=32421 max=32468
+SHELL_TONE case=40 phase_idx=15 n=64 mean=32436 min=32410 max=32452
+SHELL_TONE_CASE case=41 level=2 f_hz=5000 dbfs=-20 victim_group=1 victim_ch=6 r_src=5150 below_corner=0
+SHELL_TONE case=41 phase_idx=0 n=64 mean=32533 min=32469 max=32553
+SHELL_TONE case=41 phase_idx=1 n=64 mean=32534 min=32522 max=32585
+SHELL_TONE case=41 phase_idx=2 n=64 mean=32535 min=32522 max=32552
+SHELL_TONE case=41 phase_idx=3 n=64 mean=32532 min=32519 max=32555
+SHELL_TONE case=41 phase_idx=4 n=64 mean=32535 min=32521 max=32549
+SHELL_TONE case=41 phase_idx=5 n=64 mean=32535 min=32522 max=32548
+SHELL_TONE case=41 phase_idx=6 n=64 mean=32535 min=32517 max=32549
+SHELL_TONE case=41 phase_idx=7 n=64 mean=32535 min=32523 max=32546
+SHELL_TONE case=41 phase_idx=8 n=64 mean=32535 min=32522 max=32551
+SHELL_TONE case=41 phase_idx=9 n=64 mean=32535 min=32521 max=32549
+SHELL_TONE case=41 phase_idx=10 n=64 mean=32535 min=32523 max=32550
+SHELL_TONE case=41 phase_idx=11 n=64 mean=32535 min=32521 max=32548
+SHELL_TONE case=41 phase_idx=12 n=64 mean=32535 min=32524 max=32549
+SHELL_TONE case=41 phase_idx=13 n=64 mean=32535 min=32509 max=32566
+SHELL_TONE case=41 phase_idx=14 n=64 mean=32536 min=32511 max=32562
+SHELL_TONE case=41 phase_idx=15 n=64 mean=32534 min=32515 max=32553
+SHELL_TONE_CASE case=42 level=2 f_hz=5000 dbfs=-20 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE case=42 phase_idx=0 n=64 mean=32757 min=32737 max=32776
+SHELL_TONE case=42 phase_idx=1 n=64 mean=32755 min=32735 max=32781
+SHELL_TONE case=42 phase_idx=2 n=64 mean=32757 min=32740 max=32780
+SHELL_TONE case=42 phase_idx=3 n=64 mean=32759 min=32743 max=32778
+SHELL_TONE case=42 phase_idx=4 n=64 mean=32758 min=32739 max=32776
+SHELL_TONE case=42 phase_idx=5 n=64 mean=32757 min=32741 max=32778
+SHELL_TONE case=42 phase_idx=6 n=64 mean=32758 min=32744 max=32776
+SHELL_TONE case=42 phase_idx=7 n=64 mean=32757 min=32740 max=32772
+SHELL_TONE case=42 phase_idx=8 n=64 mean=32757 min=32744 max=32772
+SHELL_TONE case=42 phase_idx=9 n=64 mean=32756 min=32741 max=32775
+SHELL_TONE case=42 phase_idx=10 n=64 mean=32757 min=32742 max=32775
+SHELL_TONE case=42 phase_idx=11 n=64 mean=32758 min=32743 max=32780
+SHELL_TONE case=42 phase_idx=12 n=64 mean=32756 min=32739 max=32773
+SHELL_TONE case=42 phase_idx=13 n=64 mean=32756 min=32739 max=32780
+SHELL_TONE case=42 phase_idx=14 n=64 mean=32757 min=32734 max=32777
+SHELL_TONE case=42 phase_idx=15 n=64 mean=32755 min=32738 max=32777
+SHELL_TONE_CASE case=43 level=2 f_hz=5000 dbfs=-20 victim_group=0 victim_ch=10 r_src=150 below_corner=0
+SHELL_TONE case=43 phase_idx=0 n=64 mean=0 min=0 max=1
+SHELL_TONE case=43 phase_idx=1 n=64 mean=0 min=0 max=9
+SHELL_TONE case=43 phase_idx=2 n=64 mean=0 min=0 max=9
+SHELL_TONE case=43 phase_idx=3 n=64 mean=0 min=0 max=6
+SHELL_TONE case=43 phase_idx=4 n=64 mean=0 min=0 max=5
+SHELL_TONE case=43 phase_idx=5 n=64 mean=0 min=0 max=10
+SHELL_TONE case=43 phase_idx=6 n=64 mean=0 min=0 max=8
+SHELL_TONE case=43 phase_idx=7 n=64 mean=0 min=0 max=4
+SHELL_TONE case=43 phase_idx=8 n=64 mean=0 min=0 max=10
+SHELL_TONE case=43 phase_idx=9 n=64 mean=0 min=0 max=9
+SHELL_TONE case=43 phase_idx=10 n=64 mean=0 min=0 max=2
+SHELL_TONE case=43 phase_idx=11 n=64 mean=0 min=0 max=28
+SHELL_TONE case=43 phase_idx=12 n=64 mean=0 min=0 max=5
+SHELL_TONE case=43 phase_idx=13 n=64 mean=0 min=0 max=10
+SHELL_TONE case=43 phase_idx=14 n=64 mean=0 min=0 max=4
+SHELL_TONE case=43 phase_idx=15 n=64 mean=0 min=0 max=5
+SHELL_TONE_CASE case=44 level=2 f_hz=5000 dbfs=-20 victim_group=1 victim_ch=3 r_src=150 below_corner=0
+SHELL_TONE case=44 phase_idx=0 n=64 mean=0 min=0 max=0
+SHELL_TONE case=44 phase_idx=1 n=64 mean=0 min=0 max=0
+SHELL_TONE case=44 phase_idx=2 n=64 mean=0 min=0 max=1
+SHELL_TONE case=44 phase_idx=3 n=64 mean=0 min=0 max=2
+SHELL_TONE case=44 phase_idx=4 n=64 mean=0 min=0 max=2
+SHELL_TONE case=44 phase_idx=5 n=64 mean=0 min=0 max=1
+SHELL_TONE case=44 phase_idx=6 n=64 mean=0 min=0 max=0
+SHELL_TONE case=44 phase_idx=7 n=64 mean=0 min=0 max=4
+SHELL_TONE case=44 phase_idx=8 n=64 mean=0 min=0 max=0
+SHELL_TONE case=44 phase_idx=9 n=64 mean=0 min=0 max=1
+SHELL_TONE case=44 phase_idx=10 n=64 mean=0 min=0 max=0
+SHELL_TONE case=44 phase_idx=11 n=64 mean=0 min=0 max=0
+SHELL_TONE case=44 phase_idx=12 n=64 mean=0 min=0 max=0
+SHELL_TONE case=44 phase_idx=13 n=64 mean=0 min=0 max=0
+SHELL_TONE case=44 phase_idx=14 n=64 mean=0 min=0 max=0
+SHELL_TONE case=44 phase_idx=15 n=64 mean=0 min=0 max=0
+SHELL_TONE_CASE case=45 level=2 f_hz=5000 dbfs=-6 victim_group=0 victim_ch=8 r_src=5150 below_corner=0
+SHELL_TONE case=45 phase_idx=0 n=64 mean=32425 min=31660 max=32464
+SHELL_TONE case=45 phase_idx=1 n=64 mean=32436 min=32411 max=32485
+SHELL_TONE case=45 phase_idx=2 n=64 mean=32439 min=32422 max=32456
+SHELL_TONE case=45 phase_idx=3 n=64 mean=32437 min=32421 max=32457
+SHELL_TONE case=45 phase_idx=4 n=64 mean=32437 min=32413 max=32461
+SHELL_TONE case=45 phase_idx=5 n=64 mean=32437 min=32362 max=32455
+SHELL_TONE case=45 phase_idx=6 n=64 mean=32438 min=32417 max=32456
+SHELL_TONE case=45 phase_idx=7 n=64 mean=32439 min=32414 max=32460
+SHELL_TONE case=45 phase_idx=8 n=64 mean=32437 min=32421 max=32458
+SHELL_TONE case=45 phase_idx=9 n=64 mean=32438 min=32420 max=32465
+SHELL_TONE case=45 phase_idx=10 n=64 mean=32439 min=32420 max=32456
+SHELL_TONE case=45 phase_idx=11 n=64 mean=32439 min=32421 max=32457
+SHELL_TONE case=45 phase_idx=12 n=64 mean=32439 min=32417 max=32454
+SHELL_TONE case=45 phase_idx=13 n=64 mean=32437 min=32406 max=32456
+SHELL_TONE case=45 phase_idx=14 n=64 mean=32437 min=32403 max=32458
+SHELL_TONE case=45 phase_idx=15 n=64 mean=32438 min=32411 max=32463
+SHELL_TONE_CASE case=46 level=2 f_hz=5000 dbfs=-6 victim_group=1 victim_ch=6 r_src=5150 below_corner=0
+SHELL_TONE case=46 phase_idx=0 n=64 mean=32534 min=32478 max=32550
+SHELL_TONE case=46 phase_idx=1 n=64 mean=32534 min=32515 max=32549
+SHELL_TONE case=46 phase_idx=2 n=64 mean=32536 min=32521 max=32575
+SHELL_TONE case=46 phase_idx=3 n=64 mean=32534 min=32522 max=32548
+SHELL_TONE case=46 phase_idx=4 n=64 mean=32535 min=32523 max=32552
+SHELL_TONE case=46 phase_idx=5 n=64 mean=32534 min=32519 max=32549
+SHELL_TONE case=46 phase_idx=6 n=64 mean=32535 min=32519 max=32548
+SHELL_TONE case=46 phase_idx=7 n=64 mean=32534 min=32523 max=32548
+SHELL_TONE case=46 phase_idx=8 n=64 mean=32535 min=32520 max=32552
+SHELL_TONE case=46 phase_idx=9 n=64 mean=32535 min=32519 max=32548
+SHELL_TONE case=46 phase_idx=10 n=64 mean=32535 min=32521 max=32548
+SHELL_TONE case=46 phase_idx=11 n=64 mean=32535 min=32521 max=32549
+SHELL_TONE case=46 phase_idx=12 n=64 mean=32534 min=32520 max=32548
+SHELL_TONE case=46 phase_idx=13 n=64 mean=32533 min=32505 max=32559
+SHELL_TONE case=46 phase_idx=14 n=64 mean=32535 min=32516 max=32557
+SHELL_TONE case=46 phase_idx=15 n=64 mean=32535 min=32516 max=32548
+SHELL_TONE_CASE case=47 level=2 f_hz=5000 dbfs=-6 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE case=47 phase_idx=0 n=64 mean=32756 min=32738 max=32784
+SHELL_TONE case=47 phase_idx=1 n=64 mean=32756 min=32739 max=32772
+SHELL_TONE case=47 phase_idx=2 n=64 mean=32757 min=32739 max=32776
+SHELL_TONE case=47 phase_idx=3 n=64 mean=32756 min=32741 max=32770
+SHELL_TONE case=47 phase_idx=4 n=64 mean=32756 min=32739 max=32773
+SHELL_TONE case=47 phase_idx=5 n=64 mean=32757 min=32738 max=32775
+SHELL_TONE case=47 phase_idx=6 n=64 mean=32758 min=32739 max=32778
+SHELL_TONE case=47 phase_idx=7 n=64 mean=32756 min=32743 max=32773
+SHELL_TONE case=47 phase_idx=8 n=64 mean=32757 min=32734 max=32776
+SHELL_TONE case=47 phase_idx=9 n=64 mean=32758 min=32742 max=32776
+SHELL_TONE case=47 phase_idx=10 n=64 mean=32757 min=32739 max=32780
+SHELL_TONE case=47 phase_idx=11 n=64 mean=32756 min=32742 max=32772
+SHELL_TONE case=47 phase_idx=12 n=64 mean=32757 min=32742 max=32773
+SHELL_TONE case=47 phase_idx=13 n=64 mean=32757 min=32742 max=32776
+SHELL_TONE case=47 phase_idx=14 n=64 mean=32758 min=32747 max=32778
+SHELL_TONE case=47 phase_idx=15 n=64 mean=32758 min=32740 max=32773
+SHELL_TONE_CASE case=48 level=2 f_hz=5000 dbfs=-6 victim_group=0 victim_ch=10 r_src=150 below_corner=0
+SHELL_TONE case=48 phase_idx=0 n=64 mean=0 min=0 max=4
+SHELL_TONE case=48 phase_idx=1 n=64 mean=0 min=0 max=4
+SHELL_TONE case=48 phase_idx=2 n=64 mean=0 min=0 max=5
+SHELL_TONE case=48 phase_idx=3 n=64 mean=0 min=0 max=8
+SHELL_TONE case=48 phase_idx=4 n=64 mean=0 min=0 max=3
+SHELL_TONE case=48 phase_idx=5 n=64 mean=0 min=0 max=4
+SHELL_TONE case=48 phase_idx=6 n=64 mean=0 min=0 max=5
+SHELL_TONE case=48 phase_idx=7 n=64 mean=0 min=0 max=4
+SHELL_TONE case=48 phase_idx=8 n=64 mean=0 min=0 max=5
+SHELL_TONE case=48 phase_idx=9 n=64 mean=0 min=0 max=9
+SHELL_TONE case=48 phase_idx=10 n=64 mean=0 min=0 max=4
+SHELL_TONE case=48 phase_idx=11 n=64 mean=0 min=0 max=5
+SHELL_TONE case=48 phase_idx=12 n=64 mean=0 min=0 max=8
+SHELL_TONE case=48 phase_idx=13 n=64 mean=0 min=0 max=5
+SHELL_TONE case=48 phase_idx=14 n=64 mean=0 min=0 max=8
+SHELL_TONE case=48 phase_idx=15 n=64 mean=0 min=0 max=2
+SHELL_TONE_CASE case=49 level=2 f_hz=5000 dbfs=-6 victim_group=1 victim_ch=3 r_src=150 below_corner=0
+SHELL_TONE case=49 phase_idx=0 n=64 mean=0 min=0 max=1
+SHELL_TONE case=49 phase_idx=1 n=64 mean=0 min=0 max=1
+SHELL_TONE case=49 phase_idx=2 n=64 mean=0 min=0 max=0
+SHELL_TONE case=49 phase_idx=3 n=64 mean=0 min=0 max=1
+SHELL_TONE case=49 phase_idx=4 n=64 mean=0 min=0 max=1
+SHELL_TONE case=49 phase_idx=5 n=64 mean=0 min=0 max=0
+SHELL_TONE case=49 phase_idx=6 n=64 mean=0 min=0 max=40
+SHELL_TONE case=49 phase_idx=7 n=64 mean=0 min=0 max=1
+SHELL_TONE case=49 phase_idx=8 n=64 mean=0 min=0 max=2
+SHELL_TONE case=49 phase_idx=9 n=64 mean=0 min=0 max=1
+SHELL_TONE case=49 phase_idx=10 n=64 mean=0 min=0 max=1
+SHELL_TONE case=49 phase_idx=11 n=64 mean=0 min=0 max=0
+SHELL_TONE case=49 phase_idx=12 n=64 mean=0 min=0 max=1
+SHELL_TONE case=49 phase_idx=13 n=64 mean=0 min=0 max=0
+SHELL_TONE case=49 phase_idx=14 n=64 mean=0 min=0 max=0
+SHELL_TONE case=49 phase_idx=15 n=64 mean=0 min=0 max=1
+SHELL_TONE_CASE case=50 level=2 f_hz=5000 dbfs=0 victim_group=0 victim_ch=8 r_src=5150 below_corner=0
+SHELL_TONE case=50 phase_idx=0 n=64 mean=32424 min=31650 max=32457
+SHELL_TONE case=50 phase_idx=1 n=64 mean=32437 min=32412 max=32476
+SHELL_TONE case=50 phase_idx=2 n=64 mean=32439 min=32419 max=32496
+SHELL_TONE case=50 phase_idx=3 n=64 mean=32437 min=32420 max=32460
+SHELL_TONE case=50 phase_idx=4 n=64 mean=32438 min=32416 max=32472
+SHELL_TONE case=50 phase_idx=5 n=64 mean=32437 min=32419 max=32458
+SHELL_TONE case=50 phase_idx=6 n=64 mean=32434 min=32278 max=32456
+SHELL_TONE case=50 phase_idx=7 n=64 mean=32438 min=32419 max=32466
+SHELL_TONE case=50 phase_idx=8 n=64 mean=32439 min=32418 max=32457
+SHELL_TONE case=50 phase_idx=9 n=64 mean=32437 min=32416 max=32457
+SHELL_TONE case=50 phase_idx=10 n=64 mean=32437 min=32420 max=32458
+SHELL_TONE case=50 phase_idx=11 n=64 mean=32438 min=32418 max=32453
+SHELL_TONE case=50 phase_idx=12 n=64 mean=32438 min=32413 max=32457
+SHELL_TONE case=50 phase_idx=13 n=64 mean=32434 min=32401 max=32458
+SHELL_TONE case=50 phase_idx=14 n=64 mean=32435 min=32405 max=32460
+SHELL_TONE case=50 phase_idx=15 n=64 mean=32436 min=32375 max=32460
+SHELL_TONE_CASE case=51 level=2 f_hz=5000 dbfs=0 victim_group=1 victim_ch=6 r_src=5150 below_corner=0
+SHELL_TONE case=51 phase_idx=0 n=64 mean=32535 min=32519 max=32548
+SHELL_TONE case=51 phase_idx=1 n=64 mean=32534 min=32516 max=32548
+SHELL_TONE case=51 phase_idx=2 n=64 mean=32534 min=32523 max=32553
+SHELL_TONE case=51 phase_idx=3 n=64 mean=32534 min=32521 max=32547
+SHELL_TONE case=51 phase_idx=4 n=64 mean=32534 min=32520 max=32549
+SHELL_TONE case=51 phase_idx=5 n=64 mean=32534 min=32522 max=32551
+SHELL_TONE case=51 phase_idx=6 n=64 mean=32534 min=32520 max=32552
+SHELL_TONE case=51 phase_idx=7 n=64 mean=32535 min=32511 max=32553
+SHELL_TONE case=51 phase_idx=8 n=64 mean=32535 min=32522 max=32552
+SHELL_TONE case=51 phase_idx=9 n=64 mean=32533 min=32486 max=32548
+SHELL_TONE case=51 phase_idx=10 n=64 mean=32536 min=32524 max=32552
+SHELL_TONE case=51 phase_idx=11 n=64 mean=32534 min=32519 max=32556
+SHELL_TONE case=51 phase_idx=12 n=64 mean=32535 min=32521 max=32546
+SHELL_TONE case=51 phase_idx=13 n=64 mean=32535 min=32507 max=32574
+SHELL_TONE case=51 phase_idx=14 n=64 mean=32533 min=32516 max=32549
+SHELL_TONE case=51 phase_idx=15 n=64 mean=32532 min=32516 max=32548
+SHELL_TONE_CASE case=52 level=2 f_hz=5000 dbfs=0 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE case=52 phase_idx=0 n=64 mean=32758 min=32742 max=32784
+SHELL_TONE case=52 phase_idx=1 n=64 mean=32755 min=32728 max=32772
+SHELL_TONE case=52 phase_idx=2 n=64 mean=32759 min=32744 max=32776
+SHELL_TONE case=52 phase_idx=3 n=64 mean=32757 min=32741 max=32774
+SHELL_TONE case=52 phase_idx=4 n=64 mean=32757 min=32741 max=32777
+SHELL_TONE case=52 phase_idx=5 n=64 mean=32756 min=32731 max=32772
+SHELL_TONE case=52 phase_idx=6 n=64 mean=32757 min=32743 max=32771
+SHELL_TONE case=52 phase_idx=7 n=64 mean=32756 min=32743 max=32772
+SHELL_TONE case=52 phase_idx=8 n=64 mean=32757 min=32745 max=32778
+SHELL_TONE case=52 phase_idx=9 n=64 mean=32758 min=32737 max=32778
+SHELL_TONE case=52 phase_idx=10 n=64 mean=32757 min=32745 max=32774
+SHELL_TONE case=52 phase_idx=11 n=64 mean=32754 min=32737 max=32772
+SHELL_TONE case=52 phase_idx=12 n=64 mean=32757 min=32740 max=32777
+SHELL_TONE case=52 phase_idx=13 n=64 mean=32757 min=32735 max=32776
+SHELL_TONE case=52 phase_idx=14 n=64 mean=32757 min=32738 max=32775
+SHELL_TONE case=52 phase_idx=15 n=64 mean=32757 min=32740 max=32778
+SHELL_TONE_CASE case=53 level=2 f_hz=5000 dbfs=0 victim_group=0 victim_ch=10 r_src=150 below_corner=0
+SHELL_TONE case=53 phase_idx=0 n=64 mean=0 min=0 max=4
+SHELL_TONE case=53 phase_idx=1 n=64 mean=0 min=0 max=8
+SHELL_TONE case=53 phase_idx=2 n=64 mean=0 min=0 max=10
+SHELL_TONE case=53 phase_idx=3 n=64 mean=0 min=0 max=9
+SHELL_TONE case=53 phase_idx=4 n=64 mean=0 min=0 max=2
+SHELL_TONE case=53 phase_idx=5 n=64 mean=0 min=0 max=8
+SHELL_TONE case=53 phase_idx=6 n=64 mean=0 min=0 max=6
+SHELL_TONE case=53 phase_idx=7 n=64 mean=0 min=0 max=10
+SHELL_TONE case=53 phase_idx=8 n=64 mean=0 min=0 max=5
+SHELL_TONE case=53 phase_idx=9 n=64 mean=0 min=0 max=8
+SHELL_TONE case=53 phase_idx=10 n=64 mean=0 min=0 max=6
+SHELL_TONE case=53 phase_idx=11 n=64 mean=0 min=0 max=8
+SHELL_TONE case=53 phase_idx=12 n=64 mean=0 min=0 max=11
+SHELL_TONE case=53 phase_idx=13 n=64 mean=0 min=0 max=4
+SHELL_TONE case=53 phase_idx=14 n=64 mean=0 min=0 max=0
+SHELL_TONE case=53 phase_idx=15 n=64 mean=0 min=0 max=3
+SHELL_TONE_CASE case=54 level=2 f_hz=5000 dbfs=0 victim_group=1 victim_ch=3 r_src=150 below_corner=0
+SHELL_TONE case=54 phase_idx=0 n=64 mean=0 min=0 max=2
+SHELL_TONE case=54 phase_idx=1 n=64 mean=0 min=0 max=2
+SHELL_TONE case=54 phase_idx=2 n=64 mean=0 min=0 max=0
+SHELL_TONE case=54 phase_idx=3 n=64 mean=0 min=0 max=0
+SHELL_TONE case=54 phase_idx=4 n=64 mean=0 min=0 max=0
+SHELL_TONE case=54 phase_idx=5 n=64 mean=0 min=0 max=0
+SHELL_TONE case=54 phase_idx=6 n=64 mean=0 min=0 max=0
+SHELL_TONE case=54 phase_idx=7 n=64 mean=0 min=0 max=11
+SHELL_TONE case=54 phase_idx=8 n=64 mean=0 min=0 max=2
+SHELL_TONE case=54 phase_idx=9 n=64 mean=0 min=0 max=4
+SHELL_TONE case=54 phase_idx=10 n=64 mean=0 min=0 max=1
+SHELL_TONE case=54 phase_idx=11 n=64 mean=0 min=0 max=0
+SHELL_TONE case=54 phase_idx=12 n=64 mean=0 min=0 max=0
+SHELL_TONE case=54 phase_idx=13 n=64 mean=0 min=0 max=1
+SHELL_TONE case=54 phase_idx=14 n=64 mean=0 min=0 max=1
+SHELL_TONE case=54 phase_idx=15 n=64 mean=0 min=0 max=2
+SHELL_TONE_CASE case=55 level=2 f_hz=0 dbfs=-6 victim_group=0 victim_ch=8 r_src=5150 below_corner=0
+SHELL_TONE_LEVEL case=55 level=2 victim_group=0 victim_ch=8 r_src=5150 n=64 mean=32512 min=31644 max=32552 audio_virgin=0
+SHELL_TONE_STAT case=55 settled_mean_spread=14 widest_sample_band=900
+SHELL_TONE_CASE case=56 level=2 f_hz=0 dbfs=-6 victim_group=1 victim_ch=6 r_src=5150 below_corner=0
+SHELL_TONE_LEVEL case=56 level=2 victim_group=1 victim_ch=6 r_src=5150 n=64 mean=32608 min=32420 max=32638 audio_virgin=0
+SHELL_TONE_STAT case=56 settled_mean_spread=6 widest_sample_band=198
+SHELL_TONE_CASE case=57 level=2 f_hz=0 dbfs=-6 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE_LEVEL case=57 level=2 victim_group=0 victim_ch=9 r_src=650 n=64 mean=32764 min=32621 max=32796 audio_virgin=0
+SHELL_TONE_STAT case=57 settled_mean_spread=5 widest_sample_band=157
+SHELL_TONE_CASE case=58 level=2 f_hz=0 dbfs=-6 victim_group=0 victim_ch=10 r_src=150 below_corner=0
+SHELL_TONE_LEVEL case=58 level=2 victim_group=0 victim_ch=10 r_src=150 n=64 mean=0 min=0 max=29 audio_virgin=0
+SHELL_TONE_STAT case=58 settled_mean_spread=0 widest_sample_band=29
+SHELL_TONE_CASE case=59 level=2 f_hz=0 dbfs=-6 victim_group=1 victim_ch=3 r_src=150 below_corner=0
+SHELL_TONE_LEVEL case=59 level=2 victim_group=1 victim_ch=3 r_src=150 n=64 mean=0 min=0 max=4 audio_virgin=0
+SHELL_TONE_STAT case=59 settled_mean_spread=0 widest_sample_band=4
+SHELL_TONE_SPAN zero=0 rail=65532 hi_spread=0 lo_spread=0 valid=1
+SHELL_TONE_G5 victim_group=0 victim_ch=8 expect=2 mean=32514 ok=1
+SHELL_TONE_G5 victim_group=1 victim_ch=6 expect=2 mean=32609 ok=1
+SHELL_TONE_G5 victim_group=0 victim_ch=9 expect=2 mean=32766 ok=1
+SHELL_TONE_G5 victim_group=0 victim_ch=10 expect=0 mean=0 ok=1
+SHELL_TONE_G5 victim_group=1 victim_ch=3 expect=0 mean=0 ok=1
+SHELL_TONE_WINDOW window_ns=63047 nominal_ns=63050 grid_end_ns=12800 fits=1
+SHELL_TONE_WINCASE case=0 xtalk_case=10 victim_group=0 victim_ch=8 r_src=5150 word_a=8 word_b=40 codec=0
+SHELL_TONE_WIN case=0 d_before_end_ns=0 n=64 mean=32760 min=32700 max=32788
+SHELL_TONE_WIN case=0 d_before_end_ns=200 n=64 mean=32763 min=32714 max=32822
+SHELL_TONE_WIN case=0 d_before_end_ns=400 n=64 mean=32763 min=32715 max=32795
+SHELL_TONE_WIN case=0 d_before_end_ns=600 n=64 mean=32760 min=32723 max=32795
+SHELL_TONE_WIN case=0 d_before_end_ns=800 n=64 mean=32758 min=32710 max=32789
+SHELL_TONE_WIN case=0 d_before_end_ns=1000 n=64 mean=32757 min=32713 max=32812
+SHELL_TONE_WIN case=0 d_before_end_ns=1200 n=64 mean=32755 min=32728 max=32776
+SHELL_TONE_WIN case=0 d_before_end_ns=1400 n=64 mean=32756 min=32609 max=32805
+SHELL_TONE_WIN case=0 d_before_end_ns=1600 n=64 mean=32758 min=32734 max=32803
+SHELL_TONE_WIN case=0 d_before_end_ns=1800 n=64 mean=32754 min=32714 max=32777
+SHELL_TONE_WIN case=0 d_before_end_ns=2000 n=64 mean=32753 min=32726 max=32780
+SHELL_TONE_WIN case=0 d_before_end_ns=2200 n=64 mean=32752 min=32700 max=32773
+SHELL_TONE_WIN case=0 d_before_end_ns=2400 n=64 mean=32753 min=32741 max=32769
+SHELL_TONE_WIN case=0 d_before_end_ns=2600 n=64 mean=32753 min=32735 max=32770
+SHELL_TONE_WIN case=0 d_before_end_ns=2800 n=64 mean=32754 min=32696 max=32771
+SHELL_TONE_WIN case=0 d_before_end_ns=3000 n=64 mean=32753 min=32731 max=32776
+SHELL_TONE_WIN case=0 d_before_end_ns=3200 n=64 mean=32751 min=32736 max=32769
+SHELL_TONE_WIN case=0 d_before_end_ns=3400 n=64 mean=32753 min=32743 max=32766
+SHELL_TONE_WIN case=0 d_before_end_ns=3600 n=64 mean=32752 min=32730 max=32765
+SHELL_TONE_WIN case=0 d_before_end_ns=3800 n=64 mean=32751 min=32739 max=32764
+SHELL_TONE_WIN case=0 d_before_end_ns=4000 n=64 mean=32752 min=32741 max=32768
+SHELL_TONE_WIN case=0 d_before_end_ns=4200 n=64 mean=32752 min=32740 max=32772
+SHELL_TONE_WIN case=0 d_before_end_ns=4400 n=64 mean=32752 min=32739 max=32770
+SHELL_TONE_WIN case=0 d_before_end_ns=4600 n=64 mean=32752 min=32735 max=32766
+SHELL_TONE_WIN case=0 d_before_end_ns=4800 n=64 mean=32750 min=32732 max=32773
+SHELL_TONE_WIN case=0 d_before_end_ns=5000 n=64 mean=32751 min=32738 max=32761
+SHELL_TONE_WIN case=0 d_before_end_ns=5200 n=64 mean=32750 min=32735 max=32764
+SHELL_TONE_WIN case=0 d_before_end_ns=5400 n=64 mean=32749 min=32738 max=32767
+SHELL_TONE_WIN case=0 d_before_end_ns=5600 n=64 mean=32750 min=32735 max=32766
+SHELL_TONE_WIN case=0 d_before_end_ns=5800 n=64 mean=32751 min=32739 max=32768
+SHELL_TONE_WIN case=0 d_before_end_ns=6000 n=64 mean=32750 min=32732 max=32769
+SHELL_TONE_WIN case=0 d_before_end_ns=6200 n=64 mean=32750 min=32737 max=32769
+SHELL_TONE_WIN case=0 d_before_end_ns=6400 n=64 mean=32751 min=32734 max=32766
+SHELL_TONE_WIN case=0 d_before_end_ns=6600 n=64 mean=32751 min=32731 max=32769
+SHELL_TONE_WIN case=0 d_before_end_ns=6800 n=64 mean=32750 min=32735 max=32766
+SHELL_TONE_WIN case=0 d_before_end_ns=7000 n=64 mean=32750 min=32740 max=32769
+SHELL_TONE_WIN case=0 d_before_end_ns=7200 n=64 mean=32753 min=32738 max=32768
+SHELL_TONE_WIN case=0 d_before_end_ns=7400 n=64 mean=32752 min=32739 max=32772
+SHELL_TONE_WIN case=0 d_before_end_ns=7600 n=64 mean=32752 min=32739 max=32774
+SHELL_TONE_WIN case=0 d_before_end_ns=7800 n=64 mean=32755 min=32738 max=32772
+SHELL_TONE_WIN case=0 d_before_end_ns=8000 n=64 mean=32753 min=32739 max=32767
+SHELL_TONE_WIN case=0 d_before_end_ns=8200 n=64 mean=32753 min=32739 max=32772
+SHELL_TONE_WIN case=0 d_before_end_ns=8400 n=64 mean=32754 min=32740 max=32767
+SHELL_TONE_WIN case=0 d_before_end_ns=8600 n=64 mean=32755 min=32737 max=32774
+SHELL_TONE_WIN case=0 d_before_end_ns=8800 n=64 mean=32755 min=32741 max=32769
+SHELL_TONE_WIN case=0 d_before_end_ns=9000 n=64 mean=32755 min=32737 max=32774
+SHELL_TONE_WIN case=0 d_before_end_ns=9200 n=64 mean=32758 min=32739 max=32776
+SHELL_TONE_WIN case=0 d_before_end_ns=9400 n=64 mean=32757 min=32744 max=32774
+SHELL_TONE_WIN case=0 d_before_end_ns=9600 n=64 mean=32756 min=32696 max=32776
+SHELL_TONE_WIN case=0 d_before_end_ns=9800 n=64 mean=32758 min=32743 max=32783
+SHELL_TONE_WIN case=0 d_before_end_ns=10000 n=64 mean=32759 min=32747 max=32776
+SHELL_TONE_WIN case=0 d_before_end_ns=10200 n=64 mean=32760 min=32747 max=32786
+SHELL_TONE_WIN case=0 d_before_end_ns=10400 n=64 mean=32759 min=32739 max=32776
+SHELL_TONE_WIN case=0 d_before_end_ns=10600 n=64 mean=32760 min=32741 max=32784
+SHELL_TONE_WIN case=0 d_before_end_ns=10800 n=64 mean=32761 min=32746 max=32778
+SHELL_TONE_WIN case=0 d_before_end_ns=11000 n=64 mean=32763 min=32745 max=32788
+SHELL_TONE_WIN case=0 d_before_end_ns=11200 n=64 mean=32762 min=32742 max=32776
+SHELL_TONE_WIN case=0 d_before_end_ns=11400 n=64 mean=32761 min=32750 max=32786
+SHELL_TONE_WIN case=0 d_before_end_ns=11600 n=64 mean=32765 min=32747 max=32786
+SHELL_TONE_WIN case=0 d_before_end_ns=11800 n=64 mean=32764 min=32748 max=32785
+SHELL_TONE_WIN case=0 d_before_end_ns=12000 n=64 mean=32765 min=32748 max=32784
+SHELL_TONE_WIN case=0 d_before_end_ns=12200 n=64 mean=32766 min=32729 max=32787
+SHELL_TONE_WIN case=0 d_before_end_ns=12400 n=64 mean=32768 min=32749 max=32786
+SHELL_TONE_WIN case=0 d_before_end_ns=12600 n=64 mean=32766 min=32748 max=32781
+SHELL_TONE_WIN case=0 d_before_end_ns=12800 n=64 mean=32767 min=32753 max=32786
+SHELL_TONE_WINCASE case=1 xtalk_case=11 victim_group=0 victim_ch=8 r_src=5150 word_a=40 word_b=8 codec=0
+SHELL_TONE_WIN case=1 d_before_end_ns=0 n=64 mean=32760 min=32711 max=32802
+SHELL_TONE_WIN case=1 d_before_end_ns=200 n=64 mean=32762 min=32728 max=32814
+SHELL_TONE_WIN case=1 d_before_end_ns=400 n=64 mean=32761 min=32713 max=32798
+SHELL_TONE_WIN case=1 d_before_end_ns=600 n=64 mean=32761 min=32734 max=32814
+SHELL_TONE_WIN case=1 d_before_end_ns=800 n=64 mean=32760 min=32700 max=32800
+SHELL_TONE_WIN case=1 d_before_end_ns=1000 n=64 mean=32757 min=32705 max=32817
+SHELL_TONE_WIN case=1 d_before_end_ns=1200 n=64 mean=32760 min=32722 max=32798
+SHELL_TONE_WIN case=1 d_before_end_ns=1400 n=64 mean=32757 min=32711 max=32794
+SHELL_TONE_WIN case=1 d_before_end_ns=1600 n=64 mean=32760 min=32721 max=32821
+SHELL_TONE_WIN case=1 d_before_end_ns=1800 n=64 mean=32757 min=32709 max=32800
+SHELL_TONE_WIN case=1 d_before_end_ns=2000 n=64 mean=32757 min=32741 max=32795
+SHELL_TONE_WIN case=1 d_before_end_ns=2200 n=64 mean=32755 min=32741 max=32775
+SHELL_TONE_WIN case=1 d_before_end_ns=2400 n=64 mean=32756 min=32739 max=32773
+SHELL_TONE_WIN case=1 d_before_end_ns=2600 n=64 mean=32755 min=32742 max=32770
+SHELL_TONE_WIN case=1 d_before_end_ns=2800 n=64 mean=32752 min=32607 max=32770
+SHELL_TONE_WIN case=1 d_before_end_ns=3000 n=64 mean=32753 min=32741 max=32768
+SHELL_TONE_WIN case=1 d_before_end_ns=3200 n=64 mean=32753 min=32735 max=32769
+SHELL_TONE_WIN case=1 d_before_end_ns=3400 n=64 mean=32752 min=32729 max=32767
+SHELL_TONE_WIN case=1 d_before_end_ns=3600 n=64 mean=32751 min=32740 max=32770
+SHELL_TONE_WIN case=1 d_before_end_ns=3800 n=64 mean=32752 min=32735 max=32766
+SHELL_TONE_WIN case=1 d_before_end_ns=4000 n=64 mean=32751 min=32730 max=32765
+SHELL_TONE_WIN case=1 d_before_end_ns=4200 n=64 mean=32750 min=32735 max=32764
+SHELL_TONE_WIN case=1 d_before_end_ns=4400 n=64 mean=32752 min=32737 max=32768
+SHELL_TONE_WIN case=1 d_before_end_ns=4600 n=64 mean=32750 min=32735 max=32768
+SHELL_TONE_WIN case=1 d_before_end_ns=4800 n=64 mean=32752 min=32738 max=32765
+SHELL_TONE_WIN case=1 d_before_end_ns=5000 n=64 mean=32751 min=32739 max=32766
+SHELL_TONE_WIN case=1 d_before_end_ns=5200 n=64 mean=32750 min=32735 max=32771
+SHELL_TONE_WIN case=1 d_before_end_ns=5400 n=64 mean=32750 min=32734 max=32766
+SHELL_TONE_WIN case=1 d_before_end_ns=5600 n=64 mean=32750 min=32735 max=32767
+SHELL_TONE_WIN case=1 d_before_end_ns=5800 n=64 mean=32752 min=32740 max=32765
+SHELL_TONE_WIN case=1 d_before_end_ns=6000 n=64 mean=32752 min=32740 max=32772
+SHELL_TONE_WIN case=1 d_before_end_ns=6200 n=64 mean=32750 min=32741 max=32764
+SHELL_TONE_WIN case=1 d_before_end_ns=6400 n=64 mean=32752 min=32738 max=32772
+SHELL_TONE_WIN case=1 d_before_end_ns=6600 n=64 mean=32752 min=32739 max=32767
+SHELL_TONE_WIN case=1 d_before_end_ns=6800 n=64 mean=32752 min=32684 max=32763
+SHELL_TONE_WIN case=1 d_before_end_ns=7000 n=64 mean=32753 min=32736 max=32769
+SHELL_TONE_WIN case=1 d_before_end_ns=7200 n=64 mean=32753 min=32741 max=32772
+SHELL_TONE_WIN case=1 d_before_end_ns=7400 n=64 mean=32753 min=32738 max=32770
+SHELL_TONE_WIN case=1 d_before_end_ns=7600 n=64 mean=32753 min=32735 max=32770
+SHELL_TONE_WIN case=1 d_before_end_ns=7800 n=64 mean=32753 min=32739 max=32772
+SHELL_TONE_WIN case=1 d_before_end_ns=8000 n=64 mean=32753 min=32739 max=32772
+SHELL_TONE_WIN case=1 d_before_end_ns=8200 n=64 mean=32752 min=32741 max=32766
+SHELL_TONE_WIN case=1 d_before_end_ns=8400 n=64 mean=32755 min=32739 max=32772
+SHELL_TONE_WIN case=1 d_before_end_ns=8600 n=64 mean=32757 min=32741 max=32773
+SHELL_TONE_WIN case=1 d_before_end_ns=8800 n=64 mean=32755 min=32742 max=32771
+SHELL_TONE_WIN case=1 d_before_end_ns=9000 n=64 mean=32754 min=32651 max=32772
+SHELL_TONE_WIN case=1 d_before_end_ns=9200 n=64 mean=32756 min=32741 max=32778
+SHELL_TONE_WIN case=1 d_before_end_ns=9400 n=64 mean=32758 min=32741 max=32774
+SHELL_TONE_WIN case=1 d_before_end_ns=9600 n=64 mean=32756 min=32742 max=32769
+SHELL_TONE_WIN case=1 d_before_end_ns=9800 n=64 mean=32758 min=32745 max=32776
+SHELL_TONE_WIN case=1 d_before_end_ns=10000 n=64 mean=32760 min=32746 max=32784
+SHELL_TONE_WIN case=1 d_before_end_ns=10200 n=64 mean=32759 min=32742 max=32785
+SHELL_TONE_WIN case=1 d_before_end_ns=10400 n=64 mean=32760 min=32746 max=32777
+SHELL_TONE_WIN case=1 d_before_end_ns=10600 n=64 mean=32761 min=32743 max=32782
+SHELL_TONE_WIN case=1 d_before_end_ns=10800 n=64 mean=32761 min=32746 max=32782
+SHELL_TONE_WIN case=1 d_before_end_ns=11000 n=64 mean=32761 min=32746 max=32782
+SHELL_TONE_WIN case=1 d_before_end_ns=11200 n=64 mean=32763 min=32749 max=32782
+SHELL_TONE_WIN case=1 d_before_end_ns=11400 n=64 mean=32763 min=32737 max=32785
+SHELL_TONE_WIN case=1 d_before_end_ns=11600 n=64 mean=32764 min=32746 max=32786
+SHELL_TONE_WIN case=1 d_before_end_ns=11800 n=64 mean=32763 min=32746 max=32788
+SHELL_TONE_WIN case=1 d_before_end_ns=12000 n=64 mean=32764 min=32746 max=32787
+SHELL_TONE_WIN case=1 d_before_end_ns=12200 n=64 mean=32766 min=32747 max=32783
+SHELL_TONE_WIN case=1 d_before_end_ns=12400 n=64 mean=32764 min=32748 max=32786
+SHELL_TONE_WIN case=1 d_before_end_ns=12600 n=64 mean=32765 min=32746 max=32787
+SHELL_TONE_WIN case=1 d_before_end_ns=12800 n=64 mean=32762 min=32628 max=32782
+SHELL_TONE_GATES g2=1 g4=1 g5=1 g7=1 g8=-1 gates_ok=1
+SHELL_TONE_HEALTH missed_blocks=0 phase_timeouts=0 win_timeouts=0 block_ms=170654
+SHELL_TONE_END
+SHELL_TONE_CFG adc_khz=6146 repeats=64 phase_points=16 block_size=96 sr=48000 rv4=0 git=86070d9+
+SHELL_TONE_CLK span_short_cyc=2311 span_long_cyc=31285 smp_short_tenths=165 smp_long_tenths=3875
+SHELL_TONE_CAL lat_mean_ns=688 lat_min_ns=642 lat_max_ns=706 b0=6 timeouts=0
+SHELL_TONE_LEVEL case=-1 level=0 victim_group=0 victim_ch=8 r_src=5150 n=64 mean=32514 min=31649 max=32552 audio_virgin=1
+SHELL_TONE_STAT case=-1 settled_mean_spread=14 widest_sample_band=895
+SHELL_TONE_LEVEL case=-2 level=0 victim_group=1 victim_ch=6 r_src=5150 n=64 mean=32611 min=32557 max=32631 audio_virgin=1
+SHELL_TONE_STAT case=-2 settled_mean_spread=4 widest_sample_band=72
+SHELL_TONE_LEVEL case=-3 level=0 victim_group=0 victim_ch=9 r_src=650 n=64 mean=32766 min=32590 max=32808 audio_virgin=1
+SHELL_TONE_STAT case=-3 settled_mean_spread=5 widest_sample_band=199
+SHELL_TONE_LEVEL case=-4 level=0 victim_group=0 victim_ch=10 r_src=150 n=64 mean=0 min=0 max=27 audio_virgin=1
+SHELL_TONE_STAT case=-4 settled_mean_spread=0 widest_sample_band=27
+SHELL_TONE_LEVEL case=-5 level=0 victim_group=1 victim_ch=3 r_src=150 n=64 mean=0 min=0 max=37 audio_virgin=1
+SHELL_TONE_STAT case=-5 settled_mean_spread=0 widest_sample_band=37
+SHELL_TONE_LEVEL case=0 level=0 victim_group=0 victim_ch=8 r_src=5150 n=64 mean=32513 min=31643 max=32549 audio_virgin=0
+SHELL_TONE_STAT case=0 settled_mean_spread=15 widest_sample_band=902
+SHELL_TONE_LEVEL case=1 level=1 victim_group=0 victim_ch=8 r_src=5150 n=64 mean=32513 min=32343 max=32548 audio_virgin=0
+SHELL_TONE_STAT case=1 settled_mean_spread=5 widest_sample_band=202
+SHELL_TONE_LEVEL case=2 level=0 victim_group=1 victim_ch=6 r_src=5150 n=64 mean=32609 min=32487 max=32630 audio_virgin=0
+SHELL_TONE_STAT case=2 settled_mean_spread=5 widest_sample_band=137
+SHELL_TONE_LEVEL case=3 level=1 victim_group=1 victim_ch=6 r_src=5150 n=64 mean=32609 min=32432 max=32630 audio_virgin=0
+SHELL_TONE_STAT case=3 settled_mean_spread=5 widest_sample_band=194
+SHELL_TONE_LEVEL case=4 level=0 victim_group=0 victim_ch=9 r_src=650 n=64 mean=32765 min=32633 max=32796 audio_virgin=0
+SHELL_TONE_STAT case=4 settled_mean_spread=5 widest_sample_band=147
+SHELL_TONE_LEVEL case=5 level=1 victim_group=0 victim_ch=9 r_src=650 n=64 mean=32764 min=32638 max=32790 audio_virgin=0
+SHELL_TONE_STAT case=5 settled_mean_spread=4 widest_sample_band=143
+SHELL_TONE_LEVEL case=6 level=0 victim_group=0 victim_ch=10 r_src=150 n=64 mean=0 min=0 max=13 audio_virgin=0
+SHELL_TONE_STAT case=6 settled_mean_spread=0 widest_sample_band=13
+SHELL_TONE_LEVEL case=7 level=1 victim_group=0 victim_ch=10 r_src=150 n=64 mean=0 min=0 max=30 audio_virgin=0
+SHELL_TONE_STAT case=7 settled_mean_spread=0 widest_sample_band=30
+SHELL_TONE_LEVEL case=8 level=0 victim_group=1 victim_ch=3 r_src=150 n=64 mean=0 min=0 max=4 audio_virgin=0
+SHELL_TONE_STAT case=8 settled_mean_spread=0 widest_sample_band=4
+SHELL_TONE_LEVEL case=9 level=1 victim_group=1 victim_ch=3 r_src=150 n=64 mean=0 min=0 max=44 audio_virgin=0
+SHELL_TONE_STAT case=9 settled_mean_spread=0 widest_sample_band=44
+SHELL_TONE_CASE case=10 level=2 f_hz=100 dbfs=-20 victim_group=0 victim_ch=8 r_src=5150 below_corner=0
+SHELL_TONE case=10 phase_idx=0 n=64 mean=31653 min=31635 max=31672
+SHELL_TONE case=10 phase_idx=1 n=64 mean=31661 min=31637 max=32294
+SHELL_TONE case=10 phase_idx=2 n=64 mean=31660 min=31634 max=32277
+SHELL_TONE case=10 phase_idx=3 n=64 mean=31661 min=31631 max=32293
+SHELL_TONE case=10 phase_idx=4 n=64 mean=31664 min=31639 max=32302
+SHELL_TONE case=10 phase_idx=5 n=64 mean=31662 min=31639 max=32273
+SHELL_TONE case=10 phase_idx=6 n=64 mean=31659 min=31635 max=32287
+SHELL_TONE case=10 phase_idx=7 n=64 mean=31663 min=31638 max=32288
+SHELL_TONE case=10 phase_idx=8 n=64 mean=31661 min=31635 max=32286
+SHELL_TONE case=10 phase_idx=9 n=64 mean=31661 min=31633 max=32288
+SHELL_TONE case=10 phase_idx=10 n=64 mean=31663 min=31641 max=32274
+SHELL_TONE case=10 phase_idx=11 n=64 mean=31655 min=31628 max=32301
+SHELL_TONE case=10 phase_idx=12 n=64 mean=31659 min=31638 max=32278
+SHELL_TONE case=10 phase_idx=13 n=64 mean=31662 min=31639 max=32284
+SHELL_TONE case=10 phase_idx=14 n=64 mean=31663 min=31639 max=32284
+SHELL_TONE case=10 phase_idx=15 n=64 mean=31661 min=31639 max=32284
+SHELL_TONE_CASE case=11 level=2 f_hz=100 dbfs=-20 victim_group=1 victim_ch=6 r_src=5150 below_corner=0
+SHELL_TONE case=11 phase_idx=0 n=64 mean=31939 min=31924 max=32425
+SHELL_TONE case=11 phase_idx=1 n=64 mean=31938 min=31919 max=32443
+SHELL_TONE case=11 phase_idx=2 n=64 mean=31938 min=31922 max=32431
+SHELL_TONE case=11 phase_idx=3 n=64 mean=31938 min=31917 max=32422
+SHELL_TONE case=11 phase_idx=4 n=64 mean=31938 min=31922 max=32421
+SHELL_TONE case=11 phase_idx=5 n=64 mean=31938 min=31919 max=32437
+SHELL_TONE case=11 phase_idx=6 n=64 mean=31938 min=31919 max=32418
+SHELL_TONE case=11 phase_idx=7 n=64 mean=31939 min=31920 max=32432
+SHELL_TONE case=11 phase_idx=8 n=64 mean=31938 min=31918 max=32426
+SHELL_TONE case=11 phase_idx=9 n=64 mean=31939 min=31920 max=32437
+SHELL_TONE case=11 phase_idx=10 n=64 mean=31939 min=31923 max=32426
+SHELL_TONE case=11 phase_idx=11 n=64 mean=31939 min=31919 max=32440
+SHELL_TONE case=11 phase_idx=12 n=64 mean=31936 min=31919 max=32433
+SHELL_TONE case=11 phase_idx=13 n=64 mean=31938 min=31923 max=32422
+SHELL_TONE case=11 phase_idx=14 n=64 mean=31939 min=31922 max=32436
+SHELL_TONE case=11 phase_idx=15 n=64 mean=31937 min=31919 max=32430
+SHELL_TONE_CASE case=12 level=2 f_hz=100 dbfs=-20 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE case=12 phase_idx=0 n=64 mean=32747 min=32730 max=32772
+SHELL_TONE case=12 phase_idx=1 n=64 mean=32746 min=32725 max=32769
+SHELL_TONE case=12 phase_idx=2 n=64 mean=32748 min=32735 max=32768
+SHELL_TONE case=12 phase_idx=3 n=64 mean=32746 min=32730 max=32761
+SHELL_TONE case=12 phase_idx=4 n=64 mean=32747 min=32656 max=32768
+SHELL_TONE case=12 phase_idx=5 n=64 mean=32751 min=32738 max=32772
+SHELL_TONE case=12 phase_idx=6 n=64 mean=32747 min=32728 max=32770
+SHELL_TONE case=12 phase_idx=7 n=64 mean=32748 min=32735 max=32769
+SHELL_TONE case=12 phase_idx=8 n=64 mean=32748 min=32728 max=32768
+SHELL_TONE case=12 phase_idx=9 n=64 mean=32747 min=32728 max=32772
+SHELL_TONE case=12 phase_idx=10 n=64 mean=32748 min=32730 max=32769
+SHELL_TONE case=12 phase_idx=11 n=64 mean=32748 min=32738 max=32769
+SHELL_TONE case=12 phase_idx=12 n=64 mean=32744 min=32599 max=32770
+SHELL_TONE case=12 phase_idx=13 n=64 mean=32747 min=32729 max=32768
+SHELL_TONE case=12 phase_idx=14 n=64 mean=32749 min=32734 max=32768
+SHELL_TONE case=12 phase_idx=15 n=64 mean=32746 min=32731 max=32772
+SHELL_TONE_CASE case=13 level=2 f_hz=100 dbfs=-20 victim_group=0 victim_ch=10 r_src=150 below_corner=0
+SHELL_TONE case=13 phase_idx=0 n=64 mean=0 min=0 max=4
+SHELL_TONE case=13 phase_idx=1 n=64 mean=0 min=0 max=5
+SHELL_TONE case=13 phase_idx=2 n=64 mean=0 min=0 max=4
+SHELL_TONE case=13 phase_idx=3 n=64 mean=0 min=0 max=40
+SHELL_TONE case=13 phase_idx=4 n=64 mean=0 min=0 max=2
+SHELL_TONE case=13 phase_idx=5 n=64 mean=0 min=0 max=13
+SHELL_TONE case=13 phase_idx=6 n=64 mean=0 min=0 max=9
+SHELL_TONE case=13 phase_idx=7 n=64 mean=0 min=0 max=10
+SHELL_TONE case=13 phase_idx=8 n=64 mean=0 min=0 max=8
+SHELL_TONE case=13 phase_idx=9 n=64 mean=0 min=0 max=8
+SHELL_TONE case=13 phase_idx=10 n=64 mean=0 min=0 max=9
+SHELL_TONE case=13 phase_idx=11 n=64 mean=0 min=0 max=6
+SHELL_TONE case=13 phase_idx=12 n=64 mean=0 min=0 max=3
+SHELL_TONE case=13 phase_idx=13 n=64 mean=0 min=0 max=10
+SHELL_TONE case=13 phase_idx=14 n=64 mean=0 min=0 max=9
+SHELL_TONE case=13 phase_idx=15 n=64 mean=0 min=0 max=3
+SHELL_TONE_CASE case=14 level=2 f_hz=100 dbfs=-20 victim_group=1 victim_ch=3 r_src=150 below_corner=0
+SHELL_TONE case=14 phase_idx=0 n=64 mean=0 min=0 max=4
+SHELL_TONE case=14 phase_idx=1 n=64 mean=0 min=0 max=0
+SHELL_TONE case=14 phase_idx=2 n=64 mean=0 min=0 max=4
+SHELL_TONE case=14 phase_idx=3 n=64 mean=0 min=0 max=1
+SHELL_TONE case=14 phase_idx=4 n=64 mean=0 min=0 max=4
+SHELL_TONE case=14 phase_idx=5 n=64 mean=0 min=0 max=1
+SHELL_TONE case=14 phase_idx=6 n=64 mean=0 min=0 max=3
+SHELL_TONE case=14 phase_idx=7 n=64 mean=0 min=0 max=1
+SHELL_TONE case=14 phase_idx=8 n=64 mean=0 min=0 max=2
+SHELL_TONE case=14 phase_idx=9 n=64 mean=0 min=0 max=2
+SHELL_TONE case=14 phase_idx=10 n=64 mean=0 min=0 max=0
+SHELL_TONE case=14 phase_idx=11 n=64 mean=0 min=0 max=2
+SHELL_TONE case=14 phase_idx=12 n=64 mean=0 min=0 max=0
+SHELL_TONE case=14 phase_idx=13 n=64 mean=0 min=0 max=0
+SHELL_TONE case=14 phase_idx=14 n=64 mean=0 min=0 max=1
+SHELL_TONE case=14 phase_idx=15 n=64 mean=0 min=0 max=1
+SHELL_TONE_CASE case=15 level=2 f_hz=100 dbfs=-6 victim_group=0 victim_ch=8 r_src=5150 below_corner=0
+SHELL_TONE case=15 phase_idx=0 n=64 mean=31653 min=31640 max=31672
+SHELL_TONE case=15 phase_idx=1 n=64 mean=31660 min=31637 max=32278
+SHELL_TONE case=15 phase_idx=2 n=64 mean=31662 min=31641 max=32291
+SHELL_TONE case=15 phase_idx=3 n=64 mean=31663 min=31635 max=32295
+SHELL_TONE case=15 phase_idx=4 n=64 mean=31661 min=31636 max=32274
+SHELL_TONE case=15 phase_idx=5 n=64 mean=31662 min=31635 max=32278
+SHELL_TONE case=15 phase_idx=6 n=64 mean=31662 min=31639 max=32304
+SHELL_TONE case=15 phase_idx=7 n=64 mean=31660 min=31635 max=32279
+SHELL_TONE case=15 phase_idx=8 n=64 mean=31661 min=31637 max=32286
+SHELL_TONE case=15 phase_idx=9 n=64 mean=31660 min=31519 max=32279
+SHELL_TONE case=15 phase_idx=10 n=64 mean=31661 min=31635 max=32271
+SHELL_TONE case=15 phase_idx=11 n=64 mean=31660 min=31636 max=32273
+SHELL_TONE case=15 phase_idx=12 n=64 mean=31662 min=31635 max=32282
+SHELL_TONE case=15 phase_idx=13 n=64 mean=31659 min=31636 max=32278
+SHELL_TONE case=15 phase_idx=14 n=64 mean=31659 min=31637 max=32275
+SHELL_TONE case=15 phase_idx=15 n=64 mean=31662 min=31639 max=32287
+SHELL_TONE_CASE case=16 level=2 f_hz=100 dbfs=-6 victim_group=1 victim_ch=6 r_src=5150 below_corner=0
+SHELL_TONE case=16 phase_idx=0 n=64 mean=31940 min=31924 max=32430
+SHELL_TONE case=16 phase_idx=1 n=64 mean=31936 min=31918 max=32436
+SHELL_TONE case=16 phase_idx=2 n=64 mean=31938 min=31919 max=32430
+SHELL_TONE case=16 phase_idx=3 n=64 mean=31939 min=31921 max=32426
+SHELL_TONE case=16 phase_idx=4 n=64 mean=31937 min=31919 max=32422
+SHELL_TONE case=16 phase_idx=5 n=64 mean=31938 min=31922 max=32432
+SHELL_TONE case=16 phase_idx=6 n=64 mean=31938 min=31921 max=32440
+SHELL_TONE case=16 phase_idx=7 n=64 mean=31939 min=31921 max=32425
+SHELL_TONE case=16 phase_idx=8 n=64 mean=31937 min=31920 max=32430
+SHELL_TONE case=16 phase_idx=9 n=64 mean=31938 min=31918 max=32432
+SHELL_TONE case=16 phase_idx=10 n=64 mean=31936 min=31882 max=32432
+SHELL_TONE case=16 phase_idx=11 n=64 mean=31937 min=31921 max=32429
+SHELL_TONE case=16 phase_idx=12 n=64 mean=31938 min=31920 max=32432
+SHELL_TONE case=16 phase_idx=13 n=64 mean=31936 min=31916 max=32420
+SHELL_TONE case=16 phase_idx=14 n=64 mean=31937 min=31918 max=32422
+SHELL_TONE case=16 phase_idx=15 n=64 mean=31940 min=31923 max=32429
+SHELL_TONE_CASE case=17 level=2 f_hz=100 dbfs=-6 victim_group=0 victim_ch=9 r_src=650 below_corner=0
+SHELL_TONE case=17 phase_idx=0 n=64 mean=32749 min=32737 max=32768
+SHELL_TONE case=17 phase_idx=1 n=64 mean=32748 min=32733 max=32768
+SHELL_TONE case=17 phase_idx=2 n=64 mean=32745 min=32589 max=32770
+SHELL_TONE case=17 phase_idx=3 n=64 mean=32746 min=32724 max=32772
+SHELL_TONE case=17 phase_idx=4 n=64 mean=32746 min=32726 max=32760
+SHELL_TONE case=17 phase_idx=5 n=64 mean=32746 min=32729 max=32768
+SHELL_TONE case=17 phase_idx=6 n=64 mean=32750 min=32731 max=32769
+SHELL_TONE case=17 phase_idx=7 n=64 mean=32749 min=32736 max=32772

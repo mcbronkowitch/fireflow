@@ -1,0 +1,62 @@
+SHELL_TONE_LEVEL case=5 level=1 victim_group=0 victim_ch=9 r_src=650 n=64 mean=32766 min=32590 max=32797 audio_virgin=0
+SHELL_TONE_STAT case=5 settled_mean_spread=6 widest_sample_band=197
+SHELL_TONE_LEVEL case=6 level=0 victim_group=0 victim_ch=10 r_src=150 n=64 mean=0 min=0 max=94 audio_virgin=0
+SHELL_TONE_STAT case=6 settled_mean_spread=1 widest_sample_band=94
+SHELL_TONE_LEVEL case=7 level=1 victim_group=0 victim_ch=10 r_src=150 n=64 mean=0 min=0 max=37 audio_virgin=0
+SHELL_TONE_STAT case=7 settled_mean_spread=0 widest_sample_band=37
+SHELL_TONE_LEVEL case=8 level=0 victim_group=1 victim_ch=3 r_src=150 n=64 mean=0 min=0 max=44 audio_virgin=0
+SHELL_TONE_STAT case=8 settled_mean_spread=0 widest_sample_band=44
+SHELL_TONE_LEVEL case=9 level=1 victim_group=1 victim_ch=3 r_src=150 n=64 mean=0 min=0 max=23 audio_virgin=0
+SHELL_TONE_STAT case=9 settled_mean_spread=0 widest_sample_band=23
+SHELL_TONE_SPAN zero=0 rail=65532 hi_spread=1 lo_spread=0 valid=1
+SHELL_TONE_G5 victim_group=0 victim_ch=8 expect=2 mean=32518 ok=1
+SHELL_TONE_G5 victim_group=1 victim_ch=6 expect=2 mean=32614 ok=1
+SHELL_TONE_G5 victim_group=0 victim_ch=9 expect=2 mean=32766 ok=1
+SHELL_TONE_G5 victim_group=0 victim_ch=10 expect=0 mean=0 ok=1
+SHELL_TONE_G5 victim_group=1 victim_ch=3 expect=0 mean=0 ok=1
+SHELL_TONE_GATES g2=1 g4=1 g5=1 g7=1 g8=-1 missed_blocks=0 gates_ok=1
+SHELL_TONE_END
+SHELL_TONE_CFG adc_khz=6146 repeats=64 phase_points=16 block_size=96 sr=48000 rv4=0 git=4466cbb+
+SHELL_TONE_CLK span_short_cyc=2312 span_long_cyc=31288 smp_short_tenths=165 smp_long_tenths=3875
+SHELL_TONE_CAL lat_mean_ns=703 lat_min_ns=671 lat_max_ns=802 b0=11 timeouts=0
+SHELL_TONE_LEVEL case=-1 level=0 victim_group=0 victim_ch=8 r_src=5150 n=64 mean=32518 min=31666 max=32558 audio_virgin=1
+SHELL_TONE_STAT case=-1 settled_mean_spread=17 widest_sample_band=882
+SHELL_TONE_LEVEL case=-2 level=0 victim_group=1 victim_ch=6 r_src=5150 n=64 mean=32616 min=32553 max=32635 audio_virgin=1
+SHELL_TONE_STAT case=-2 settled_mean_spread=3 widest_sample_band=74
+SHELL_TONE_LEVEL case=-3 level=0 victim_group=0 victim_ch=9 r_src=650 n=64 mean=32766 min=32694 max=32803 audio_virgin=1
+SHELL_TONE_STAT case=-3 settled_mean_spread=2 widest_sample_band=95
+SHELL_TONE_LEVEL case=-4 level=0 victim_group=0 victim_ch=10 r_src=150 n=64 mean=0 min=0 max=102 audio_virgin=1
+SHELL_TONE_STAT case=-4 settled_mean_spread=1 widest_sample_band=102
+SHELL_TONE_LEVEL case=-5 level=0 victim_group=1 victim_ch=3 r_src=150 n=64 mean=0 min=0 max=55 audio_virgin=1
+SHELL_TONE_STAT case=-5 settled_mean_spread=0 widest_sample_band=55
+SHELL_TONE_LEVEL case=0 level=0 victim_group=0 victim_ch=8 r_src=5150 n=64 mean=32518 min=31654 max=32554 audio_virgin=0
+SHELL_TONE_STAT case=0 settled_mean_spread=17 widest_sample_band=889
+SHELL_TONE_LEVEL case=1 level=1 victim_group=0 victim_ch=8 r_src=5150 n=64 mean=32518 min=32309 max=32561 audio_virgin=0
+SHELL_TONE_STAT case=1 settled_mean_spread=6 widest_sample_band=232
+SHELL_TONE_LEVEL case=2 level=0 victim_group=1 victim_ch=6 r_src=5150 n=64 mean=32614 min=32470 max=32635 audio_virgin=0
+SHELL_TONE_STAT case=2 settled_mean_spread=6 widest_sample_band=160
+SHELL_TONE_LEVEL case=3 level=1 victim_group=1 victim_ch=6 r_src=5150 n=64 mean=32615 min=32534 max=32642 audio_virgin=0
+SHELL_TONE_STAT case=3 settled_mean_spread=4 widest_sample_band=90
+SHELL_TONE_LEVEL case=4 level=0 victim_group=0 victim_ch=9 r_src=650 n=64 mean=32765 min=32592 max=32801 audio_virgin=0
+SHELL_TONE_STAT case=4 settled_mean_spread=5 widest_sample_band=193
+SHELL_TONE_LEVEL case=5 level=1 victim_group=0 victim_ch=9 r_src=650 n=64 mean=32765 min=32608 max=32791 audio_virgin=0
+SHELL_TONE_STAT case=5 settled_mean_spread=4 widest_sample_band=177
+SHELL_TONE_LEVEL case=6 level=0 victim_group=0 victim_ch=10 r_src=150 n=64 mean=0 min=0 max=13 audio_virgin=0
+SHELL_TONE_STAT case=6 settled_mean_spread=0 widest_sample_band=13
+SHELL_TONE_LEVEL case=7 level=1 victim_group=0 victim_ch=10 r_src=150 n=64 mean=0 min=0 max=28 audio_virgin=0
+SHELL_TONE_STAT case=7 settled_mean_spread=0 widest_sample_band=28
+SHELL_TONE_LEVEL case=8 level=0 victim_group=1 victim_ch=3 r_src=150 n=64 mean=0 min=0 max=50 audio_virgin=0
+SHELL_TONE_STAT case=8 settled_mean_spread=0 widest_sample_band=50
+SHELL_TONE_LEVEL case=9 level=1 victim_group=1 victim_ch=3 r_src=150 n=64 mean=0 min=0 max=25 audio_virgin=0
+SHELL_TONE_STAT case=9 settled_mean_spread=0 widest_sample_band=25
+SHELL_TONE_SPAN zero=0 rail=65533 hi_spread=0 lo_spread=0 valid=1
+SHELL_TONE_G5 victim_group=0 victim_ch=8 expect=2 mean=32518 ok=1
+SHELL_TONE_G5 victim_group=1 victim_ch=6 expect=2 mean=32615 ok=1
+SHELL_TONE_G5 victim_group=0 victim_ch=9 expect=2 mean=32765 ok=1
+SHELL_TONE_G5 victim_group=0 victim_ch=10 expect=0 mean=0 ok=1
+SHELL_TONE_G5 victim_group=1 victim_ch=3 expect=0 mean=0 ok=1
+SHELL_TONE_GATES g2=1 g4=1 g5=1 g7=1 g8=-1 missed_blocks=0 gates_ok=1
+SHELL_TONE_END
+SHELL_TONE_CFG adc_khz=6146 repeats=64 phase_points=16 block_size=96 sr=48000 rv4=0 git=4466cbb+
+      7 SHELL_TONE_GATES g2=0 g4=1 g5=1 g7=1 g8=-1 missed_blocks=0 gates_ok=0
+    519 SHELL_TONE_GATES g2=1 g4=1 g5=1 g7=1 g8=-1 missed_blocks=0 gates_ok=1
