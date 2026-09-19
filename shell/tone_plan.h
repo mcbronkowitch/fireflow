@@ -24,7 +24,27 @@ enum class ToneLevel : uint8_t
     Stopped       = 0,   // StopAudio() before the block; the codec is idle
     RunningSilent = 1,   // audio started, callback writes zeros
     Tone          = 2,   // one row of the frequency x level table
+    // The discriminating arm (codec-tone-measured.md section 6). The callback
+    // writes zeros while the phase accumulator keeps advancing at a row's real
+    // step, so the phase grid waits one period per repeat exactly as a Tone
+    // case does and the output carries nothing. Cadence identical, aggressor
+    // gone, codec RUNNING in both arms.
+    //
+    // It is NOT "the phase grid with the codec stopped", which is the obvious
+    // phrasing and wrong twice: phase_now() derives its base from
+    // g_phase_at_block and g_dwt_at_block_start, which only the callback
+    // writes, so a stopped codec freezes the base the grid waits on -- and
+    // stopping the codec moves a second variable besides, which is the one
+    // thing this comparison cannot afford.
+    SilentCadence = 3,
 };
+
+// The dBFS field on a SilentCadence case. Silence has no level -- an
+// amplitude of 0.0f is -inf dBFS -- and SHELL_TONE_CASE's shape has a dbfs
+// field that must carry something. This sentinel is far below kToneDbfsFloor,
+// is never a table row, and read_tone.py asserts that no level=2 row ever
+// carries it, so a reader keying on it cannot mistake it for a real level.
+inline constexpr int kToneSilentDbfs = -127;
 
 // The sample rate the ladder is checked against. Read from src/hw/board.h's
 // SetAudioSampleRate(SAI_48KHZ); the firmware asks the board at runtime and

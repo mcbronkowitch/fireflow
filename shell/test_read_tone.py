@@ -35,7 +35,8 @@ from contextlib import redirect_stderr
 
 from read_tone import (parse_block, format_csv, format_meta_csv, deltas,
                        static_deltas, delta_pp, g8, verdicts, block_floor,
-                       level_diffs, virgin_levels, BOOT_VIRGIN_FLOOR)
+                       level_diffs, virgin_levels, cadence_shifts, report,
+                       silent_deltas, _fmt1, FIELDS, BOOT_VIRGIN_FLOOR)
 
 FAILURES = []
 
@@ -108,7 +109,8 @@ def build_block(phase_points=4, gates_ok=1, missed=0,
                 stopped_mean=90, running_mean=100,
                 tone_means=(100, 106, 100, 94),
                 fits=1, win_points=5, win_step=200,
-                extra_victim=False):
+                extra_victim=False, silent_means=None,
+                silent_level=3, silent_dbfs=None):
     """One block in spec section 8's print order, field for field.
 
     Case numbering follows the firmware's: the boot-virgin floor lines are
@@ -197,6 +199,30 @@ def build_block(phase_points=4, gates_ok=1, missed=0,
         lines.append("SHELL_TONE_STAT case=%d settled_mean_spread=6 "
                      "widest_sample_band=198" % case)
         case += 1
+
+    # The silent-cadence arm: one case per victim at the tone row's OWN
+    # frequency, level=3, dbfs at the sentinel. Off by default so every
+    # check written before this arm existed still runs against the block it
+    # was written against.
+    #
+    # THE FREQUENCY MATCHES THE TONE ROW'S ON PURPOSE. cadence_shifts() pairs
+    # the two arms by (victim, f_hz); a fixture whose silent case sat at a
+    # frequency no tone row uses would produce two half-filled rows that
+    # never pair, and every check below would pass without the pairing ever
+    # having been exercised.
+    if silent_means is not None:
+        for g, ch, r in victims:
+            lines.append("SHELL_TONE_CASE case=%d level=%d f_hz=1000 dbfs=%d "
+                         "victim_group=%d victim_ch=%d r_src=%d below_corner=0"
+                         % (case, silent_level,
+                            -127 if silent_dbfs is None else silent_dbfs,
+                            g, ch, r))
+            for k in range(phase_points):
+                mean = silent_means[k % len(silent_means)]
+                lines.append("SHELL_TONE case=%d phase_idx=%d n=64 mean=%d "
+                             "min=%d max=%d"
+                             % (case, k, mean, mean - 2, mean + 2))
+            case += 1
 
     lines.append("SHELL_TONE_SPAN zero=0 rail=65532 hi_spread=0 lo_spread=0 "
                  "valid=1")
@@ -639,6 +665,136 @@ check("a $$ fusion inside the git= string field is refused -- nothing else "
       parse_block(git_fused) is None)
 check("a corrupted block does not poison the block that follows it",
       parse_block(fused + base) is not None)
+
+# --- Section K: the silent-cadence arm (codec-tone-measured.md section 6) --
+#
+# The arm is a tone case in every printed respect except `level` and `dbfs`:
+# same tag, same grid, same f_hz, same victim. Those two fields are therefore
+# the whole of what keeps a measurement of the CADENCE out of a criterion
+# about a TONE, and this section is what holds them there.
+
+# tone_means default is (100, 106, 100, 94): mean 100, against running_mean
+# 100, so the tone arm's shift is 0.0 and its peak-to-peak is 12. The silent
+# arm below is deliberately offset so the two arms cannot be confused by a
+# check that only looks at magnitudes.
+k_base = build_block(silent_means=(70, 76, 70, 64))
+k_block = parse_block(k_base)
+check("a block carrying the silent-cadence arm parses", k_block is not None)
+
+# THE LOAD-BEARING CHECK. delta_pp drives spec section 4's criterion. The
+# silent cases pass every other test deltas() applies -- a case line, f_hz
+# != 0, a victim with a RunningSilent reference -- so only the level filter
+# keeps them out. Without it the criterion would return a verdict on
+# silence, in rows indistinguishable from real ones.
+k_pp = delta_pp(k_block)
+check("delta_pp counts the tone cases only, never the silent arm",
+      len(k_pp) == len(VICTIMS))
+check("every delta_pp row is a level=2 case",
+      all(row["dbfs"] != -127 for row in k_pp))
+check("the silent arm does not reach verdicts() either",
+      len(quiet(verdicts, k_block, build_xtalk_meta())[0]) == len(VICTIMS))
+
+k_shifts = cadence_shifts(k_block)
+k_by = {(r["victim_group"], r["victim_ch"], r["f_hz"]): r for r in k_shifts}
+# Keyed on (victim, frequency) and looked up defensively: a pairing bug that
+# drops the frequency from the key -- the obvious one, and the one a
+# mutation test reaches for -- makes this lookup miss, and a guard that dies
+# on a KeyError reports a traceback instead of naming the check that caught
+# it. The empty dict keeps every assertion below meaningful and red.
+k_row = k_by.get((VICTIMS[0][0], VICTIMS[0][1], 1000), {})
+check("cadence_shifts keys its rows on victim AND frequency", bool(k_row))
+k_row = k_row or {"tone_shift": None, "silent_shift": None,
+                  "difference": None}
+# tone means average 100 against running_mean 100; silent means average 70.
+check("cadence_shifts reports the tone arm's absolute shift",
+      k_row["tone_shift"] is not None
+      and abs(k_row["tone_shift"] - 0.0) < 1e-9)
+check("cadence_shifts reports the silent arm's absolute shift",
+      k_row["silent_shift"] is not None
+      and abs(k_row["silent_shift"] - -30.0) < 1e-9)
+check("cadence_shifts reports the difference between the two arms",
+      k_row["difference"] is not None
+      and abs(k_row["difference"] - 30.0) < 1e-9)
+check("cadence_shifts pairs the arms rather than listing them apart",
+      len(k_shifts) == len(VICTIMS))
+
+# A block from an image that predates the arm -- which is every capture the
+# campaign took, the vendored fixture included. The tone column must still
+# be reported and the missing arm must be VISIBLY missing: a 0.0 there is
+# also a perfectly plausible shift on a 150 ohm tie.
+k_old = cadence_shifts(parse_block(build_block()))
+check("a pre-arm block still reports its tone column",
+      k_old and all(r["tone_shift"] is not None for r in k_old))
+check("a pre-arm block reports no silent column rather than a zero",
+      all(r["silent_shift"] is None and r["difference"] is None
+          for r in k_old))
+check("a missing arm formats as a dash and not as 0.0", _fmt1(None) == "-")
+check("a real zero still formats as a zero", _fmt1(0.0) == "0.0")
+
+# Rule 9, both directions. The two fields are redundant with each other by
+# construction, and that redundancy is the check: either one alone can be
+# wrong in a way that attributes a whole arm to the other.
+check("a level=2 case carrying the silent sentinel is refused",
+      parse_block(build_block(silent_means=(70, 76, 70, 64),
+                              silent_level=2)) is None)
+check("a level=3 case carrying a real dBFS is refused",
+      parse_block(build_block(silent_means=(70, 76, 70, 64),
+                              silent_dbfs=-6)) is None)
+
+# The CSV is the archival artifact, and deltas() is tone-only on purpose, so
+# the silent arm has to be appended explicitly or it vanishes from the file
+# while still being reported on stderr -- data printed by the board, parsed
+# by the reader, and then dropped on the floor.
+k_csv = format_csv(k_block).strip().split("\n")
+k_level_col = FIELDS.index("level")
+k_levels = [r.split(",")[k_level_col] for r in k_csv[1:]]
+check("the CSV carries both arms' phase points",
+      len(k_csv) - 1 == 2 * len(VICTIMS) * 4)
+check("and level says which arm each CSV row belongs to",
+      k_levels.count("2") == len(VICTIMS) * 4
+      and k_levels.count("3") == len(VICTIMS) * 4)
+
+# The report prints the section and names the missing arm rather than
+# leaving a reader to infer it from a column of dashes.
+_, k_out = quiet(report, parse_block(build_block()), build_xtalk_meta())
+check("the report names a missing silent arm in words",
+      "NO SILENT-CADENCE ARM IN THIS BLOCK" in k_out)
+_, k_out2 = quiet(report, k_block, build_xtalk_meta())
+check("the report does not claim a missing arm when one is present",
+      "NO SILENT-CADENCE ARM IN THIS BLOCK" not in k_out2)
+
+# --- Section L: the silent arm on a REAL board block -----------------------
+#
+# Section K's fixture is written by the same hand as the parser and agrees
+# with it by construction -- the same argument section B makes for the tone
+# block. This is the board's own output: the capture whose answer
+# codec-tone-measured.md section 6 rests on, parsed here so that a firmware
+# change which moves the arm's line shape fails a test rather than a document
+# review.
+SILENT_BLOCK = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            os.pardir, "docs", "hardware", "captures",
+                            "task-6-board-capture-silent-arm.txt")
+with io.open(SILENT_BLOCK, encoding="utf-8", errors="replace") as fh:
+    l_block = parse_block(fh)
+check("the silent-arm board capture parses", l_block is not None)
+l_shifts = cadence_shifts(l_block)
+check("and it carries both arms on every victim and frequency",
+      len(l_shifts) == 15
+      and all(r["tone_shift"] is not None and r["silent_shift"] is not None
+              for r in l_shifts))
+# THE DOCUMENT'S CLAIM, AS A TEST. Section 6 reports the largest difference
+# across the fifteen rows as 0.58 counts and concludes from it that the 852
+# counts are cadence and not tone. A firmware or reader change that moved
+# that number would leave the document asserting something the code no longer
+# produces, which is the drift docs/gotchas.md records.
+l_worst = max(abs(r["difference"]) for r in l_shifts)
+check("the two arms agree to under one count on the real block -- the whole "
+      "of section 6's answer", l_worst < 1.0)
+check("and the arm is not silently reading zero on the victims that move",
+      min(r["tone_shift"] for r in l_shifts) < -800.0)
+# The tone cases of that block must still be judged, and judged alone.
+check("the real block's criterion table is the 45 tone rows, not 60",
+      len(quiet(verdicts, l_block, build_xtalk_meta())[0]) == 45)
 
 if FAILURES:
     for f in FAILURES:

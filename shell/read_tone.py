@@ -111,6 +111,12 @@ Two things about that format a reader gets wrong exactly once:
   cases from 0 in its own namespace, so `case=0` exists under
   `SHELL_TONE_WINCASE` and under `SHELL_TONE_LEVEL` and means two different
   measurements. Everything here keys on the pair.
+- **`level` is what separates the two arms of section 6's discriminator.**
+  `level=2` is a tone case; `level=3` is the SAME grid at the same phase step
+  with the callback's amplitude at zero, and it carries `dbfs=-127` because
+  silence has no level. Everything else on the line is identical, so a reader
+  that keys only on `f_hz != 0` will judge a silent case against a criterion
+  about a tone. `deltas()` filters on level for exactly that reason.
 - **The boot-virgin floor lines are `SHELL_TONE_LEVEL` too**, at `case=-1`
   through `case=-5`, with `audio_virgin=1`. They are measured once per boot
   before any `StartAudio()` anywhere in the image, then cached and re-emitted
@@ -217,6 +223,18 @@ _GATE_NAMES = OrderedDict((("g2", "instrument floor"),
 LEVEL_STOPPED = 0
 LEVEL_RUNNING_SILENT = 1
 LEVEL_TONE = 2
+# The discriminating arm (codec-tone-measured.md section 6): the phase grid
+# walked at a row's real phase step with the callback's amplitude at zero.
+# Same cadence as a tone case, no aggressor, codec running in both arms.
+# Announced on SHELL_TONE_CASE like any other case, so the block's
+# completeness rules cover it with no new tag -- see rules 5 and 6.
+LEVEL_SILENT_CADENCE = 3
+
+# The dbfs field on a SilentCadence case. Silence has no level; the line shape
+# has a field for one. tone_plan.h:kToneSilentDbfs is the authority and this
+# must track it. A level=2 row carrying it is a firmware that mislabelled an
+# arm, which _is_complete() rule 9 refuses.
+SILENT_DBFS = -127
 
 # The one field in this format whose value is not an integer -- and therefore
 # the one field that int() cannot defend, which is why the explicit "$$"
@@ -425,6 +443,20 @@ def _is_complete(block):
                           for p in block["win_points"])
         if got_win != want_win:
             return False
+
+    # 9. The two arms are labelled consistently, in BOTH directions. The
+    #    silent-cadence arm is a tone case in every printed respect except
+    #    level and dbfs -- same tag, same grid, same f_hz -- so those two
+    #    fields are the whole of what separates a measurement of the tone
+    #    from a measurement of the cadence. A level=2 row carrying the
+    #    silent sentinel, or a level=3 row carrying a real dBFS, is a
+    #    firmware that mislabelled an arm, and every number downstream would
+    #    be attributed to the wrong one while looking entirely plausible.
+    for c in block["cases"]:
+        if c["level"] == LEVEL_TONE and c["dbfs"] == SILENT_DBFS:
+            return False
+        if c["level"] == LEVEL_SILENT_CADENCE and c["dbfs"] != SILENT_DBFS:
+            return False
     return True
 
 
@@ -542,13 +574,37 @@ def deltas(block):
 
     The static row (f_hz == 0) has no phase grid and appears in
     static_deltas() instead, not here: it has one measurement, and a row in
-    this table that carried one point would be read as a curve."""
+    this table that carried one point would be read as a curve.
+
+    LEVEL_TONE ONLY, and the filter is load-bearing. The silent-cadence arm
+    (level=3) walks the same 16-point grid at the same phase step, so it
+    matches every other test this function applies -- it has a case line, it
+    has f_hz != 0, it has a victim with a RunningSilent reference. Without
+    the level test its cases would flow into delta_pp() and be judged against
+    spec section 4's criterion, which is a criterion about a TONE. A silent
+    case passing or failing a tone criterion is a verdict about nothing, and
+    it would look exactly like a real row. cadence_shifts() is where that arm
+    is read."""
+    return _grid_deltas(block, LEVEL_TONE)
+
+
+def silent_deltas(block):
+    """The same rows for the silent-cadence arm (level=3).
+
+    Kept OUT of deltas() and given its own name so that no caller can reach
+    the criterion path by accident, and kept in the CSV so the arm's 16
+    points per case are archived like any other. `level` on each row is what
+    tells a CSV reader which arm a row belongs to."""
+    return _grid_deltas(block, LEVEL_SILENT_CADENCE)
+
+
+def _grid_deltas(block, level):
     ref = running_silent_means(block)
     cases = _case_by_id(block)
     rows = []
     for p in sorted(block["points"], key=lambda e: (e["case"], e["phase_idx"])):
         c = cases.get(p["case"])
-        if c is None or c["f_hz"] == 0:
+        if c is None or c["f_hz"] == 0 or c["level"] != level:
             continue
         base = ref.get(_victim_key(c))
         if base is None:
@@ -616,6 +672,99 @@ def delta_pp(block):
                     "max_phase_idx": hi["phase_idx"],
                     "points": len(rows)})
     return out
+
+
+def _fmt1(value):
+    """One decimal, or a dash. The dash is not cosmetic: a missing arm has to
+    be visibly missing rather than printed as 0.0, which is also a perfectly
+    plausible shift on the two 150 ohm ties."""
+    return "-" if value is None else "%.1f" % value
+
+
+def cadence_shifts(block):
+    """The absolute shift `delta_pp` cannot see, for both arms, per victim
+    and frequency.
+
+    WHAT THIS IS. `delta_pp` is a peak-to-peak WITHIN a case, so a constant
+    offset across one is invisible to it by construction. This is that
+    offset: the mean of a case's 16 phase means, minus that victim's
+    RunningSilent mean. On the campaign's own blocks it reaches **852 counts**
+    on `REF_A` at 100 Hz -- 53 LSB of 12 bit against a criterion of half an
+    LSB, and about a hundred times the largest `delta_pp` in the same run.
+
+    WHY IT NEEDED A SECOND ARM. Three explanations were excluded by lines the
+    same block prints: starting the codec moves a victim by one count or less
+    (`level_diffs`), a steady -4.34 V on the output moves `REF_A` by two
+    (`static_deltas`), and ten times the amplitude moves it by under two (the
+    three level rows of a frequency, the `tone` column below). What was left
+    was confounded and structurally so -- `measure_phase_point()` waits for
+    the next phase crossing, so the interval between two conversions IS one
+    period of the tone, and frequency and measurement cadence were the same
+    variable. The `silent` column breaks that: same step, same waits,
+    amplitude zero.
+
+    HOW TO READ IT, and this is the whole of what may be read. If `silent`
+    tracks `tone`, the shift is this probe's own cadence and the audio output
+    is exonerated. If `silent` collapses toward zero, the output moves a
+    5150 ohm divider by tens of LSB and round two's negative result was
+    measured with a statistic that could not see it. NO MECHANISM IS ASSERTED
+    either way, and this is reported and never gated: it is a discriminator,
+    not a health check.
+
+    The reference is RunningSilent and not the boot-virgin Stopped level, for
+    the reason running_silent_means() gives -- the codec runs in every arm
+    compared here. On the shipped block the two references differ by 0 counts
+    on four victims and 2 on `REF_C`, so the choice does not move the reading;
+    it is stated because two references for one quantity is how a number
+    drifts.
+
+    `silent` is None for a block from an image built before this arm existed,
+    which includes the vendored fixture. That is not an error and the report
+    says so rather than printing a column of blanks."""
+    ref = running_silent_means(block)
+    cases = _case_by_id(block)
+    sums, counts = {}, {}
+    for p in block["points"]:
+        sums[p["case"]] = sums.get(p["case"], 0) + p["mean"]
+        counts[p["case"]] = counts.get(p["case"], 0) + 1
+
+    arms = {LEVEL_TONE: {}, LEVEL_SILENT_CADENCE: {}}
+    attrs = {}
+    for case, total in sums.items():
+        c = cases.get(case)
+        if c is None or c["f_hz"] == 0 or c["level"] not in arms:
+            continue
+        base = ref.get(_victim_key(c))
+        if base is None:
+            continue
+        key = (_victim_key(c), c["f_hz"])
+        attrs.setdefault(key, c)
+        arms[c["level"]].setdefault(key, []).append(
+            total / float(counts[case]) - base)
+
+    order = _victim_order(block)
+    rows = []
+    for key in sorted(set(arms[LEVEL_TONE]) | set(arms[LEVEL_SILENT_CADENCE]),
+                      key=lambda k: (order.index(k[0]) if k[0] in order
+                                     else len(order), k[1])):
+        tone = arms[LEVEL_TONE].get(key)
+        silent = arms[LEVEL_SILENT_CADENCE].get(key)
+        tone_mean = sum(tone) / float(len(tone)) if tone else None
+        silent_mean = sum(silent) / float(len(silent)) if silent else None
+        rows.append({
+            "victim_group": key[0][0], "victim_ch": key[0][1],
+            "r_src": attrs[key]["r_src"], "f_hz": key[1],
+            "tone_shift": tone_mean, "tone_cases": len(tone or ()),
+            # The three level rows' spread at this frequency: the amplitude
+            # test, printed beside the shift it rules on rather than left to
+            # a reader to recompute from the delta_pp table.
+            "tone_level_spread": (max(tone) - min(tone)) if tone and
+                                 len(tone) > 1 else None,
+            "silent_shift": silent_mean, "silent_cases": len(silent or ()),
+            "difference": (None if tone_mean is None or silent_mean is None
+                           else tone_mean - silent_mean),
+        })
+    return rows
 
 
 def block_floor(block):
@@ -887,9 +1036,15 @@ def verdicts(block, xtalk_meta):
 
 def format_csv(block):
     """One row per printed phase point, with its case's attributes and this
-    reader's delta beside it."""
+    reader's delta beside it.
+
+    BOTH ARMS, tone first and then silent-cadence, with `level` saying which.
+    The CSV is the archival artifact: a row the firmware measured and printed
+    that this file drops is data lost for good, and `deltas()` is tone-only on
+    purpose (see there), so the silent arm has to be appended explicitly or it
+    would disappear from the CSV while still being reported on stderr."""
     rows = [",".join(FIELDS)]
-    for row in deltas(block):
+    for row in deltas(block) + silent_deltas(block):
         rows.append(",".join(str(row.get(f, "")) for f in FIELDS))
     return "\n".join(rows) + "\n"
 
@@ -1086,6 +1241,35 @@ def report(block, xtalk_meta, out=None):
               "peak-to-peak)"
               % (row["dbfs"], row["victim_group"], row["victim_ch"],
                  row["r_src"], row["mean"], row["delta"]), file=sys.stderr)
+
+    shifts = cadence_shifts(block)
+    if shifts:
+        print("", file=sys.stderr)
+        print("absolute shift (codec-tone-measured.md section 6): a case's "
+              "grid mean minus its victim's RunningSilent mean. delta_pp is a "
+              "peak-to-peak WITHIN a case and cannot see this. `tone` "
+              "averages that frequency's level rows and `lvl_spread` is their "
+              "spread -- the amplitude test. `silent` is the same cadence "
+              "with the callback's amplitude at zero: if it tracks `tone` the "
+              "shift is this probe's cadence, if it collapses toward zero it "
+              "is the audio output. Reported, never gated, no mechanism "
+              "attached.", file=sys.stderr)
+        have_silent = any(r["silent_shift"] is not None for r in shifts)
+        for row in shifts:
+            print("  victim (%d,%d) r_src=%-4d f=%-5d tone=%9s lvl_spread=%6s "
+                  "silent=%9s diff=%9s"
+                  % (row["victim_group"], row["victim_ch"], row["r_src"],
+                     row["f_hz"],
+                     _fmt1(row["tone_shift"]), _fmt1(row["tone_level_spread"]),
+                     _fmt1(row["silent_shift"]), _fmt1(row["difference"])),
+                  file=sys.stderr)
+        if not have_silent:
+            print("  NO SILENT-CADENCE ARM IN THIS BLOCK. The image predates "
+                  "it (every capture of the 2026-09-18/19 campaign, the "
+                  "vendored fixture included), so the `tone` column stands "
+                  "alone and the confound section 6 describes is NOT resolved "
+                  "by this run. That is the expected reading of an older "
+                  "block, not a fault in it.", file=sys.stderr)
 
     failed = [row for row in rows if row["gated"] and not row["pass"]]
     if failed:

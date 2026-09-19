@@ -6,12 +6,14 @@
 > own audio output carries a tone through the analog zone, past the
 > multiplexers, how far does a settled multiplexer channel move?
 >
-> **The answer the campaign's own criterion returns is negative** — §4. The
-> answer a second statistic returns, on the same blocks, is **852 counts** —
-> §6. Those are not in conflict: they are two different quantities, and the
-> criterion is blind to the second by construction. §6 is the part of this run
-> that was not analysed while the campaign was running and is first reported
-> here.
+> **The answer is negative, twice over.** The campaign's own criterion returns
+> no frequency slope, no level slope and no ordering by impedance — §4. A
+> second statistic the criterion is blind to by construction returns **852
+> counts** — §6 — and a further measurement, taken 2026-09-19 after the
+> campaign closed, shows those 852 counts reproduce **to within one count with
+> the audio output carrying nothing at all**. They are this probe's own
+> measurement cadence. The output is exonerated, and the same measurement
+> eliminates §4's one remaining candidate.
 >
 > Its predecessor is [`crosstalk-measured.md`](crosstalk-measured.md), whose
 > §6 deferred one sequence — a transient that has already decayed by the
@@ -270,7 +272,7 @@ already unreachable before the audio was started. `REF_A` cannot pass this
 criterion on this board and nothing about the tone follows from its nine
 failures.
 
-### The one row that is clearly outside its floor
+### The one row that looked clearly outside its floor — and is not
 
 `REF_C` at 100 Hz, `case=21`: **`delta_pp = 11` against a floor of 4.** It is
 the only failing row anywhere in the table whose victim's floor leaves room for
@@ -282,16 +284,26 @@ it, and its level ladder is the only monotone one in the run:
 
 That is the shape a coupled signal has — roughly proportional to amplitude,
 1.1 / 5.5 / 11 for a straight line through the origin against the measured
-2 / 6 / 11. **It is recorded unlabelled, and here is why it stays unlabelled:**
-nine level ladders in this run can vary at all — the other six belong to the two
-150 Ω ties and are all zeros — and a strictly rising triple arises by chance one
-time in six, so **1.5 of those nine** are expected to rise monotonically with no
-cause behind them. Exactly **one** does. A single occurrence, however
-well-shaped, is what chance already predicts. It is the best candidate in the
-run, and it is a candidate.
+2 / 6 / 11. It was recorded **unlabelled**, for two reasons that were good at
+the time: nine level ladders in this run can vary at all — the other six belong
+to the two 150 Ω ties and are all zeros — and a strictly rising triple arises by
+chance one time in six, so **1.5 of those nine** are expected to rise
+monotonically with nothing behind them, and exactly one did. Across the
+campaign's four captures the same ladder reads 2/6/4, 3/8/11, 4/7/12 and
+2/6/11: monotone in three of four.
 
-What would settle it costs one capture: the same row at more than three levels,
-on more than one boot. Nothing else in this campaign's data can.
+**It is now eliminated, by the measurement §6 built.** The silent-cadence arm
+walks the same grid at the same 100 Hz cadence with the output carrying
+nothing, and on `REF_C` it returns a peak-to-peak of **12** — larger than the
+10 this ladder's top row produced, and larger than any tone row at that
+frequency. The quantity the candidate rested on is fully available from the
+measurement cadence alone. The floor of 4 that made it look exceptional is the
+boot-virgin floor, measured by `measure_level()`, which spins nothing between
+conversions; the rows it was being compared against wait a full 10 ms period
+between every one. §6's last subsection carries the table.
+
+**There is no candidate left in this run.** Nothing gated stands clearly above
+its own silent-cadence floor.
 
 ## 5. What the static row and the silent levels say
 
@@ -319,18 +331,26 @@ before it starts.
 
 ## 6. The 852 counts `delta_pp` cannot see
 
-**This section was not part of the campaign's analysis.** It reads the same
-committed blocks for a quantity the campaign's statistic discards: the
-**absolute mean** of a tone case against that victim's own boot-virgin Stopped
-level, at the same rung, where the rung bias cancels.
+**This section was not part of the campaign's analysis, and it is the reason
+the campaign needed one more measurement.** It reads the same committed blocks
+for a quantity the campaign's statistic discards — the **absolute mean** of a
+tone case against that victim's **RunningSilent** mean, at the same rung, where
+the rung bias cancels — and then reports a run taken on 2026-09-19, after the
+campaign closed, that says what the quantity is.
 
-Shipped block, mean of a case's 16 phase means, minus the Stopped level:
+RunningSilent and not the boot-virgin Stopped level, for the reason §4's
+`delta` column uses it — the codec runs in every arm compared here. On the
+shipped block the two references differ by **0 counts on four victims and 2 on
+`REF_C`**, so the choice does not move the reading; it is stated because two
+references for one quantity is how a number drifts.
 
-| victim | 100 Hz | 1 kHz | 5 kHz | static (DC) | RunningSilent |
+Shipped block, mean of a case's 16 phase means, minus the RunningSilent mean:
+
+| victim | 100 Hz | 1 kHz | 5 kHz | static (DC) | Stopped |
 |---|---:|---:|---:|---:|---:|
-| `REF_A` 5150 Ω | **−852** | **−310** | **−77** | −2 | +1 |
-| `REF_C` 5150 Ω | **−673** | **−256** | **−77** | −1 | −1 |
-| `REF_B` 650 Ω | −18 | −12 | −9 | −2 | +1 |
+| `REF_A` 5150 Ω | **−852** | **−310** | **−77** | −2 | −1 |
+| `REF_C` 5150 Ω | **−671** | **−254** | **−75** | −1 | +1 |
+| `REF_B` 650 Ω | −18 | −12 | −9 | −2 | −1 |
 | `R_SP10` 150 Ω | 0 | 0 | 0 | 0 | 0 |
 | `R_LO3` 150 Ω | 0 | 0 | 0 | 0 | 0 |
 
@@ -338,23 +358,25 @@ Shipped block, mean of a case's 16 phase means, minus the Stopped level:
 of half an LSB. It is roughly a hundred times the largest `delta_pp` anywhere
 in the run.
 
-**It reproduces across boots.** Three independent captures, three boots, same
-image family:
+**It reproduces across boots at 100 Hz, and drifts above it.** Four captures,
+four boots — the last is the silent-arm run of the subsection below:
 
-| | `438fd51` | `c5631f4` | `task-5` |
-|---|---:|---:|---:|
-| `REF_A` 100 Hz | −850.7 | −851.7 | −852.4 |
-| `REF_A` 1 kHz | −284.4 | −281.1 | −308.9 |
-| `REF_A` 5 kHz | −70.2 | −70.8 | −76.2 |
-| `REF_C` 100 Hz | −670.2 | −670.5 | −672.7 |
-| `REF_B` 100 Hz | −17.2 | −18.2 | −17.9 |
+| | `438fd51` | `c5631f4` | `task-5` | `ab02aec` |
+|---|---:|---:|---:|---:|
+| `REF_A` 100 Hz | −849.7 | −850.7 | −851.4 | −854.0 |
+| `REF_A` 1 kHz | −283.4 | −280.1 | −307.9 | **−370.7** |
+| `REF_A` 5 kHz | −69.2 | −69.8 | −75.2 | **−92.1** |
+| `REF_C` 100 Hz | −669.2 | −669.5 | −670.7 | −674.2 |
+| `REF_B` 100 Hz | −16.2 | −17.2 | −15.9 | −17.1 |
 
-The 100 Hz rows agree to **two counts across three boots**. The 1 kHz row is
-the loose one, spanning 28 counts, and it is the only figure in this table that
-would not survive being quoted to three digits.
+The 100 Hz rows agree to **four counts across four boots**. The 1 kHz and
+5 kHz rows do not: they wander **91 and 23 counts** respectively, most of it
+in the fourth boot. Whatever this quantity is, only its 100 Hz value is stable
+between power cycles, and no figure above 100 Hz may be quoted to three digits.
+That drift turns out to matter (see below) — both arms follow it together.
 
-**It does not scale with amplitude.** This is the decisive column, and it is
-what separates this quantity from anything the tone's own signal could do:
+**It does not scale with amplitude.** This was the first column to point away
+from the tone's own signal, before the arm below settled it:
 
 | victim | f | −20 dBFS | −6 dBFS | 0 dBFS | spread |
 |---|---|---:|---:|---:|---:|
@@ -369,68 +391,140 @@ two counts**, while changing 100 Hz to 5 kHz at a fixed amplitude moves
 `REF_A` by **775**. Whatever this is, the tone's amplitude is not in it.
 
 **It is ordered by source impedance, and the ties read exactly zero.** At
-100 Hz: 5150 Ω → −852 and −673, 650 Ω → −18, 150 Ω → 0 and 0. That is the
+100 Hz: 5150 Ω → −852 and −671, 650 Ω → −18, 150 Ω → 0 and 0. That is the
 attribution axis responding, and responding *harder* than proportionally —
-852/18 is 47× across an impedance ratio of 7.9×.
+852/18 is 47× across an impedance ratio of 7.9×. **The ordering survives the
+silent arm below**, so it is an impedance dependence somewhere in the ADC path
+and not evidence that anything couples into the node.
 
-### What this run can and cannot say about it
+### What the campaign's own blocks could not say
 
-**Three explanations are already excluded by measurements in this document:**
+**Three explanations are excluded by measurements already in this document:**
 
 - Not the codec running — RunningSilent moves ±1 (§5).
 - Not a DC level on the output — the static row holds −4.34 V and moves 2 (§5).
 - Not the tone's amplitude — ≤1.8 counts over 10× (the table above).
 
-**What is left is confounded, and the confound is structural** (§2): frequency
+**What was left was confounded, and the confound is structural** (§2): frequency
 and the interval between conversions are the same variable in this instrument.
 The shift is monotone in frequency, and it is equally monotone in the wait —
-10 ms, 1 ms, 0.2 ms. This run contains no case with a long wait and no tone,
-so it cannot tell the two apart. **That is not a hedge; it is the design's
-limit, and it was not seen while the design was being reviewed.**
+10 ms, 1 ms, 0.2 ms. None of the campaign's four captures contains a case with
+a long wait and no tone, so none of them can tell the two apart. That is not a
+hedge; it is the design's limit, and it was not seen while the design was being
+reviewed.
 
-**One numerical correspondence is worth recording, as a correspondence.**
-`settle-measured.md` §7 measured what a 5150 Ω victim reads on its first
-conversion after arriving from an `AGND` tie:
+### The arm that separates them, and the answer
 
-| victim | §7, first read from `AGND` | this run, 100 Hz shift |
-|---|---:|---:|
-| `REF_A` | −866 | −852 |
-| `REF_C` | −682 | −673 |
-| `REF_B` | −9 | −18 |
+The discriminating case is **not** "the phase grid with the codec stopped",
+which is the obvious phrasing and wrong twice over: `phase_now()` derives its
+base from `g_phase_at_block` and `g_dwt_at_block_start`, which only the
+callback writes, so a stopped codec freezes the phase base the grid waits on —
+and stopping the codec moves a second variable besides.
 
-The two 5150 Ω figures agree to within 2 %. **That is an observation across two
-instruments and two questions, and it is not an explanation**, for a reason
-visible in §7 itself: §7's column is about arriving from a *different channel*,
-and nothing changes channel inside a tone case — `park_victim()` runs once per
-case and the channel is held for all 1024 conversions. Calling the
-correspondence a mechanism would attach an unmeasured one, which this project
-does not do.
+The right arm sets **`g_amplitude = 0` while leaving `g_phase_step` at the
+row's real value**. The callback writes `a * s` with `a = 0`, so the output is
+silent; the accumulator still advances, so the grid still waits one period per
+repeat. Same cadence, no aggressor, codec running in both arms. One case per
+victim per frequency, `level=3` on `SHELL_TONE_CASE`
+(`ToneLevel::SilentCadence`).
 
-### What would settle it
+**Measured 2026-09-19, image `ab02aec+`, the complete block of
+[`captures/task-6-board-capture-silent-arm.txt`](captures/task-6-board-capture-silent-arm.txt)**
+— 227.2 s, `gates_ok=1`, `missed_blocks=0`, `phase_timeouts=0`,
+`win_timeouts=0`, ADC `timeouts=0`, `b0=9` against a bound of 64, and not one
+`$$` overflow marker in 2925 captured lines:
 
-**Three cases, one per frequency, and the callback already supports them.**
-Set `g_amplitude = 0.0f` while leaving `g_phase_step` at the row's real value,
-and measure on the phase grid exactly as a tone row is measured. The callback
-writes `a * s` with `a = 0`, so the output is **silent**; the phase accumulator
-keeps advancing, so the grid waits exactly as long as it does for the real
-tone. Cadence identical, aggressor gone, and the codec is running in both arms.
+| victim | f | tone | silent | difference |
+|---|---|---:|---:|---:|
+| `REF_A` 5150 Ω | 100 Hz | −854.0 | −854.3 | **+0.27** |
+| `REF_A` 5150 Ω | 1 kHz | −370.7 | −370.6 | **−0.17** |
+| `REF_A` 5150 Ω | 5 kHz | −92.1 | −91.6 | **−0.50** |
+| `REF_C` 5150 Ω | 100 Hz | −674.2 | −674.2 | **+0.02** |
+| `REF_C` 5150 Ω | 1 kHz | −296.0 | −295.4 | **−0.58** |
+| `REF_C` 5150 Ω | 5 kHz | −86.6 | −86.6 | **+0.06** |
+| `REF_B` 650 Ω | 100 Hz | −17.1 | −17.4 | **+0.31** |
+| `REF_B` 650 Ω | 1 kHz | −11.4 | −11.7 | **+0.25** |
+| `REF_B` 650 Ω | 5 kHz | −9.0 | −9.3 | **+0.35** |
+| `R_SP10` 150 Ω | all three | 0.0 | 0.0 | **≤0.04** |
+| `R_LO3` 150 Ω | all three | 0.0 | 0.0 | **0.00** |
 
-*Not "with the codec stopped".* That is the obvious phrasing and it is the
-wrong experiment twice over: `phase_now()` derives its base from
-`g_phase_at_block` and `g_dwt_at_block_start`, which only the callback writes,
-so a stopped codec freezes the phase base the grid waits on; and stopping the
-codec changes a second variable, which is the one thing this comparison cannot
-afford.
+**The largest difference across all fifteen rows is 0.58 counts.** A shift that
+reaches 854 counts is reproduced to within six tenths of a count by a run in
+which the output carries nothing at all.
 
-If the shift survives the silent arm, it is the probe's cadence and the audio
-output is exonerated. If it vanishes, the audio output moves a 5150 Ω pot
-reading by 53 LSB of 12 bit and the design has a problem that `delta_pp ≤ 8`
-never saw.
+**A second block of the same boot, taken before this one, says the same.** Its
+fifteen differences are −0.6, +0.6, +1.0, +0.5, +0.7, +0.8, 0.0, 0.0, +0.2 and
+six zeros — largest 1.0 count. Two blocks, thirty rows, no difference above one
+count.
 
-It is a small change to `tone_probe.cpp` and a reflash. **Until it is run,
-neither reading of §4's negative result is safe:** the campaign concluded the
-tone does not disturb a settled channel, and the statistic it concluded that
-from cannot see the largest movement in its own data.
+**The 852 counts are this probe's own measurement cadence. The audio output
+is exonerated.** It contributes at most one count, which is the ADC's own
+repeat-to-repeat noise on a mean of 64.
+
+**A second observation makes that harder to argue with.** The shift is not
+stable between boots: `REF_A` at 1 kHz reads −283, −280, −308 across the
+campaign's three captures and **−369** in this one, and at 5 kHz −69, −70, −75
+and now **−90**. The 100 Hz row barely moves (−850, −851, −851, **−853**). So
+the quantity wandered by 60 to 90 counts between boots at the middle and top of
+the ladder — and inside this boot the two arms still tracked each other to one
+count. Both arms follow the drift together, which is not what an aggressor and
+its absence do.
+
+**No mechanism is attached, and this run does not supply one.** The
+correspondence with `settle-measured.md` §7's first-arrival column is
+unaffected by the result above — if anything it is now the more interesting
+of the two, because the cause is somewhere in the ADC path rather than on the
+board's analog side. What would name it is a wait sweep at a fixed frequency,
+which is a different instrument and not this one.
+
+### The silent arm is also the right floor for `delta_pp`
+
+The arm answers a second question nobody asked it. `delta_pp` is judged in §4
+against each victim's **boot-virgin floor** — and that floor is measured by
+`measure_level()`, which spins nothing between conversions. A tone row waits a
+full period between every conversion. The two are not measured under the same
+cadence, and the silent arm is the first statistic in this campaign that is.
+
+Peak-to-peak over the 16 phase points, same block, tone rows against the
+silent row at the same frequency:
+
+| victim | f | tone, −20/−6/0 dBFS | silent (no tone) | boot-virgin floor |
+|---|---|---|---:|---:|
+| `REF_A` | 100 Hz | 11, 10, 10 | **12** | 16 |
+| `REF_A` | 1 kHz | 15, 13, 16 | **14** | 16 |
+| `REF_A` | 5 kHz | 13, 15, 15 | **14** | 16 |
+| `REF_C` | 100 Hz | 11, 9, 7 | **7** | 2 |
+| `REF_C` | 1 kHz | 7, 6, 6 | **6** | 2 |
+| `REF_C` | 5 kHz | 3, 3, 4 | **3** | 2 |
+| `REF_B` | 100 Hz | 7, 14, 3 | **4** | 3 |
+| `REF_B` | 1 kHz | 5, 5, 8 | **6** | 3 |
+| `REF_B` | 5 kHz | 4, 3, 5 | **4** | 4 |
+| `R_SP10` | all | 0–1 | **0** | 1 |
+| `R_LO3` | all | 0 | **0** | 0 |
+
+**On the two gated victims, no row stands clearly above its own silent-cadence
+floor.** `REF_A`'s largest excess is 2 counts (1 kHz, 0 dBFS: 16 against 14);
+`REF_C`'s is 4 (100 Hz, **−20 dBFS** — the *quietest* row of its ladder, which
+is the wrong end for coupling).
+
+`REF_B` shows one outlier, 14 at 100 Hz and −6 dBFS against a silent floor of
+4, and it is reported rather than smoothed. It is not read as a finding: `REF_B`
+is the 650 Ω impedance control and report-only, and its own three rows at that
+frequency run **7, 14, 3** — a spread that no ordering in amplitude survives.
+
+**And `REF_C`'s 100 Hz ladder — §4's one candidate — is eliminated.** In this
+block it runs **11, 9, 7**, i.e. *downward* with amplitude, against a
+silent-cadence floor of 7. In the shipped block it ran 2, 6, 11 upward against a
+silent floor that block could not measure. Two blocks of the same boot put the
+same ladder in opposite directions, and the quantity it rested on is available
+from cadence alone. The boot-virgin floor of 2 that made it look exceptional is
+a floor measured without the waits. §4 records the elimination.
+
+**What this says about the criterion.** Spec §4's `delta_pp ≤ 8` is compared
+against a floor that does not share the cadence of the rows it judges. On this
+board that understates the floor at 5150 Ω by up to ten counts — the whole
+budget and more. A future round should gate against the silent-cadence row at
+the same frequency, and this run is the first that could have said so.
 
 ## 7. The edge inside the sampling window
 
@@ -450,7 +544,9 @@ SHELL_TONE_WINDOW window_ns=63047 nominal_ns=63050 grid_end_ns=12800 fits=1
 
 **63047 ns against a nominal 63050** — three nanoseconds, from a clock the
 probe measured rather than assumed. The grid fits with a factor of five to
-spare.
+spare. §6's later run, a different boot and a different image, printed
+**63045**: the measured window reproduces to two nanoseconds across a power
+cycle and a reflash.
 
 `MUX8_EN_N` against `REF_A`, both edge directions, 65 points at 200 ns, 64
 repeats, four complete curves across two blocks of the committed capture:
@@ -513,22 +609,36 @@ supported, *does not flip*, is robust under every one of them.
 | The audio output is DC-coupled at B1/B2, full scale 8.66 V peak, inverting | **measured** — handheld meter, three readings, spec §9 |
 | `adc_khz = 6146` | **measured**, printed, and matching `settle-measured.md` §1 in a different image |
 | Every `delta_pp` in §4 | **measured**, printed per phase point |
-| The absolute shifts in §6 | **derived** — case mean of 16 printed phase means, minus the printed Stopped level, same victim, same rung |
+| The absolute shifts in §6 | **derived** — case mean of 16 printed phase means, minus the printed RunningSilent mean, same victim, same rung |
+| That those shifts are the measurement cadence and not the tone | **measured** — §6's silent-cadence arm, `level=3`, one block, fifteen rows, largest difference 1.0 count |
+| That `REF_C`'s 100 Hz ladder is not coupling | **measured** — the same arm returns 12 on that victim at that frequency with no tone, above the ladder's top value of 10 |
 | The 172 s cadence figure in §2 | **derived** from the ladder, checked against printed `block_ms` |
 | The window in §7, 63047 ns | **measured** from this boot's clock |
 | The rung bias that absorbs most of §7's junction step | **measured**, but in a different run — `settle-measured.md` §7 |
-| Why §6's shift happens | **unmeasured**, and the one case that would decide it was not run |
-| Whether `REF_C`'s 100 Hz ladder is coupling or chance | **unmeasured** — one monotone ladder out of fifteen |
+| Why §6's shift happens at all | **unmeasured** — the arm says what it is not, not what it is; a wait sweep at a fixed frequency is what would name it |
+| Why the shift drifts 60–90 counts between boots above 100 Hz | **unmeasured** |
 | That an unloaded output is a valid aggressor for a loaded jack | **reasoned, not verified** — spec §11 |
 
 ## 9. Open, characterised, deliberately unexplained
 
-- **§6's 852 counts.** Three explanations excluded, cadence and tone
-  confounded, one case would settle it. No mechanism attached.
+- **§6's 852 counts are the measurement cadence, not the tone** — answered,
+  to within one count on fifteen rows. What remains open is **what in the ADC
+  path the cadence is meeting**: the correspondence with
+  `settle-measured.md` §7's first-arrival column is close on both 5150 Ω
+  victims, and naming it needs a wait sweep at a fixed frequency, which is a
+  different instrument. No mechanism attached.
+- **The shift drifts between boots** — `REF_A` at 1 kHz reads −283, −280,
+  −308 and −371 across four captures — while the two arms track each other to
+  one count inside any one boot. Characterised, unexplained.
+- **Spec §4's criterion is judged against the wrong floor.** The boot-virgin
+  floor spins nothing between conversions; the rows it judges wait a full
+  period. §6's last subsection measures the difference and it reaches ten
+  counts at 5150 Ω.
 - **§7's 28–34 count residue** at the two instruments' junction, after the
   measured rung bias is taken out.
-- **§4's `REF_C` 100 Hz ladder**, 2 → 6 → 11. The best candidate in the run and
-  inside what chance produces from fifteen triples.
+- ~~`REF_C`'s 100 Hz ladder~~ — **closed**, not open: the silent-cadence arm
+  returns 12 on that victim at that frequency with no tone, above the ladder's
+  own top value of 10. §4.
 - **`REF_A`'s floor of 14** makes an 8-count criterion unreachable on that
   victim before any aggressor exists. The criterion is reading the floor, and
   this document says so rather than widening the bound.
@@ -553,13 +663,23 @@ audio trace running through the analog zone past the muxes does not put a
 readable sinusoid on a settled pot channel, at any of nine frequency-level
 combinations, on this board.
 
-**As §6 poses it, one measurement decides whether that sentence is true.** If
-the 852 counts are the probe's own cadence, the sentence stands and the
-instrument needs a note. If they are the audio output, a 5150 Ω divider moves
-53 LSB of 12 bit when a 100 Hz tone plays, and the panel's high-impedance
-controls have a problem that no statistic in this campaign was looking for.
-**That is three silent cases, one flash and one capture, and it should happen
-before any panel decision leans on round two.**
+**§6 asked whether that sentence survives the one statistic the criterion
+cannot see, and it does.** The 852 counts are the probe's own measurement
+cadence: with the output carrying nothing the same shift comes back to within
+one count, on all fifteen rows, at every impedance. The audio trace is
+exonerated on this board, and a panel decision may now lean on round two.
+
+**Two things the same measurement leaves the design owing.** First,
+`delta_pp`'s floor is wrong: the boot-virgin floor spins nothing between
+conversions while the rows it judges wait a full period, and at 5150 Ω the
+difference reaches ten counts — the criterion's entire budget. A future round
+gates against the silent-cadence row at the same frequency. Second, the shift
+itself is real, large and unexplained: something in the ADC path moves a
+5150 Ω channel by up to 852 counts as a function of how long the converter
+waits, it drifts 60 to 90 counts between boots, and the shipping firmware's
+free-running ADC DMA reads pots at a cadence nobody has characterised. **That
+is the question worth the next instrument** — a wait sweep at a fixed
+frequency — and it is a bigger one than round two set out to ask.
 
 Two things this run does *not* license either way: it says nothing about a
 loaded jack, and nothing about the shipping firmware's free-running ADC DMA,
@@ -584,6 +704,20 @@ docstring is the authority for this command.
 §6's and §7's tables are computed from the capture files directly; both are
 plain `SHELL_TONE` and `SHELL_TONE_WIN` line scans over
 `docs/hardware/captures/`.
+
+**§6's answer has its own capture, and the reader prints it.** The
+silent-cadence run is `captures/task-6-board-capture-silent-arm.txt`; both arms
+are in that block, so `cadence_shifts()` pairs them and the `tone` / `silent` /
+`diff` table comes straight out:
+
+```bash
+python -c "import sys; sys.path.insert(0, 'shell'); import read_tone as r; raise SystemExit(r.report(r.parse_block(open('docs/hardware/captures/task-6-board-capture-silent-arm.txt')), open('docs/hardware/2026-09-19-xtalk.csv.meta.csv').read(), 'tone-silent.csv'))"
+```
+
+It exits 1 for the same reason the command above does — ten gated rows fail a
+criterion that is reading a floor — and the section it adds is the answer. The
+four earlier captures print the same section with the `silent` column as `-`
+and a line saying in words that the arm is missing from that image.
 
 To rebuild and reflash the image:
 

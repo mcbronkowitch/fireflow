@@ -313,7 +313,7 @@ SHELL_TONE_CLK   span_short_cyc=%d span_long_cyc=%d smp_short_tenths=%d smp_long
 SHELL_TONE_CAL   lat_mean_ns=%d lat_min_ns=%d lat_max_ns=%d b0=%d timeouts=%d
 SHELL_TONE_LEVEL case=%d level=%d victim_group=%d victim_ch=%d r_src=%d n=%d mean=%d min=%d max=%d audio_virgin=%d   (stopped and running-silent)
 SHELL_TONE_STAT  case=%d settled_mean_spread=%d widest_sample_band=%d
-SHELL_TONE_CASE  case=%d level=%d f_hz=%d dbfs=%d victim_group=%d victim_ch=%d r_src=%d below_corner=%d
+SHELL_TONE_CASE  case=%d level=%d f_hz=%d dbfs=%d victim_group=%d victim_ch=%d r_src=%d below_corner=%d   (level=2 tone, level=3 silent-cadence)
 SHELL_TONE       case=%d phase_idx=%d n=%d mean=%d min=%d max=%d
 SHELL_TONE_SPAN  zero=%d rail=%d hi_spread=%d lo_spread=%d valid=%d
 SHELL_TONE_G5    victim_group=%d victim_ch=%d expect=%d mean=%d ok=%d
@@ -324,6 +324,22 @@ SHELL_TONE_GATES  g2=%d g4=%d g5=%d g7=%d g8=%d gates_ok=%d
 SHELL_TONE_HEALTH missed_blocks=%d phase_timeouts=%d win_timeouts=%d block_ms=%d
 SHELL_TONE_END
 ```
+
+**`level` on `SHELL_TONE_CASE` has a fourth value (2026-09-19).**
+`ToneLevel::SilentCadence = 3` is the discriminating arm
+[`docs/hardware/codec-tone-measured.md`](../../hardware/codec-tone-measured.md)
+section 6 asks for: the phase grid walked at a row's real phase step with the
+callback's amplitude at zero, so the cadence is a tone case's and the output
+is silent. It is announced with the same `SHELL_TONE_CASE` tag and walks the
+same `SHELL_TONE` grid — deliberately, so the block's completeness rules cover
+it with no new tag and no new rule — and the ONLY fields separating it from a
+tone case are `level=3` and `dbfs=-127` (`tone_plan.h:kToneSilentDbfs`; silence
+has no level and the line shape has a field for one). A reader keying on
+`f_hz != 0` alone will judge silence against a criterion about a tone;
+`read_tone.py`'s `deltas()` filters on `level` for that reason and its guard
+red-proves the filter. One case per victim per distinct frequency, printed
+after the static row, so every case index published before this arm existed
+keeps its number.
 
 `SHELL_TONE_SPAN` is the G5 span calibration (zero/rail/spread), copied
 from round one's pass. `SHELL_TONE_G5` is the per-victim G5 address

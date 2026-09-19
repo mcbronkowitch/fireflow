@@ -997,6 +997,122 @@ void run_tone_probe(bench::Board& hw)
             }
         }
 
+        // --- The silent-cadence arm (codec-tone-measured.md section 6) ---
+        //
+        // WHAT THIS EXISTS TO SEPARATE. Reading the campaign's own blocks for
+        // ABSOLUTE level rather than delta_pp, a 100 Hz tone moves REF_A 852
+        // counts off its boot-virgin Stopped level -- 53 LSB of 12 bit,
+        // against a criterion of half an LSB -- reproducing across three
+        // boots to two counts, ordered by source impedance, exactly zero on
+        // both 150 ohm ties, and FLAT under a ten-fold amplitude change.
+        // delta_pp is a peak-to-peak WITHIN a case and is blind to it.
+        //
+        // Three explanations were already excluded by lines this block
+        // prints: starting the codec moves every victim by one count or less
+        // (RunningSilent), a steady -4.34 V on the output moves REF_A by two
+        // (the static row), and ten times the amplitude moves it by under two
+        // (the three level rows of each frequency). What was left was
+        // CONFOUNDED, and structurally so: measure_phase_point() waits for the
+        // next phase crossing, so the interval between two conversions IS one
+        // period of the tone. Frequency and measurement cadence were the same
+        // variable, and the campaign's run contained no case with a long wait
+        // and no tone.
+        //
+        // This is that case. g_amplitude goes to zero while g_phase_step keeps
+        // the row's REAL value, so the callback writes a * s with a == 0 --
+        // silence -- while the accumulator advances exactly as before and the
+        // grid waits exactly as long. Same cadence, no aggressor, codec
+        // running in both arms.
+        //
+        // HOW TO READ THE RESULT. If the shift survives here, it is this
+        // probe's own cadence meeting something in the ADC path and the audio
+        // output is exonerated. If it vanishes, the output moves a 5150 ohm
+        // divider by 53 LSB of 12 bit and round two's negative result was
+        // measured with a statistic that could not see it. NO MECHANISM IS
+        // ASSUMED EITHER WAY; this prints the two arms and nothing more.
+        //
+        // Every victim, not only the three that moved: the two 150 ohm ties
+        // are the attribution axis and reading zero in this arm too is the
+        // check that keeps them one. They cost 21 s of the ~57 s this arm
+        // adds to a ~171 s block.
+        //
+        // The frequencies come from kToneRows itself rather than a second
+        // table -- one table to keep in step, the same argument this file
+        // makes for using round one's victim table directly. The static row
+        // is skipped: f_hz == 0 has no period, so it has no cadence to hold
+        // constant.
+        //
+        // case_idx CONTINUES the same counter, so these land after the static
+        // row and every case index published before this arm existed keeps
+        // its number.
+        for(int i = 0; i < kToneRowCount; ++i)
+        {
+            const int f_hz = kToneRows[i].f_hz;
+            if(f_hz == 0) continue;
+
+            bool already = false;
+            for(int j = 0; j < i; ++j)
+                if(kToneRows[j].f_hz == f_hz) { already = true; break; }
+            if(already) continue;
+
+            // The step is the row's; the amplitude is not. Set once here, in
+            // the foreground, between cases -- same discipline as the tone
+            // ladder above.
+            g_phase_step = phase_step_per_sample(f_hz, sr_hz);
+            g_amplitude  = 0.0f;
+
+            hw.Delay(20);
+
+            for(int v = 0; v < kXtalkVictims; ++v)
+            {
+                const XtalkVictim& vv = kXtalkVictimTable[v];
+
+                // Same line shape as a tone case, so the block's completeness
+                // rules (read_tone.py rules 5 and 6) cover this arm with no
+                // new tag and no new rule: the case counter stays dense and a
+                // case with f_hz != 0 still owes exactly phase_points points.
+                // level=3 is what tells the two arms apart; dbfs carries
+                // kToneSilentDbfs because silence has no level and this line
+                // shape has a field for one.
+                hw.PrintLine("SHELL_TONE_CASE case=%d level=%d f_hz=%d dbfs=%d "
+                             "victim_group=%d victim_ch=%d r_src=%d below_corner=%d",
+                             case_idx, static_cast<int>(ToneLevel::SilentCadence),
+                             f_hz, kToneSilentDbfs, vv.group, vv.channel,
+                             static_cast<int>(vv.r_src_ohm), 0);
+
+                park_victim(chain, vv);
+
+                for(int k = 0; k < kTonePhasePoints; ++k)
+                {
+                    int         n = 0;
+                    const Point p = measure_phase_point(g_phase_step, sr_hz, k, &n);
+                    hw.PrintLine("SHELL_TONE case=%d phase_idx=%d n=%d mean=%d min=%d max=%d",
+                                 case_idx, k, n, p.mean, p.min, p.max);
+                }
+                ++case_idx;
+            }
+        }
+
+        // RESTORE THE STATE THE TONE LADDER USED TO LEAVE BEHIND, and do it
+        // before the span/G5 pass rather than after. That pass reads the two
+        // HI and two LO ties and judges every victim's address against them,
+        // and the comment ahead of the window sweep below records why it runs
+        // "with the codec in whatever state the tone-case loop left it in":
+        // changing those conditions changes two measurements neither that
+        // task nor this arm is about. Without this the span and all five G5
+        // verdicts would be taken in silence where every earlier block took
+        // them under the last row's output, and any shift between a new
+        // capture and the committed one would be unattributable.
+        //
+        // Read from the table's last row rather than restated, so a row added
+        // or reordered there carries this with it.
+        {
+            const ToneRow& last = kToneRows[kToneRowCount - 1];
+            g_phase_step = phase_step_per_sample(last.f_hz, sr_hz);
+            g_amplitude  = powf(10.0f, static_cast<float>(last.dbfs) / 20.0f);
+            hw.Delay(20);
+        }
+
         // --- Step 4: G5's span and per-victim verdict, copied from
         // xtalk_probe.cpp's measure_span()/coupon_verdict() pass (see the
         // comment ahead of that section above) ---

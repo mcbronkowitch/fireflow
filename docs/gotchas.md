@@ -70,6 +70,19 @@ by ear are a different list: [`docs/by-ear-decisions.md`](by-ear-decisions.md).
   (make's one-second mtime resolution, and switches that must be resolved at
   parse time) and as the bring-up-probe entry further down: `cmp` the image
   before you flash.
+- **Python's `__pycache__` has the same one-second mtime blind spot make
+  does, and it fakes a failed mutation test.** During a RED proof on
+  `shell/read_tone.py` the sabotage was applied, the guard went red, the
+  source was restored byte-for-byte — and the guard *stayed* red, naming the
+  check the restored code satisfies. The restored file had landed in the same
+  filesystem second as the cached `shell/__pycache__/read_tone.cpython-*.pyc`,
+  so the interpreter kept serving the sabotaged bytecode. The visible symptom
+  is the worst one available: a test that looks like it is failing honestly,
+  against source that is demonstrably correct, which invites "fixing" code
+  that was never broken. **`rm -rf shell/__pycache__` between the halves of a
+  mutation test**, and treat a red that survives an exact restore as a cache
+  before treating it as a finding. Same family as the make entry above and as
+  `fireflow-bench-stale-object-trap`.
 - **Bench rows can shift ~7 % from icache layout alone** when a new
   translation unit links into the binary (observed on small rows with no
   engine change). Only compare bench rows measured in the same build/run,

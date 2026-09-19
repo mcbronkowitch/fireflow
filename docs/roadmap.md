@@ -58,24 +58,35 @@ is actually built today, and what is still design-only.
   — with the attribution axis alive, both 150 Ω ties reading exactly 0 at
   every gated row. `REF_A` fails the `delta_pp ≤ 8` criterion at all nine
   rows and seven of those nine sit at or below its own 14-count boot-virgin
-  floor: **the criterion is reading the floor on that victim.** One row out
-  of nine is clearly outside its floor — `REF_C` at 100 Hz running 2 → 6 → 11
-  across the level ladder — and it is recorded **unlabelled**. The bench half
-  is now written up:
+  floor: **the criterion is reading the floor on that victim.** One row of nine
+  looked clearly outside its floor — `REF_C` at 100 Hz running 2 → 6 → 11
+  across the level ladder — and it was recorded **unlabelled**; it has since
+  been eliminated, see below. The bench half is now written up:
   [`docs/hardware/codec-tone-measured.md`](hardware/codec-tone-measured.md),
   and reading the same blocks for **absolute level** rather than `delta_pp`
   turned up the one thing the campaign's statistic is blind to by
-  construction: a 100 Hz tone moves `REF_A` **852 counts** — 53 LSB of 12 bit
-  — reproducing across three boots to two counts, ordered by source impedance,
-  zero on both 150 Ω ties, and **flat under a ten-fold amplitude change**.
-  Three explanations are excluded by measurements already in hand; what
-  remains is confounded, because the phase grid ties the tone's frequency to
-  the interval between conversions. **Three silent cases settle it** — the phase
-  grid run at each row's real phase step with the callback's amplitude at
-  zero, so the cadence is identical and the aggressor is gone, the codec
-  running in both arms — and until that is run, neither reading of round two's
-  negative result is safe. That is the next
-  move on M6's measurement side; §6 and §10 of the write-up carry it);
+  construction: a 100 Hz tone moves `REF_A` **852 counts** — 53 LSB of 12 bit,
+  ordered by source impedance, zero on both 150 Ω ties, and flat under a
+  ten-fold amplitude change. **A further measurement on 2026-09-19 settled
+  it, and the answer is that those 852 counts are the probe's own measurement
+  cadence, not the tone.** A silent-cadence arm — the same phase grid at the
+  same phase step with the callback's amplitude at zero, so the waits are
+  identical and the output carries nothing — reproduces the whole shift **to
+  within one count on all fifteen rows**, at every impedance. The audio trace
+  through the analog zone is exonerated on this board and a panel decision may
+  lean on round two. The same arm **eliminates the campaign's one remaining
+  candidate**: `REF_C`'s 100 Hz level ladder ran 2 → 6 → 11 upward in the
+  shipped block and **11 → 9 → 7 downward** in the new one, against a
+  no-tone floor of 7 at the same cadence. Two things
+  it leaves owing, both in §6 and §10 of the write-up: `delta_pp`'s
+  boot-virgin floor does not share the cadence of the rows it judges and
+  understates them by up to ten counts at 5150 Ω, so a future round gates
+  against the silent row instead; and the shift itself is real, large,
+  drifting 60–90 counts between boots and **unexplained** — something in the
+  ADC path moves a 5150 Ω channel as a function of how long the converter
+  waits, which the shipping firmware's free-running ADC DMA does at a cadence
+  nobody has characterised. A wait sweep at a fixed frequency is the next
+  instrument, and it asks a bigger question than round two set out to);
   earlier, 2026-09-03 (**the coupon is fully ordered — boards and
   parts**: JLCPCB, five bare 4-layer boards, $22.02 all in, and one Reichelt
   order at 14.19 € plus 5.95 € shipping, both placed. The next move on M6 is a
