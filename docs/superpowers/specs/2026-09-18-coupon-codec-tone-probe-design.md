@@ -107,6 +107,13 @@ No timing enters it — an asynchronous free-running ADC read on the shipping
 firmware lands at a random phase, so the peak-to-peak is the worst case it
 can meet.
 
+**One exception, deliberate: the static row is reported and not gated.** A
+constant has no phase, so that row is one point, so its `delta_pp` is 0 by
+construction — a gate on it could never go red, and this project fixes gates
+that cannot fail. `read_tone.py`'s `static_deltas()` carries the same
+statement at its definition, and the row's `delta` against the
+running-silent level is printed like any other.
+
 ## 5. The phase grid
 
 The callback runs at 48 kHz with the block size the board reports
