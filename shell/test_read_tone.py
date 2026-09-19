@@ -35,7 +35,7 @@ from contextlib import redirect_stderr
 
 from read_tone import (parse_block, format_csv, format_meta_csv, deltas,
                        static_deltas, delta_pp, g8, verdicts, block_floor,
-                       level_diffs, BOOT_VIRGIN_FLOOR)
+                       level_diffs, virgin_levels, BOOT_VIRGIN_FLOOR)
 
 FAILURES = []
 
@@ -75,13 +75,14 @@ def build_xtalk_meta(spreads=(15, 0)):
 
 # The fixture's two victims. Both are in read_tone's BOOT_VIRGIN_FLOOR, which
 # is what makes G8(b) evaluable on the fixture at all:
-#   (0,8)  REF_A   boots 17,16,17,14 -> bound [13-4, 17+4] = [10, 21]
+#   (0,8)  REF_A   boots 17,16,17,14 -> bound [14-4, 17+4] = [10, 21]
 #   (0,10) R_SP10  boots  1, 1, 0, 0 -> bound [ 0-4,  1+4] = [-4,  5]
 VICTIMS = ((0, 8, 5150), (0, 10, 150))
 
 
 def build_block(phase_points=4, gates_ok=1, missed=0,
                 virgin_spreads=(17, 1),
+                stopped_mean=90, running_mean=100,
                 tone_means=(100, 106, 100, 94),
                 fits=1, win_points=5, win_step=200,
                 extra_victim=False):
@@ -117,12 +118,22 @@ def build_block(phase_points=4, gates_ok=1, missed=0,
                      "widest_sample_band=895" % (-(vi + 1), spread))
 
     # The per-block ladder: Stopped then RunningSilent, per victim.
+    #
+    # THE TWO LEVELS CARRY DIFFERENT MEANS ON PURPOSE. Spec section 4 says
+    # every delta is measured against the RUNNING-SILENT level, so that the
+    # only difference between a tone case and its reference is the tone. With
+    # both levels at the same mean the choice is unfalsifiable: swapping the
+    # reference to Stopped leaves every assertion green while out.csv's delta
+    # column and static_deltas() both move. Ten counts apart makes the choice
+    # visible in section D's numbers.
     case = 0
     for g, ch, r in victims:
         for level in (0, 1):
+            mean = stopped_mean if level == 0 else running_mean
             lines.append("SHELL_TONE_LEVEL case=%d level=%d victim_group=%d "
-                         "victim_ch=%d r_src=%d n=64 mean=100 min=98 max=102 "
-                         "audio_virgin=0" % (case, level, g, ch, r))
+                         "victim_ch=%d r_src=%d n=64 mean=%d min=%d max=%d "
+                         "audio_virgin=0"
+                         % (case, level, g, ch, r, mean, mean - 2, mean + 2))
             lines.append("SHELL_TONE_STAT case=%d settled_mean_spread=7 "
                          "widest_sample_band=208" % case)
             case += 1
@@ -179,6 +190,24 @@ def build_block(phase_points=4, gates_ok=1, missed=0,
     return lines
 
 
+def replace_in(lines, old, new, count=1):
+    """A surgical edit on a generated block: replace `old` with `new` on the
+    first `count` lines that contain it, and refuse if the count is wrong.
+
+    Deleting a line proves the rule that notices its absence; this proves the
+    rules that notice a line being WRONG while every count stays right, which
+    is the shape of corruption a total-count check cannot see."""
+    out, n = [], 0
+    for line in lines:
+        if n < count and old in line:
+            line = line.replace(old, new)
+            n += 1
+        out.append(line)
+    if n != count:
+        raise AssertionError("%r found %d times, wanted %d" % (old, n, count))
+    return out
+
+
 def drop_first(lines, prefix):
     out = list(lines)
     for i, line in enumerate(out):
@@ -192,8 +221,12 @@ def drop_first(lines, prefix):
 base = build_block()
 block = parse_block(base)
 check("a complete block parses", block is not None)
-check("the boot-virgin floor is kept, one line per victim",
-      block and len(block["levels"]) == 8)
+check("the boot-virgin floor is kept, one line per victim, numbered "
+      "backwards from -1",
+      block and sorted(v["case"] for v in virgin_levels(block)) == [-2, -1])
+check("and every other LEVEL line is kept beside it",
+      block and len(block["levels"]) == 8
+      and len(block["levels"]) - len(virgin_levels(block)) == 6)
 check("every phase point is kept", block and len(block["points"]) == 8)
 check("the window line is kept", block and block["window"]["fits"] == 1)
 check("the window sweep's points are kept",
@@ -223,8 +256,13 @@ if os.path.exists(REAL_BLOCK):
               and real["cfg"]["repeats"] == 64)
         check("the real block's 45 tone grids are all kept",
               len(real["points"]) == 45 * 16)
-        check("the real block's 60 cases are all kept",
-              len(real["cases"]) + 2 * 5 == 60)
+        check("the real block's 50 announced cases are all kept",
+              len(real["cases"]) == 50)
+        check("and together with the ladder they number 0..59 with no hole",
+              sorted({c["case"] for c in real["cases"]}
+                     | {lv["case"] for lv in real["levels"]
+                        if lv["case"] >= 0 and lv["level"] in (0, 1)})
+              == list(range(60)))
         check("the real block's 20 level/stat pairs are all kept",
               len(real["levels"]) == 20 and len(real["stats"]) == 20)
         check("the real block's five victims all have G5 evidence",
@@ -265,6 +303,28 @@ check("a block missing a victim's G5 line is refused",
                                    "victim_ch=10")) is None)
 check("a block missing a whole tone case's CASE line is refused",
       parse_block(drop_first(base, "SHELL_TONE_CASE case=5 ")) is None)
+# The four rules below are each reached by ONE fixture and by no other:
+# every one of them survives a line deletion because a neighbouring rule
+# catches the same deletion first. What they are for is a block whose counts
+# are all right and whose content is not.
+check("a gap in the boot-virgin numbering is refused (rule 1) -- the floor "
+      "lines are the set every later rule counts victims from",
+      parse_block(replace_in(base, "case=-2", "case=-3", 2)) is None)
+check("a ladder that is right in total and wrong per victim is refused "
+      "(rule 3) -- one victim's RunningSilent replaced by a second Stopped "
+      "reading of another victim",
+      parse_block(replace_in(
+          base, "case=3 level=1 victim_group=0 victim_ch=10 r_src=150",
+          "case=3 level=0 victim_group=0 victim_ch=8 r_src=5150")) is None)
+check("a case renumbered out of the dense range is refused (rule 5) -- every "
+      "line of that case is present and consistent, and only the numbering "
+      "says a case was lost",
+      parse_block(replace_in(base, "case=7", "case=99", 3)) is None)
+check("a static case that announced itself and then measured nothing is "
+      "refused (rule 7) -- dropping BOTH its LEVEL and its STAT keeps the "
+      "level/stat sets equal, so rule 4 cannot see it",
+      parse_block(drop_first(drop_first(base, "SHELL_TONE_LEVEL case=6 "),
+                             "SHELL_TONE_STAT case=6 ")) is None)
 check("a block claiming fits=1 with no window sweep is refused",
       parse_block([l for l in base
                    if not l.startswith("SHELL_TONE_WIN")
@@ -284,19 +344,40 @@ check("fits=0 with no sweep is a complete block",
 # sinusoidal disturbance has zero mean over a period, so an average would
 # report every tone case as zero.
 d = deltas(block)
-check("delta is the tone point minus that victim's running-silent mean",
+# The fixture's Stopped level is 90 and its RunningSilent level is 100, so
+# these four numbers are the assertion that the reference is the right one:
+# against Stopped they would read [10, 16, 10, 4].
+check("delta is the tone point minus that victim's RUNNING-SILENT mean, not "
+      "its Stopped mean",
       d and [row["delta"] for row in d if row["case"] == 4] == [0, 6, 0, -6])
-check("the static row is not in the phase table",
-      all(row["f_hz"] != 0 for row in d))
+# The static row is kept out of the phase table by deltas()'s own f_hz == 0
+# filter. Asserting that over an ordinary block proves nothing -- a static
+# case prints no point lines at all, so the filter never runs and deleting it
+# changes nothing. deltas() is a public function, so the filter is reached by
+# handing it a block that does carry such a point.
+injected = parse_block(base)
+injected["points"].append({"case": 6, "phase_idx": 0, "n": 64, "mean": 98,
+                           "min": 96, "max": 100})
+check("deltas() keeps the static row out of the phase table even when a "
+      "point line claims to belong to it",
+      len(deltas(injected)) == 8
+      and all(row["f_hz"] != 0 for row in deltas(injected)))
+check("and no delta_pp entry is produced for a static case either",
+      all(e["case"] != 6 for e in delta_pp(injected)))
 pp = delta_pp(block)
 check("delta_pp is the peak-to-peak across the phase grid",
       pp and all(row["delta_pp"] == 12 for row in pp))
 check("a mean of delta would have been zero, which is why pp is the statistic",
       sum(row["delta"] for row in d if row["case"] == 4) == 0)
-check("the static row's delta is its own quantity, one per victim",
+# Static mean 98 against RunningSilent 100 is -2; against Stopped 90 it
+# would be +8. This is the other half of the reference assertion, and it is
+# the one that bites: delta_pp is immune to a constant reference shift, but
+# out.csv's delta column and this number are not.
+check("the static row's delta is measured against RunningSilent too, one "
+      "per victim",
       [row["delta"] for row in static_deltas(block)] == [-2, -2])
 check("running-silent minus stopped is reported per victim",
-      [row["diff"] for row in level_diffs(block)] == [0, 0])
+      [row["diff"] for row in level_diffs(block)] == [10, 10])
 
 # --- E: the criterion -----------------------------------------------------
 # delta_pp <= 8 on every 5150 ohm victim at every row.
@@ -365,11 +446,33 @@ check("G8(b) names the victim whose floor moved",
 check("G8(b) reports how far outside the range it was",
       g8(parse_block(build_block(virgin_spreads=(22, 1))),
          build_xtalk_meta())["worst_delta"] == 1)
+orphan = g8(parse_block(build_block(extra_victim=True,
+                                    virgin_spreads=(17, 1, 5))),
+            build_xtalk_meta())
 check("G8(b) refuses a victim it has no recorded baseline for, rather than "
-      "passing it silently",
-      not g8(parse_block(build_block(extra_victim=True,
-                                     virgin_spreads=(17, 1, 5))),
-             build_xtalk_meta())["pass"])
+      "passing it silently", not orphan["pass"])
+# And it must NAME that victim. Asserting only `pass` let a victim that
+# PASSED overwrite worst_victim, because `excess > worst_excess` with
+# worst_excess starting at -1 is true for an excess of 0 -- so the refusal
+# read "0 counts outside the recorded range for victim (0, 8)" while (0,8)
+# was fine and (1,15) was the failure. worst_victim exists to say which
+# victim's floor moved; a check that cannot see it name the wrong one is not
+# guarding it.
+check("G8(b) names the victim it could not judge, not one that passed",
+      orphan["worst_victim"] == (1, 15)
+      and orphan["no_baseline"] == [(1, 15)])
+orphan_rows = {(r["victim_group"], r["victim_ch"]): r["pass"]
+               for r in orphan["victims"]}
+check("and the victims that were judged still report their own verdicts",
+      orphan_rows == {(0, 8): True, (0, 10): True, (1, 15): False})
+_, orphan_msg = quiet(verdicts,
+                      parse_block(build_block(extra_victim=True,
+                                              virgin_spreads=(17, 1, 5))),
+                      build_xtalk_meta())
+check("and the refusal on stderr names (1, 15) and says no baseline, rather "
+      "than reporting a count of counts against a victim that passed",
+      "(1, 15)" in orphan_msg and "no recorded boot-virgin baseline"
+      in orphan_msg and "(0, 8)" not in orphan_msg)
 
 # --- H: G8(a), report only ------------------------------------------------
 # Round one's settled_mean_spread is a peak-to-peak across 65 DIFFERENT
@@ -449,10 +552,10 @@ truncated = list(base)
 truncated[-2] = truncated[-2][:-2] + "$$"
 check("a $$-truncated field does not crash the parser, and yields no block",
       parse_block(truncated) is None)
-# The marker is refused outright and not only where int() happens to choke:
-# a cut that lands on a space would otherwise parse as a valid line with
-# extra tokens. This is the fusion shape the real capture's first two lines
-# have.
+# A fusion stamped at the end of a value. int() catches this one on its own
+# -- the token becomes "mean=100$$SHELL_TONE" -- and so it would a fusion
+# landing on a space, whose token partitions to an empty value. This is the
+# shape the real capture's first two lines have.
 fused = list(base)
 for i, line in enumerate(fused):
     if line.startswith("SHELL_TONE case=4 phase_idx=0"):
@@ -460,8 +563,19 @@ for i, line in enumerate(fused):
                     + "$$SHELL_TONE case=4 phase_idx=1 n=64 mean=106 min=104 "
                       "max=108")
         break
-check("a fusion that lands on a token boundary is refused too",
+check("a fusion stamped at the end of a value is refused",
       parse_block(fused) is None)
+# THE ONE SHAPE int() CANNOT SEE, and the whole reason _fields() refuses the
+# marker explicitly: `git` is a string field, so no int() ever runs on it. A
+# fusion there yields a corrupted build stamp plus a handful of int-able
+# extra tokens, and the block passes every completeness rule and is returned.
+git_fused = list(base)
+git_fused[0] = (git_fused[0]
+                + "$$SHELL_TONE case=4 phase_idx=0 n=64 mean=100 min=98 "
+                  "max=102")
+check("a $$ fusion inside the git= string field is refused -- nothing else "
+      "in the parser could catch that one",
+      parse_block(git_fused) is None)
 check("a corrupted block does not poison the block that follows it",
       parse_block(fused + base) is not None)
 

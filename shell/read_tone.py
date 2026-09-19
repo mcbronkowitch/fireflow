@@ -132,7 +132,7 @@ G8_NOT_LIKE_FOR_LIKE = (
     "reduce_and_emit():440-468) is a peak-to-peak across 65 grid points that "
     "carry 65 DIFFERENT pre-conversion delays -- each repeat spins "
     "park_cycles + d_cycles first, and d runs 0..12800 ns. This image's "
-    "(tone_probe.cpp measure_level():533-601) has no spin and varies nothing: "
+    "(tone_probe.cpp measure_level():557-601) has no spin and varies nothing: "
     "its 65 points are 65x64 calls to sample_now() under one identical "
     "condition, so it is repeat-to-repeat noise on the mean. Same count "
     "(65x64), different content. tone_plan.h:82-85 states the requirement in "
@@ -162,9 +162,9 @@ LEVEL_STOPPED = 0
 LEVEL_RUNNING_SILENT = 1
 LEVEL_TONE = 2
 
-# The one field in this format whose value is not an integer. Everything else
-# is int()d, which is what makes a "$$"-truncated field raise instead of
-# quietly parsing as a string.
+# The one field in this format whose value is not an integer -- and therefore
+# the one field that int() cannot defend, which is why the explicit "$$"
+# refusal below exists.
 _STR_FIELDS = ("git",)
 
 
@@ -172,9 +172,20 @@ _STR_FIELDS = ("git",)
 
 def _fields(line, prefix):
     # libDaisy's logger stamps an overflowing line with "$$" and fuses what
-    # follows onto it. int() catches that whenever the cut lands inside a
-    # value, but a cut that happens to land on a space would otherwise parse
-    # as a valid line with extra tokens, so the marker is refused outright.
+    # follows onto it.
+    #
+    # int() ALREADY CATCHES ALMOST EVERY SHAPE OF THIS, and the earlier
+    # comment here claimed a hole that does not exist: a cut landing on a
+    # space yields the token "$$SHELL_TONE..." whose partition("=") gives an
+    # empty value, and int("") raises like any other. Both markers in the
+    # 2026-09-19 capture land mid-value and raise the same way.
+    #
+    # THE ONE REAL HOLE IS `git`. It is in _STR_FIELDS, so int() never runs
+    # on it, and a fusion inside SHELL_TONE_CFG's git= value parses as a
+    # perfectly valid line: a corrupted build stamp plus whatever tokens the
+    # fused remainder contributes, all of them int-able. The block then
+    # passes every completeness rule and is returned. That is the failure
+    # this line prevents, and the guard's K3 constructs exactly it.
     if "$$" in line:
         raise ValueError("libDaisy overflow marker")
     out = {}
@@ -435,9 +446,17 @@ def running_silent_means(block):
 
 
 def level_diffs(block):
-    """RunningSilent minus Stopped per victim -- the codec's own contribution
-    with no tone playing, which is the DMA/clock candidate `settle-measured.md`
-    section 5 names and could not separate. Reported, not gated."""
+    """RunningSilent minus Stopped per victim: the reading with the codec
+    started and no tone playing, minus the reading with it stopped.
+
+    WHAT CHANGED BETWEEN THE TWO IS `StartAudio()`, and nothing narrower
+    than that is measured here. This difference does not separate the SAI
+    DMA from the I2S clocks from anything else that call sets running, and
+    no name is put on it -- an earlier draft of this docstring called it
+    "the DMA/clock candidate", which is a mechanism nothing in this block
+    isolates. `settle-measured.md` section 5 left a question open in this
+    area; this number is an input to it and not an answer. Reported, never
+    gated."""
     stopped, running, attrs = {}, {}, {}
     for lv in _live_levels(block):
         key = _victim_key(lv)
@@ -608,7 +627,7 @@ def g8(block, xtalk_meta):
         (`settle_plan.h:89-93`, `grid_ns(i) = i * 200`). Its
         `settled_mean_spread` (`reduce_and_emit()` :440-468) is therefore a
         peak-to-peak ACROSS 65 DIFFERENT PRE-CONVERSION DELAYS.
-      * `shell/tone_probe.cpp` `measure_level()` (:533-601) has no spin and
+      * `shell/tone_probe.cpp` `measure_level()` (:557-601) has no spin and
         varies nothing across its 65 points. Its `settled_mean_spread` is
         repeat-to-repeat noise on the mean.
 
@@ -625,6 +644,15 @@ def g8(block, xtalk_meta):
 
     rows = []
     worst_excess, worst_victim = -1, None
+    # Victims G8 could not evaluate AT ALL -- no floor measured, or no
+    # recorded baseline to measure it against. They are kept apart from the
+    # excess arithmetic because "0 counts outside the recorded range" is not
+    # a statement about them, and because a later victim that PASSES must not
+    # be able to take the failure's name: `excess > worst_excess` with
+    # worst_excess at -1 let an excess of 0 overwrite exactly that, and the
+    # refusal then named a victim that was fine. The whole reason
+    # worst_victim exists is to say which victim's floor moved.
+    no_baseline = []
     for key in _victim_order(block):
         spread = floors.get(key)
         entry = BOOT_VIRGIN_FLOOR.get(key)
@@ -637,8 +665,7 @@ def g8(block, xtalk_meta):
                          "r_src": r_src, "spread": None, "lo": None,
                          "hi": None, "excess": None, "pass": False,
                          "boots": entry["boots"] if entry else ()})
-            if worst_victim is None:
-                worst_victim = key
+            no_baseline.append(key)
             continue
         if entry is None:
             # A victim with no recorded baseline. A silent pass here is
@@ -648,8 +675,7 @@ def g8(block, xtalk_meta):
                          "name": "?", "r_src": r_src, "spread": spread,
                          "lo": None, "hi": None, "excess": None,
                          "pass": False, "boots": ()})
-            if worst_victim is None:
-                worst_victim = key
+            no_baseline.append(key)
             continue
         lo = min(entry["boots"]) - G8_BOUND_COUNTS
         hi = max(entry["boots"]) + G8_BOUND_COUNTS
@@ -673,9 +699,16 @@ def g8(block, xtalk_meta):
                        "boot_virgin_spread": floors.get(key),
                        "round_one_spread": round_one.get(key)})
 
+    # An unevaluable victim outranks any excess: it is the stronger failure
+    # (G8 has nothing to judge at all) and it is the one the operator has to
+    # act on, by adding that victim's boots to BOOT_VIRGIN_FLOOR.
+    if no_baseline:
+        worst_victim = no_baseline[0]
+
     return {"pass": bool(rows) and all(r["pass"] for r in rows),
             "worst_delta": max(worst_excess, 0),
             "worst_victim": worst_victim,
+            "no_baseline": no_baseline,
             "victims": rows,
             "round_one": {"like_for_like": False,
                           "reason": G8_NOT_LIKE_FOR_LIKE,
@@ -718,11 +751,24 @@ def verdicts(block, xtalk_meta):
         return []
     gate = g8(block, xtalk_meta)
     if not gate["pass"]:
-        print("G8(b) FAILED -- this image's boot-virgin floor is %d counts "
-              "outside the recorded range for victim %s; every delta_pp below "
-              "would be measured against a baseline that is not this "
-              "campaign's, and nothing in the tone block alone could notice"
-              % (gate["worst_delta"], gate["worst_victim"]), file=sys.stderr)
+        # Two different failures, and they do not share a sentence. A victim
+        # with no recorded baseline was not measured against anything, so a
+        # count of counts would be meaningless for it.
+        if gate["no_baseline"]:
+            print("G8(b) FAILED -- no recorded boot-virgin baseline for "
+                  "victim(s) %s, so their floor was not judged at all; add "
+                  "their boots to BOOT_VIRGIN_FLOOR before quoting any "
+                  "delta_pp from this run"
+                  % ", ".join(str(k) for k in gate["no_baseline"]),
+                  file=sys.stderr)
+        else:
+            print("G8(b) FAILED -- this image's boot-virgin floor is %d "
+                  "counts outside the recorded range for victim %s; every "
+                  "delta_pp below would be measured against a baseline that "
+                  "is not this campaign's, and nothing in the tone block "
+                  "alone could notice"
+                  % (gate["worst_delta"], gate["worst_victim"]),
+                  file=sys.stderr)
         return []
 
     floors = block_floor(block)

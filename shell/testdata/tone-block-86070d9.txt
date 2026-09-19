@@ -8,11 +8,24 @@
 # The trailing + is a dirty tree, and that is the whole provenance problem:
 # 86070d9 is the HEAD the capture was taken against, not the commit that
 # carries the code that produced it. The work was committed afterwards and
-# then AMENDED TWICE, so the commit that ships this image is 52843e0
-# ("feat(shell): the edge inside the sampling window"). Only comments and
-# the commit message changed across the amendments -- the code is identical
-# -- but a reader tracing git=86070d9+ lands on the pre-commit HEAD and
-# finds no tone_probe.cpp matching this output. Trace 52843e0 instead.
+# then amended, and the commit that ships this image is 52843e0
+# ("feat(shell): the edge inside the sampling window"). A reader tracing
+# git=86070d9+ lands on the pre-commit HEAD and finds no tone_probe.cpp
+# matching this output. Trace 52843e0 instead.
+#
+# HOW MUCH OF THAT IS CHECKABLE, and how much is not. Two commands settle
+# the part that matters, and both are worth running rather than believed:
+#
+#   git diff --stat 86070d9 52843e0     -> tone_probe.cpp, tone_plan.h, spec
+#   git diff 1125ee0 52843e0            -> EMPTY: identical trees
+#   git diff a5c9775 1125ee0 -- shell/tone_probe.cpp shell/tone_plan.h
+#                                       -> every changed line is a // comment
+#
+# So: the last amendment changed the commit message and nothing else, and the
+# one before it changed only comments in the two firmware sources. The
+# amended-away commits themselves are unreachable, so no claim about them can
+# be checked from this repo; what is above is what the surviving commits
+# show, and nothing further should be read into it.
 #
 # WHAT IS NOT HERE. The source capture opens mid-block, ends mid-block, and
 # carries two libDaisy "$$" overflow markers at its lines 3-4. Neither
