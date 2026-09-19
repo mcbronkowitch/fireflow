@@ -183,26 +183,39 @@ G8 is the one to prove red deliberately: a stopped-level spread 5 counts off
 round one's must fail, because that is a run whose tone results would all be
 plausible and all be against the wrong baseline.
 
-**Measured across two boots, no mechanism attached** (Task 4 fix round 3):
+**Measured across three boots, no mechanism attached** (Task 4 fix round 3):
 the boot-virgin floor's `settled_mean_spread`, against round one's own two
 published columns (`xtalk.csv.meta.csv`'s whole silent grid, and that grid
 with its `d=0` point dropped):
 
 | victim | boot-virgin spread | round one, whole grid | round one, `d=0` dropped |
 |---|---|---|---|
-| `REF_A` g0 ch8 5150 Ω | 17, then 16 | 15/16/17 | 10/11/12 |
-| `REF_C` g1 ch6 5150 Ω | 3, then 3 | 10/11/12 | 6/6/6 |
-| `REF_B` g0 ch9 650 Ω | 2, then 3 | 6/6/7 | 6/6/7 |
-| `R_SP10` 150 Ω | 1, then 1 | 0/0/1 | 0/0/1 |
-| `R_LO3` 150 Ω | 0, then 0 | 0/0/0 | 0/0/0 |
+| `REF_A` g0 ch8 5150 Ω | 17, 16, 17 | 15/16/17 | 10/11/12 |
+| `REF_C` g1 ch6 5150 Ω | 3, 3, 4 | 10/11/12 | 6/6/6 |
+| `REF_B` g0 ch9 650 Ω | 2, 3, 4 | 6/6/7 | 6/6/7 |
+| `R_SP10` 150 Ω | 1, 1, 0 | 0/0/1 | 0/0/1 |
+| `R_LO3` 150 Ω | 0, 0, 0 | 0/0/0 | 0/0/0 |
+
+The floor is not identical across boots: `REF_B` reads 2, 3 and 4 across the
+three boots, a spread of two counts, and `REF_C` and `R_SP10` each move by
+one count. An earlier note in this project's working record claimed the
+boot-virgin floor was reproducible across boots "to about one count"; the
+third boot supersedes that claim, and this spec records the wider figure
+instead. This bears directly on G8, whose bound is 4 counts: a floor that
+itself moves 2 counts between boots spends half that budget before any
+image change has been measured at all.
 
 `REF_A` lands on round one's whole-grid figure. `REF_C` and `REF_B` come out
-**lower** than either of round one's columns, not higher — so G8's 4-count
-bound, read literally against either column, does not hold for `REF_C`
-(3 against 10/11/12 or 6/6/6: 7-9 counts off, not 4). **This is stated as a
-measured fact, open, not resolved here**: which of round one's two columns
-G8 should compare against, and what to do about `REF_C`, is a decision for
-the controller and Bastian, not answered by this spec.
+**lower** than either of round one's columns, not higher. `REF_C`'s G8
+verdict flips depending on which of round one's two columns G8 compares
+against: against the whole-grid column (10/11/12) the boot-virgin floor is
+6-9 counts off, outside G8's 4-count bound; against the `d=0`-dropped
+column (6/6/6) it is 2-3 counts off, inside the bound. **This is stated as
+a measured fact, open, not resolved here**: the choice of column is exactly
+the decision left open, and it is now the decision that determines
+`REF_C`'s verdict, not a detail beside it. Which column, and what to do
+about `REF_C`, is a decision for the controller and Bastian, not answered
+by this spec.
 
 ## 8. Output
 
@@ -212,10 +225,16 @@ SHELL_TONE_CLK / _CAL                       (round one's lines, unchanged)
 SHELL_TONE_CASE  case=%d level=%d f_hz=%d dbfs=%d victim_group=%d victim_ch=%d r_src=%d below_corner=%d
 SHELL_TONE       case=%d phase_idx=%d n=%d mean=%d min=%d max=%d
 SHELL_TONE_LEVEL case=%d level=%d victim_group=%d victim_ch=%d r_src=%d n=%d mean=%d min=%d max=%d audio_virgin=%d   (stopped and running-silent)
+SHELL_TONE_STAT  case=%d settled_mean_spread=%d widest_sample_band=%d
 SHELL_TONE_WIN   case=%d victim_group=%d victim_ch=%d r_src=%d word_a=%d word_b=%d d_before_end_ns=%d n=%d mean=%d min=%d max=%d
 SHELL_TONE_GATES g2=%d g4=%d g5=%d g7=%d g8=%d missed_blocks=%d gates_ok=%d phase_timeouts=%d block_ms=%d
 SHELL_TONE_END
 ```
+
+`SHELL_TONE_STAT` is printed immediately after every `SHELL_TONE_LEVEL` line
+(`shell/tone_probe.cpp:389-391`), the two forming the pair the prose below
+refers to. `settled_mean_spread` is the quantity G8 reads; `widest_sample_band`
+is the per-conversion band.
 
 **The `SHELL_TONE` line above is not this spec's original one.** The plan's
 [decision 1](2026-09-18-coupon-codec-tone-probe.md) already records why and
