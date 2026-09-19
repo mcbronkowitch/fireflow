@@ -60,16 +60,39 @@ def quiet(fn, *args, **kwargs):
     return result, buf.getvalue()
 
 
-def build_xtalk_meta(spreads=(15, 0)):
+def build_xtalk_meta(spreads=(15, 0), row10_spreads=(16, 9)):
     """Round one's metadata, cut to what G8's report-only half reads: each
     silent case's settled_mean_spread, and enough of its CASE rows to say
-    which victim that case was."""
+    which victim that case was AND which plan row it belongs to.
+
+    **BOTH OF ROUND ONE'S SILENT ROWS ARE HERE, AND THAT IS THE POINT.**
+    Round one's plan has two `kind=Silent` rows over the same five victims:
+    row 1, the floor, and row 10, "Silent, printing". The real
+    `2026-09-19-xtalk.csv.meta.csv` carries both, cases 0-4 and 53-57. An
+    earlier version of this generator emitted one silent case per victim
+    with `row,1` hardcoded, which made "the floor is row 1" true by
+    construction -- vacuous shape 2 -- and hid a live defect in
+    `_xtalk_silent_floor()`, which keyed by victim alone and returned row 10.
+
+    `spreads` and `row10_spreads` MUST DIFFER per victim or section H stops
+    asserting anything: with equal values the selection is unfalsifiable
+    again. The two defaults differ on both victims."""
+    assert all(a != b for a, b in zip(spreads, row10_spreads)), (
+        "the two silent rows must carry different spreads or the row-1 "
+        "selection is unfalsifiable")
     rows = ["scope,case,key,value"]
-    for i, (g, ch) in enumerate(((0, 8), (0, 10))):
-        rows.append("case,%d,row,1" % i)
-        rows.append("case,%d,victim_group,%d" % (i, g))
-        rows.append("case,%d,victim_ch,%d" % (i, ch))
-        rows.append("silent,%d,settled_mean_spread,%d" % (i, spreads[i]))
+    victims = ((0, 8), (0, 10))
+    # Row 10's cases are numbered well above row 1's, exactly as the real
+    # file numbers them, so the plain-dict overwrite the fix removed would
+    # land on row 10 and not on row 1.
+    for row, case_base, values in ((1, 0, spreads), (10, 53, row10_spreads)):
+        for i, (g, ch) in enumerate(victims):
+            case = case_base + i
+            rows.append("case,%d,row,%d" % (case, row))
+            rows.append("case,%d,kind,0" % case)
+            rows.append("case,%d,victim_group,%d" % (case, g))
+            rows.append("case,%d,victim_ch,%d" % (case, ch))
+            rows.append("silent,%d,settled_mean_spread,%d" % (case, values[i]))
     return "\n".join(rows) + "\n"
 
 
@@ -92,6 +115,19 @@ def build_block(phase_points=4, gates_ok=1, missed=0,
     -1 downwards, the per-block Stopped/RunningSilent ladder is 0..2N-1, the
     tone cases continue that counter, and the window sweep numbers its own
     cases from 0 in a separate namespace."""
+    # Section D's whole reference argument is a property of THIS fixture,
+    # and until this line it was recorded only in a comment. The reviewer
+    # mutation-tested it: equalising the two means and updating the one
+    # literal in section D re-greens the guard with the reference bug back.
+    # An assertion does not make the property undeletable -- nothing does --
+    # but it puts the reason at the point where the tidying happens, and it
+    # fails loudly instead of quietly weakening three checks.
+    assert stopped_mean != running_mean, (
+        "the Stopped and RunningSilent fixture means must DIFFER. Spec "
+        "section 4 measures every delta against RUNNING-SILENT; with both "
+        "levels at one mean that choice is unfalsifiable and section D's "
+        "delta, static-row and level_diffs checks all pass against either "
+        "reference. Change the numbers, not their equality.")
     victims = list(VICTIMS)
     if extra_victim:
         # A victim with no entry in BOOT_VIRGIN_FLOOR. Section G asserts G8
@@ -484,6 +520,31 @@ g = g8(block, build_xtalk_meta(spreads=(15, 0)))
 check("G8(a) reports round one's number beside this image's floor",
       [(r["boot_virgin_spread"], r["round_one_spread"])
        for r in g["round_one"]["victims"]] == [(17, 15), (1, 0)])
+# THE ROW-1 SELECTION, asserted against a fixture that carries both silent
+# rows. Row 1 is the floor and row 10 is "Silent, printing"; keyed by victim
+# alone the higher case numbers won and this read (16, 9) -- row 10 -- while
+# calling it the floor. The two rows' spreads differ by construction (see
+# build_xtalk_meta), so this check is what makes the selection falsifiable.
+check("G8(a) takes round one's ROW 1 spread, the floor, not its row-10 "
+      "'Silent, printing' row",
+      [r["round_one_spread"] for r in g["round_one"]["victims"]] == [15, 0])
+# And the other direction: change ONLY row 10 and nothing moves. A selection
+# that took the last silent case, or a max, or a mean, would move here.
+g_r10 = g8(block, build_xtalk_meta(spreads=(15, 0), row10_spreads=(42, 41)))
+check("and row 10's spreads do not reach G8(a) at all",
+      [r["round_one_spread"] for r in g_r10["round_one"]["victims"]]
+      == [15, 0])
+# A silent case with no `row` is not taken for the floor by default. The
+# defect this replaced was exactly a guess about which silent case was
+# meant, so the absent-row case reports nothing rather than a wrong number.
+no_row = "\n".join(["scope,case,key,value",
+                    "case,0,victim_group,0",
+                    "case,0,victim_ch,8",
+                    "silent,0,settled_mean_spread,15"]) + "\n"
+check("a silent case that does not say which row it is is not read as the "
+      "floor",
+      [r["round_one_spread"] for r in
+       g8(block, no_row)["round_one"]["victims"]] == [None, None])
 check("G8(a) says in the object itself that it is not like-for-like",
       g["round_one"]["like_for_like"] is False
       and "measure_silent_point" in g["round_one"]["reason"])

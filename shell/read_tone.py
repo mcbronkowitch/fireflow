@@ -576,14 +576,35 @@ def block_floor(block):
 
 # --- round one's file -----------------------------------------------------
 
+# Round one's plan has TWO Silent rows, and only the first is the floor.
+# Spec section 4 of the crosstalk design and `docs/hardware/crosstalk-measured.md`
+# section 4 both say it in as many words -- "row 1 is the floor", row 10 is
+# "Silent, printing", i.e. the same channel read with the probe's own USB-CDC
+# traffic on the bus. `read_xtalk.py` calls this same number `ROW_FLOOR`.
+XTALK_FLOOR_ROW = 1
+
+
 def _xtalk_silent_floor(xtalk_meta):
     """Round one's silent-block `settled_mean_spread` per victim, out of its
     `xtalk.csv.meta.csv`.
 
     The file is `scope,case,key,value`. The `silent` scope carries each
     silent case's statistic; the `case` scope says which victim that case
-    was. Neither alone is enough, which is why G8 needs both."""
+    was, AND which plan row it belongs to. All three are needed, which is
+    why G8 reads more than the `silent` scope.
+
+    THE ROW IS NOT OPTIONAL, and reading it is a bug fix rather than a
+    refinement. Both of round one's Silent rows land in the `silent` scope
+    and both map to the same five victims -- in the committed
+    `2026-09-19-xtalk.csv.meta.csv` that is cases 0-4 (`row,1`) and cases
+    53-57 (`row,10`). Keyed by victim alone the later cases overwrote the
+    earlier ones and this function returned row 10, `(16, 12, 5, 1, 0)`,
+    where its own first line says it means the floor, row 1,
+    `(15, 14, 5, 1, 0)`. `REF_C` was off by two. G8(a) is report-only so no
+    gate was wrong, but the printed comparison was, and it is the column a
+    write-up would quote."""
     victim_of = {}
+    row_of = {}
     spread_of = {}
     for line in xtalk_meta.strip().split("\n"):
         parts = line.split(",")
@@ -592,12 +613,18 @@ def _xtalk_silent_floor(xtalk_meta):
         scope, case, key, value = (p.strip() for p in parts)
         if scope == "case" and key in ("victim_group", "victim_ch"):
             victim_of.setdefault(case, {})[key] = int(value)
+        elif scope == "case" and key == "row":
+            row_of[case] = int(value)
         elif scope == "silent" and key == "settled_mean_spread":
             spread_of[case] = int(value)
     out = {}
     for case, spread in spread_of.items():
         v = victim_of.get(case)
         if v is None or "victim_group" not in v or "victim_ch" not in v:
+            continue
+        # A silent case with no row at all is not silently taken for the
+        # floor: that is exactly the guess that produced the defect above.
+        if row_of.get(case) != XTALK_FLOOR_ROW:
             continue
         out[(v["victim_group"], v["victim_ch"])] = spread
     return out
