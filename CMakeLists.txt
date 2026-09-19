@@ -379,3 +379,11 @@ add_test(NAME read_xtalk_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_read_xtalk.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
+
+# Reads shell/testdata/tone-block-86070d9.txt as well as its own generated
+# fixture -- one real block the board printed, vendored because the capture
+# it came from lives under .superpowers/ and is gitignored.
+add_test(NAME read_tone_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_read_tone.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
