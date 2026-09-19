@@ -60,8 +60,22 @@ is actually built today, and what is still design-only.
   rows and seven of those nine sit at or below its own 14-count boot-virgin
   floor: **the criterion is reading the floor on that victim.** One row out
   of nine is clearly outside its floor — `REF_C` at 100 Hz running 2 → 6 → 11
-  across the level ladder — and it is recorded **unlabelled**. Still owed:
-  the `docs/hardware/` write-up of round two, which is separate work);
+  across the level ladder — and it is recorded **unlabelled**. The bench half
+  is now written up:
+  [`docs/hardware/codec-tone-measured.md`](hardware/codec-tone-measured.md),
+  and reading the same blocks for **absolute level** rather than `delta_pp`
+  turned up the one thing the campaign's statistic is blind to by
+  construction: a 100 Hz tone moves `REF_A` **852 counts** — 53 LSB of 12 bit
+  — reproducing across three boots to two counts, ordered by source impedance,
+  zero on both 150 Ω ties, and **flat under a ten-fold amplitude change**.
+  Three explanations are excluded by measurements already in hand; what
+  remains is confounded, because the phase grid ties the tone's frequency to
+  the interval between conversions. **Three silent cases settle it** — the phase
+  grid run at each row's real phase step with the callback's amplitude at
+  zero, so the cadence is identical and the aggressor is gone, the codec
+  running in both arms — and until that is run, neither reading of round two's
+  negative result is safe. That is the next
+  move on M6's measurement side; §6 and §10 of the write-up carry it);
   earlier, 2026-09-03 (**the coupon is fully ordered — boards and
   parts**: JLCPCB, five bare 4-layer boards, $22.02 all in, and one Reichelt
   order at 14.19 € plus 5.95 € shipping, both placed. The next move on M6 is a

@@ -97,7 +97,7 @@ below is a difference of two readings at the same rung, where that bias cancels.
 The 150 Ω ties are unaffected — §7's ladder is flat for them.
 
 **What was not measured.** The reverse-order sequence (aggressor before victim
-park) is round two's. No second board, no second submodule, no rework. The audio
+park) is round two's, and it ran: [`codec-tone-measured.md`](codec-tone-measured.md) §7. No second board, no second submodule, no rework. The audio
 SAI DMA is not running in this image and neither is the shipping firmware's
 free-running ADC DMA, which bounds what §6's row-10 result rules out.
 
