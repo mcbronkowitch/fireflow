@@ -15,6 +15,7 @@
 #include "shell_settle_probe.h"
 #include "shell_xtalk_probe.h"
 #include "shell_tone_probe.h"
+#include "shell_wait_probe.h"
 #include "hw/board.h"
 #include "sdram_mem.h"
 #include "instrument.h"
@@ -50,12 +51,16 @@ volatile uint32_t g_block_tick = 0;
 #include "tone_probe.h"
 #endif
 
+#if SHELL_WAIT_PROBE
+#include "wait_probe.h"
+#endif
+
 #if defined(SHELL_CPU_PROBE)
 #include <cstdint>
 #include "util/CpuLoadMeter.h"
 #endif
 
-#if defined(SHELL_CPU_PROBE) || SHELL_COUPON_PROBE || SHELL_SETTLE_PROBE || SHELL_XTALK_PROBE || SHELL_TONE_PROBE
+#if defined(SHELL_CPU_PROBE) || SHELL_COUPON_PROBE || SHELL_SETTLE_PROBE || SHELL_XTALK_PROBE || SHELL_TONE_PROBE || SHELL_WAIT_PROBE
 // libDaisy deklariert diese beiden in src/usbd/usbd_desc.c als
 // `extern const char*` und definiert sie nie -- die Anwendung besitzt ihre
 // eigene USB-Identitaet. Ohne sie scheitert der USB-Zweig beim LINKEN, nicht
@@ -263,6 +268,13 @@ int main(void)
     // a callback that writes a tone and nothing else. No engine: the
     // operating point has to be "the codec, and only the codec".
     shell::run_tone_probe(hw);   // never returns
+#endif
+
+#if SHELL_WAIT_PROBE
+    // The board under test is the coupon, and the question is how long the
+    // converter waited. The codec runs only inside the probe's arm C, with a
+    // callback that writes zeros; no engine.
+    shell::run_wait_probe(hw);   // never returns
 #endif
 
 #if SHELL_SETTLE_PROBE

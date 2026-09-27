@@ -250,6 +250,36 @@ ifneq ($(filter $(SHELL_TONE_DC),0 1),$(SHELL_TONE_DC))
 $(error SHELL_TONE_DC must be 0 or 1)
 endif
 
+# Position 1 replaces the instrument with the wait-sweep probe: a settled mux
+# channel is converted, the converter idles a commanded W, and the channel is
+# converted again, for W from back to back to 50 ms. It runs the codec only
+# inside its own bridge arm, so it is exclusive with every other probe
+# switch for the same reason they are exclusive with each other: each
+# dispatches before StartAudio and none returns.
+# Spec:  ../docs/superpowers/specs/2026-09-27-coupon-wait-sweep-probe-design.md
+# Plan:  ../docs/superpowers/plans/2026-09-27-coupon-wait-sweep-probe.md
+SHELL_WAIT_PROBE ?= 0
+
+ifneq ($(filter $(SHELL_WAIT_PROBE),0 1),$(SHELL_WAIT_PROBE))
+$(error SHELL_WAIT_PROBE must be 0 or 1)
+endif
+
+ifeq ($(SHELL_WAIT_PROBE),1)
+ifneq ($(SHELL_COUPON_PROBE),1)
+$(error SHELL_WAIT_PROBE=1 needs SHELL_COUPON_PROBE=1: the probe drives the \
+coupon chain profile, and the panel profile has none of its channels)
+endif
+ifeq ($(SHELL_SETTLE_PROBE),1)
+$(error SHELL_WAIT_PROBE=1 and SHELL_SETTLE_PROBE=1 are mutually exclusive)
+endif
+ifeq ($(SHELL_XTALK_PROBE),1)
+$(error SHELL_WAIT_PROBE=1 and SHELL_XTALK_PROBE=1 are mutually exclusive)
+endif
+ifeq ($(SHELL_TONE_PROBE),1)
+$(error SHELL_WAIT_PROBE=1 and SHELL_TONE_PROBE=1 are mutually exclusive)
+endif
+endif
+
 CPP_SOURCES = \
 	main.cpp \
 	sdram_mem.cpp \
@@ -263,6 +293,8 @@ CPP_SOURCES = \
 	xtalk_probe.cpp \
 	tone_probe.cpp \
 	tone_plan.cpp \
+	wait_probe.cpp \
+	wait_plan.cpp \
 	mux_scan.cpp \
 	../engine/body/mode_bank.cpp \
 	../engine/body/ks_string.cpp \
@@ -313,7 +345,7 @@ include $(SYSTEM_FILES_DIR)/Makefile
 # Fehler zurueck, und er sieht wie eine Messung aus.
 C_INCLUDES += -I$(BUILD_DIR)
 
-SWITCH_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/probe_adc.o $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o
+SWITCH_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/probe_adc.o $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o
 
 # ZUR PARSE-ZEIT, nicht als Regel, und das ist der Kern der Reparatur vom
 # 2026-08-23. Als Regel mit FORCE hat es ZWEIMAL nicht gehalten:
@@ -339,14 +371,16 @@ SWITCH_HEADERS := \
   $(shell python write_shell_settle_probe.py $(BUILD_DIR)/shell_settle_probe.h $(SHELL_SETTLE_PROBE) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_xtalk_probe.py $(BUILD_DIR)/shell_xtalk_probe.h $(SHELL_XTALK_PROBE) $(SHELL_XTALK_RV4) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_tone_probe.py $(BUILD_DIR)/shell_tone_probe.h $(SHELL_TONE_PROBE) $(SHELL_TONE_DC) $(SWITCH_OBJECTS)) \
-  $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o)
+  $(shell python write_shell_wait_probe.py $(BUILD_DIR)/shell_wait_probe.h $(SHELL_WAIT_PROBE) $(SWITCH_OBJECTS)) \
+  $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o)
 
-# The git stamp deletes only xtalk_probe.o and tone_probe.o, because those are
-# the only objects that read it. Listing the whole SWITCH_OBJECTS there would
+# The git stamp deletes only xtalk_probe.o, tone_probe.o and wait_probe.o,
+# because those are the only objects that read it. Listing the whole SWITCH_OBJECTS there would
 # force a full rebuild of seven objects on every commit for a string in one
 # format argument.
 
-$(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_selftest.h $(BUILD_DIR)/shell_cpu_probe.h $(BUILD_DIR)/shell_mux_probe.h $(BUILD_DIR)/shell_idle_fill.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_xtalk_probe.h $(BUILD_DIR)/shell_tone_probe.h
+$(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_selftest.h $(BUILD_DIR)/shell_cpu_probe.h $(BUILD_DIR)/shell_mux_probe.h $(BUILD_DIR)/shell_idle_fill.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_xtalk_probe.h $(BUILD_DIR)/shell_tone_probe.h $(BUILD_DIR)/shell_wait_probe.h
+$(BUILD_DIR)/wait_probe.o: $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/xtalk_probe.o: $(BUILD_DIR)/shell_xtalk_probe.h $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/shell_coupon_probe.h
 $(BUILD_DIR)/tone_probe.o: $(BUILD_DIR)/shell_tone_probe.h $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/shell_coupon_probe.h
 $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o: $(BUILD_DIR)/shell_coupon_probe.h
