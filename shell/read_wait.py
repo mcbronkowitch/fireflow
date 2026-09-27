@@ -108,6 +108,34 @@ def _fields(line, prefix):
     return out
 
 
+# Every tag's field set, transcribed from wait_probe.cpp's format strings. A
+# line cut short WITHOUT a "$$" marker parses as valid ints and simply lacks
+# its tail; checking the key set turns that into a refused block instead of
+# a KeyError halfway through report().
+_KEYS = {
+    "SHELL_WAIT_CFG": {"adc_khz", "repeats", "points", "block_size", "sr",
+                       "sweep_dir", "git"},
+    "SHELL_WAIT_CLK": {"span_short_cyc", "span_long_cyc", "smp_short_tenths",
+                       "smp_long_tenths"},
+    "SHELL_WAIT_CAL": {"lat_mean_ns", "lat_min_ns", "lat_max_ns", "b0",
+                       "timeouts"},
+    "SHELL_WAIT_CASE": {"case", "arm", "victim_group", "victim_ch", "r_src",
+                        "rung_tenths", "codec"},
+    "SHELL_WAIT": {"case", "w_us", "n", "mean", "min", "max"},
+    "SHELL_WAIT_SPAN": {"zero", "rail", "hi_spread", "lo_spread", "valid"},
+    "SHELL_WAIT_G5": {"victim_group", "victim_ch", "expect", "mean", "ok"},
+    "SHELL_WAIT_GATES": {"g2", "g4", "g5", "g7", "g9", "gates_ok"},
+    "SHELL_WAIT_HEALTH": {"missed_blocks", "timeouts", "block_ms"},
+}
+
+
+def _parse(line, prefix):
+    out = _fields(line, prefix)
+    if set(out) != _KEYS[prefix]:
+        raise ValueError("%s carries the wrong field set" % prefix)
+    return out
+
+
 _SINGLE = (("SHELL_WAIT_CFG", "cfg"), ("SHELL_WAIT_CLK", "clk"),
            ("SHELL_WAIT_CAL", "cal"), ("SHELL_WAIT_SPAN", "span"),
            ("SHELL_WAIT_GATES", "gates"), ("SHELL_WAIT_HEALTH", "health"))
@@ -128,7 +156,7 @@ def _is_complete(block):
             return False
     if sorted(block["cases"]) != list(range(CASES)):
         return False
-    if len(block["g5"]) != VICTIMS:
+    if len({_victim(g) for g in block["g5"]}) != VICTIMS             or len(block["g5"]) != VICTIMS:
         return False
     for case, c in block["cases"].items():
         if c["arm"] != case // VICTIMS:
@@ -159,18 +187,18 @@ def parse_block(lines):
                 return block if _is_complete(block) else None
             for prefix, key in _SINGLE:
                 if line.startswith(prefix + " "):
-                    block[key] = _fields(line, prefix)
+                    block[key] = _parse(line, prefix)
                     break
             else:
                 if line.startswith("SHELL_WAIT_CASE "):
-                    c = _fields(line, "SHELL_WAIT_CASE")
+                    c = _parse(line, "SHELL_WAIT_CASE")
                     if c["case"] in block["cases"]:
                         return None
                     block["cases"][c["case"]] = c
                 elif line.startswith("SHELL_WAIT_G5 "):
-                    block["g5"].append(_fields(line, "SHELL_WAIT_G5"))
+                    block["g5"].append(_parse(line, "SHELL_WAIT_G5"))
                 elif line.startswith("SHELL_WAIT "):
-                    p = _fields(line, "SHELL_WAIT")
+                    p = _parse(line, "SHELL_WAIT")
                     if p["case"] not in block["cases"]:
                         return None
                     pts = block["points"].setdefault(p["case"], {})
@@ -316,11 +344,13 @@ def report(block, out=None):
         with open(out, "w", encoding="utf-8", newline="") as fh:
             fh.write(format_csv(block))
 
+    reasons = []
     if gates["gates_ok"] != 1:
-        print("REFUSED: the firmware's gates_ok is 0", file=err)
-        return 1
+        reasons.append("the firmware's gates_ok is 0")
     if passed is not True:
-        print("REFUSED: G9", file=err)
+        reasons.append("G9")
+    if reasons:
+        print("REFUSED: %s" % "; ".join(reasons), file=err)
         return 1
     return 0
 

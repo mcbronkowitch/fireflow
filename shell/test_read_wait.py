@@ -30,13 +30,13 @@ def check(label, cond):
 # kXtalkVictimTable's order and impedances (xtalk_plan.h), and the rung each
 # arm reads it at, in tenths: 5150 ohm -> 2.5 cycles, 650/150 -> 1.5 cycles,
 # arm L -> 387.5.
-VICTIMS = ((0, 8, 5150, 25), (0, 9, 650, 15), (1, 6, 5150, 25),
+VICTIMS = ((0, 8, 5150, 25), (1, 6, 5150, 25), (0, 9, 650, 15),
            (0, 10, 150, 15), (1, 3, 150, 15))
 BASE = {(0, 8): 31700, (0, 9): 32750, (1, 6): 31950, (0, 10): 0, (1, 3): 0}
 
 
 def build_block(g9_shift=-852, gates_ok=1, sweep_dir=0, tie_shift=0,
-                drop_point=None, dup_point=False, overflow=False):
+                drop_point=None, dup_point=False, overflow=False, n_at=None):
     """One complete block. Every arm's shift is a simple function of W so a
     test can predict it; arm C REF_A at 10 ms is exactly `g9_shift`."""
     lines = ["SHELL_WAIT_CFG adc_khz=6146 repeats=64 points=15 block_size=96 "
@@ -65,8 +65,12 @@ def build_block(g9_shift=-852, gates_ok=1, sweep_dir=0, tie_shift=0,
                 else:
                     shift = -(w // 20)   # any monotone law will do
                 mean = BASE[(g, ch)] + shift
-                line = ("SHELL_WAIT case=%d w_us=%d n=64 mean=%d min=%d max=%d"
-                        % (case, w, mean, mean - 5, mean + 5))
+                if n_at == (case, w):
+                    line = ("SHELL_WAIT case=%d w_us=%d n=0 mean=-1 min=-1 "
+                            "max=-1" % (case, w))
+                else:
+                    line = ("SHELL_WAIT case=%d w_us=%d n=64 mean=%d min=%d "
+                            "max=%d" % (case, w, mean, mean - 5, mean + 5))
                 lines.append(line)
                 if dup_point and case == 0 and w == 0:
                     lines.append(line)
@@ -130,8 +134,10 @@ check("D2 and yields the same shifts",
 # --- E. Incomplete or corrupted blocks are refused, never half-read ---
 check("E1 a missing point refuses the block",
       parse_block(build_block(drop_point=(15, 10000))) is None)
-check("E2 a missing G9 point is a refusal, not a pass",
+check("E2 a missing G9 reference (arm C REF_A, W=0) refuses the block",
       parse_block(build_block(drop_point=(15, 0))) is None)
+check("E2b a missing G9 point (arm C REF_A, W=10 ms) refuses the block",
+      parse_block(build_block(drop_point=(15, 10000))) is None)
 check("E3 a duplicated point refuses the block",
       parse_block(build_block(dup_point=True)) is None)
 check("E4 a $$ overflow marker refuses the block",
@@ -145,6 +151,27 @@ check("E6 a block that never reaches END is refused",
 off_grid = [l.replace("w_us=50000 ", "w_us=40000 ") for l in build_block()]
 check("E7 a point off the grid refuses the block",
       parse_block(off_grid) is None)
+
+cut = [l.replace(" block_ms=90123", "") for l in build_block()]
+check("E8 a line cut short without a $$ marker refuses the block",
+      parse_block(cut) is None)
+g5_dup = build_block()
+i = [k for k, l in enumerate(g5_dup) if l.startswith("SHELL_WAIT_G5")]
+g5_dup[i[1]] = g5_dup[i[0]]
+check("E9 five G5 lines naming only four victims refuse the block",
+      parse_block(g5_dup) is None)
+
+# --- G. A timed-out point is not a reference, and G9 then refuses ---
+bn = parse_block(build_block(n_at=(15, 10000)))
+check("G1 an n=0 point parses", bn is not None)
+check("G2 and its shift is None", g9(bn) == (None, None))
+code, text = run_report(bn)
+check("G3 an uncomputable G9 exits 1", code == 1 and "NOT COMPUTABLE" in text)
+bz = parse_block(build_block(n_at=(15, 0)))
+check("G4 an n=0 reference voids every shift of its case",
+      all(r["shift"] is None for r in shifts(bz) if r["case"] == 15))
+code, text = run_report(parse_block(build_block(gates_ok=0, g9_shift=-700)))
+check("G5 both refusals are named", "gates_ok is 0; G9" in text)
 
 # --- F. A moving tie is reported, and does not change the exit code ---
 bt = parse_block(build_block(tie_shift=-3))

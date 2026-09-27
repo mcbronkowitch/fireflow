@@ -36,7 +36,27 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-09-19 (**the coupon has been built, populated and
+- **Last updated:** 2026-09-27 (**round three, the wait-sweep probe, is
+  designed and built to a flashable image — not flashed, not measured.** It
+  makes the interval between conversions the axis that round two could only
+  sample at three tone periods: prime a conversion, idle a commanded `W`,
+  convert again, for `W` from back to back to 50 ms, in four arms — the curve,
+  one discarded conversion before the read, the 387.5-cycle rung, and a
+  codec-running bridge whose 10 ms point must land in [−900, −800] on `REF_A`
+  (G9, host-side, a judgement flagged for Bastian). Arms B and L are the two
+  fixes the shipping scan could adopt, so the result is useful without a
+  mechanism. Spec
+  `docs/superpowers/specs/2026-09-27-coupon-wait-sweep-probe-design.md`
+  (every *flagged* decision in it was taken without Bastian), plan beside it,
+  image `SHELL_COUPON_PROBE=1 SHELL_WAIT_PROBE=1`, reader `shell/read_wait.py`
+  with guard `read_wait_guard`. Also committed the same day: the coupon's
+  bring-up record of 2026-09-17, the module on four 2×5 sockets rather than
+  two 2×10, and the pots, which since 2026-09-16 are **the one open order
+  line** — the drawer parts turned out to reach the board only on flying
+  leads, and the RV09 vertical replacement is in
+  `hardware/coupon/order-bom.md`. The 2026-09-03 entry below still says the
+  pots come from stock; that stopped being true on 2026-09-16); earlier,
+  2026-09-19 (**the coupon has been built, populated and
   measured twice, and both rounds returned a NEGATIVE result on the question
   they were built to ask.** Round one, the crosstalk probe, pits the board's
   own digital edges against a settled mux channel:
@@ -3921,6 +3941,16 @@ except the decision to place it. Recorded in `review.py`'s Section 3 (so
 `proof/review.md` carries it for whoever reads the sheet) and in
 `hardware/coupon/README.md`'s order list; docs only, no board or schematic
 file moved.
+
+**2026-09-27 — the next coupon instrument is built, and it waits on a board
+session.** Round two left one item bigger than it found it: a 5150 Ω channel
+reads up to 852 counts low as a function of how long the converter waited
+between conversions, with no mechanism attached. The wait-sweep probe
+(`SHELL_WAIT_PROBE`, spec
+`docs/superpowers/specs/2026-09-27-coupon-wait-sweep-probe-design.md`) sweeps
+that wait from back to back to 50 ms and asks, per arm, whether one discarded
+conversion or the 387.5-cycle rung pays it off — the two fixes the shipping
+scan could adopt. Built and host-tested; nothing it predicts is measured.
 
 **2026-09-03 — the boards are ordered, and the parts list collapses to one
 domestic parcel.** The fab order went to JLCPCB on 2026-09-02: five bare

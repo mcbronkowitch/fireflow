@@ -1,9 +1,11 @@
 # The coupon wait-sweep probe — design (round three)
 
 **Date:** 2026-09-27
-**Status:** DESIGNED and BUILT to a flashable image while Bastian was away;
-**not flashed, not measured.** Every decision marked *flagged* below was taken
-without him and is his to overturn before the first board session.
+**Status:** DESIGNED and BUILT to a flashable image while Bastian was away,
+2026-09-27; **not flashed, not measured.** Host test `test_wait_plan.cpp` and
+guard `read_wait_guard` are green with their reds proved. Every decision
+marked *flagged* below was taken without him and is his to overturn before
+the first board session; §11 is the session.
 **Depends on:** round two
 ([`2026-09-18-coupon-codec-tone-probe-design.md`](2026-09-18-coupon-codec-tone-probe-design.md))
 and its write-up
@@ -116,6 +118,15 @@ silent-cadence arm ran in. Round two measured `Stopped` against
 `RunningSilent` at ±1 count on every victim, so the two are not expected to
 differ; arm C exists so that the bridge in §5 is like-for-like rather than
 resting on that expectation.
+
+**"Stopped" has two histories, and the reader cannot tell them apart.** In
+the first block of a boot, arms A, B and L run on a codec that has never been
+started; in every later block they run after arm C's `StopAudio()`. Round two
+kept those apart with its `audio_virgin` flag; this probe does not, because
+its question is the wait and not the codec. In practice a USB host connects
+after block 1 has begun and reads block 2 or later. If arms A and C disagree
+at the bridge points by more than round two's ±1 count, this is the first
+thing to rule out. (Found in review, 2026-09-27; not a defect, a limit.)
 
 **The wait runs with interrupts enabled; the conversions are masked** — the
 same split round two uses, for the same reason: arm C's callback must keep the
@@ -310,7 +321,35 @@ free-running DMA, whose conversions follow each other with no idle and on
 different channels — that is `settle-measured.md` §7's first-arrival
 question, already measured, and not this one.
 
-## 11. Out of scope
+## 11. The board session
+
+Nothing below has been run. Build in a shell **without** `env.sh` (CLAUDE.md:
+the two toolchains must not mix), flash over DFU with the submodule in its
+bootloader, then listen:
+
+```bash
+PATH="/c/Program Files/DaisyToolchain/bin:/c/Program Files/Git/usr/bin:$PATH" make -C shell -j8 images SHELL_COUPON_PROBE=1 SHELL_WAIT_PROBE=1
+```
+
+```bash
+dfu-util -a 0 -s 0x90040000:leave -D shell/build/shell-sram.bin
+```
+
+```bash
+python shell/read_wait.py COM5 wait.csv
+```
+
+`COM5` is a placeholder for whichever port the board enumerates on. The
+QSPI bank is already on the board (`shell/README.md`) and is not reflashed.
+Two consecutive blocks give one of each sweep direction; the first complete
+block is the one to vendor under `shell/testdata/` so `read_wait_guard` parses
+a real block and not only its own fixtures.
+
+Before reading the curve, three checks, in order: `gates_ok=1`, G9 PASS, and
+no `TIE MOVED` line. A block that fails any of them is read for what failed,
+not for the curve.
+
+## 12. Out of scope
 
 - Any mechanism experiment. If the curve names a time constant, what the time
   constant belongs to is the round after this.
