@@ -6,12 +6,14 @@ red for 23 days).
 
 build_block() writes a whole block in the exact shape wait_probe.cpp's
 PrintLine calls produce -- transcribed from the firmware, not from the spec.
-There is no board capture yet to vendor beside it, which is the one gap this
-guard cannot close: a fixture written by the same hand as the parser agrees
-with it by construction. **The first real block should be vendored under
-testdata/ and parsed here**, the way test_read_tone.py's section B does.
+A fixture written by the same hand as the parser agrees with it by
+construction, so section H also parses the first complete block the board
+printed (testdata/wait-block-e22a628.txt, lines 244-520 of
+docs/hardware/captures/wait-capture-e22a628.txt), the way test_read_tone.py's
+section B does.
 """
 import io
+import os
 import sys
 from contextlib import redirect_stderr
 
@@ -180,6 +182,40 @@ code, text = run_report(bt)
 check("F2 and reported", "TIE MOVED" in text)
 check("F3 but not gated", code == 0)
 check("F4 a clean block has no tie faults", tie_faults(b) == [])
+check("F5 a tie at +-1 is inside the measured tolerance",
+      tie_faults(parse_block(build_block(tie_shift=1))) == []
+      and tie_faults(parse_block(build_block(tie_shift=-1))) == [])
+check("F6 a tie at 2 is reported",
+      len(tie_faults(parse_block(build_block(tie_shift=2)))) > 0)
+
+# --- H. The first real block the board printed parses, and says what the
+# write-up says. docs/hardware/wait-measured.md quotes these numbers; a
+# firmware or reader change that moved them would leave the document
+# asserting something the code no longer produces. ---
+REAL_BLOCK = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "testdata", "wait-block-e22a628.txt")
+with io.open(REAL_BLOCK, encoding="utf-8") as fh:
+    rb = parse_block(fh)
+check("H1 the vendored board block parses", rb is not None)
+rrows = shifts(rb)
+code, text = run_report(rb)
+check("H2 it passes every gate and G9, and exits 0", code == 0)
+check("H3 G9 reads -865 on it", g9(rb) == (True, -865))
+check("H4 no tie moves beyond tolerance", tie_faults(rb) == [])
+
+
+def real(arm, victim, w):
+    return [r["shift"] for r in rrows
+            if r["arm"] == arm and r["victim"] == victim and r["w_us"] == w][0]
+
+
+check("H5 arm A REF_A saturates: -804 at 5 ms, -856 at 10 ms, -855 at 50 ms",
+      (real(0, (0, 8), 5000), real(0, (0, 8), 10000), real(0, (0, 8), 50000))
+      == (-804, -856, -855))
+check("H6 arm L is flat within 2 counts on every victim and W",
+      all(abs(r["shift"]) <= 2 for r in rrows if r["arm"] == 2))
+check("H7 arm B leaves a residue: REF_A between -30 and -45 from 1 ms up",
+      all(-45 <= real(1, (0, 8), w) <= -30 for w in (1000, 5000, 10000, 50000)))
 
 if FAILURES:
     for f in FAILURES:

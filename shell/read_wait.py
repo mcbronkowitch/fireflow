@@ -89,6 +89,15 @@ ROUND_TWO = {
 # block that shows the fault.
 TIE_R_SRC = 150
 
+# How far a tie may move before it is reported. 1, not 0 -- MEASURED: the
+# first board capture (docs/hardware/captures/wait-capture-e22a628.txt,
+# 2026-09-27) put R_SP10 at +1 on exactly one of its 245 points (arm A,
+# W = 5 ms, block 2) and at 0 everywhere else. A mean of 64 conversions on a
+# node at 0 V can round to 1 when a single conversion reads 64 or more, and a
+# report that fires on that trains its reader to ignore it. 2 and up is still
+# reported.
+TIE_TOLERANCE = 1
+
 _STR_FIELDS = ("git",)
 
 
@@ -259,10 +268,11 @@ def g9(block):
 
 
 def tie_faults(block):
-    """Every (arm, victim, W) where a 150 ohm tie's shift is not 0. Report
-    only (see TIE_R_SRC)."""
+    """Every (arm, victim, W) where a 150 ohm tie's shift exceeds
+    TIE_TOLERANCE in magnitude. Report only (see TIE_R_SRC)."""
     return [r for r in shifts(block)
-            if r["r_src"] == TIE_R_SRC and r["shift"] not in (None, 0)]
+            if r["r_src"] == TIE_R_SRC and r["shift"] is not None
+            and abs(r["shift"]) > TIE_TOLERANCE]
 
 
 # --- output ----------------------------------------------------------------

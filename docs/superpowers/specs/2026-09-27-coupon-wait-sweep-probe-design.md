@@ -1,8 +1,10 @@
 # The coupon wait-sweep probe — design (round three)
 
 **Date:** 2026-09-27
-**Status:** DESIGNED and BUILT to a flashable image while Bastian was away,
-2026-09-27; **not flashed, not measured.** Host test `test_wait_plan.cpp` and
+**Status:** BUILT, flashed and **measured 2026-09-27**, image `e22a628`, two
+complete blocks, every gate and G9 passing — the result is
+[`docs/hardware/wait-measured.md`](../../hardware/wait-measured.md). Designed
+and built while Bastian was away, the same day. Host test `test_wait_plan.cpp` and
 guard `read_wait_guard` are green with their reds proved. Every decision
 marked *flagged* below was taken without him and is his to overturn before
 the first board session; §11 is the session.

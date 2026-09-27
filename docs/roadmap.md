@@ -36,8 +36,13 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-09-27 (**round three, the wait-sweep probe, is
-  designed and built to a flashable image — not flashed, not measured.** It
+- **Last updated:** 2026-09-27, evening (**round three is measured**:
+  [`docs/hardware/wait-measured.md`](hardware/wait-measured.md). The shift
+  saturates at about −860 counts on `REF_A` by 10 ms, the 387.5-cycle rung
+  removes it at every wait (within ±3 counts), and one discarded conversion
+  leaves 30–41 counts behind at 5150 Ω — so between the two cheap fixes the
+  evidence favours the rung. Earlier the same day: **round three, the
+  wait-sweep probe, was designed and built to a flashable image.** It
   makes the interval between conversions the axis that round two could only
   sample at three tone periods: prime a conversion, idle a commanded `W`,
   convert again, for `W` from back to back to 50 ms, in four arms — the curve,
