@@ -4,7 +4,7 @@ namespace shell {
 
 // Spec section 6. Arms A and B at the working rung (B takes one conversion
 // more per repeat), arm L at the long rung, arm C at the working rung on its
-// three points only -- each summed over five victims and kWaitRepeats
+// four points only -- each summed over five victims and kWaitRepeats
 // repeats. Integer microseconds throughout, divided once at the end.
 uint32_t wait_block_estimate_ms()
 {

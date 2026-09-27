@@ -93,14 +93,15 @@ victim), now with `W` commanded instead of inherited from a frequency.
 | **A** `wait` | stopped | victim's working rung | full grid, 15 points | the curve |
 | **B** `discard` | stopped | victim's working rung | full grid | whether one extra conversion pays it off, at every `W` |
 | **L** `long` | stopped | 387.5 cycles | full grid | whether a long acquisition window pays it off, at every `W` |
-| **C** `codec` | running, callback writes zeros | victim's working rung | 200 µs, 1 ms, 10 ms only | the bridge to round two (§5, G9) |
+| **C** `codec` | running, callback writes zeros | victim's working rung | 0, 200 µs, 1 ms, 10 ms only | the bridge to round two (§5, G9) |
 
 **The grid, in µs:** 0, 2, 5, 10, 20, 50, 100, 200, 500, 1 000, 2 000,
 5 000, 10 000, 20 000, 50 000. Roughly three points per decade, and round
 two's three cadences (200, 1 000, 10 000 µs) are **on** the grid, so arm A
 meets them without interpolation. `W = 0` is back to back: the measured
 conversion starts as soon as the prime's `EOC` is seen, and it is every arm's
-own reference.
+own reference — arm C's included, which is why arm C carries a `W = 0` point
+of its own rather than borrowing arm A's, measured with the codec stopped.
 
 *Flagged:* the top of the grid. Round two never waited longer than 10 ms, so
 anything past 10 ms is new ground, and 50 ms is where the block cost starts
@@ -203,11 +204,11 @@ working-rung conversions at most (~2.7 µs each at the measured 6.146 MHz,
 arm B) or two long-rung ones (~65 µs each, arm L). The grid sums to
 88 887 µs, so a full grid of 64 repeats is **~5.7 s** per victim per arm.
 Arms A, B and L over five victims: **~85 s**. Arm C: 11.2 ms × 64 × 5 =
-**~3.6 s**. With calibration, span and printing, a block is estimated at
+**~3.6 s** (its `W = 0` point costs two conversions). With calibration, span and printing, a block is estimated at
 **~90 s**, against round two's measured 170–227 s. `block_ms` is printed
 (§7) and is the measurement; this paragraph is the estimate it replaces.
 
-Output volume: 4 arms × 5 victims = 20 case lines, 15 × 15 + 3 × 5 = 240
+Output volume: 4 arms × 5 victims = 20 case lines, 15 × 15 + 4 × 5 = 245
 point lines, plus about twenty calibration and verdict lines — roughly 280
 lines per block, about a third of round two's 821. The accumulation overflow
 (`logger.cpp:78-87`, `docs/gotchas.md`) is a volume problem, and this is less
@@ -239,7 +240,7 @@ SHELL_WAIT_END
   alternates every block, for the reason `settle-measured.md` §6 gives: in
   one direction elapsed time and the axis increase together, and a drift
   across a 5.7 s sweep would be indistinguishable from a slow tail. Arm C's
-  three points follow the same direction.
+  four points follow the same direction.
 - `rung_tenths`: the sampling rung in tenths of an ADC cycle (25 for
   2.5 cycles, 3875 for 387.5) — printed because arm L's rung differs from
   every other arm's and a reader must not have to infer it.
@@ -254,7 +255,8 @@ SHELL_WAIT_END
 
 - **`tests/test_wait_plan.cpp`**, host, doctest:
   - the grid starts at 0, is strictly increasing, and has 15 points;
-  - each of arm C's three points is on the grid (so arm A meets them exactly);
+  - each of arm C's four points is on the grid (so arm A meets them exactly),
+    and the first is its own `W = 0`;
   - the µs-to-core-cycle conversion of the **largest** grid point does not
     overflow 32 bits — the trap is real: `cycles.h:ns_to_cycles()` computes
     `ns * 480` in 32 bits and wraps above ~8.9 ms, so 10 ms passed through it

@@ -44,11 +44,15 @@ inline constexpr uint32_t kWaitGridUs[kWaitPoints] = {
     500,  1000, 2000, 5000, 10000, 20000, 50000,
 };
 
-// Arm C's grid: round two's three cadences and nothing else. Each must be a
-// point of kWaitGridUs -- the host test pins that -- so arm C and arm A are
-// compared at identical commanded waits.
-inline constexpr int kWaitCodecPoints = 3;
-inline constexpr uint32_t kWaitCodecGridUs[kWaitCodecPoints] = {200, 1000, 10000};
+// Arm C's grid: its own back-to-back reference, then round two's three
+// cadences and nothing else. The 0 is not optional: shift(W) is defined
+// against the same arm's W = 0 (spec section 4), and without it arm C would
+// have to borrow arm A's reference -- measured with the codec stopped, which
+// is the one variable arm C exists to hold. Each point must be a point of
+// kWaitGridUs -- the host test pins that -- so arm C and arm A are compared
+// at identical commanded waits.
+inline constexpr int kWaitCodecPoints = 4;
+inline constexpr uint32_t kWaitCodecGridUs[kWaitCodecPoints] = {0, 200, 1000, 10000};
 
 // Arm C's point k as an index into kWaitGridUs, or -1 if it is not on the
 // grid. Constexpr so the host test can call it; the firmware never needs it.

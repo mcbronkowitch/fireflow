@@ -333,7 +333,7 @@ void run_wait_probe(bench::Board& hw)
                 // and the block size say it should have been, with a
                 // tolerance of one block -- round two's rule, because the two
                 // clocks are read at slightly different instants. A case is
-                // 3 points x 64 repeats x at most ~10 ms, ~0.72 s, well
+                // 4 points x 64 repeats x at most ~10 ms, ~0.72 s, well
                 // inside the DWT's ~8.9 s wrap. The PrintLine calls inside
                 // the case are counted in the elapsed time too, and the
                 // callback keeps running through them, so they cost nothing

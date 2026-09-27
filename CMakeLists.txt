@@ -394,3 +394,11 @@ add_test(NAME read_tone_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_read_tone.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
+
+# Generated fixtures only until the wait-sweep probe's first board block
+# exists; that block should be vendored under shell/testdata/ and parsed by
+# this guard, as read_tone_guard does with its own.
+add_test(NAME read_wait_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_read_wait.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)

@@ -13,7 +13,7 @@ TEST_CASE("wait grid: starts back to back, strictly increasing, fifteen points")
     }
 }
 
-TEST_CASE("wait grid: round two's three cadences are on it") {
+TEST_CASE("wait grid: arm C's reference and round two's three cadences are on it") {
     // Arm C is compared against arm A at identical commanded waits; a codec
     // point that is off the grid would compare against an interpolation.
     for(int k = 0; k < shell::kWaitCodecPoints; ++k) {
@@ -22,10 +22,12 @@ TEST_CASE("wait grid: round two's three cadences are on it") {
         REQUIRE(i >= 0);
         CHECK(shell::kWaitGridUs[i] == shell::kWaitCodecGridUs[k]);
     }
-    // And the three are the three round two measured: 5 kHz, 1 kHz, 100 Hz.
-    CHECK(shell::kWaitCodecGridUs[0] == 200u);
-    CHECK(shell::kWaitCodecGridUs[1] == 1000u);
-    CHECK(shell::kWaitCodecGridUs[2] == 10000u);
+    // Its own back-to-back reference first, then the three cadences round
+    // two measured: 5 kHz, 1 kHz, 100 Hz.
+    CHECK(shell::kWaitCodecGridUs[0] == 0u);
+    CHECK(shell::kWaitCodecGridUs[1] == 200u);
+    CHECK(shell::kWaitCodecGridUs[2] == 1000u);
+    CHECK(shell::kWaitCodecGridUs[3] == 10000u);
     CHECK(shell::wait_codec_grid_index(-1) == -1);
     CHECK(shell::wait_codec_grid_index(shell::kWaitCodecPoints) == -1);
 }
