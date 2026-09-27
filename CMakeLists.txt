@@ -100,6 +100,8 @@ add_executable(spky_tests
     tests/test_xtalk_plan.cpp
     shell/tone_plan.cpp
     tests/test_tone_plan.cpp
+    shell/wait_plan.cpp
+    tests/test_wait_plan.cpp
     tests/test_seed_audition_init.cpp
     tests/test_seed_audition_protocol.cpp
     tests/test_bbd_edge_state.cpp
