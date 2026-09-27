@@ -168,6 +168,77 @@ caps and the capacitor under test. No pots, no button, no 165, no LEDs —
 LEDs only if the round is chasing noise rather than time, which is the load
 they are there for (`scripts/design.py:115`).
 
+## Bringing it up
+
+**First powered board, 2026-09-17.** Everything populated except the seven
+pots, both solder jumpers bridged, and every measurement below taken with the
+Patch Submodule *out* of its sockets. That is the whole scope of what a
+module-less power-up can prove: `+3V3` reaches the board only through the
+submodule's A10 (`scripts/netlist.py:97`), so with the module out no chip on
+either side of the moat has a supply. A dead board is the expected state here,
+not a fault.
+
+**Nothing has to be counted, and no reference designator has to be read off
+the silkscreen.** Two signatures identify everything:
+
+- **Which bulk-cap pad is ground.** Probe between a pad of `C_BP12` and a pad
+  of `C_BN12`, all four combinations: exactly one reads 0 Ω, and those are the
+  two ground pads. The opposite combination is +12 V against -12 V.
+- **Which socket pin is which.** With one probe on a ground pad, walk the
+  other along bank A's ten pins. Exactly two read 0 Ω (A4, A7 — same column,
+  one per row), exactly one reads ~1.6 kΩ (A10, `+3V3`), the rest are open.
+  A1 and A5 being open is correct: with no module, ±12 V has no DC path to
+  ground at all.
+
+Bank A is the 2×5 group at the lower right of the module outline, beside
+`J_PWR`, long axis horizontal. Holding the board component side up with the
+pot/jack edge at the bottom and the header to the right: **lower row, right to
+left, is A1..A5; upper row, right to left, is A10..A6**, so A1 and A10 share
+the column nearest the header. (Pad coordinates: `scripts/placement.py`'s
+module docstring, transformed by the 180° placement.)
+
+Measured, in the order taken:
+
+| check | reading | what it proves |
+|---|---|---|
+| across `C_BP12`, across `C_BN12` | 16–17 MΩ, climbing | no short on either ±12 V rail; nothing but the cap loads them |
+| `C_BP12` pad vs `C_BN12` pad, 4 combinations | one at 0 Ω, opposite open | rails separated; identifies both ground pads |
+| across `C_B3V3` (`+3V3` vs `GND`) | **1.6 kΩ** | see below |
+| same, with `SW1` held down | **1.4 kΩ** | `R_BTN` and the button |
+| bank A sweep against ground | A4, A7 at 0 Ω; A10 at 1.6 kΩ; rest open | the pin numbering, without counting |
+| A1 vs `J_PWR`'s north pins, A5 vs its south pins | 0 Ω (0.1 Ω probe contact) | the ±12 V copper reaches the module |
+| **powered:** A1, A5, A10 against A7 | -12 V, +12 V, **0 V** | polarity, and that nothing feeds `+3V3` |
+
+**The 1.6 kΩ is the single most informative reading on the board, and it is
+not a fault.** Three reference dividers sit across the analog rail —
+`R_REFA1/A2` 20k, `R_REFC1/C2` 20k, `R_REFB1/B2` **2k** — and in parallel
+they predict 1.67 kΩ, with the 1k divider dominating. Pressing `SW1` puts
+`R_BTN`'s 10k in parallel and predicts 1.43 kΩ. Both landed. Because the
+dividers hang on `A+3V3`/`AGND` while the meter sat on `+3V3`/`GND`, that one
+reading also proves **both jumpers conduct** — the current goes out through
+`JP_3V3` and back through `JP_GND`.
+
+Two practical notes:
+
+- **Park the black probe in A7, not A4.** Both are ground. A7's neighbours A6
+  and A8 are unconnected, so a slipped probe there does nothing; A4's
+  neighbour is A5 at +12 V.
+- **The bulk caps hold ±12 V for minutes after power-off.** Against their own
+  measured 16 MΩ leakage and nothing else, the time constant is about 160 s
+  (arithmetic from the measured value, not timed). Meter A1 and A5 down to
+  ~0 V before the module goes in, or bleed them through a resistor.
+
+**What was not measured, and cannot be any more:** the moat continuity check
+this README asks for above — `TP_AGND` open against `TP_GND`, `TP_A3V3` open
+against `TP_3V3`. The jumpers were bridged first, and after that both pairs
+read 0 Ω whether the moat is clean or shorted. On this board that answer is
+gone for good.
+
+**Still unpopulated: the seven pots.** The bring-up scan judges every channel
+against a table, so MUX16 0/2/4/6 and MUX8 0/2/4 will read as floating and
+report red until the pots are in. The reference and tie channels are the ones
+that carry a real verdict before then.
+
 ## Layer and zone map
 
 4 copper layers, y growing downward from the board's top-left corner:

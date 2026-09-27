@@ -212,7 +212,7 @@
 <text x="1144.5" y="980" font-size="12" fill="#f2eee2" text-anchor="middle" transform="rotate(-90 1144.5 981)">U_MUX8</text>
 <text x="1144.5" y="993" font-size="9.5" fill="#f2eee2" text-anchor="middle" transform="rotate(-90 1144.5 981)">74HC4051</text>
 <text x="818.265" y="507" font-size="19" fill="#171713" text-anchor="middle">U_SM</text>
-<text x="818.265" y="527" font-size="12" fill="#656056" text-anchor="middle">Daisy Patch SM &#8212; seats on J_SM1 / J_SM2, two 2&#215;10 sockets</text>
+<text x="818.265" y="527" font-size="12" fill="#656056" text-anchor="middle">Daisy Patch SM &#8212; seats on four 2&#215;5 sockets J_SM1..J_SM4, each cut from a 2&#215;10 strip</text>
 <text x="818.265" y="545" font-size="11" fill="#656056" text-anchor="middle">solder the sockets, not the module</text>
 <text x="215" y="307.185" font-size="12" fill="#f2eee2" text-anchor="middle" transform="rotate(-90 215 308.185)">U_SR1</text>
 <text x="215" y="320.185" font-size="9.5" fill="#f2eee2" text-anchor="middle" transform="rotate(-90 215 308.185)">74HC595</text>

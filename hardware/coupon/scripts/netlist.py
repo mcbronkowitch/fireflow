@@ -107,14 +107,20 @@ def build():
     sm.by_number("B2", D.AUDIO_L)
 
     # ---- the SM's sockets --------------------------------------------------
-    # Purchase items, nothing more: two 2x10 female strips that solder into
-    # U_SM's own landing pattern (40 holes, banks A/B and C/D). They carry no
+    # Purchase items, nothing more: female strips that solder into U_SM's own
+    # landing pattern. That pattern is FOUR separate 2x5 groups (banks A and D
+    # horizontal on one edge, B and C vertical on the other -- pad coordinates
+    # in placement.py's docstring), so it takes four 2x5 sockets; a straight
+    # 2x10 fits neither edge. Each is cut from a 2x10 strip -- the position
+    # under the cut is lost, so one strip yields one 2x5 -- hence four refs
+    # and four strips (order-bom.md). They carry no
     # footprint and no nets of their own -- the holes belong to the
     # DAISY_PATCH_SM footprint -- but without them on the BOM the "stays
     # removable" note above is a soldered-in module.
-    for ref in ("J_SM1", "J_SM2"):
-        add(ref, "Connector_Generic:Conn_02x10_Odd_Even", "2x10 socket 2.54mm",
-            "", "female socket strip for the Patch SM landing pattern; "
+    for ref in ("J_SM1", "J_SM2", "J_SM3", "J_SM4"):
+        add(ref, "Connector_Generic:Conn_02x05_Odd_Even", "2x5 socket 2.54mm",
+            "", "female socket for one 2x5 group of the Patch SM landing pattern, "
+            "cut from a 2x10 strip; "
             "BOM only, no own footprint")
 
     # ---- Eurorack power ----------------------------------------------------

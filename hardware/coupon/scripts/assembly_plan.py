@@ -512,7 +512,7 @@ class View(object):
                 out.append('<text x="%g" y="%g" font-size="19" fill="%s" text-anchor="middle">'
                            'U_SM</text>' % (cx, cy - 6, col))
                 out.append('<text x="%g" y="%g" font-size="12" fill="%s" text-anchor="middle">'
-                           'Daisy Patch SM &#8212; seats on J_SM1 / J_SM2, two 2&#215;10 sockets'
+                           'Daisy Patch SM &#8212; seats on four 2&#215;5 sockets J_SM1..J_SM4, each cut from a 2&#215;10 strip'
                            '</text>' % (cx, cy + 14, MUTED))
                 out.append('<text x="%g" y="%g" font-size="11" fill="%s" text-anchor="middle">'
                            'solder the sockets, not the module</text>' % (cx, cy + 32, MUTED))
@@ -649,7 +649,7 @@ def write_assembly(parts, path):
 # board mm the leader lands on.
 ZONES = [
     (1, "left", 20.0, 8.0, 18.0, "the shift registers and the eight LEDs"),
-    (2, "top", 40.0, 46.0, 26.0, "the Daisy module &#8212; it sits on two sockets"),
+    (2, "top", 40.0, 46.0, 26.0, "the Daisy module &#8212; it sits on four 2&#215;5 sockets"),
     (3, "top", 86.0, 90.0, 5.0, "the button and the ADC probe points"),
     (4, "right", 26.0, 95.5, 28.0, "Eurorack power in, bulk caps beside it"),
     (5, "left", 48.1, 30.0, 48.1, "the 1.0 mm moat &#8212; digital above, analog below"),

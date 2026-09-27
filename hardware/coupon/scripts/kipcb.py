@@ -146,7 +146,7 @@ def footprint(lib_id):
 def add_part(board, part, x_mm, y_mm, rot_deg, side="F"):
     """Place one `netlist.Part`, wire every pad it named to a net, append it
     to the board. Parts with no footprint (the SM's two socket strips,
-    `J_SM1`/`J_SM2`, and the `#FLG*` power-flag placeholders) carry no
+    `J_SM1`..`J_SM4`, and the `#FLG*` power-flag placeholders) carry no
     physical footprint by design -- skipped, `None` returned."""
     if not part.footprint:
         return None

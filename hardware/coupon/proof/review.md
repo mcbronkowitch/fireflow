@@ -83,10 +83,10 @@ Everything else in this schematic came out of the Patch SM datasheet or a KiCad 
 | 8 | probe | TP_3V3, TP_A3V3, TP_ADC11, TP_ADC12, TP_AGND, TP_AUDIO_L, TP_CLK, TP_GND | `TestPoint:TestPoint_Pad_D1.5mm` |
 | 5 | 10k | R_BTN, R_REFA1, R_REFA2, R_REFC1, R_REFC2 | `Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder` |
 | 5 | 100n | C_IN1, C_M16, C_M8, C_SR1, C_SR2 | `Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder` |
+| 4 | 2x5 socket 2.54mm | J_SM1, J_SM2, J_SM3, J_SM4 | *BOM only, no own footprint* |
 | 4 | 10k | RV1, RV2, RV5, RV6 | `Potentiometer_THT:Potentiometer_Alpha_RD901F-40-00D_Single_Vertical` |
 | 4 | 10u 25V | C_B3V3, C_BA3V3, C_BN12, C_BP12 | `Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder` |
 | 3 | 20k | RV3, RV4, RV7 | `Potentiometer_THT:Potentiometer_Alpha_RD901F-40-00D_Single_Vertical` |
-| 2 | 2x10 socket 2.54mm | J_SM1, J_SM2 | *BOM only, no own footprint* |
 | 2 | DNP | C_COM16, C_COM8 | `Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder` |
 | 2 | COM probe | TP_COM16, TP_COM8 | `TestPoint:TestPoint_Pad_D1.5mm` |
 | 2 | 0R link | JP_3V3, JP_GND | `Jumper:SolderJumper-2_P1.3mm_Open_Pad1.0x1.5mm` |
