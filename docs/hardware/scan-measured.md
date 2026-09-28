@@ -241,7 +241,8 @@ during the measurement, which is why the bank is recorded here.
   recording, after the turning, RV2's emitted value moved by more than 60 raw
   counts over about 10 s, beyond H, while RV4 and RV6 held still; whether the
   knob was being touched was not recorded, and no cause is claimed. RV4's low
-  stop was not seen. The session is recorded in the M6 entry of 2026-09-28 in
+  stop, not seen in the session, was read later the same day: all three pots
+  fully left gave `rv2=0 rv4=0 rv6=0` on every `SHELL_PLAY` line. The session is recorded in the M6 entry of 2026-09-28 in
   [`docs/roadmap.md`](../roadmap.md).
 
 ## 8. How to repeat it

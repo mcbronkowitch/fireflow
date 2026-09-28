@@ -41,8 +41,8 @@ is actually built today, and what is still design-only.
   [`docs/hardware/scan-measured.md`](hardware/scan-measured.md): board
   session 1's check image found every coupon channel clean one block after
   its address was written, to within 0.61 counts against a criterion of 8;
-  board session 2 played `SHELL_PANEL_SCAN`: RV2 and RV6 reached both stops,
-  RV4 its top stop (its low stop was not seen), all three moved audibly, and
+  board session 2 played `SHELL_PANEL_SCAN`: all three pots reached both
+  stops (RV4's low stop in a later read the same day), all three moved audibly, and
   `FILT_A` did not step audibly at 48 ms per sweep; see the M6 entry of that
   date. Earlier the same
   day: **the scan-budget pass is done** —
@@ -4054,7 +4054,9 @@ the pot round), and sweeps climbing about 21/s — the 48 ms per sweep the
 budget predicted. Bastian turned the pots: RV2 (`RATE_A`)
 reached 0 and 1.000, RV6 (`FILT_A`) reached 0 and 1.000, RV4 (`DENSITY_A`)
 reached 1.000 and came down to 0.260 — 0 was not seen in the two recordings.
-By ear, all three move; `FILT_A` does not step audibly at 48 ms per sweep
+*Later the same day*, with all three pots turned fully left, a 4 s read of
+`SHELL_PLAY` showed `rv2=0 rv4=0 rv6=0` on every line (`valid=1`, rail
+63483–63484): RV4 reaches its low stop too. By ear, all three move; `FILT_A` does not step audibly at 48 ms per sweep
 ("alles hörbar, Filter stuft nicht").
 
 **Open, unattributed:** at the end of the second recording, RV2's emitted
