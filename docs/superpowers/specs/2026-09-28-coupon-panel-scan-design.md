@@ -128,7 +128,8 @@ The reader's exit code is 1 on any failed gate or failed criterion.
 **The hysteresis rule.** H is the largest `max − min` in arm S over the seven
 pot channels (the coupon's `Unchecked` steps, g0 ch 0/2/4/6 and g1 ch 0/2/4),
 across all complete run blocks of the committed capture, rounded up to the
-next multiple of 16 counts. The reader prints it. The playing image carries it
+next multiple of 16 counts, and never less than 16: a zero-width band would
+emit on every count of noise. The reader prints it. The playing image carries it
 as `kPotHysteresis` with the capture as its provenance.
 
 ## 5. The playing image, `SHELL_PANEL_SCAN=1`
