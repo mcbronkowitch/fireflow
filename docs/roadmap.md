@@ -43,7 +43,7 @@ is actually built today, and what is still design-only.
   saturates at about −860 counts on `REF_A` by 10 ms, the 387.5-cycle rung
   removes it at every wait (within ±3 counts), and one discarded conversion
   leaves 30–41 counts behind at 5150 Ω — so between the two cheap fixes the
-  evidence favours the rung.) Earlier the same day: **round three, the
+  evidence favours the rung. Earlier the same day: **round three, the
   wait-sweep probe, was designed and built to a flashable image.** It
   makes the interval between conversions the axis that round two could only
   sample at three tone periods: prime a conversion, idle a commanded `W`,
@@ -3965,7 +3965,9 @@ reading, a wiring check at a stop. `SHELL_POT_ROUND=1` adds RV2, RV4 and RV6
 at mid travel to both existing probes — six pairs in the settle probe (P6–P11,
 from each pot's high and low neighbour), three victims in the wait probe — with
 every divider kept as a same-boot control and G3 still judged on P0–P5 only.
-The pots are set by hand to ~32768 on the bring-up scan; PG1 (reading in
+The pots were set by hand on the bring-up scan to what `REF_A`, the exact
+10k/10k divider, reads there (about 31734 on that image's scale, whose rail
+is 63484) — true 50/50; PG1 (reading in
 [28180, 37355]) and PG2 (≤ 1024 counts between the two images) refuse a run
 whose pot was off-centre or moved. `shell/read_pots.py` joins the two images'
 files into the round's tables. Spec
@@ -3977,8 +3979,8 @@ is still to come. One thing it has to settle first: the settle image's G3
 failed in every block, on the dividers P1–P4 (settled-region spread 9–12
 counts against a bound of 8), which is the 2026-09-18 settle round's own G3
 behaviour and not the pots'; `read_pots.py` refuses the run for it, as
-designed. It closes Phase-0 Task 6 step 5b on real pots once the board has
-spoken.
+designed. It closes Phase-0 Task 6 step 5b on real pots once the write-up
+has read the captures.
 
 **2026-09-27 — the next coupon instrument is built, and it waits on a board
 session.** Round two left one item bigger than it found it: a 5150 Ω channel
