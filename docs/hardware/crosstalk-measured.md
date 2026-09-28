@@ -509,6 +509,12 @@ What would strengthen it, roughly in order of what each buys:
    is a reminder that ADC behaviour here has already turned out to be
    configuration rather than silicon.
 
+**Decided 2026-09-28 (Bastian): items 1 and 4 are skipped for now.** The pot
+had been fitted all along, so item 4 is one `SHELL_XTALK_RV4=1` run away, but
+the panel scan's check image has since read every coupon channel clean in the
+real scan pattern ([`scan-measured.md`](scan-measured.md)). Item 1 waits until
+a control-PCB decision hangs on row 7.
+
 ## 11. What it means for the design
 
 **The LED word is the finding, and it is an actionable one.** Eight simultaneous

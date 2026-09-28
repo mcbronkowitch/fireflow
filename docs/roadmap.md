@@ -81,7 +81,8 @@ is actually built today, and what is still design-only.
   the pots fitted. Only a wiring check has read them — clockwise stop, all
   seven at the rail — and mid travel, where a pot's source impedance peaks,
   is unmeasured. Round one's four `RV4` row-6 cases were skipped on a false
-  premise and can run with `SHELL_XTALK_RV4=1`. **Also 2026-09-28: the
+  premise and can run with `SHELL_XTALK_RV4=1`; on 2026-09-28 Bastian decided
+  to leave them skipped (see the M6 entry of that date). **Also 2026-09-28: the
   capacitor-at-`COM` test is struck** (Bastian's decision) — `C_COM16`/`C_COM8`
   stay empty on every board, no second coupon gets populated for it, and
   `settle-budget.md` §4's "fit none" stays arithmetic. The 2026-09-03 entry below
@@ -4083,6 +4084,14 @@ should add mainly its own rows rather than another 13 KB; the 748 bytes of
 names in `kParams` are never read by the firmware. And on the panel
 profile, `find_control` keys on `(group, ch)` only, so part 2's 70-pot table
 must key on the sense pin too.
+
+**Skipped by decision** (Bastian, the same day): round one's four `RV4`
+row-6 crosstalk cases (`SHELL_XTALK_RV4=1`) — the scan check already read
+every coupon channel clean in the real scan pattern with the engine running,
+so they would only fill a gap in round one's table — and a second populated
+coupon, which is worth building only once a control-PCB decision hangs on
+the LED-word finding (`crosstalk-measured.md` row 7). Both remain runnable;
+the coupon has nothing else open.
 
 **Next:** part 2 — the 70-pot table, the three keycaps on the 165 and the 19
 LEDs on the 595 — waits for the control PCB's pin map, which should give one

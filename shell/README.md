@@ -284,9 +284,12 @@ the 16:1, 48 ms on the 8:1.
    engine setters that drags in, a one-time cost; part 2's table rows are
    what comes on top. Part 2's table must also key on the sense pin, not only
    `(group, ch)`.
-2. **Open on the coupon, if anyone wants it:** round one's four RV4 cases
-   (`SHELL_XTALK_RV4=1`, skipped on the false belief that RV4 was unfitted),
-   and a second populated board to separate board from design.
+2. **Skipped on the coupon, by decision (Bastian, 2026-09-28):** round one's
+   four RV4 cases (`SHELL_XTALK_RV4=1`) — the scan check already read every
+   channel clean in the real pattern, with the engine running — and a second
+   populated board, which is worth building only once a control-PCB decision
+   hangs on the LED-word finding (`crosstalk-measured.md` row 7). Both remain
+   runnable; neither blocks anything.
 
 **The switch headers are written while the Makefile is parsed, not by a
 rule** — with a rule, the build produced two byte-identical images for two
