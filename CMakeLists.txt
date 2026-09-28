@@ -420,6 +420,14 @@ add_test(NAME read_pots_guard
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_read_pots.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
 
+# The panel scan's measurement image: gates G1-G3, the criterion, and the
+# hysteresis rule. Generated fixtures; the committed capture joins after the
+# first board session (spec 2026-09-28-coupon-panel-scan-design.md).
+add_test(NAME read_scan_check_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_read_scan_check.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
+
 # The two budget calculations under tools/. scan_budget imports settle_budget,
 # so a constant revised there reaches both guards; scan_budget also reads the
 # pot count from host/vcv/res/gen_hw_panel.py and goes red when the panel moves.
