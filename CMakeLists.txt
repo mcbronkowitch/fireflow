@@ -403,3 +403,10 @@ add_test(NAME read_wait_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_read_wait.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
+
+# Round four's shared host-side module: the two position gates, the derived
+# impedance, and the pot table held against shell/pot_plan.h.
+add_test(NAME pot_round_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_pot_round.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
