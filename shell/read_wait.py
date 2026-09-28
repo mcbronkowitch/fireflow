@@ -24,6 +24,12 @@ cannot be computed at all. 0 otherwise. Nothing about the SHAPE of the curve
 enters the exit code -- this is a characterisation, and a gate on the
 answer would refuse the run that gives it.
 
+In a SHELL_POT_ROUND=1 image the block carries eight victims -- round one's
+five, then RV2, RV4, RV6 -- and SHELL_POT_CFG plus three SHELL_POT_ID lines
+directly after SHELL_WAIT_CFG. PG1 (spec 2026-09-28 section 7) then joins the
+exit code. With an out path, a `out.csv.meta.csv` is written beside `out.csv`,
+in read_settle.py's `scope,pair,key,value` shape.
+
 The block format below was transcribed from `wait_probe.cpp`'s PrintLine
 calls, not from the spec -- see docs/gotchas.md on a probe spec's output
 section drifting from its firmware.
@@ -34,6 +40,8 @@ listening mid-block and has to wait for the next _CFG.
 """
 import sys
 import time
+
+import pot_round
 
 # Arm numbering, as printed on SHELL_WAIT_CASE (wait_plan.h: WaitArm).
 ARM_WAIT = 0
@@ -50,8 +58,9 @@ WAIT_GRID_US = (0, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000,
                 10000, 20000, 50000)
 CODEC_GRID_US = (0, 200, 1000, 10000)
 
-VICTIMS = 5
-CASES = 4 * VICTIMS
+# Round one's five victims. A pot-round block adds pot_round.POTS after them;
+# victims(block) is the count a block actually carries.
+BASE_VICTIMS = 5
 
 # --- G9, the bridge to round two -------------------------------------------
 #
@@ -152,8 +161,13 @@ _SINGLE = (("SHELL_WAIT_CFG", "cfg"), ("SHELL_WAIT_CLK", "clk"),
 
 def _new_block():
     block = {key: None for _, key in _SINGLE}
-    block.update({"cases": {}, "points": {}, "g5": []})
+    block.update({"cases": {}, "points": {}, "g5": [],
+                  "pot_cfg": None, "pot_ids": []})
     return block
+
+
+def victims(block):
+    return BASE_VICTIMS + (len(pot_round.POTS) if block["pot_cfg"] else 0)
 
 
 def _is_complete(block):
@@ -163,12 +177,16 @@ def _is_complete(block):
     for _, key in _SINGLE:
         if block[key] is None:
             return False
-    if sorted(block["cases"]) != list(range(CASES)):
+    if block["pot_cfg"] is not None or block["pot_ids"]:
+        if not pot_round.ids_match(block["pot_cfg"], block["pot_ids"]):
+            return False
+    n = victims(block)
+    if sorted(block["cases"]) != list(range(4 * n)):
         return False
-    if len({_victim(g) for g in block["g5"]}) != VICTIMS             or len(block["g5"]) != VICTIMS:
+    if len({_victim(g) for g in block["g5"]}) != n             or len(block["g5"]) != n:
         return False
     for case, c in block["cases"].items():
-        if c["arm"] != case // VICTIMS:
+        if c["arm"] != case // n:
             return False
         grid = CODEC_GRID_US if c["arm"] == ARM_CODEC else WAIT_GRID_US
         pts = block["points"].get(case, {})
@@ -204,6 +222,12 @@ def parse_block(lines):
                     if c["case"] in block["cases"]:
                         return None
                     block["cases"][c["case"]] = c
+                elif line.startswith("SHELL_POT_"):
+                    kind, fields = pot_round.parse_pot_line(line) or (None, None)
+                    if kind == "cfg":
+                        block["pot_cfg"] = fields
+                    elif kind == "id":
+                        block["pot_ids"].append(fields)
                 elif line.startswith("SHELL_WAIT_G5 "):
                     block["g5"].append(_parse(line, "SHELL_WAIT_G5"))
                 elif line.startswith("SHELL_WAIT "):
@@ -273,6 +297,50 @@ def tie_faults(block):
     return [r for r in shifts(block)
             if r["r_src"] == TIE_R_SRC and r["shift"] is not None
             and abs(r["shift"]) > TIE_TOLERANCE]
+
+
+def pot_readings(block):
+    """[(name, reading)] per pot, in POTS order: arm L's W = 0 mean -- the
+    387.5-cycle rung back to back, which round three measured flat at every
+    wait. [] for a block with no pot lines; None where that point converted
+    nothing."""
+    if block["pot_cfg"] is None:
+        return []
+    out = []
+    for name, g, ch, _, _, _ in pot_round.POTS:
+        reading = None
+        for case_id, c in block["cases"].items():
+            if c["arm"] == ARM_LONG and _victim(c) == (g, ch):
+                p = block["points"][case_id][0]
+                reading = p["mean"] if p["n"] > 0 else None
+        out.append((name, reading))
+    return out
+
+
+def _pg1_ok(block):
+    return all(pot_round.pg1(r) for _, r in pot_readings(block))
+
+
+def format_meta_csv(block):
+    """Everything the block says that is not a grid point, plus the verdicts
+    this reader computes, as `scope,pair,key,value` rows -- read_settle.py's
+    shape, so read_pots.py reads both files the same way."""
+    rows = ["scope,pair,key,value"]
+    for scope in ("cfg", "clk", "cal", "span", "gates", "health"):
+        for name, value in block[scope].items():
+            rows.append("%s,,%s,%s" % (scope, name, value))
+    passed, s = g9(block)
+    rows.append("host,,g9_pass,%d" % (1 if passed else 0))
+    rows.append("host,,g9_shift,%s" % ("" if s is None else s))
+    rows.append("host,,pg1_pass,%d" % (1 if _pg1_ok(block) else 0))
+    if block["pot_cfg"] is not None:
+        for name, value in block["pot_cfg"].items():
+            rows.append("pot_cfg,,%s,%s" % (name, value))
+        for entry in sorted(block["pot_ids"], key=lambda e: e["idx"]):
+            for name, value in entry.items():
+                if name != "idx":
+                    rows.append("pot_id,%d,%s,%s" % (entry["idx"], name, value))
+    return "\n".join(rows) + "\n"
 
 
 # --- output ----------------------------------------------------------------
@@ -350,15 +418,29 @@ def report(block, out=None):
         print("\nG9: %s -- arm C REF_A shift at 10 ms = %d, bound [%d, %d]"
               % ("PASS" if passed else "FAIL", s, G9_LO, G9_HI), file=err)
 
+    for (name, reading), pot in zip(pot_readings(block), pot_round.POTS):
+        if reading is None:
+            print("%s: no arm-L W=0 reading -- PG1 FAIL" % name, file=err)
+        else:
+            print("%s: reading=%d x=%.4f r_src=%.0f ohm (R_track %d nominal) "
+                  "PG1 %s" % (name, reading, reading / pot_round.FULL_SCALE,
+                              pot_round.r_src(reading, pot[5]), pot[5],
+                              "PASS" if pot_round.pg1(reading) else "FAIL"),
+                  file=err)
+
     if out is not None:
         with open(out, "w", encoding="utf-8", newline="") as fh:
             fh.write(format_csv(block))
+        with open(out + ".meta.csv", "w", encoding="utf-8", newline="") as fh:
+            fh.write(format_meta_csv(block))
 
     reasons = []
     if gates["gates_ok"] != 1:
         reasons.append("the firmware's gates_ok is 0")
     if passed is not True:
         reasons.append("G9")
+    if not _pg1_ok(block):
+        reasons.append("PG1 (a pot outside its mid-travel window)")
     if reasons:
         print("REFUSED: %s" % "; ".join(reasons), file=err)
         return 1

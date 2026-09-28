@@ -17,9 +17,10 @@ import os
 import sys
 from contextlib import redirect_stderr
 
+import pot_round
 from read_wait import (parse_block, shifts, g9, tie_faults, report,
                        format_csv, WAIT_GRID_US, CODEC_GRID_US, G9_LO, G9_HI,
-                       CSV_FIELDS)
+                       CSV_FIELDS, pot_readings, victims, format_meta_csv)
 
 FAILURES = []
 
@@ -35,10 +36,12 @@ def check(label, cond):
 VICTIMS = ((0, 8, 5150, 25), (1, 6, 5150, 25), (0, 9, 650, 15),
            (0, 10, 150, 15), (1, 3, 150, 15))
 BASE = {(0, 8): 31700, (0, 9): 32750, (1, 6): 31950, (0, 10): 0, (1, 3): 0}
+POT_VICTIMS = ((0, 2, 2650, 15), (0, 6, 5150, 25), (1, 2, 2650, 15))
 
 
 def build_block(g9_shift=-852, gates_ok=1, sweep_dir=0, tie_shift=0,
-                drop_point=None, dup_point=False, overflow=False, n_at=None):
+                drop_point=None, dup_point=False, overflow=False, n_at=None,
+                pots=False, pot_base=32768):
     """One complete block. Every arm's shift is a simple function of W so a
     test can predict it; arm C REF_A at 10 ms is exactly `g9_shift`."""
     lines = ["SHELL_WAIT_CFG adc_khz=6146 repeats=64 points=15 block_size=96 "
@@ -48,11 +51,17 @@ def build_block(g9_shift=-852, gates_ok=1, sweep_dir=0, tie_shift=0,
              "smp_short_tenths=165 smp_long_tenths=3875",
              "SHELL_WAIT_CAL lat_mean_ns=690 lat_min_ns=640 lat_max_ns=770 "
              "b0=17 timeouts=0"]
+    if pots:
+        lines[1:1] = pot_round.sample_lines()
+    victims_used = VICTIMS + (POT_VICTIMS if pots else ())
+    base = dict(BASE)
+    if pots:
+        base.update({(0, 2): pot_base, (0, 6): pot_base, (1, 2): pot_base})
     for arm in range(4):
         grid = CODEC_GRID_US if arm == 3 else WAIT_GRID_US
         order = list(grid) if sweep_dir == 0 else list(reversed(grid))
-        for v, (g, ch, r_src, rung) in enumerate(VICTIMS):
-            case = arm * 5 + v
+        for v, (g, ch, r_src, rung) in enumerate(victims_used):
+            case = arm * len(victims_used) + v
             lines.append("SHELL_WAIT_CASE case=%d arm=%d victim_group=%d "
                          "victim_ch=%d r_src=%d rung_tenths=%d codec=%d"
                          % (case, arm, g, ch, r_src,
@@ -66,7 +75,7 @@ def build_block(g9_shift=-852, gates_ok=1, sweep_dir=0, tie_shift=0,
                     shift = g9_shift
                 else:
                     shift = -(w // 20)   # any monotone law will do
-                mean = BASE[(g, ch)] + shift
+                mean = base[(g, ch)] + shift
                 if n_at == (case, w):
                     line = ("SHELL_WAIT case=%d w_us=%d n=0 mean=-1 min=-1 "
                             "max=-1" % (case, w))
@@ -78,9 +87,9 @@ def build_block(g9_shift=-852, gates_ok=1, sweep_dir=0, tie_shift=0,
                     lines.append(line)
     lines.append("SHELL_WAIT_SPAN zero=0 rail=65532 hi_spread=0 lo_spread=0 "
                  "valid=1")
-    for (g, ch, _, _) in VICTIMS:
+    for (g, ch, _, _) in victims_used:
         lines.append("SHELL_WAIT_G5 victim_group=%d victim_ch=%d expect=2 "
-                     "mean=%d ok=1" % (g, ch, BASE[(g, ch)]))
+                     "mean=%d ok=1" % (g, ch, base[(g, ch)]))
     lines.append("SHELL_WAIT_GATES g2=1 g4=1 g5=1 g7=1 g9=-1 gates_ok=%d"
                  % gates_ok)
     lines.append("SHELL_WAIT_HEALTH missed_blocks=0 timeouts=0 block_ms=90123")
@@ -187,6 +196,36 @@ check("F5 a tie at +-1 is inside the measured tolerance",
       and tie_faults(parse_block(build_block(tie_shift=-1))) == [])
 check("F6 a tie at 2 is reported",
       len(tie_faults(parse_block(build_block(tie_shift=2)))) > 0)
+
+# --- P. a pot-round block (spec 2026-09-28 sections 5, 6, 7) ---
+pb = parse_block(build_block(pots=True))
+check("P1 an eight-victim pot block parses", pb is not None)
+check("P2 it counts eight victims and 32 cases",
+      pb is not None and victims(pb) == 8 and len(pb["cases"]) == 32)
+check("P3 the old five-victim block still counts five",
+      victims(parse_block(build_block())) == 5)
+check("P4 one reading per pot, from arm L at W=0",
+      pb is not None and pot_readings(pb) == [("RV2", 32768), ("RV4", 32768),
+                                              ("RV6", 32768)])
+check("P5 a pot block exits 0 at mid travel", run_report(pb)[0] == 0)
+check("P6 a pot at 37356 fails PG1 and the exit code",
+      run_report(parse_block(build_block(pots=True, pot_base=37356)))[0] == 1)
+check("P7 a pot at 37355 passes",
+      run_report(parse_block(build_block(pots=True, pot_base=37355)))[0] == 0)
+no_ids = [l for l in build_block(pots=True) if not l.startswith("SHELL_POT_ID idx=2")]
+check("P8 a pot block missing an ID line is refused", parse_block(no_ids) is None)
+meta = {tuple(r.split(",")[:3]): r.split(",")[3]
+        for r in format_meta_csv(pb).strip().split("\n")[1:]}
+check("P9 the metadata carries the gate, G9, PG1 and the pots",
+      meta.get(("gates", "", "gates_ok")) == "1"
+      and meta.get(("host", "", "g9_pass")) == "1"
+      and meta.get(("host", "", "pg1_pass")) == "1"
+      and meta.get(("pot_id", "2", "name")) == "RV6")
+check("P10 a block with no pot lines has no readings and pg1_pass=1",
+      pot_readings(parse_block(build_block())) == []
+      and ("host", "", "pg1_pass") in
+      {tuple(r.split(",")[:3]) for r in
+       format_meta_csv(parse_block(build_block())).strip().split("\n")[1:]})
 
 # --- H. The first real block the board printed parses, and says what the
 # write-up says. docs/hardware/wait-measured.md quotes these numbers; a
