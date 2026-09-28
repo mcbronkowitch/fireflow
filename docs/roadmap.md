@@ -3967,7 +3967,7 @@ from each pot's high and low neighbour), three victims in the wait probe — wit
 every divider kept as a same-boot control and G3 still judged on P0–P5 only.
 The pots were set by hand on the bring-up scan to what `REF_A`, the exact
 10k/10k divider, reads there (about 31734 on that image's scale, whose rail
-is 63484) — true 50/50; PG1 (reading in
+is 63484) — nominally 50/50; PG1 (reading in
 [28180, 37355]) and PG2 (≤ 1024 counts between the two images) refuse a run
 whose pot was off-centre or moved. `shell/read_pots.py` joins the two images'
 files into the round's tables. Spec

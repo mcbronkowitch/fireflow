@@ -1,7 +1,13 @@
 # The coupon pot round — design (round four)
 
-> **Status:** designed 2026-09-28 with Bastian, section by section; nothing in
-> it has been built or run. It is the round that closes Phase-0 Task 6 step 5b
+> **Status:** designed 2026-09-28 with Bastian, section by section; built and
+> measured on the board the same day (plan beside it; captures under
+> `docs/hardware/captures/pot-*-capture-*.txt`). Two things ran differently
+> from this text: the pots were set to what `REF_A` reads on the bring-up
+> image (about 31734 on its 63484-rail scale), not to 32768 — see §7; and
+> §5's claim that the block estimate and the loop share one constant does not
+> hold, because the firmware never calls the estimate — it is a host-side
+> bound only. It is the round that closes Phase-0 Task 6 step 5b
 > (`docs/superpowers/plans/2026-08-07-fireflow-phase-0-hardware-foundation.md`)
 > on real pots, and it asks round three's question
 > ([`wait-measured.md`](../../hardware/wait-measured.md)) of the same pots.
@@ -156,8 +162,8 @@ no fixed expected value, only a window.
 **Cost, derived:** `wait_block_estimate_ms()` scales linearly with the victim
 count; it estimates 89.7 s at five and the board measured 89.6 s
 (`wait-measured.md` §2). At eight: **~143.5 s**. The function takes the victim
-count from the same constant the loop uses, so the estimate and the loop
-cannot drift apart. `block_ms` is printed and is the measurement.
+count as an argument; the firmware does not call it, so it is a host-side
+bound only. `block_ms` is printed and is the measurement.
 
 **What is expected, stated before the run:** RV4 saturates near `REF_A`'s
 −858 counts, give or take the pot's tolerance; RV2 and RV6 land somewhere
