@@ -47,5 +47,18 @@ already committed in derived form as `../2026-09-19-xtalk.csv` and
 recorded in `../crosstalk-measured.md` and exist in raw form only in the
 session workspace.
 
+`pot-settle-capture-618427c.txt` is the settle probe's pot-round image
+(`SHELL_COUPON_PROBE=1 SHELL_SETTLE_PROBE=1 SHELL_POT_ROUND=1`), captured
+2026-09-28 on the one coupon board with RV2, RV4 and RV6 set to mid travel. It
+holds three complete blocks; the file opens mid-block, on a partial block
+that started before the port opened, and the first complete block starts at
+line 708.
+
+`pot-wait-capture-e20b8fd.txt` is the wait probe's pot-round image
+(`SHELL_COUPON_PROBE=1 SHELL_WAIT_PROBE=1 SHELL_POT_ROUND=1`), captured the
+same day on the same board with the same pot settings. It too holds three
+complete blocks after an opening partial one; the first complete block starts
+at line 412.
+
 A capture is evidence, not a document. Nothing here is edited to read better,
 and where a capture contradicts a write-up, the capture wins.

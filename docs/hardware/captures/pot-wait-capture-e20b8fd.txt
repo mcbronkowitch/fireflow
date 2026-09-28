@@ -1,0 +1,1740 @@
+SHELL_WAIT case=1 w_us=500 n=64 mean=32440 min=32422 max=32456
+SHELL_WAIT case=1 w_us=1000 n=64 mean=32307 min=32290 max=32322
+SHELL_WAIT case=1 w_us=2000 n=64 mean=32098 min=32085 max=32112
+SHELL_WAIT case=1 w_us=5000 n=64 mean=31927 min=31915 max=31943
+SHELL_WAIT case=1 w_us=10000 n=64 mean=31926 min=31909 max=31937
+SHELL_WAIT case=1 w_us=20000 n=64 mean=31928 min=31915 max=31938
+SHELL_WAIT case=1 w_us=50000 n=64 mean=31928 min=31915 max=31942
+SHELL_WAIT_CASE case=2 arm=0 victim_group=0 victim_ch=9 r_src=650 rung_tenths=15 codec=0
+SHELL_WAIT case=2 w_us=0 n=64 mean=32764 min=32747 max=32780
+SHELL_WAIT case=2 w_us=2 n=64 mean=32766 min=32745 max=32785
+SHELL_WAIT case=2 w_us=5 n=64 mean=32767 min=32751 max=32792
+SHELL_WAIT case=2 w_us=10 n=64 mean=32758 min=32737 max=32777
+SHELL_WAIT case=2 w_us=20 n=64 mean=32753 min=32709 max=32779
+SHELL_WAIT case=2 w_us=50 n=64 mean=32757 min=32743 max=32784
+SHELL_WAIT case=2 w_us=100 n=64 mean=32753 min=32582 max=32776
+SHELL_WAIT case=2 w_us=200 n=64 mean=32754 min=32595 max=32780
+SHELL_WAIT case=2 w_us=500 n=64 mean=32755 min=32737 max=32779
+SHELL_WAIT case=2 w_us=1000 n=64 mean=32753 min=32732 max=32779
+SHELL_WAIT case=2 w_us=2000 n=64 mean=32749 min=32726 max=32776
+SHELL_WAIT case=2 w_us=5000 n=64 mean=32745 min=32575 max=32777
+SHELL_WAIT case=2 w_us=10000 n=64 mean=32746 min=32728 max=32768
+SHELL_WAIT case=2 w_us=20000 n=64 mean=32748 min=32728 max=32770
+SHELL_WAIT case=2 w_us=50000 n=64 mean=32746 min=32727 max=32768
+SHELL_WAIT_CASE case=3 arm=0 victim_group=0 victim_ch=10 r_src=150 rung_tenths=15 codec=0
+SHELL_WAIT case=3 w_us=0 n=64 mean=0 min=0 max=6
+SHELL_WAIT case=3 w_us=2 n=64 mean=0 min=0 max=9
+SHELL_WAIT case=3 w_us=5 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=3 w_us=10 n=64 mean=0 min=0 max=10
+SHELL_WAIT case=3 w_us=20 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=3 w_us=50 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=3 w_us=100 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=3 w_us=200 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=3 w_us=500 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=3 w_us=1000 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=3 w_us=2000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=3 w_us=5000 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=3 w_us=10000 n=64 mean=0 min=0 max=6
+SHELL_WAIT case=3 w_us=20000 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=3 w_us=50000 n=64 mean=0 min=0 max=8
+SHELL_WAIT_CASE case=4 arm=0 victim_group=1 victim_ch=3 r_src=150 rung_tenths=15 codec=0
+SHELL_WAIT case=4 w_us=0 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=4 w_us=2 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=4 w_us=5 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=4 w_us=10 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=4 w_us=20 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=4 w_us=50 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=4 w_us=100 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=4 w_us=200 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=4 w_us=500 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=4 w_us=1000 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=4 w_us=2000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=4 w_us=5000 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=4 w_us=10000 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=4 w_us=20000 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=4 w_us=50000 n=64 mean=0 min=0 max=4
+SHELL_WAIT_CASE case=5 arm=0 victim_group=0 victim_ch=2 r_src=2650 rung_tenths=15 codec=0
+SHELL_WAIT case=5 w_us=0 n=64 mean=32505 min=32469 max=32526
+SHELL_WAIT case=5 w_us=2 n=64 mean=32507 min=32485 max=32526
+SHELL_WAIT case=5 w_us=5 n=64 mean=32508 min=32491 max=32528
+SHELL_WAIT case=5 w_us=10 n=64 mean=32497 min=32481 max=32515
+SHELL_WAIT case=5 w_us=20 n=64 mean=32488 min=32466 max=32509
+SHELL_WAIT case=5 w_us=50 n=64 mean=32484 min=32454 max=32505
+SHELL_WAIT case=5 w_us=100 n=64 mean=32467 min=32448 max=32484
+SHELL_WAIT case=5 w_us=200 n=64 mean=32437 min=32417 max=32459
+SHELL_WAIT case=5 w_us=500 n=64 mean=32355 min=32336 max=32375
+SHELL_WAIT case=5 w_us=1000 n=64 mean=32225 min=32196 max=32244
+SHELL_WAIT case=5 w_us=2000 n=64 mean=32028 min=32012 max=32045
+SHELL_WAIT case=5 w_us=5000 n=64 mean=31860 min=31841 max=31874
+SHELL_WAIT case=5 w_us=10000 n=64 mean=31860 min=31844 max=31881
+SHELL_WAIT case=5 w_us=20000 n=64 mean=31859 min=31843 max=31877
+SHELL_WAIT case=5 w_us=50000 n=64 mean=31861 min=31843 max=31884
+SHELL_WAIT_CASE case=6 arm=0 victim_group=0 victim_ch=6 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=6 w_us=0 n=64 mean=32460 min=32420 max=32477
+SHELL_WAIT case=6 w_us=2 n=64 mean=32461 min=32443 max=32484
+SHELL_WAIT case=6 w_us=5 n=64 mean=32457 min=32285 max=32484
+SHELL_WAIT case=6 w_us=10 n=64 mean=32449 min=32426 max=32472
+SHELL_WAIT case=6 w_us=20 n=64 mean=32443 min=32420 max=32469
+SHELL_WAIT case=6 w_us=50 n=64 mean=32432 min=32410 max=32453
+SHELL_WAIT case=6 w_us=100 n=64 mean=32408 min=32391 max=32429
+SHELL_WAIT case=6 w_us=200 n=64 mean=32369 min=32347 max=32390
+SHELL_WAIT case=6 w_us=500 n=64 mean=32248 min=32227 max=32273
+SHELL_WAIT case=6 w_us=1000 n=64 mean=32069 min=32047 max=32090
+SHELL_WAIT case=6 w_us=2000 n=64 mean=31789 min=31707 max=31810
+SHELL_WAIT case=6 w_us=5000 n=64 mean=31556 min=31540 max=31573
+SHELL_WAIT case=6 w_us=10000 n=64 mean=31557 min=31541 max=31577
+SHELL_WAIT case=6 w_us=20000 n=64 mean=31555 min=31531 max=31571
+SHELL_WAIT case=6 w_us=50000 n=64 mean=31556 min=31541 max=31575
+SHELL_WAIT_CASE case=7 arm=0 victim_group=1 victim_ch=2 r_src=2650 rung_tenths=15 codec=0
+SHELL_WAIT case=7 w_us=0 n=64 mean=32571 min=32554 max=32588
+SHELL_WAIT case=7 w_us=2 n=64 mean=32569 min=32550 max=32585
+SHELL_WAIT case=7 w_us=5 n=64 mean=32566 min=32546 max=32581
+SHELL_WAIT case=7 w_us=10 n=64 mean=32556 min=32540 max=32572
+SHELL_WAIT case=7 w_us=20 n=64 mean=32549 min=32535 max=32565
+SHELL_WAIT case=7 w_us=50 n=64 mean=32544 min=32528 max=32562
+SHELL_WAIT case=7 w_us=100 n=64 mean=32535 min=32521 max=32548
+SHELL_WAIT case=7 w_us=200 n=64 mean=32515 min=32503 max=32536
+SHELL_WAIT case=7 w_us=500 n=64 mean=32457 min=32441 max=32472
+SHELL_WAIT case=7 w_us=1000 n=64 mean=32370 min=32359 max=32385
+SHELL_WAIT case=7 w_us=2000 n=64 mean=32235 min=32224 max=32247
+SHELL_WAIT case=7 w_us=5000 n=64 mean=32119 min=32107 max=32138
+SHELL_WAIT case=7 w_us=10000 n=64 mean=32119 min=32107 max=32134
+SHELL_WAIT case=7 w_us=20000 n=64 mean=32119 min=32106 max=32132
+SHELL_WAIT case=7 w_us=50000 n=64 mean=32118 min=32064 max=32129
+SHELL_WAIT_CASE case=8 arm=1 victim_group=0 victim_ch=8 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=8 w_us=0 n=64 mean=32513 min=32488 max=32538
+SHELL_WAIT case=8 w_us=2 n=64 mean=32505 min=32485 max=32532
+SHELL_WAIT case=8 w_us=5 n=64 mean=32491 min=32467 max=32523
+SHELL_WAIT case=8 w_us=10 n=64 mean=32490 min=32457 max=32529
+SHELL_WAIT case=8 w_us=20 n=64 mean=32499 min=32473 max=32523
+SHELL_WAIT case=8 w_us=50 n=64 mean=32499 min=32481 max=32528
+SHELL_WAIT case=8 w_us=100 n=64 mean=32492 min=32340 max=32516
+SHELL_WAIT case=8 w_us=200 n=64 mean=32492 min=32460 max=32510
+SHELL_WAIT case=8 w_us=500 n=64 mean=32480 min=32460 max=32506
+SHELL_WAIT case=8 w_us=1000 n=64 mean=32481 min=32460 max=32502
+SHELL_WAIT case=8 w_us=2000 n=64 mean=32466 min=32450 max=32484
+SHELL_WAIT case=8 w_us=5000 n=64 mean=32469 min=32451 max=32489
+SHELL_WAIT case=8 w_us=10000 n=64 mean=32469 min=32454 max=32491
+SHELL_WAIT case=8 w_us=20000 n=64 mean=32470 min=32453 max=32497
+SHELL_WAIT case=8 w_us=50000 n=64 mean=32467 min=32304 max=32488
+SHELL_WAIT_CASE case=9 arm=1 victim_group=1 victim_ch=6 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=9 w_us=0 n=64 mean=32610 min=32599 max=32626
+SHELL_WAIT case=9 w_us=2 n=64 mean=32601 min=32585 max=32617
+SHELL_WAIT case=9 w_us=5 n=64 mean=32595 min=32581 max=32604
+SHELL_WAIT case=9 w_us=10 n=64 mean=32581 min=32572 max=32594
+SHELL_WAIT case=9 w_us=20 n=64 mean=32587 min=32571 max=32605
+SHELL_WAIT case=9 w_us=50 n=64 mean=32587 min=32567 max=32602
+SHELL_WAIT case=9 w_us=100 n=64 mean=32589 min=32569 max=32601
+SHELL_WAIT case=9 w_us=200 n=64 mean=32586 min=32570 max=32597
+SHELL_WAIT case=9 w_us=500 n=64 mean=32591 min=32576 max=32604
+SHELL_WAIT case=9 w_us=1000 n=64 mean=32579 min=32568 max=32594
+SHELL_WAIT case=9 w_us=2000 n=64 mean=32575 min=32562 max=32590
+SHELL_WAIT case=9 w_us=5000 n=64 mean=32574 min=32561 max=32588
+SHELL_WAIT case=9 w_us=10000 n=64 mean=32573 min=32508 max=32589
+SHELL_WAIT case=9 w_us=20000 n=64 mean=32573 min=32557 max=32588
+SHELL_WAIT case=9 w_us=50000 n=64 mean=32574 min=32560 max=32592
+SHELL_WAIT_CASE case=10 arm=1 victim_group=0 victim_ch=9 r_src=650 rung_tenths=15 codec=0
+SHELL_WAIT case=10 w_us=0 n=64 mean=32765 min=32749 max=32785
+SHELL_WAIT case=10 w_us=2 n=64 mean=32762 min=32745 max=32781
+SHELL_WAIT case=10 w_us=5 n=64 mean=32758 min=32738 max=32775
+SHELL_WAIT case=10 w_us=10 n=64 mean=32743 min=32727 max=32762
+SHELL_WAIT case=10 w_us=20 n=64 mean=32752 min=32733 max=32770
+SHELL_WAIT case=10 w_us=50 n=64 mean=32754 min=32727 max=32775
+SHELL_WAIT case=10 w_us=100 n=64 mean=32751 min=32738 max=32766
+SHELL_WAIT case=10 w_us=200 n=64 mean=32751 min=32739 max=32769
+SHELL_WAIT case=10 w_us=500 n=64 mean=32753 min=32740 max=32776
+SHELL_WAIT case=10 w_us=1000 n=64 mean=32753 min=32734 max=32776
+SHELL_WAIT case=10 w_us=2000 n=64 mean=32754 min=32735 max=32776
+SHELL_WAIT case=10 w_us=5000 n=64 mean=32752 min=32739 max=32774
+SHELL_WAIT case=10 w_us=10000 n=64 mean=32751 min=32730 max=32768
+SHELL_WAIT case=10 w_us=20000 n=64 mean=32750 min=32733 max=32770
+SHELL_WAIT case=10 w_us=50000 n=64 mean=32751 min=32734 max=32764
+SHELL_WAIT_CASE case=11 arm=1 victim_group=0 victim_ch=10 r_src=150 rung_tenths=15 codec=0
+SHELL_WAIT case=11 w_us=0 n=64 mean=0 min=0 max=6
+SHELL_WAIT case=11 w_us=2 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=11 w_us=5 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=11 w_us=10 n=64 mean=0 min=0 max=11
+SHELL_WAIT case=11 w_us=20 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=11 w_us=50 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=11 w_us=100 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=11 w_us=200 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=11 w_us=500 n=64 mean=0 min=0 max=9
+SHELL_WAIT case=11 w_us=1000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=11 w_us=2000 n=64 mean=0 min=0 max=7
+SHELL_WAIT case=11 w_us=5000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=11 w_us=10000 n=64 mean=0 min=0 max=10
+SHELL_WAIT case=11 w_us=20000 n=64 mean=0 min=0 max=6
+SHELL_WAIT case=11 w_us=50000 n=64 mean=0 min=0 max=6
+SHELL_WAIT_CASE case=12 arm=1 victim_group=1 victim_ch=3 r_src=150 rung_tenths=15 codec=0
+SHELL_WAIT case=12 w_us=0 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=12 w_us=2 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=12 w_us=5 n=64 mean=0 min=0 max=3
+SHELL_WAIT case=12 w_us=10 n=64 mean=0 min=0 max=7
+SHELL_WAIT case=12 w_us=20 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=12 w_us=50 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=12 w_us=100 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=12 w_us=200 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=12 w_us=500 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=12 w_us=1000 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=12 w_us=2000 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=12 w_us=5000 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=12 w_us=10000 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=12 w_us=20000 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=12 w_us=50000 n=64 mean=0 min=0 max=0
+SHELL_WAIT_CASE case=13 arm=1 victim_group=0 victim_ch=2 r_src=2650 rung_tenths=15 codec=0
+SHELL_WAIT case=13 w_us=0 n=64 mean=32506 min=32486 max=32527
+SHELL_WAIT case=13 w_us=2 n=64 mean=32496 min=32469 max=32518
+SHELL_WAIT case=13 w_us=5 n=64 mean=32490 min=32472 max=32518
+SHELL_WAIT case=13 w_us=10 n=64 mean=32481 min=32458 max=32498
+SHELL_WAIT case=13 w_us=20 n=64 mean=32488 min=32455 max=32503
+SHELL_WAIT case=13 w_us=50 n=64 mean=32488 min=32471 max=32505
+SHELL_WAIT case=13 w_us=100 n=64 mean=32486 min=32465 max=32505
+SHELL_WAIT case=13 w_us=200 n=64 mean=32485 min=32466 max=32505
+SHELL_WAIT case=13 w_us=500 n=64 mean=32478 min=32464 max=32500
+SHELL_WAIT case=13 w_us=1000 n=64 mean=32481 min=32464 max=32500
+SHELL_WAIT case=13 w_us=2000 n=64 mean=32466 min=32450 max=32488
+SHELL_WAIT case=13 w_us=5000 n=64 mean=32464 min=32446 max=32487
+SHELL_WAIT case=13 w_us=10000 n=64 mean=32466 min=32451 max=32488
+SHELL_WAIT case=13 w_us=20000 n=64 mean=32461 min=32311 max=32482
+SHELL_WAIT case=13 w_us=50000 n=64 mean=32465 min=32450 max=32485
+SHELL_WAIT_CASE case=14 arm=1 victim_group=0 victim_ch=6 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=14 w_us=0 n=64 mean=32458 min=32431 max=32476
+SHELL_WAIT case=14 w_us=2 n=64 mean=32452 min=32437 max=32469
+SHELL_WAIT case=14 w_us=5 n=64 mean=32447 min=32422 max=32465
+SHELL_WAIT case=14 w_us=10 n=64 mean=32434 min=32414 max=32452
+SHELL_WAIT case=14 w_us=20 n=64 mean=32440 min=32424 max=32464
+SHELL_WAIT case=14 w_us=50 n=64 mean=32441 min=32411 max=32464
+SHELL_WAIT case=14 w_us=100 n=64 mean=32437 min=32418 max=32456
+SHELL_WAIT case=14 w_us=200 n=64 mean=32435 min=32413 max=32461
+SHELL_WAIT case=14 w_us=500 n=64 mean=32432 min=32405 max=32470
+SHELL_WAIT case=14 w_us=1000 n=64 mean=32419 min=32393 max=32438
+SHELL_WAIT case=14 w_us=2000 n=64 mean=32404 min=32382 max=32425
+SHELL_WAIT case=14 w_us=5000 n=64 mean=32404 min=32387 max=32426
+SHELL_WAIT case=14 w_us=10000 n=64 mean=32406 min=32389 max=32424
+SHELL_WAIT case=14 w_us=20000 n=64 mean=32404 min=32377 max=32424
+SHELL_WAIT case=14 w_us=50000 n=64 mean=32405 min=32383 max=32428
+SHELL_WAIT_CASE case=15 arm=1 victim_group=1 victim_ch=2 r_src=2650 rung_tenths=15 codec=0
+SHELL_WAIT case=15 w_us=0 n=64 mean=32571 min=32551 max=32592
+SHELL_WAIT case=15 w_us=2 n=64 mean=32564 min=32546 max=32580
+SHELL_WAIT case=15 w_us=5 n=64 mean=32558 min=32544 max=32571
+SHELL_WAIT case=15 w_us=10 n=64 mean=32546 min=32535 max=32559
+SHELL_WAIT case=15 w_us=20 n=64 mean=32552 min=32538 max=32569
+SHELL_WAIT case=15 w_us=50 n=64 mean=32550 min=32507 max=32568
+SHELL_WAIT case=15 w_us=100 n=64 mean=32552 min=32539 max=32570
+SHELL_WAIT case=15 w_us=200 n=64 mean=32552 min=32536 max=32566
+SHELL_WAIT case=15 w_us=500 n=64 mean=32553 min=32528 max=32568
+SHELL_WAIT case=15 w_us=1000 n=64 mean=32550 min=32537 max=32563
+SHELL_WAIT case=15 w_us=2000 n=64 mean=32552 min=32541 max=32568
+SHELL_WAIT case=15 w_us=5000 n=64 mean=32546 min=32530 max=32562
+SHELL_WAIT case=15 w_us=10000 n=64 mean=32546 min=32533 max=32562
+SHELL_WAIT case=15 w_us=20000 n=64 mean=32547 min=32534 max=32561
+SHELL_WAIT case=15 w_us=50000 n=64 mean=32546 min=32534 max=32560
+SHELL_WAIT_CASE case=16 arm=2 victim_group=0 victim_ch=8 r_src=5150 rung_tenths=3875 codec=0
+SHELL_WAIT case=16 w_us=0 n=64 mean=32763 min=32745 max=32777
+SHELL_WAIT case=16 w_us=2 n=64 mean=32762 min=32745 max=32777
+SHELL_WAIT case=16 w_us=5 n=64 mean=32763 min=32747 max=32780
+SHELL_WAIT case=16 w_us=10 n=64 mean=32762 min=32749 max=32778
+SHELL_WAIT case=16 w_us=20 n=64 mean=32762 min=32749 max=32780
+SHELL_WAIT case=16 w_us=50 n=64 mean=32759 min=32662 max=32782
+SHELL_WAIT case=16 w_us=100 n=64 mean=32761 min=32749 max=32778
+SHELL_WAIT case=16 w_us=200 n=64 mean=32761 min=32749 max=32776
+SHELL_WAIT case=16 w_us=500 n=64 mean=32761 min=32707 max=32781
+SHELL_WAIT case=16 w_us=1000 n=64 mean=32761 min=32750 max=32781
+SHELL_WAIT case=16 w_us=2000 n=64 mean=32761 min=32747 max=32779
+SHELL_WAIT case=16 w_us=5000 n=64 mean=32762 min=32746 max=32778
+SHELL_WAIT case=16 w_us=10000 n=64 mean=32762 min=32741 max=32777
+SHELL_WAIT case=16 w_us=20000 n=64 mean=32761 min=32749 max=32776
+SHELL_WAIT case=16 w_us=50000 n=64 mean=32761 min=32746 max=32780
+SHELL_WAIT_CASE case=17 arm=2 victim_group=1 victim_ch=6 r_src=5150 rung_tenths=3875 codec=0
+SHELL_WAIT case=17 w_us=0 n=64 mean=32792 min=32781 max=32807
+SHELL_WAIT case=17 w_us=2 n=64 mean=32793 min=32786 max=32806
+SHELL_WAIT case=17 w_us=5 n=64 mean=32794 min=32781 max=32808
+SHELL_WAIT case=17 w_us=10 n=64 mean=32792 min=32778 max=32804
+SHELL_WAIT case=17 w_us=20 n=64 mean=32791 min=32782 max=32802
+SHELL_WAIT case=17 w_us=50 n=64 mean=32792 min=32777 max=32800
+SHELL_WAIT case=17 w_us=100 n=64 mean=32793 min=32780 max=32805
+SHELL_WAIT case=17 w_us=200 n=64 mean=32793 min=32783 max=32802
+SHELL_WAIT case=17 w_us=500 n=64 mean=32792 min=32784 max=32802
+SHELL_WAIT case=17 w_us=1000 n=64 mean=32793 min=32782 max=32808
+SHELL_WAIT case=17 w_us=2000 n=64 mean=32793 min=32784 max=32808
+SHELL_WAIT case=17 w_us=5000 n=64 mean=32793 min=32779 max=32803
+SHELL_WAIT case=17 w_us=10000 n=64 mean=32794 min=32786 max=32805
+SHELL_WAIT case=17 w_us=20000 n=64 mean=32792 min=32782 max=32805
+SHELL_WAIT case=17 w_us=50000 n=64 mean=32794 min=32783 max=32808
+SHELL_WAIT_CASE case=18 arm=2 victim_group=0 victim_ch=9 r_src=650 rung_tenths=3875 codec=0
+SHELL_WAIT case=18 w_us=0 n=64 mean=32762 min=32748 max=32779
+SHELL_WAIT case=18 w_us=2 n=64 mean=32762 min=32746 max=32777
+SHELL_WAIT case=18 w_us=5 n=64 mean=32761 min=32736 max=32780
+SHELL_WAIT case=18 w_us=10 n=64 mean=32763 min=32749 max=32776
+SHELL_WAIT case=18 w_us=20 n=64 mean=32763 min=32743 max=32778
+SHELL_WAIT case=18 w_us=50 n=64 mean=32761 min=32749 max=32778
+SHELL_WAIT case=18 w_us=100 n=64 mean=32762 min=32745 max=32780
+SHELL_WAIT case=18 w_us=200 n=64 mean=32764 min=32751 max=32782
+SHELL_WAIT case=18 w_us=500 n=64 mean=32761 min=32746 max=32778
+SHELL_WAIT case=18 w_us=1000 n=64 mean=32763 min=32749 max=32781
+SHELL_WAIT case=18 w_us=2000 n=64 mean=32761 min=32740 max=32779
+SHELL_WAIT case=18 w_us=5000 n=64 mean=32764 min=32749 max=32779
+SHELL_WAIT case=18 w_us=10000 n=64 mean=32761 min=32746 max=32777
+SHELL_WAIT case=18 w_us=20000 n=64 mean=32763 min=32743 max=32781
+SHELL_WAIT case=18 w_us=50000 n=64 mean=32763 min=32746 max=32786
+SHELL_WAIT_CASE case=19 arm=2 victim_group=0 victim_ch=10 r_src=150 rung_tenths=3875 codec=0
+SHELL_WAIT case=19 w_us=0 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=19 w_us=2 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=19 w_us=5 n=64 mean=0 min=0 max=7
+SHELL_WAIT case=19 w_us=10 n=64 mean=0 min=0 max=9
+SHELL_WAIT case=19 w_us=20 n=64 mean=0 min=0 max=13
+SHELL_WAIT case=19 w_us=50 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=19 w_us=100 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=19 w_us=200 n=64 mean=0 min=0 max=9
+SHELL_WAIT case=19 w_us=500 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=19 w_us=1000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=19 w_us=2000 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=19 w_us=5000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=19 w_us=10000 n=64 mean=0 min=0 max=10
+SHELL_WAIT case=19 w_us=20000 n=64 mean=0 min=0 max=9
+SHELL_WAIT case=19 w_us=50000 n=64 mean=0 min=0 max=7
+SHELL_WAIT_CASE case=20 arm=2 victim_group=1 victim_ch=3 r_src=150 rung_tenths=3875 codec=0
+SHELL_WAIT case=20 w_us=0 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=20 w_us=2 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=20 w_us=5 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=20 w_us=10 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=20 w_us=20 n=64 mean=0 min=0 max=3
+SHELL_WAIT case=20 w_us=50 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=20 w_us=100 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=20 w_us=200 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=20 w_us=500 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=20 w_us=1000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=20 w_us=2000 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=20 w_us=5000 n=64 mean=0 min=0 max=9
+SHELL_WAIT case=20 w_us=10000 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=20 w_us=20000 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=20 w_us=50000 n=64 mean=0 min=0 max=0
+SHELL_WAIT_CASE case=21 arm=2 victim_group=0 victim_ch=2 r_src=2650 rung_tenths=3875 codec=0
+SHELL_WAIT case=21 w_us=0 n=64 mean=32681 min=32665 max=32700
+SHELL_WAIT case=21 w_us=2 n=64 mean=32682 min=32663 max=32698
+SHELL_WAIT case=21 w_us=5 n=64 mean=32683 min=32671 max=32697
+SHELL_WAIT case=21 w_us=10 n=64 mean=32682 min=32663 max=32696
+SHELL_WAIT case=21 w_us=20 n=64 mean=32680 min=32666 max=32697
+SHELL_WAIT case=21 w_us=50 n=64 mean=32682 min=32664 max=32696
+SHELL_WAIT case=21 w_us=100 n=64 mean=32682 min=32667 max=32699
+SHELL_WAIT case=21 w_us=200 n=64 mean=32681 min=32668 max=32695
+SHELL_WAIT case=21 w_us=500 n=64 mean=32680 min=32665 max=32694
+SHELL_WAIT case=21 w_us=1000 n=64 mean=32680 min=32668 max=32696
+SHELL_WAIT case=21 w_us=2000 n=64 mean=32682 min=32659 max=32703
+SHELL_WAIT case=21 w_us=5000 n=64 mean=32681 min=32668 max=32697
+SHELL_WAIT case=21 w_us=10000 n=64 mean=32682 min=32669 max=32696
+SHELL_WAIT case=21 w_us=20000 n=64 mean=32681 min=32658 max=32699
+SHELL_WAIT case=21 w_us=50000 n=64 mean=32682 min=32665 max=32704
+SHELL_WAIT_CASE case=22 arm=2 victim_group=0 victim_ch=6 r_src=5150 rung_tenths=3875 codec=0
+SHELL_WAIT case=22 w_us=0 n=64 mean=32718 min=32705 max=32733
+SHELL_WAIT case=22 w_us=2 n=64 mean=32718 min=32695 max=32736
+SHELL_WAIT case=22 w_us=5 n=64 mean=32720 min=32705 max=32736
+SHELL_WAIT case=22 w_us=10 n=64 mean=32719 min=32704 max=32735
+SHELL_WAIT case=22 w_us=20 n=64 mean=32720 min=32709 max=32734
+SHELL_WAIT case=22 w_us=50 n=64 mean=32719 min=32708 max=32738
+SHELL_WAIT case=22 w_us=100 n=64 mean=32719 min=32707 max=32737
+SHELL_WAIT case=22 w_us=200 n=64 mean=32720 min=32701 max=32739
+SHELL_WAIT case=22 w_us=500 n=64 mean=32719 min=32706 max=32740
+SHELL_WAIT case=22 w_us=1000 n=64 mean=32718 min=32703 max=32741
+SHELL_WAIT case=22 w_us=2000 n=64 mean=32718 min=32701 max=32733
+SHELL_WAIT case=22 w_us=5000 n=64 mean=32720 min=32705 max=32733
+SHELL_WAIT case=22 w_us=10000 n=64 mean=32717 min=32549 max=32736
+SHELL_WAIT case=22 w_us=20000 n=64 mean=32719 min=32706 max=32731
+SHELL_WAIT case=22 w_us=50000 n=64 mean=32720 min=32703 max=32742
+SHELL_WAIT_CASE case=23 arm=2 victim_group=1 victim_ch=2 r_src=2650 rung_tenths=3875 codec=0
+SHELL_WAIT case=23 w_us=0 n=64 mean=32687 min=32678 max=32702
+SHELL_WAIT case=23 w_us=2 n=64 mean=32686 min=32621 max=32696
+SHELL_WAIT case=23 w_us=5 n=64 mean=32686 min=32675 max=32700
+SHELL_WAIT case=23 w_us=10 n=64 mean=32687 min=32678 max=32701
+SHELL_WAIT case=23 w_us=20 n=64 mean=32687 min=32678 max=32696
+SHELL_WAIT case=23 w_us=50 n=64 mean=32687 min=32675 max=32700
+SHELL_WAIT case=23 w_us=100 n=64 mean=32687 min=32678 max=32696
+SHELL_WAIT case=23 w_us=200 n=64 mean=32687 min=32677 max=32698
+SHELL_WAIT case=23 w_us=500 n=64 mean=32686 min=32677 max=32698
+SHELL_WAIT case=23 w_us=1000 n=64 mean=32688 min=32679 max=32697
+SHELL_WAIT case=23 w_us=2000 n=64 mean=32688 min=32679 max=32702
+SHELL_WAIT case=23 w_us=5000 n=64 mean=32687 min=32679 max=32697
+SHELL_WAIT case=23 w_us=10000 n=64 mean=32687 min=32677 max=32700
+SHELL_WAIT case=23 w_us=20000 n=64 mean=32687 min=32674 max=32697
+SHELL_WAIT case=23 w_us=50000 n=64 mean=32687 min=32676 max=32699
+SHELL_WAIT_CASE case=24 arm=3 victim_group=0 victim_ch=8 r_src=5150 rung_tenths=25 codec=1
+SHELL_WAIT case=24 w_us=0 n=64 mean=32513 min=32475 max=32549
+SHELL_WAIT case=24 w_us=200 n=64 mean=32432 min=32408 max=32453
+SHELL_WAIT case=24 w_us=1000 n=64 mean=32150 min=32138 max=32171
+SHELL_WAIT case=24 w_us=10000 n=64 mean=31647 min=31631 max=31662
+SHELL_WAIT_CASE case=25 arm=3 victim_group=1 victim_ch=6 r_src=5150 rung_tenths=25 codec=1
+SHELL_WAIT case=25 w_us=0 n=64 mean=32611 min=32599 max=32621
+SHELL_WAIT case=25 w_us=200 n=64 mean=32532 min=32523 max=32545
+SHELL_WAIT case=25 w_us=1000 n=64 mean=32314 min=32301 max=32332
+SHELL_WAIT case=25 w_us=10000 n=64 mean=31927 min=31916 max=31937
+SHELL_WAIT_CASE case=26 arm=3 victim_group=0 victim_ch=9 r_src=650 rung_tenths=15 codec=1
+SHELL_WAIT case=26 w_us=0 n=64 mean=32765 min=32739 max=32800
+SHELL_WAIT case=26 w_us=200 n=64 mean=32754 min=32742 max=32772
+SHELL_WAIT case=26 w_us=1000 n=64 mean=32752 min=32733 max=32773
+SHELL_WAIT case=26 w_us=10000 n=64 mean=32749 min=32731 max=32769
+SHELL_WAIT_CASE case=27 arm=3 victim_group=0 victim_ch=10 r_src=150 rung_tenths=15 codec=1
+SHELL_WAIT case=27 w_us=0 n=64 mean=0 min=0 max=6
+SHELL_WAIT case=27 w_us=200 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=27 w_us=1000 n=64 mean=0 min=0 max=6
+SHELL_WAIT case=27 w_us=10000 n=64 mean=0 min=0 max=5
+SHELL_WAIT_CASE case=28 arm=3 victim_group=1 victim_ch=3 r_src=150 rung_tenths=15 codec=1
+SHELL_WAIT case=28 w_us=0 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=28 w_us=200 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=28 w_us=1000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=28 w_us=10000 n=64 mean=0 min=0 max=10
+SHELL_WAIT_CASE case=29 arm=3 victim_group=0 victim_ch=2 r_src=2650 rung_tenths=15 codec=1
+SHELL_WAIT case=29 w_us=0 n=64 mean=32504 min=32452 max=32528
+SHELL_WAIT case=29 w_us=200 n=64 mean=32438 min=32420 max=32456
+SHELL_WAIT case=29 w_us=1000 n=64 mean=32231 min=32220 max=32247
+SHELL_WAIT case=29 w_us=10000 n=64 mean=31860 min=31848 max=31874
+SHELL_WAIT_CASE case=30 arm=3 victim_group=0 victim_ch=6 r_src=5150 rung_tenths=25 codec=1
+SHELL_WAIT case=30 w_us=0 n=64 mean=32460 min=32438 max=32481
+SHELL_WAIT case=30 w_us=200 n=64 mean=32369 min=32353 max=32387
+SHELL_WAIT case=30 w_us=1000 n=64 mean=32076 min=32059 max=32093
+SHELL_WAIT case=30 w_us=10000 n=64 mean=31558 min=31544 max=31576
+SHELL_WAIT_CASE case=31 arm=3 victim_group=1 victim_ch=2 r_src=2650 rung_tenths=15 codec=1
+SHELL_WAIT case=31 w_us=0 n=64 mean=32572 min=32560 max=32583
+SHELL_WAIT case=31 w_us=200 n=64 mean=32515 min=32494 max=32528
+SHELL_WAIT case=31 w_us=1000 n=64 mean=32375 min=32367 max=32387
+SHELL_WAIT case=31 w_us=10000 n=64 mean=32119 min=32109 max=32134
+SHELL_WAIT_SPAN zero=0 rail=65532 hi_spread=0 lo_spread=0 valid=1
+SHELL_WAIT_G5 victim_group=0 victim_ch=8 expect=2 mean=32512 ok=1
+SHELL_WAIT_G5 victim_group=1 victim_ch=6 expect=2 mean=32610 ok=1
+SHELL_WAIT_G5 victim_group=0 victim_ch=9 expect=2 mean=32764 ok=1
+SHELL_WAIT_G5 victim_group=0 victim_ch=10 expect=0 mean=0 ok=1
+SHELL_WAIT_G5 victim_group=1 victim_ch=3 expect=0 mean=0 ok=1
+SHELL_WAIT_G5 victim_group=0 victim_ch=2 expect=3 mean=32505 ok=1
+SHELL_WAIT_G5 victim_group=0 victim_ch=6 expect=3 mean=32460 ok=1
+SHELL_WAIT_G5 victim_group=1 victim_ch=2 expect=3 mean=32571 ok=1
+SHELL_WAIT_GATES g2=1 g4=1 g5=1 g7=1 g9=-1 gates_ok=1
+SHELL_WAIT_HEALTH missed_blocks=0 timeouts=0 block_ms=143417
+SHELL_WAIT_END
+SHELL_WAIT_CFG adc_khz=6146 repeats=64 points=15 block_size=96 sr=48000 sweep_dir=1 git=e20b8fd
+SHELL_POT_CFG round=1 pots=3 git=e20b8fd
+SHELL_POT_ID idx=0 name=RV2 group=0 ch=2 r_track=10000 hi=1 lo=3
+SHELL_POT_ID idx=1 name=RV4 group=0 ch=6 r_track=20000 hi=5 lo=7
+SHELL_POT_ID idx=2 name=RV6 group=1 ch=2 r_track=10000 hi=1 lo=3
+SHELL_WAIT_CLK span_short_cyc=2312 span_long_cyc=31287 smp_short_tenths=165 smp_long_tenths=3875
+SHELL_WAIT_CAL lat_mean_ns=704 lat_min_ns=673 lat_max_ns=813 b0=8 timeouts=0
+SHELL_WAIT_CASE case=0 arm=0 victim_group=0 victim_ch=8 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=0 w_us=50000 n=64 mean=31650 min=31633 max=31668
+SHELL_WAIT case=0 w_us=20000 n=64 mean=31650 min=31628 max=31668
+SHELL_WAIT case=0 w_us=10000 n=64 mean=31648 min=31627 max=31669
+SHELL_WAIT case=0 w_us=5000 n=64 mean=31650 min=31631 max=31665
+SHELL_WAIT case=0 w_us=2000 n=64 mean=31889 min=31866 max=31908
+SHELL_WAIT case=0 w_us=1000 n=64 mean=32152 min=32133 max=32176
+SHELL_WAIT case=0 w_us=500 n=64 mean=32319 min=32293 max=32338
+SHELL_WAIT case=0 w_us=200 n=64 mean=32430 min=32275 max=32456
+SHELL_WAIT case=0 w_us=100 n=64 mean=32471 min=32434 max=32493
+SHELL_WAIT case=0 w_us=50 n=64 mean=32489 min=32461 max=32509
+SHELL_WAIT case=0 w_us=20 n=64 mean=32498 min=32460 max=32520
+SHELL_WAIT case=0 w_us=10 n=64 mean=32506 min=32483 max=32532
+SHELL_WAIT case=0 w_us=5 n=64 mean=32518 min=32498 max=32548
+SHELL_WAIT case=0 w_us=2 n=64 mean=32515 min=32494 max=32542
+SHELL_WAIT case=0 w_us=0 n=64 mean=32509 min=32327 max=32537
+SHELL_WAIT_CASE case=1 arm=0 victim_group=1 victim_ch=6 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=1 w_us=50000 n=64 mean=31928 min=31917 max=31944
+SHELL_WAIT case=1 w_us=20000 n=64 mean=31929 min=31907 max=31943
+SHELL_WAIT case=1 w_us=10000 n=64 mean=31929 min=31913 max=31941
+SHELL_WAIT case=1 w_us=5000 n=64 mean=31929 min=31914 max=31944
+SHELL_WAIT case=1 w_us=2000 n=64 mean=32113 min=32102 max=32128
+SHELL_WAIT case=1 w_us=1000 n=64 mean=32316 min=32299 max=32330
+SHELL_WAIT case=1 w_us=500 n=64 mean=32446 min=32429 max=32460
+SHELL_WAIT case=1 w_us=200 n=64 mean=32529 min=32514 max=32543
+SHELL_WAIT case=1 w_us=100 n=64 mean=32561 min=32538 max=32578
+SHELL_WAIT case=1 w_us=50 n=64 mean=32576 min=32563 max=32592
+SHELL_WAIT case=1 w_us=20 n=64 mean=32583 min=32554 max=32599
+SHELL_WAIT case=1 w_us=10 n=64 mean=32591 min=32577 max=32602
+SHELL_WAIT case=1 w_us=5 n=64 mean=32604 min=32593 max=32616
+SHELL_WAIT case=1 w_us=2 n=64 mean=32606 min=32587 max=32620
+SHELL_WAIT case=1 w_us=0 n=64 mean=32610 min=32597 max=32625
+SHELL_WAIT_CASE case=2 arm=0 victim_group=0 victim_ch=9 r_src=650 rung_tenths=15 codec=0
+SHELL_WAIT case=2 w_us=50000 n=64 mean=32747 min=32729 max=32768
+SHELL_WAIT case=2 w_us=20000 n=64 mean=32746 min=32729 max=32769
+SHELL_WAIT case=2 w_us=10000 n=64 mean=32748 min=32729 max=32776
+SHELL_WAIT case=2 w_us=5000 n=64 mean=32749 min=32735 max=32773
+SHELL_WAIT case=2 w_us=2000 n=64 mean=32750 min=32725 max=32773
+SHELL_WAIT case=2 w_us=1000 n=64 mean=32752 min=32736 max=32772
+SHELL_WAIT case=2 w_us=500 n=64 mean=32759 min=32742 max=32777
+SHELL_WAIT case=2 w_us=200 n=64 mean=32756 min=32733 max=32778
+SHELL_WAIT case=2 w_us=100 n=64 mean=32755 min=32739 max=32776
+SHELL_WAIT case=2 w_us=50 n=64 mean=32756 min=32736 max=32776
+SHELL_WAIT case=2 w_us=20 n=64 mean=32755 min=32733 max=32776
+SHELL_WAIT case=2 w_us=10 n=64 mean=32759 min=32741 max=32777
+SHELL_WAIT case=2 w_us=5 n=64 mean=32765 min=32594 max=32784
+SHELL_WAIT case=2 w_us=2 n=64 mean=32766 min=32749 max=32781
+SHELL_WAIT case=2 w_us=0 n=64 mean=32765 min=32742 max=32784
+SHELL_WAIT_CASE case=3 arm=0 victim_group=0 victim_ch=10 r_src=150 rung_tenths=15 codec=0
+SHELL_WAIT case=3 w_us=50000 n=64 mean=0 min=0 max=11
+SHELL_WAIT case=3 w_us=20000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=3 w_us=10000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=3 w_us=5000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=3 w_us=2000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=3 w_us=1000 n=64 mean=0 min=0 max=6
+SHELL_WAIT case=3 w_us=500 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=3 w_us=200 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=3 w_us=100 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=3 w_us=50 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=3 w_us=20 n=64 mean=0 min=0 max=12
+SHELL_WAIT case=3 w_us=10 n=64 mean=0 min=0 max=7
+SHELL_WAIT case=3 w_us=5 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=3 w_us=2 n=64 mean=0 min=0 max=12
+SHELL_WAIT case=3 w_us=0 n=64 mean=0 min=0 max=10
+SHELL_WAIT_CASE case=4 arm=0 victim_group=1 victim_ch=3 r_src=150 rung_tenths=15 codec=0
+SHELL_WAIT case=4 w_us=50000 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=4 w_us=20000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=4 w_us=10000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=4 w_us=5000 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=4 w_us=2000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=4 w_us=1000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=4 w_us=500 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=4 w_us=200 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=4 w_us=100 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=4 w_us=50 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=4 w_us=20 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=4 w_us=10 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=4 w_us=5 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=4 w_us=2 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=4 w_us=0 n=64 mean=0 min=0 max=2
+SHELL_WAIT_CASE case=5 arm=0 victim_group=0 victim_ch=2 r_src=2650 rung_tenths=15 codec=0
+SHELL_WAIT case=5 w_us=50000 n=64 mean=31862 min=31845 max=31876
+SHELL_WAIT case=5 w_us=20000 n=64 mean=31862 min=31840 max=31883
+SHELL_WAIT case=5 w_us=10000 n=64 mean=31860 min=31844 max=31874
+SHELL_WAIT case=5 w_us=5000 n=64 mean=31862 min=31846 max=31879
+SHELL_WAIT case=5 w_us=2000 n=64 mean=32039 min=32023 max=32056
+SHELL_WAIT case=5 w_us=1000 n=64 mean=32234 min=32211 max=32254
+SHELL_WAIT case=5 w_us=500 n=64 mean=32359 min=32341 max=32378
+SHELL_WAIT case=5 w_us=200 n=64 mean=32440 min=32426 max=32463
+SHELL_WAIT case=5 w_us=100 n=64 mean=32468 min=32445 max=32498
+SHELL_WAIT case=5 w_us=50 n=64 mean=32482 min=32465 max=32503
+SHELL_WAIT case=5 w_us=20 n=64 mean=32492 min=32469 max=32511
+SHELL_WAIT case=5 w_us=10 n=64 mean=32497 min=32480 max=32513
+SHELL_WAIT case=5 w_us=5 n=64 mean=32508 min=32490 max=32526
+SHELL_WAIT case=5 w_us=2 n=64 mean=32507 min=32474 max=32527
+SHELL_WAIT case=5 w_us=0 n=64 mean=32504 min=32478 max=32527
+SHELL_WAIT_CASE case=6 arm=0 victim_group=0 victim_ch=6 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=6 w_us=50000 n=64 mean=31558 min=31539 max=31578
+SHELL_WAIT case=6 w_us=20000 n=64 mean=31557 min=31538 max=31573
+SHELL_WAIT case=6 w_us=10000 n=64 mean=31557 min=31535 max=31569
+SHELL_WAIT case=6 w_us=5000 n=64 mean=31558 min=31541 max=31574
+SHELL_WAIT case=6 w_us=2000 n=64 mean=31807 min=31790 max=31826
+SHELL_WAIT case=6 w_us=1000 n=64 mean=32081 min=32059 max=32105
+SHELL_WAIT case=6 w_us=500 n=64 mean=32254 min=32236 max=32278
+SHELL_WAIT case=6 w_us=200 n=64 mean=32370 min=32345 max=32398
+SHELL_WAIT case=6 w_us=100 n=64 mean=32412 min=32389 max=32436
+SHELL_WAIT case=6 w_us=50 n=64 mean=32432 min=32405 max=32456
+SHELL_WAIT case=6 w_us=20 n=64 mean=32443 min=32425 max=32479
+SHELL_WAIT case=6 w_us=10 n=64 mean=32451 min=32434 max=32469
+SHELL_WAIT case=6 w_us=5 n=64 mean=32462 min=32444 max=32481
+SHELL_WAIT case=6 w_us=2 n=64 mean=32462 min=32445 max=32481
+SHELL_WAIT case=6 w_us=0 n=64 mean=32461 min=32443 max=32480
+SHELL_WAIT_CASE case=7 arm=0 victim_group=1 victim_ch=2 r_src=2650 rung_tenths=15 codec=0
+SHELL_WAIT case=7 w_us=50000 n=64 mean=32121 min=32110 max=32137
+SHELL_WAIT case=7 w_us=20000 n=64 mean=32119 min=32109 max=32133
+SHELL_WAIT case=7 w_us=10000 n=64 mean=32121 min=32107 max=32136
+SHELL_WAIT case=7 w_us=5000 n=64 mean=32120 min=32106 max=32134
+SHELL_WAIT case=7 w_us=2000 n=64 mean=32243 min=32233 max=32258
+SHELL_WAIT case=7 w_us=1000 n=64 mean=32376 min=32364 max=32390
+SHELL_WAIT case=7 w_us=500 n=64 mean=32461 min=32447 max=32477
+SHELL_WAIT case=7 w_us=200 n=64 mean=32517 min=32506 max=32533
+SHELL_WAIT case=7 w_us=100 n=64 mean=32535 min=32521 max=32552
+SHELL_WAIT case=7 w_us=50 n=64 mean=32546 min=32532 max=32565
+SHELL_WAIT case=7 w_us=20 n=64 mean=32550 min=32533 max=32570
+SHELL_WAIT case=7 w_us=10 n=64 mean=32558 min=32542 max=32573
+SHELL_WAIT case=7 w_us=5 n=64 mean=32568 min=32554 max=32584
+SHELL_WAIT case=7 w_us=2 n=64 mean=32570 min=32555 max=32584
+SHELL_WAIT case=7 w_us=0 n=64 mean=32570 min=32559 max=32586
+SHELL_WAIT_CASE case=8 arm=1 victim_group=0 victim_ch=8 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=8 w_us=50000 n=64 mean=32468 min=32447 max=32491
+SHELL_WAIT case=8 w_us=20000 n=64 mean=32469 min=32452 max=32488
+SHELL_WAIT case=8 w_us=10000 n=64 mean=32471 min=32454 max=32488
+SHELL_WAIT case=8 w_us=5000 n=64 mean=32470 min=32452 max=32485
+SHELL_WAIT case=8 w_us=2000 n=64 mean=32467 min=32448 max=32500
+SHELL_WAIT case=8 w_us=1000 n=64 mean=32482 min=32463 max=32506
+SHELL_WAIT case=8 w_us=500 n=64 mean=32484 min=32469 max=32501
+SHELL_WAIT case=8 w_us=200 n=64 mean=32495 min=32470 max=32514
+SHELL_WAIT case=8 w_us=100 n=64 mean=32495 min=32372 max=32517
+SHELL_WAIT case=8 w_us=50 n=64 mean=32499 min=32483 max=32518
+SHELL_WAIT case=8 w_us=20 n=64 mean=32499 min=32472 max=32534
+SHELL_WAIT case=8 w_us=10 n=64 mean=32491 min=32465 max=32514
+SHELL_WAIT case=8 w_us=5 n=64 mean=32493 min=32471 max=32528
+SHELL_WAIT case=8 w_us=2 n=64 mean=32504 min=32477 max=32533
+SHELL_WAIT case=8 w_us=0 n=64 mean=32512 min=32488 max=32540
+SHELL_WAIT_CASE case=9 arm=1 victim_group=1 victim_ch=6 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=9 w_us=50000 n=64 mean=32574 min=32559 max=32588
+SHELL_WAIT case=9 w_us=20000 n=64 mean=32574 min=32562 max=32588
+SHELL_WAIT case=9 w_us=10000 n=64 mean=32574 min=32559 max=32592
+SHELL_WAIT case=9 w_us=5000 n=64 mean=32574 min=32559 max=32592
+SHELL_WAIT case=9 w_us=2000 n=64 mean=32579 min=32565 max=32598
+SHELL_WAIT case=9 w_us=1000 n=64 mean=32579 min=32567 max=32594
+SHELL_WAIT case=9 w_us=500 n=64 mean=32587 min=32569 max=32600
+SHELL_WAIT case=9 w_us=200 n=64 mean=32584 min=32570 max=32598
+SHELL_WAIT case=9 w_us=100 n=64 mean=32588 min=32575 max=32608
+SHELL_WAIT case=9 w_us=50 n=64 mean=32588 min=32577 max=32599
+SHELL_WAIT case=9 w_us=20 n=64 mean=32589 min=32575 max=32608
+SHELL_WAIT case=9 w_us=10 n=64 mean=32580 min=32563 max=32594
+SHELL_WAIT case=9 w_us=5 n=64 mean=32596 min=32583 max=32611
+SHELL_WAIT case=9 w_us=2 n=64 mean=32602 min=32591 max=32616
+SHELL_WAIT case=9 w_us=0 n=64 mean=32608 min=32592 max=32625
+SHELL_WAIT_CASE case=10 arm=1 victim_group=0 victim_ch=9 r_src=650 rung_tenths=15 codec=0
+SHELL_WAIT case=10 w_us=50000 n=64 mean=32751 min=32735 max=32769
+SHELL_WAIT case=10 w_us=20000 n=64 mean=32752 min=32735 max=32772
+SHELL_WAIT case=10 w_us=10000 n=64 mean=32753 min=32736 max=32772
+SHELL_WAIT case=10 w_us=5000 n=64 mean=32749 min=32568 max=32776
+SHELL_WAIT case=10 w_us=2000 n=64 mean=32752 min=32735 max=32769
+SHELL_WAIT case=10 w_us=1000 n=64 mean=32752 min=32734 max=32768
+SHELL_WAIT case=10 w_us=500 n=64 mean=32753 min=32737 max=32781
+SHELL_WAIT case=10 w_us=200 n=64 mean=32755 min=32740 max=32776
+SHELL_WAIT case=10 w_us=100 n=64 mean=32754 min=32742 max=32771
+SHELL_WAIT case=10 w_us=50 n=64 mean=32753 min=32735 max=32774
+SHELL_WAIT case=10 w_us=20 n=64 mean=32753 min=32733 max=32776
+SHELL_WAIT case=10 w_us=10 n=64 mean=32746 min=32731 max=32764
+SHELL_WAIT case=10 w_us=5 n=64 mean=32760 min=32741 max=32778
+SHELL_WAIT case=10 w_us=2 n=64 mean=32763 min=32745 max=32784
+SHELL_WAIT case=10 w_us=0 n=64 mean=32765 min=32753 max=32782
+SHELL_WAIT_CASE case=11 arm=1 victim_group=0 victim_ch=10 r_src=150 rung_tenths=15 codec=0
+SHELL_WAIT case=11 w_us=50000 n=64 mean=0 min=0 max=6
+SHELL_WAIT case=11 w_us=20000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=11 w_us=10000 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=11 w_us=5000 n=64 mean=0 min=0 max=7
+SHELL_WAIT case=11 w_us=2000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=11 w_us=1000 n=64 mean=0 min=0 max=7
+SHELL_WAIT case=11 w_us=500 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=11 w_us=200 n=64 mean=0 min=0 max=12
+SHELL_WAIT case=11 w_us=100 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=11 w_us=50 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=11 w_us=20 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=11 w_us=10 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=11 w_us=5 n=64 mean=0 min=0 max=12
+SHELL_WAIT case=11 w_us=2 n=64 mean=0 min=0 max=12
+SHELL_WAIT case=11 w_us=0 n=64 mean=0 min=0 max=8
+SHELL_WAIT_CASE case=12 arm=1 victim_group=1 victim_ch=3 r_src=150 rung_tenths=15 codec=0
+SHELL_WAIT case=12 w_us=50000 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=12 w_us=20000 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=12 w_us=10000 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=12 w_us=5000 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=12 w_us=2000 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=12 w_us=1000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=12 w_us=500 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=12 w_us=200 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=12 w_us=100 n=64 mean=0 min=0 max=30
+SHELL_WAIT case=12 w_us=50 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=12 w_us=20 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=12 w_us=10 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=12 w_us=5 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=12 w_us=2 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=12 w_us=0 n=64 mean=0 min=0 max=1
+SHELL_WAIT_CASE case=13 arm=1 victim_group=0 victim_ch=2 r_src=2650 rung_tenths=15 codec=0
+SHELL_WAIT case=13 w_us=50000 n=64 mean=32465 min=32451 max=32484
+SHELL_WAIT case=13 w_us=20000 n=64 mean=32465 min=32444 max=32488
+SHELL_WAIT case=13 w_us=10000 n=64 mean=32463 min=32444 max=32481
+SHELL_WAIT case=13 w_us=5000 n=64 mean=32465 min=32445 max=32481
+SHELL_WAIT case=13 w_us=2000 n=64 mean=32468 min=32455 max=32488
+SHELL_WAIT case=13 w_us=1000 n=64 mean=32484 min=32457 max=32498
+SHELL_WAIT case=13 w_us=500 n=64 mean=32478 min=32463 max=32495
+SHELL_WAIT case=13 w_us=200 n=64 mean=32487 min=32465 max=32508
+SHELL_WAIT case=13 w_us=100 n=64 mean=32487 min=32467 max=32508
+SHELL_WAIT case=13 w_us=50 n=64 mean=32487 min=32469 max=32504
+SHELL_WAIT case=13 w_us=20 n=64 mean=32491 min=32469 max=32510
+SHELL_WAIT case=13 w_us=10 n=64 mean=32479 min=32450 max=32494
+SHELL_WAIT case=13 w_us=5 n=64 mean=32489 min=32435 max=32507
+SHELL_WAIT case=13 w_us=2 n=64 mean=32496 min=32475 max=32527
+SHELL_WAIT case=13 w_us=0 n=64 mean=32504 min=32481 max=32529
+SHELL_WAIT_CASE case=14 arm=1 victim_group=0 victim_ch=6 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=14 w_us=50000 n=64 mean=32405 min=32377 max=32423
+SHELL_WAIT case=14 w_us=20000 n=64 mean=32404 min=32388 max=32425
+SHELL_WAIT case=14 w_us=10000 n=64 mean=32405 min=32385 max=32424
+SHELL_WAIT case=14 w_us=5000 n=64 mean=32404 min=32378 max=32432
+SHELL_WAIT case=14 w_us=2000 n=64 mean=32406 min=32381 max=32425
+SHELL_WAIT case=14 w_us=1000 n=64 mean=32422 min=32398 max=32440
+SHELL_WAIT case=14 w_us=500 n=64 mean=32426 min=32405 max=32455
+SHELL_WAIT case=14 w_us=200 n=64 mean=32434 min=32414 max=32457
+SHELL_WAIT case=14 w_us=100 n=64 mean=32436 min=32421 max=32456
+SHELL_WAIT case=14 w_us=50 n=64 mean=32440 min=32423 max=32463
+SHELL_WAIT case=14 w_us=20 n=64 mean=32441 min=32413 max=32461
+SHELL_WAIT case=14 w_us=10 n=64 mean=32433 min=32411 max=32451
+SHELL_WAIT case=14 w_us=5 n=64 mean=32446 min=32425 max=32466
+SHELL_WAIT case=14 w_us=2 n=64 mean=32449 min=32282 max=32469
+SHELL_WAIT case=14 w_us=0 n=64 mean=32458 min=32440 max=32485
+SHELL_WAIT_CASE case=15 arm=1 victim_group=1 victim_ch=2 r_src=2650 rung_tenths=15 codec=0
+SHELL_WAIT case=15 w_us=50000 n=64 mean=32547 min=32531 max=32560
+SHELL_WAIT case=15 w_us=20000 n=64 mean=32546 min=32532 max=32558
+SHELL_WAIT case=15 w_us=10000 n=64 mean=32547 min=32530 max=32564
+SHELL_WAIT case=15 w_us=5000 n=64 mean=32545 min=32532 max=32560
+SHELL_WAIT case=15 w_us=2000 n=64 mean=32552 min=32542 max=32565
+SHELL_WAIT case=15 w_us=1000 n=64 mean=32552 min=32542 max=32566
+SHELL_WAIT case=15 w_us=500 n=64 mean=32554 min=32537 max=32569
+SHELL_WAIT case=15 w_us=200 n=64 mean=32550 min=32534 max=32566
+SHELL_WAIT case=15 w_us=100 n=64 mean=32550 min=32539 max=32565
+SHELL_WAIT case=15 w_us=50 n=64 mean=32551 min=32537 max=32566
+SHELL_WAIT case=15 w_us=20 n=64 mean=32552 min=32538 max=32568
+SHELL_WAIT case=15 w_us=10 n=64 mean=32545 min=32533 max=32561
+SHELL_WAIT case=15 w_us=5 n=64 mean=32558 min=32541 max=32576
+SHELL_WAIT case=15 w_us=2 n=64 mean=32562 min=32549 max=32575
+SHELL_WAIT case=15 w_us=0 n=64 mean=32570 min=32558 max=32586
+SHELL_WAIT_CASE case=16 arm=2 victim_group=0 victim_ch=8 r_src=5150 rung_tenths=3875 codec=0
+SHELL_WAIT case=16 w_us=50000 n=64 mean=32763 min=32750 max=32778
+SHELL_WAIT case=16 w_us=20000 n=64 mean=32761 min=32749 max=32776
+SHELL_WAIT case=16 w_us=10000 n=64 mean=32761 min=32745 max=32780
+SHELL_WAIT case=16 w_us=5000 n=64 mean=32762 min=32751 max=32780
+SHELL_WAIT case=16 w_us=2000 n=64 mean=32762 min=32745 max=32780
+SHELL_WAIT case=16 w_us=1000 n=64 mean=32761 min=32749 max=32782
+SHELL_WAIT case=16 w_us=500 n=64 mean=32761 min=32705 max=32780
+SHELL_WAIT case=16 w_us=200 n=64 mean=32761 min=32748 max=32781
+SHELL_WAIT case=16 w_us=100 n=64 mean=32763 min=32752 max=32778
+SHELL_WAIT case=16 w_us=50 n=64 mean=32762 min=32748 max=32778
+SHELL_WAIT case=16 w_us=20 n=64 mean=32762 min=32748 max=32776
+SHELL_WAIT case=16 w_us=10 n=64 mean=32762 min=32749 max=32776
+SHELL_WAIT case=16 w_us=5 n=64 mean=32761 min=32744 max=32780
+SHELL_WAIT case=16 w_us=2 n=64 mean=32762 min=32744 max=32780
+SHELL_WAIT case=16 w_us=0 n=64 mean=32761 min=32743 max=32780
+SHELL_WAIT_CASE case=17 arm=2 victim_group=1 victim_ch=6 r_src=5150 rung_tenths=3875 codec=0
+SHELL_WAIT case=17 w_us=50000 n=64 mean=32793 min=32784 max=32805
+SHELL_WAIT case=17 w_us=20000 n=64 mean=32793 min=32783 max=32804
+SHELL_WAIT case=17 w_us=10000 n=64 mean=32793 min=32781 max=32808
+SHELL_WAIT case=17 w_us=5000 n=64 mean=32793 min=32783 max=32804
+SHELL_WAIT case=17 w_us=2000 n=64 mean=32793 min=32784 max=32807
+SHELL_WAIT case=17 w_us=1000 n=64 mean=32793 min=32786 max=32804
+SHELL_WAIT case=17 w_us=500 n=64 mean=32792 min=32780 max=32805
+SHELL_WAIT case=17 w_us=200 n=64 mean=32791 min=32783 max=32805
+SHELL_WAIT case=17 w_us=100 n=64 mean=32792 min=32782 max=32805
+SHELL_WAIT case=17 w_us=50 n=64 mean=32792 min=32784 max=32803
+SHELL_WAIT case=17 w_us=20 n=64 mean=32793 min=32782 max=32803
+SHELL_WAIT case=17 w_us=10 n=64 mean=32793 min=32784 max=32802
+SHELL_WAIT case=17 w_us=5 n=64 mean=32793 min=32782 max=32806
+SHELL_WAIT case=17 w_us=2 n=64 mean=32791 min=32783 max=32802
+SHELL_WAIT case=17 w_us=0 n=64 mean=32792 min=32785 max=32802
+SHELL_WAIT_CASE case=18 arm=2 victim_group=0 victim_ch=9 r_src=650 rung_tenths=3875 codec=0
+SHELL_WAIT case=18 w_us=50000 n=64 mean=32764 min=32749 max=32780
+SHELL_WAIT case=18 w_us=20000 n=64 mean=32763 min=32747 max=32779
+SHELL_WAIT case=18 w_us=10000 n=64 mean=32761 min=32743 max=32779
+SHELL_WAIT case=18 w_us=5000 n=64 mean=32762 min=32749 max=32780
+SHELL_WAIT case=18 w_us=2000 n=64 mean=32761 min=32749 max=32776
+SHELL_WAIT case=18 w_us=1000 n=64 mean=32763 min=32750 max=32780
+SHELL_WAIT case=18 w_us=500 n=64 mean=32761 min=32743 max=32780
+SHELL_WAIT case=18 w_us=200 n=64 mean=32763 min=32743 max=32784
+SHELL_WAIT case=18 w_us=100 n=64 mean=32762 min=32746 max=32777
+SHELL_WAIT case=18 w_us=50 n=64 mean=32762 min=32741 max=32777
+SHELL_WAIT case=18 w_us=20 n=64 mean=32761 min=32746 max=32784
+SHELL_WAIT case=18 w_us=10 n=64 mean=32761 min=32747 max=32781
+SHELL_WAIT case=18 w_us=5 n=64 mean=32762 min=32749 max=32783
+SHELL_WAIT case=18 w_us=2 n=64 mean=32762 min=32746 max=32780
+SHELL_WAIT case=18 w_us=0 n=64 mean=32760 min=32744 max=32778
+SHELL_WAIT_CASE case=19 arm=2 victim_group=0 victim_ch=10 r_src=150 rung_tenths=3875 codec=0
+SHELL_WAIT case=19 w_us=50000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=19 w_us=20000 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=19 w_us=10000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=19 w_us=5000 n=64 mean=0 min=0 max=9
+SHELL_WAIT case=19 w_us=2000 n=64 mean=0 min=0 max=6
+SHELL_WAIT case=19 w_us=1000 n=64 mean=0 min=0 max=9
+SHELL_WAIT case=19 w_us=500 n=64 mean=0 min=0 max=7
+SHELL_WAIT case=19 w_us=200 n=64 mean=0 min=0 max=11
+SHELL_WAIT case=19 w_us=100 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=19 w_us=50 n=64 mean=0 min=0 max=6
+SHELL_WAIT case=19 w_us=20 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=19 w_us=10 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=19 w_us=5 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=19 w_us=2 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=19 w_us=0 n=64 mean=0 min=0 max=8
+SHELL_WAIT_CASE case=20 arm=2 victim_group=1 victim_ch=3 r_src=150 rung_tenths=3875 codec=0
+SHELL_WAIT case=20 w_us=50000 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=20 w_us=20000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=20 w_us=10000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=20 w_us=5000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=20 w_us=2000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=20 w_us=1000 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=20 w_us=500 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=20 w_us=200 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=20 w_us=100 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=20 w_us=50 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=20 w_us=20 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=20 w_us=10 n=64 mean=0 min=0 max=11
+SHELL_WAIT case=20 w_us=5 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=20 w_us=2 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=20 w_us=0 n=64 mean=0 min=0 max=1
+SHELL_WAIT_CASE case=21 arm=2 victim_group=0 victim_ch=2 r_src=2650 rung_tenths=3875 codec=0
+SHELL_WAIT case=21 w_us=50000 n=64 mean=32683 min=32658 max=32695
+SHELL_WAIT case=21 w_us=20000 n=64 mean=32681 min=32669 max=32696
+SHELL_WAIT case=21 w_us=10000 n=64 mean=32682 min=32655 max=32697
+SHELL_WAIT case=21 w_us=5000 n=64 mean=32680 min=32661 max=32696
+SHELL_WAIT case=21 w_us=2000 n=64 mean=32681 min=32667 max=32698
+SHELL_WAIT case=21 w_us=1000 n=64 mean=32680 min=32653 max=32694
+SHELL_WAIT case=21 w_us=500 n=64 mean=32682 min=32663 max=32697
+SHELL_WAIT case=21 w_us=200 n=64 mean=32681 min=32665 max=32699
+SHELL_WAIT case=21 w_us=100 n=64 mean=32681 min=32667 max=32697
+SHELL_WAIT case=21 w_us=50 n=64 mean=32683 min=32669 max=32697
+SHELL_WAIT case=21 w_us=20 n=64 mean=32681 min=32666 max=32695
+SHELL_WAIT case=21 w_us=10 n=64 mean=32681 min=32668 max=32698
+SHELL_WAIT case=21 w_us=5 n=64 mean=32681 min=32665 max=32696
+SHELL_WAIT case=21 w_us=2 n=64 mean=32680 min=32668 max=32696
+SHELL_WAIT case=21 w_us=0 n=64 mean=32681 min=32667 max=32699
+SHELL_WAIT_CASE case=22 arm=2 victim_group=0 victim_ch=6 r_src=5150 rung_tenths=3875 codec=0
+SHELL_WAIT case=22 w_us=50000 n=64 mean=32720 min=32709 max=32740
+SHELL_WAIT case=22 w_us=20000 n=64 mean=32718 min=32707 max=32736
+SHELL_WAIT case=22 w_us=10000 n=64 mean=32718 min=32705 max=32734
+SHELL_WAIT case=22 w_us=5000 n=64 mean=32720 min=32692 max=32737
+SHELL_WAIT case=22 w_us=2000 n=64 mean=32719 min=32703 max=32740
+SHELL_WAIT case=22 w_us=1000 n=64 mean=32718 min=32705 max=32734
+SHELL_WAIT case=22 w_us=500 n=64 mean=32720 min=32707 max=32744
+SHELL_WAIT case=22 w_us=200 n=64 mean=32718 min=32595 max=32735
+SHELL_WAIT case=22 w_us=100 n=64 mean=32719 min=32709 max=32738
+SHELL_WAIT case=22 w_us=50 n=64 mean=32720 min=32704 max=32738
+SHELL_WAIT case=22 w_us=20 n=64 mean=32721 min=32707 max=32738
+SHELL_WAIT case=22 w_us=10 n=64 mean=32720 min=32708 max=32737
+SHELL_WAIT case=22 w_us=5 n=64 mean=32719 min=32710 max=32734
+SHELL_WAIT case=22 w_us=2 n=64 mean=32720 min=32705 max=32735
+SHELL_WAIT case=22 w_us=0 n=64 mean=32718 min=32707 max=32735
+SHELL_WAIT_CASE case=23 arm=2 victim_group=1 victim_ch=2 r_src=2650 rung_tenths=3875 codec=0
+SHELL_WAIT case=23 w_us=50000 n=64 mean=32688 min=32679 max=32698
+SHELL_WAIT case=23 w_us=20000 n=64 mean=32687 min=32677 max=32700
+SHELL_WAIT case=23 w_us=10000 n=64 mean=32688 min=32679 max=32704
+SHELL_WAIT case=23 w_us=5000 n=64 mean=32687 min=32675 max=32699
+SHELL_WAIT case=23 w_us=2000 n=64 mean=32686 min=32676 max=32699
+SHELL_WAIT case=23 w_us=1000 n=64 mean=32687 min=32677 max=32697
+SHELL_WAIT case=23 w_us=500 n=64 mean=32687 min=32678 max=32697
+SHELL_WAIT case=23 w_us=200 n=64 mean=32686 min=32677 max=32697
+SHELL_WAIT case=23 w_us=100 n=64 mean=32686 min=32675 max=32698
+SHELL_WAIT case=23 w_us=50 n=64 mean=32688 min=32678 max=32700
+SHELL_WAIT case=23 w_us=20 n=64 mean=32687 min=32675 max=32697
+SHELL_WAIT case=23 w_us=10 n=64 mean=32687 min=32678 max=32699
+SHELL_WAIT case=23 w_us=5 n=64 mean=32686 min=32674 max=32697
+SHELL_WAIT case=23 w_us=2 n=64 mean=32686 min=32674 max=32697
+SHELL_WAIT case=23 w_us=0 n=64 mean=32687 min=32678 max=32698
+SHELL_WAIT_CASE case=24 arm=3 victim_group=0 victim_ch=8 r_src=5150 rung_tenths=25 codec=1
+SHELL_WAIT case=24 w_us=10000 n=64 mean=31646 min=31634 max=31664
+SHELL_WAIT case=24 w_us=1000 n=64 mean=32152 min=32111 max=32174
+SHELL_WAIT case=24 w_us=200 n=64 mean=32430 min=32397 max=32452
+SHELL_WAIT case=24 w_us=0 n=64 mean=32513 min=32485 max=32533
+SHELL_WAIT_CASE case=25 arm=3 victim_group=1 victim_ch=6 r_src=5150 rung_tenths=25 codec=1
+SHELL_WAIT case=25 w_us=10000 n=64 mean=31927 min=31917 max=31936
+SHELL_WAIT case=25 w_us=1000 n=64 mean=32316 min=32303 max=32328
+SHELL_WAIT case=25 w_us=200 n=64 mean=32530 min=32515 max=32544
+SHELL_WAIT case=25 w_us=0 n=64 mean=32609 min=32583 max=32625
+SHELL_WAIT_CASE case=26 arm=3 victim_group=0 victim_ch=9 r_src=650 rung_tenths=15 codec=1
+SHELL_WAIT case=26 w_us=10000 n=64 mean=32745 min=32731 max=32772
+SHELL_WAIT case=26 w_us=1000 n=64 mean=32750 min=32734 max=32772
+SHELL_WAIT case=26 w_us=200 n=64 mean=32754 min=32729 max=32772
+SHELL_WAIT case=26 w_us=0 n=64 mean=32764 min=32749 max=32785
+SHELL_WAIT_CASE case=27 arm=3 victim_group=0 victim_ch=10 r_src=150 rung_tenths=15 codec=1
+SHELL_WAIT case=27 w_us=10000 n=64 mean=0 min=0 max=9
+SHELL_WAIT case=27 w_us=1000 n=64 mean=0 min=0 max=7
+SHELL_WAIT case=27 w_us=200 n=64 mean=0 min=0 max=3
+SHELL_WAIT case=27 w_us=0 n=64 mean=0 min=0 max=3
+SHELL_WAIT_CASE case=28 arm=3 victim_group=1 victim_ch=3 r_src=150 rung_tenths=15 codec=1
+SHELL_WAIT case=28 w_us=10000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=28 w_us=1000 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=28 w_us=200 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=28 w_us=0 n=64 mean=0 min=0 max=0
+SHELL_WAIT_CASE case=29 arm=3 victim_group=0 victim_ch=2 r_src=2650 rung_tenths=15 codec=1
+SHELL_WAIT case=29 w_us=10000 n=64 mean=31858 min=31845 max=31877
+SHELL_WAIT case=29 w_us=1000 n=64 mean=32232 min=32219 max=32251
+SHELL_WAIT case=29 w_us=200 n=64 mean=32437 min=32417 max=32453
+SHELL_WAIT case=29 w_us=0 n=64 mean=32503 min=32474 max=32520
+SHELL_WAIT_CASE case=30 arm=3 victim_group=0 victim_ch=6 r_src=5150 rung_tenths=25 codec=1
+SHELL_WAIT case=30 w_us=10000 n=64 mean=31555 min=31538 max=31571
+SHELL_WAIT case=30 w_us=1000 n=64 mean=32079 min=32062 max=32097
+SHELL_WAIT case=30 w_us=200 n=64 mean=32369 min=32350 max=32392
+SHELL_WAIT case=30 w_us=0 n=64 mean=32458 min=32313 max=32482
+SHELL_WAIT_CASE case=31 arm=3 victim_group=1 victim_ch=2 r_src=2650 rung_tenths=15 codec=1
+SHELL_WAIT case=31 w_us=10000 n=64 mean=32118 min=32110 max=32128
+SHELL_WAIT case=31 w_us=1000 n=64 mean=32374 min=32363 max=32386
+SHELL_WAIT case=31 w_us=200 n=64 mean=32515 min=32500 max=32527
+SHELL_WAIT case=31 w_us=0 n=64 mean=32569 min=32545 max=32587
+SHELL_WAIT_SPAN zero=0 rail=65532 hi_spread=0 lo_spread=0 valid=1
+SHELL_WAIT_G5 victim_group=0 victim_ch=8 expect=2 mean=32509 ok=1
+SHELL_WAIT_G5 victim_group=1 victim_ch=6 expect=2 mean=32610 ok=1
+SHELL_WAIT_G5 victim_group=0 victim_ch=9 expect=2 mean=32765 ok=1
+SHELL_WAIT_G5 victim_group=0 victim_ch=10 expect=0 mean=0 ok=1
+SHELL_WAIT_G5 victim_group=1 victim_ch=3 expect=0 mean=0 ok=1
+SHELL_WAIT_G5 victim_group=0 victim_ch=2 expect=3 mean=32504 ok=1
+SHELL_WAIT_G5 victim_group=0 victim_ch=6 expect=3 mean=32461 ok=1
+SHELL_WAIT_G5 victim_group=1 victim_ch=2 expect=3 mean=32570 ok=1
+SHELL_WAIT_GATES g2=1 g4=1 g5=1 g7=1 g9=-1 gates_ok=1
+SHELL_WAIT_HEALTH missed_blocks=0 timeouts=0 block_ms=143417
+SHELL_WAIT_END
+SHELL_WAIT_CFG adc_khz=6146 repeats=64 points=15 block_size=96 sr=48000 sweep_dir=0 git=e20b8fd
+SHELL_POT_CFG round=1 pots=3 git=e20b8fd
+SHELL_POT_ID idx=0 name=RV2 group=0 ch=2 r_track=10000 hi=1 lo=3
+SHELL_POT_ID idx=1 name=RV4 group=0 ch=6 r_track=20000 hi=5 lo=7
+SHELL_POT_ID idx=2 name=RV6 group=1 ch=2 r_track=10000 hi=1 lo=3
+SHELL_WAIT_CLK span_short_cyc=2312 span_long_cyc=31287 smp_short_tenths=165 smp_long_tenths=3875
+SHELL_WAIT_CAL lat_mean_ns=700 lat_min_ns=671 lat_max_ns=792 b0=8 timeouts=0
+SHELL_WAIT_CASE case=0 arm=0 victim_group=0 victim_ch=8 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=0 w_us=0 n=64 mean=32512 min=32452 max=32545
+SHELL_WAIT case=0 w_us=2 n=64 mean=32514 min=32494 max=32539
+SHELL_WAIT case=0 w_us=5 n=64 mean=32515 min=32372 max=32537
+SHELL_WAIT case=0 w_us=10 n=64 mean=32508 min=32481 max=32529
+SHELL_WAIT case=0 w_us=20 n=64 mean=32500 min=32474 max=32523
+SHELL_WAIT case=0 w_us=50 n=64 mean=32491 min=32460 max=32512
+SHELL_WAIT case=0 w_us=100 n=64 mean=32470 min=32452 max=32495
+SHELL_WAIT case=0 w_us=200 n=64 mean=32431 min=32404 max=32449
+SHELL_WAIT case=0 w_us=500 n=64 mean=32320 min=32300 max=32341
+SHELL_WAIT case=0 w_us=1000 n=64 mean=32154 min=32127 max=32179
+SHELL_WAIT case=0 w_us=2000 n=64 mean=31889 min=31871 max=31904
+SHELL_WAIT case=0 w_us=5000 n=64 mean=31652 min=31631 max=31668
+SHELL_WAIT case=0 w_us=10000 n=64 mean=31649 min=31622 max=31673
+SHELL_WAIT case=0 w_us=20000 n=64 mean=31649 min=31631 max=31672
+SHELL_WAIT case=0 w_us=50000 n=64 mean=31648 min=31633 max=31666
+SHELL_WAIT_CASE case=1 arm=0 victim_group=1 victim_ch=6 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=1 w_us=0 n=64 mean=32609 min=32577 max=32625
+SHELL_WAIT case=1 w_us=2 n=64 mean=32607 min=32592 max=32624
+SHELL_WAIT case=1 w_us=5 n=64 mean=32602 min=32536 max=32616
+SHELL_WAIT case=1 w_us=10 n=64 mean=32590 min=32567 max=32608
+SHELL_WAIT case=1 w_us=20 n=64 mean=32585 min=32566 max=32605
+SHELL_WAIT case=1 w_us=50 n=64 mean=32578 min=32559 max=32596
+SHELL_WAIT case=1 w_us=100 n=64 mean=32561 min=32547 max=32579
+SHELL_WAIT case=1 w_us=200 n=64 mean=32531 min=32516 max=32552
+SHELL_WAIT case=1 w_us=500 n=64 mean=32445 min=32432 max=32459
+SHELL_WAIT case=1 w_us=1000 n=64 mean=32317 min=32299 max=32332
+SHELL_WAIT case=1 w_us=2000 n=64 mean=32114 min=32103 max=32128
+SHELL_WAIT case=1 w_us=5000 n=64 mean=31928 min=31917 max=31939
+SHELL_WAIT case=1 w_us=10000 n=64 mean=31927 min=31917 max=31942
+SHELL_WAIT case=1 w_us=20000 n=64 mean=31928 min=31910 max=31944
+SHELL_WAIT case=1 w_us=50000 n=64 mean=31928 min=31917 max=31941
+SHELL_WAIT_CASE case=2 arm=0 victim_group=0 victim_ch=9 r_src=650 rung_tenths=15 codec=0
+SHELL_WAIT case=2 w_us=0 n=64 mean=32765 min=32739 max=32784
+SHELL_WAIT case=2 w_us=2 n=64 mean=32767 min=32744 max=32784
+SHELL_WAIT case=2 w_us=5 n=64 mean=32766 min=32748 max=32788
+SHELL_WAIT case=2 w_us=10 n=64 mean=32759 min=32740 max=32781
+SHELL_WAIT case=2 w_us=20 n=64 mean=32756 min=32734 max=32776
+SHELL_WAIT case=2 w_us=50 n=64 mean=32756 min=32735 max=32776
+SHELL_WAIT case=2 w_us=100 n=64 mean=32755 min=32742 max=32781
+SHELL_WAIT case=2 w_us=200 n=64 mean=32755 min=32731 max=32778
+SHELL_WAIT case=2 w_us=500 n=64 mean=32756 min=32743 max=32772
+SHELL_WAIT case=2 w_us=1000 n=64 mean=32753 min=32734 max=32772
+SHELL_WAIT case=2 w_us=2000 n=64 mean=32749 min=32728 max=32776
+SHELL_WAIT case=2 w_us=5000 n=64 mean=32746 min=32731 max=32770
+SHELL_WAIT case=2 w_us=10000 n=64 mean=32747 min=32728 max=32770
+SHELL_WAIT case=2 w_us=20000 n=64 mean=32748 min=32732 max=32769
+SHELL_WAIT case=2 w_us=50000 n=64 mean=32748 min=32723 max=32769
+SHELL_WAIT_CASE case=3 arm=0 victim_group=0 victim_ch=10 r_src=150 rung_tenths=15 codec=0
+SHELL_WAIT case=3 w_us=0 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=3 w_us=2 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=3 w_us=5 n=64 mean=0 min=0 max=9
+SHELL_WAIT case=3 w_us=10 n=64 mean=0 min=0 max=7
+SHELL_WAIT case=3 w_us=20 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=3 w_us=50 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=3 w_us=100 n=64 mean=0 min=0 max=13
+SHELL_WAIT case=3 w_us=200 n=64 mean=0 min=0 max=7
+SHELL_WAIT case=3 w_us=500 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=3 w_us=1000 n=64 mean=0 min=0 max=7
+SHELL_WAIT case=3 w_us=2000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=3 w_us=5000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=3 w_us=10000 n=64 mean=0 min=0 max=6
+SHELL_WAIT case=3 w_us=20000 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=3 w_us=50000 n=64 mean=0 min=0 max=10
+SHELL_WAIT_CASE case=4 arm=0 victim_group=1 victim_ch=3 r_src=150 rung_tenths=15 codec=0
+SHELL_WAIT case=4 w_us=0 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=4 w_us=2 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=4 w_us=5 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=4 w_us=10 n=64 mean=0 min=0 max=3
+SHELL_WAIT case=4 w_us=20 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=4 w_us=50 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=4 w_us=100 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=4 w_us=200 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=4 w_us=500 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=4 w_us=1000 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=4 w_us=2000 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=4 w_us=5000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=4 w_us=10000 n=64 mean=1 min=0 max=68
+SHELL_WAIT case=4 w_us=20000 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=4 w_us=50000 n=64 mean=0 min=0 max=1
+SHELL_WAIT_CASE case=5 arm=0 victim_group=0 victim_ch=2 r_src=2650 rung_tenths=15 codec=0
+SHELL_WAIT case=5 w_us=0 n=64 mean=32506 min=32467 max=32530
+SHELL_WAIT case=5 w_us=2 n=64 mean=32509 min=32492 max=32530
+SHELL_WAIT case=5 w_us=5 n=64 mean=32508 min=32483 max=32525
+SHELL_WAIT case=5 w_us=10 n=64 mean=32500 min=32475 max=32518
+SHELL_WAIT case=5 w_us=20 n=64 mean=32492 min=32467 max=32516
+SHELL_WAIT case=5 w_us=50 n=64 mean=32484 min=32460 max=32503
+SHELL_WAIT case=5 w_us=100 n=64 mean=32469 min=32450 max=32489
+SHELL_WAIT case=5 w_us=200 n=64 mean=32439 min=32422 max=32458
+SHELL_WAIT case=5 w_us=500 n=64 mean=32359 min=32343 max=32384
+SHELL_WAIT case=5 w_us=1000 n=64 mean=32238 min=32218 max=32260
+SHELL_WAIT case=5 w_us=2000 n=64 mean=32042 min=32022 max=32065
+SHELL_WAIT case=5 w_us=5000 n=64 mean=31859 min=31845 max=31881
+SHELL_WAIT case=5 w_us=10000 n=64 mean=31860 min=31842 max=31876
+SHELL_WAIT case=5 w_us=20000 n=64 mean=31862 min=31842 max=31881
+SHELL_WAIT case=5 w_us=50000 n=64 mean=31862 min=31847 max=31878
+SHELL_WAIT_CASE case=6 arm=0 victim_group=0 victim_ch=6 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=6 w_us=0 n=64 mean=32459 min=32414 max=32488
+SHELL_WAIT case=6 w_us=2 n=64 mean=32462 min=32445 max=32480
+SHELL_WAIT case=6 w_us=5 n=64 mean=32462 min=32446 max=32487
+SHELL_WAIT case=6 w_us=10 n=64 mean=32450 min=32428 max=32477
+SHELL_WAIT case=6 w_us=20 n=64 mean=32444 min=32422 max=32470
+SHELL_WAIT case=6 w_us=50 n=64 mean=32432 min=32416 max=32460
+SHELL_WAIT case=6 w_us=100 n=64 mean=32410 min=32384 max=32439
+SHELL_WAIT case=6 w_us=200 n=64 mean=32371 min=32351 max=32388
+SHELL_WAIT case=6 w_us=500 n=64 mean=32257 min=32236 max=32281
+SHELL_WAIT case=6 w_us=1000 n=64 mean=32082 min=32058 max=32097
+SHELL_WAIT case=6 w_us=2000 n=64 mean=31809 min=31795 max=31829
+SHELL_WAIT case=6 w_us=5000 n=64 mean=31557 min=31538 max=31578
+SHELL_WAIT case=6 w_us=10000 n=64 mean=31557 min=31542 max=31576
+SHELL_WAIT case=6 w_us=20000 n=64 mean=31558 min=31542 max=31574
+SHELL_WAIT case=6 w_us=50000 n=64 mean=31556 min=31540 max=31577
+SHELL_WAIT_CASE case=7 arm=0 victim_group=1 victim_ch=2 r_src=2650 rung_tenths=15 codec=0
+SHELL_WAIT case=7 w_us=0 n=64 mean=32572 min=32555 max=32587
+SHELL_WAIT case=7 w_us=2 n=64 mean=32571 min=32551 max=32585
+SHELL_WAIT case=7 w_us=5 n=64 mean=32568 min=32552 max=32580
+SHELL_WAIT case=7 w_us=10 n=64 mean=32555 min=32536 max=32578
+SHELL_WAIT case=7 w_us=20 n=64 mean=32550 min=32533 max=32567
+SHELL_WAIT case=7 w_us=50 n=64 mean=32545 min=32530 max=32557
+SHELL_WAIT case=7 w_us=100 n=64 mean=32536 min=32522 max=32549
+SHELL_WAIT case=7 w_us=200 n=64 mean=32516 min=32502 max=32527
+SHELL_WAIT case=7 w_us=500 n=64 mean=32461 min=32445 max=32476
+SHELL_WAIT case=7 w_us=1000 n=64 mean=32377 min=32360 max=32394
+SHELL_WAIT case=7 w_us=2000 n=64 mean=32244 min=32229 max=32262
+SHELL_WAIT case=7 w_us=5000 n=64 mean=32120 min=32050 max=32140
+SHELL_WAIT case=7 w_us=10000 n=64 mean=32120 min=32110 max=32133
+SHELL_WAIT case=7 w_us=20000 n=64 mean=32119 min=32050 max=32133
+SHELL_WAIT case=7 w_us=50000 n=64 mean=32120 min=32104 max=32135
+SHELL_WAIT_CASE case=8 arm=1 victim_group=0 victim_ch=8 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=8 w_us=0 n=64 mean=32514 min=32487 max=32548
+SHELL_WAIT case=8 w_us=2 n=64 mean=32502 min=32474 max=32522
+SHELL_WAIT case=8 w_us=5 n=64 mean=32493 min=32477 max=32520
+SHELL_WAIT case=8 w_us=10 n=64 mean=32487 min=32451 max=32526
+SHELL_WAIT case=8 w_us=20 n=64 mean=32500 min=32482 max=32516
+SHELL_WAIT case=8 w_us=50 n=64 mean=32500 min=32484 max=32521
+SHELL_WAIT case=8 w_us=100 n=64 mean=32496 min=32473 max=32514
+SHELL_WAIT case=8 w_us=200 n=64 mean=32494 min=32466 max=32512
+SHELL_WAIT case=8 w_us=500 n=64 mean=32484 min=32461 max=32503
+SHELL_WAIT case=8 w_us=1000 n=64 mean=32482 min=32463 max=32500
+SHELL_WAIT case=8 w_us=2000 n=64 mean=32466 min=32301 max=32490
+SHELL_WAIT case=8 w_us=5000 n=64 mean=32469 min=32453 max=32492
+SHELL_WAIT case=8 w_us=10000 n=64 mean=32469 min=32448 max=32489
+SHELL_WAIT case=8 w_us=20000 n=64 mean=32471 min=32449 max=32490
+SHELL_WAIT case=8 w_us=50000 n=64 mean=32471 min=32455 max=32489
+SHELL_WAIT_CASE case=9 arm=1 victim_group=1 victim_ch=6 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=9 w_us=0 n=64 mean=32611 min=32596 max=32623
+SHELL_WAIT case=9 w_us=2 n=64 mean=32602 min=32591 max=32618
+SHELL_WAIT case=9 w_us=5 n=64 mean=32596 min=32584 max=32608
+SHELL_WAIT case=9 w_us=10 n=64 mean=32581 min=32570 max=32594
+SHELL_WAIT case=9 w_us=20 n=64 mean=32588 min=32572 max=32609
+SHELL_WAIT case=9 w_us=50 n=64 mean=32589 min=32576 max=32603
+SHELL_WAIT case=9 w_us=100 n=64 mean=32589 min=32573 max=32604
+SHELL_WAIT case=9 w_us=200 n=64 mean=32585 min=32569 max=32602
+SHELL_WAIT case=9 w_us=500 n=64 mean=32590 min=32574 max=32610
+SHELL_WAIT case=9 w_us=1000 n=64 mean=32581 min=32564 max=32596
+SHELL_WAIT case=9 w_us=2000 n=64 mean=32579 min=32563 max=32594
+SHELL_WAIT case=9 w_us=5000 n=64 mean=32574 min=32564 max=32590
+SHELL_WAIT case=9 w_us=10000 n=64 mean=32574 min=32558 max=32587
+SHELL_WAIT case=9 w_us=20000 n=64 mean=32575 min=32563 max=32592
+SHELL_WAIT case=9 w_us=50000 n=64 mean=32574 min=32559 max=32590
+SHELL_WAIT_CASE case=10 arm=1 victim_group=0 victim_ch=9 r_src=650 rung_tenths=15 codec=0
+SHELL_WAIT case=10 w_us=0 n=64 mean=32766 min=32748 max=32787
+SHELL_WAIT case=10 w_us=2 n=64 mean=32761 min=32747 max=32780
+SHELL_WAIT case=10 w_us=5 n=64 mean=32758 min=32743 max=32780
+SHELL_WAIT case=10 w_us=10 n=64 mean=32744 min=32727 max=32760
+SHELL_WAIT case=10 w_us=20 n=64 mean=32755 min=32735 max=32777
+SHELL_WAIT case=10 w_us=50 n=64 mean=32752 min=32732 max=32770
+SHELL_WAIT case=10 w_us=100 n=64 mean=32751 min=32731 max=32769
+SHELL_WAIT case=10 w_us=200 n=64 mean=32754 min=32733 max=32772
+SHELL_WAIT case=10 w_us=500 n=64 mean=32754 min=32741 max=32775
+SHELL_WAIT case=10 w_us=1000 n=64 mean=32752 min=32729 max=32772
+SHELL_WAIT case=10 w_us=2000 n=64 mean=32750 min=32733 max=32765
+SHELL_WAIT case=10 w_us=5000 n=64 mean=32752 min=32735 max=32770
+SHELL_WAIT case=10 w_us=10000 n=64 mean=32751 min=32739 max=32767
+SHELL_WAIT case=10 w_us=20000 n=64 mean=32753 min=32733 max=32769
+SHELL_WAIT case=10 w_us=50000 n=64 mean=32754 min=32740 max=32776
+SHELL_WAIT_CASE case=11 arm=1 victim_group=0 victim_ch=10 r_src=150 rung_tenths=15 codec=0
+SHELL_WAIT case=11 w_us=0 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=11 w_us=2 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=11 w_us=5 n=64 mean=0 min=0 max=10
+SHELL_WAIT case=11 w_us=10 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=11 w_us=20 n=64 mean=0 min=0 max=33
+SHELL_WAIT case=11 w_us=50 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=11 w_us=100 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=11 w_us=200 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=11 w_us=500 n=64 mean=0 min=0 max=12
+SHELL_WAIT case=11 w_us=1000 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=11 w_us=2000 n=64 mean=1 min=0 max=53
+SHELL_WAIT case=11 w_us=5000 n=64 mean=0 min=0 max=9
+SHELL_WAIT case=11 w_us=10000 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=11 w_us=20000 n=64 mean=0 min=0 max=9
+SHELL_WAIT case=11 w_us=50000 n=64 mean=0 min=0 max=14
+SHELL_WAIT_CASE case=12 arm=1 victim_group=1 victim_ch=3 r_src=150 rung_tenths=15 codec=0
+SHELL_WAIT case=12 w_us=0 n=64 mean=0 min=0 max=3
+SHELL_WAIT case=12 w_us=2 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=12 w_us=5 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=12 w_us=10 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=12 w_us=20 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=12 w_us=50 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=12 w_us=100 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=12 w_us=200 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=12 w_us=500 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=12 w_us=1000 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=12 w_us=2000 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=12 w_us=5000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=12 w_us=10000 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=12 w_us=20000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=12 w_us=50000 n=64 mean=0 min=0 max=0
+SHELL_WAIT_CASE case=13 arm=1 victim_group=0 victim_ch=2 r_src=2650 rung_tenths=15 codec=0
+SHELL_WAIT case=13 w_us=0 n=64 mean=32506 min=32479 max=32528
+SHELL_WAIT case=13 w_us=2 n=64 mean=32494 min=32467 max=32523
+SHELL_WAIT case=13 w_us=5 n=64 mean=32489 min=32469 max=32512
+SHELL_WAIT case=13 w_us=10 n=64 mean=32481 min=32461 max=32497
+SHELL_WAIT case=13 w_us=20 n=64 mean=32489 min=32467 max=32512
+SHELL_WAIT case=13 w_us=50 n=64 mean=32486 min=32468 max=32506
+SHELL_WAIT case=13 w_us=100 n=64 mean=32487 min=32469 max=32504
+SHELL_WAIT case=13 w_us=200 n=64 mean=32485 min=32470 max=32506
+SHELL_WAIT case=13 w_us=500 n=64 mean=32477 min=32451 max=32499
+SHELL_WAIT case=13 w_us=1000 n=64 mean=32481 min=32464 max=32496
+SHELL_WAIT case=13 w_us=2000 n=64 mean=32467 min=32450 max=32482
+SHELL_WAIT case=13 w_us=5000 n=64 mean=32463 min=32444 max=32484
+SHELL_WAIT case=13 w_us=10000 n=64 mean=32463 min=32444 max=32482
+SHELL_WAIT case=13 w_us=20000 n=64 mean=32464 min=32449 max=32486
+SHELL_WAIT case=13 w_us=50000 n=64 mean=32465 min=32445 max=32487
+SHELL_WAIT_CASE case=14 arm=1 victim_group=0 victim_ch=6 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=14 w_us=0 n=64 mean=32458 min=32441 max=32484
+SHELL_WAIT case=14 w_us=2 n=64 mean=32455 min=32435 max=32474
+SHELL_WAIT case=14 w_us=5 n=64 mean=32446 min=32423 max=32467
+SHELL_WAIT case=14 w_us=10 n=64 mean=32433 min=32418 max=32453
+SHELL_WAIT case=14 w_us=20 n=64 mean=32443 min=32421 max=32466
+SHELL_WAIT case=14 w_us=50 n=64 mean=32440 min=32424 max=32457
+SHELL_WAIT case=14 w_us=100 n=64 mean=32438 min=32413 max=32461
+SHELL_WAIT case=14 w_us=200 n=64 mean=32434 min=32421 max=32452
+SHELL_WAIT case=14 w_us=500 n=64 mean=32431 min=32406 max=32458
+SHELL_WAIT case=14 w_us=1000 n=64 mean=32420 min=32386 max=32445
+SHELL_WAIT case=14 w_us=2000 n=64 mean=32405 min=32387 max=32424
+SHELL_WAIT case=14 w_us=5000 n=64 mean=32404 min=32388 max=32422
+SHELL_WAIT case=14 w_us=10000 n=64 mean=32405 min=32381 max=32424
+SHELL_WAIT case=14 w_us=20000 n=64 mean=32401 min=32224 max=32424
+SHELL_WAIT case=14 w_us=50000 n=64 mean=32404 min=32383 max=32423
+SHELL_WAIT_CASE case=15 arm=1 victim_group=1 victim_ch=2 r_src=2650 rung_tenths=15 codec=0
+SHELL_WAIT case=15 w_us=0 n=64 mean=32572 min=32550 max=32587
+SHELL_WAIT case=15 w_us=2 n=64 mean=32564 min=32547 max=32578
+SHELL_WAIT case=15 w_us=5 n=64 mean=32559 min=32546 max=32574
+SHELL_WAIT case=15 w_us=10 n=64 mean=32546 min=32527 max=32560
+SHELL_WAIT case=15 w_us=20 n=64 mean=32551 min=32537 max=32568
+SHELL_WAIT case=15 w_us=50 n=64 mean=32552 min=32541 max=32567
+SHELL_WAIT case=15 w_us=100 n=64 mean=32551 min=32541 max=32568
+SHELL_WAIT case=15 w_us=200 n=64 mean=32550 min=32536 max=32564
+SHELL_WAIT case=15 w_us=500 n=64 mean=32553 min=32535 max=32564
+SHELL_WAIT case=15 w_us=1000 n=64 mean=32550 min=32538 max=32564
+SHELL_WAIT case=15 w_us=2000 n=64 mean=32553 min=32534 max=32570
+SHELL_WAIT case=15 w_us=5000 n=64 mean=32545 min=32534 max=32557
+SHELL_WAIT case=15 w_us=10000 n=64 mean=32546 min=32533 max=32562
+SHELL_WAIT case=15 w_us=20000 n=64 mean=32545 min=32535 max=32560
+SHELL_WAIT case=15 w_us=50000 n=64 mean=32544 min=32533 max=32560
+SHELL_WAIT_CASE case=16 arm=2 victim_group=0 victim_ch=8 r_src=5150 rung_tenths=3875 codec=0
+SHELL_WAIT case=16 w_us=0 n=64 mean=32763 min=32747 max=32778
+SHELL_WAIT case=16 w_us=2 n=64 mean=32762 min=32747 max=32779
+SHELL_WAIT case=16 w_us=5 n=64 mean=32761 min=32749 max=32775
+SHELL_WAIT case=16 w_us=10 n=64 mean=32762 min=32747 max=32784
+SHELL_WAIT case=16 w_us=20 n=64 mean=32762 min=32741 max=32780
+SHELL_WAIT case=16 w_us=50 n=64 mean=32763 min=32746 max=32784
+SHELL_WAIT case=16 w_us=100 n=64 mean=32762 min=32751 max=32776
+SHELL_WAIT case=16 w_us=200 n=64 mean=32763 min=32745 max=32782
+SHELL_WAIT case=16 w_us=500 n=64 mean=32763 min=32749 max=32778
+SHELL_WAIT case=16 w_us=1000 n=64 mean=32759 min=32585 max=32778
+SHELL_WAIT case=16 w_us=2000 n=64 mean=32761 min=32747 max=32777
+SHELL_WAIT case=16 w_us=5000 n=64 mean=32761 min=32748 max=32775
+SHELL_WAIT case=16 w_us=10000 n=64 mean=32763 min=32747 max=32776
+SHELL_WAIT case=16 w_us=20000 n=64 mean=32761 min=32749 max=32776
+SHELL_WAIT case=16 w_us=50000 n=64 mean=32763 min=32748 max=32778
+SHELL_WAIT_CASE case=17 arm=2 victim_group=1 victim_ch=6 r_src=5150 rung_tenths=3875 codec=0
+SHELL_WAIT case=17 w_us=0 n=64 mean=32792 min=32781 max=32804
+SHELL_WAIT case=17 w_us=2 n=64 mean=32793 min=32781 max=32805
+SHELL_WAIT case=17 w_us=5 n=64 mean=32793 min=32782 max=32802
+SHELL_WAIT case=17 w_us=10 n=64 mean=32793 min=32779 max=32803
+SHELL_WAIT case=17 w_us=20 n=64 mean=32793 min=32783 max=32808
+SHELL_WAIT case=17 w_us=50 n=64 mean=32792 min=32782 max=32802
+SHELL_WAIT case=17 w_us=100 n=64 mean=32794 min=32784 max=32806
+SHELL_WAIT case=17 w_us=200 n=64 mean=32793 min=32780 max=32804
+SHELL_WAIT case=17 w_us=500 n=64 mean=32794 min=32784 max=32805
+SHELL_WAIT case=17 w_us=1000 n=64 mean=32792 min=32783 max=32805
+SHELL_WAIT case=17 w_us=2000 n=64 mean=32792 min=32784 max=32804
+SHELL_WAIT case=17 w_us=5000 n=64 mean=32793 min=32784 max=32805
+SHELL_WAIT case=17 w_us=10000 n=64 mean=32794 min=32781 max=32804
+SHELL_WAIT case=17 w_us=20000 n=64 mean=32794 min=32783 max=32807
+SHELL_WAIT case=17 w_us=50000 n=64 mean=32793 min=32786 max=32804
+SHELL_WAIT_CASE case=18 arm=2 victim_group=0 victim_ch=9 r_src=650 rung_tenths=3875 codec=0
+SHELL_WAIT case=18 w_us=0 n=64 mean=32762 min=32749 max=32779
+SHELL_WAIT case=18 w_us=2 n=64 mean=32761 min=32744 max=32780
+SHELL_WAIT case=18 w_us=5 n=64 mean=32763 min=32739 max=32786
+SHELL_WAIT case=18 w_us=10 n=64 mean=32761 min=32738 max=32784
+SHELL_WAIT case=18 w_us=20 n=64 mean=32762 min=32746 max=32780
+SHELL_WAIT case=18 w_us=50 n=64 mean=32761 min=32747 max=32778
+SHELL_WAIT case=18 w_us=100 n=64 mean=32761 min=32748 max=32780
+SHELL_WAIT case=18 w_us=200 n=64 mean=32763 min=32749 max=32780
+SHELL_WAIT case=18 w_us=500 n=64 mean=32763 min=32749 max=32779
+SHELL_WAIT case=18 w_us=1000 n=64 mean=32762 min=32751 max=32779
+SHELL_WAIT case=18 w_us=2000 n=64 mean=32762 min=32747 max=32785
+SHELL_WAIT case=18 w_us=5000 n=64 mean=32761 min=32731 max=32783
+SHELL_WAIT case=18 w_us=10000 n=64 mean=32761 min=32745 max=32786
+SHELL_WAIT case=18 w_us=20000 n=64 mean=32762 min=32750 max=32784
+SHELL_WAIT case=18 w_us=50000 n=64 mean=32763 min=32751 max=32780
+SHELL_WAIT_CASE case=19 arm=2 victim_group=0 victim_ch=10 r_src=150 rung_tenths=3875 codec=0
+SHELL_WAIT case=19 w_us=0 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=19 w_us=2 n=64 mean=0 min=0 max=10
+SHELL_WAIT case=19 w_us=5 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=19 w_us=10 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=19 w_us=20 n=64 mean=0 min=0 max=7
+SHELL_WAIT case=19 w_us=50 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=19 w_us=100 n=64 mean=0 min=0 max=7
+SHELL_WAIT case=19 w_us=200 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=19 w_us=500 n=64 mean=0 min=0 max=7
+SHELL_WAIT case=19 w_us=1000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=19 w_us=2000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=19 w_us=5000 n=64 mean=0 min=0 max=6
+SHELL_WAIT case=19 w_us=10000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=19 w_us=20000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=19 w_us=50000 n=64 mean=0 min=0 max=8
+SHELL_WAIT_CASE case=20 arm=2 victim_group=1 victim_ch=3 r_src=150 rung_tenths=3875 codec=0
+SHELL_WAIT case=20 w_us=0 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=20 w_us=2 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=20 w_us=5 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=20 w_us=10 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=20 w_us=20 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=20 w_us=50 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=20 w_us=100 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=20 w_us=200 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=20 w_us=500 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=20 w_us=1000 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=20 w_us=2000 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=20 w_us=5000 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=20 w_us=10000 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=20 w_us=20000 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=20 w_us=50000 n=64 mean=0 min=0 max=4
+SHELL_WAIT_CASE case=21 arm=2 victim_group=0 victim_ch=2 r_src=2650 rung_tenths=3875 codec=0
+SHELL_WAIT case=21 w_us=0 n=64 mean=32682 min=32657 max=32700
+SHELL_WAIT case=21 w_us=2 n=64 mean=32679 min=32505 max=32692
+SHELL_WAIT case=21 w_us=5 n=64 mean=32683 min=32664 max=32698
+SHELL_WAIT case=21 w_us=10 n=64 mean=32682 min=32663 max=32698
+SHELL_WAIT case=21 w_us=20 n=64 mean=32681 min=32655 max=32698
+SHELL_WAIT case=21 w_us=50 n=64 mean=32682 min=32667 max=32695
+SHELL_WAIT case=21 w_us=100 n=64 mean=32681 min=32670 max=32697
+SHELL_WAIT case=21 w_us=200 n=64 mean=32682 min=32669 max=32700
+SHELL_WAIT case=21 w_us=500 n=64 mean=32681 min=32663 max=32698
+SHELL_WAIT case=21 w_us=1000 n=64 mean=32682 min=32664 max=32702
+SHELL_WAIT case=21 w_us=2000 n=64 mean=32680 min=32668 max=32695
+SHELL_WAIT case=21 w_us=5000 n=64 mean=32682 min=32667 max=32699
+SHELL_WAIT case=21 w_us=10000 n=64 mean=32682 min=32669 max=32696
+SHELL_WAIT case=21 w_us=20000 n=64 mean=32681 min=32667 max=32695
+SHELL_WAIT case=21 w_us=50000 n=64 mean=32681 min=32666 max=32695
+SHELL_WAIT_CASE case=22 arm=2 victim_group=0 victim_ch=6 r_src=5150 rung_tenths=3875 codec=0
+SHELL_WAIT case=22 w_us=0 n=64 mean=32719 min=32704 max=32730
+SHELL_WAIT case=22 w_us=2 n=64 mean=32720 min=32702 max=32734
+SHELL_WAIT case=22 w_us=5 n=64 mean=32720 min=32705 max=32736
+SHELL_WAIT case=22 w_us=10 n=64 mean=32719 min=32704 max=32735
+SHELL_WAIT case=22 w_us=20 n=64 mean=32718 min=32703 max=32740
+SHELL_WAIT case=22 w_us=50 n=64 mean=32718 min=32707 max=32729
+SHELL_WAIT case=22 w_us=100 n=64 mean=32717 min=32703 max=32736
+SHELL_WAIT case=22 w_us=200 n=64 mean=32718 min=32694 max=32737
+SHELL_WAIT case=22 w_us=500 n=64 mean=32718 min=32623 max=32735
+SHELL_WAIT case=22 w_us=1000 n=64 mean=32719 min=32708 max=32735
+SHELL_WAIT case=22 w_us=2000 n=64 mean=32720 min=32707 max=32738
+SHELL_WAIT case=22 w_us=5000 n=64 mean=32718 min=32703 max=32735
+SHELL_WAIT case=22 w_us=10000 n=64 mean=32717 min=32702 max=32733
+SHELL_WAIT case=22 w_us=20000 n=64 mean=32719 min=32703 max=32732
+SHELL_WAIT case=22 w_us=50000 n=64 mean=32720 min=32706 max=32738
+SHELL_WAIT_CASE case=23 arm=2 victim_group=1 victim_ch=2 r_src=2650 rung_tenths=3875 codec=0
+SHELL_WAIT case=23 w_us=0 n=64 mean=32687 min=32675 max=32700
+SHELL_WAIT case=23 w_us=2 n=64 mean=32687 min=32678 max=32701
+SHELL_WAIT case=23 w_us=5 n=64 mean=32687 min=32674 max=32698
+SHELL_WAIT case=23 w_us=10 n=64 mean=32688 min=32677 max=32698
+SHELL_WAIT case=23 w_us=20 n=64 mean=32687 min=32677 max=32700
+SHELL_WAIT case=23 w_us=50 n=64 mean=32688 min=32678 max=32698
+SHELL_WAIT case=23 w_us=100 n=64 mean=32687 min=32677 max=32700
+SHELL_WAIT case=23 w_us=200 n=64 mean=32688 min=32679 max=32700
+SHELL_WAIT case=23 w_us=500 n=64 mean=32687 min=32673 max=32702
+SHELL_WAIT case=23 w_us=1000 n=64 mean=32687 min=32675 max=32701
+SHELL_WAIT case=23 w_us=2000 n=64 mean=32687 min=32678 max=32699
+SHELL_WAIT case=23 w_us=5000 n=64 mean=32686 min=32678 max=32698
+SHELL_WAIT case=23 w_us=10000 n=64 mean=32687 min=32679 max=32700
+SHELL_WAIT case=23 w_us=20000 n=64 mean=32687 min=32679 max=32700
+SHELL_WAIT case=23 w_us=50000 n=64 mean=32687 min=32676 max=32699
+SHELL_WAIT_CASE case=24 arm=3 victim_group=0 victim_ch=8 r_src=5150 rung_tenths=25 codec=1
+SHELL_WAIT case=24 w_us=0 n=64 mean=32517 min=32485 max=32544
+SHELL_WAIT case=24 w_us=200 n=64 mean=32431 min=32406 max=32452
+SHELL_WAIT case=24 w_us=1000 n=64 mean=32157 min=32138 max=32178
+SHELL_WAIT case=24 w_us=10000 n=64 mean=31647 min=31500 max=31666
+SHELL_WAIT_CASE case=25 arm=3 victim_group=1 victim_ch=6 r_src=5150 rung_tenths=25 codec=1
+SHELL_WAIT case=25 w_us=0 n=64 mean=32611 min=32597 max=32622
+SHELL_WAIT case=25 w_us=200 n=64 mean=32532 min=32511 max=32545
+SHELL_WAIT case=25 w_us=1000 n=64 mean=32319 min=32307 max=32331
+SHELL_WAIT case=25 w_us=10000 n=64 mean=31927 min=31917 max=31938
+SHELL_WAIT_CASE case=26 arm=3 victim_group=0 victim_ch=9 r_src=650 rung_tenths=15 codec=1
+SHELL_WAIT case=26 w_us=0 n=64 mean=32765 min=32734 max=32785
+SHELL_WAIT case=26 w_us=200 n=64 mean=32756 min=32737 max=32773
+SHELL_WAIT case=26 w_us=1000 n=64 mean=32752 min=32739 max=32772
+SHELL_WAIT case=26 w_us=10000 n=64 mean=32746 min=32698 max=32769
+SHELL_WAIT_CASE case=27 arm=3 victim_group=0 victim_ch=10 r_src=150 rung_tenths=15 codec=1
+SHELL_WAIT case=27 w_us=0 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=27 w_us=200 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=27 w_us=1000 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=27 w_us=10000 n=64 mean=0 min=0 max=14
+SHELL_WAIT_CASE case=28 arm=3 victim_group=1 victim_ch=3 r_src=150 rung_tenths=15 codec=1
+SHELL_WAIT case=28 w_us=0 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=28 w_us=200 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=28 w_us=1000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=28 w_us=10000 n=64 mean=0 min=0 max=1
+SHELL_WAIT_CASE case=29 arm=3 victim_group=0 victim_ch=2 r_src=2650 rung_tenths=15 codec=1
+SHELL_WAIT case=29 w_us=0 n=64 mean=32502 min=32447 max=32540
+SHELL_WAIT case=29 w_us=200 n=64 mean=32439 min=32424 max=32456
+SHELL_WAIT case=29 w_us=1000 n=64 mean=32235 min=32223 max=32252
+SHELL_WAIT case=29 w_us=10000 n=64 mean=31859 min=31842 max=31877
+SHELL_WAIT_CASE case=30 arm=3 victim_group=0 victim_ch=6 r_src=5150 rung_tenths=25 codec=1
+SHELL_WAIT case=30 w_us=0 n=64 mean=32459 min=32443 max=32480
+SHELL_WAIT case=30 w_us=200 n=64 mean=32373 min=32357 max=32393
+SHELL_WAIT case=30 w_us=1000 n=64 mean=32083 min=32063 max=32097
+SHELL_WAIT case=30 w_us=10000 n=64 mean=31554 min=31541 max=31573
+SHELL_WAIT_CASE case=31 arm=3 victim_group=1 victim_ch=2 r_src=2650 rung_tenths=15 codec=1
+SHELL_WAIT case=31 w_us=0 n=64 mean=32570 min=32556 max=32587
+SHELL_WAIT case=31 w_us=200 n=64 mean=32516 min=32498 max=32529
+SHELL_WAIT case=31 w_us=1000 n=64 mean=32378 min=32367 max=32391
+SHELL_WAIT case=31 w_us=10000 n=64 mean=32120 min=32113 max=32129
+SHELL_WAIT_SPAN zero=0 rail=65533 hi_spread=0 lo_spread=0 valid=1
+SHELL_WAIT_G5 victim_group=0 victim_ch=8 expect=2 mean=32512 ok=1
+SHELL_WAIT_G5 victim_group=1 victim_ch=6 expect=2 mean=32609 ok=1
+SHELL_WAIT_G5 victim_group=0 victim_ch=9 expect=2 mean=32765 ok=1
+SHELL_WAIT_G5 victim_group=0 victim_ch=10 expect=0 mean=0 ok=1
+SHELL_WAIT_G5 victim_group=1 victim_ch=3 expect=0 mean=0 ok=1
+SHELL_WAIT_G5 victim_group=0 victim_ch=2 expect=3 mean=32506 ok=1
+SHELL_WAIT_G5 victim_group=0 victim_ch=6 expect=3 mean=32459 ok=1
+SHELL_WAIT_G5 victim_group=1 victim_ch=2 expect=3 mean=32572 ok=1
+SHELL_WAIT_GATES g2=1 g4=1 g5=1 g7=1 g9=-1 gates_ok=1
+SHELL_WAIT_HEALTH missed_blocks=0 timeouts=0 block_ms=143419
+SHELL_WAIT_END
+SHELL_WAIT_CFG adc_khz=6146 repeats=64 points=15 block_size=96 sr=48000 sweep_dir=1 git=e20b8fd
+SHELL_POT_CFG round=1 pots=3 git=e20b8fd
+SHELL_POT_ID idx=0 name=RV2 group=0 ch=2 r_track=10000 hi=1 lo=3
+SHELL_POT_ID idx=1 name=RV4 group=0 ch=6 r_track=20000 hi=5 lo=7
+SHELL_POT_ID idx=2 name=RV6 group=1 ch=2 r_track=10000 hi=1 lo=3
+SHELL_WAIT_CLK span_short_cyc=2312 span_long_cyc=31287 smp_short_tenths=165 smp_long_tenths=3875
+SHELL_WAIT_CAL lat_mean_ns=701 lat_min_ns=659 lat_max_ns=811 b0=11 timeouts=0
+SHELL_WAIT_CASE case=0 arm=0 victim_group=0 victim_ch=8 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=0 w_us=50000 n=64 mean=31649 min=31631 max=31668
+SHELL_WAIT case=0 w_us=20000 n=64 mean=31651 min=31634 max=31670
+SHELL_WAIT case=0 w_us=10000 n=64 mean=31650 min=31633 max=31670
+SHELL_WAIT case=0 w_us=5000 n=64 mean=31651 min=31636 max=31668
+SHELL_WAIT case=0 w_us=2000 n=64 mean=31896 min=31881 max=31916
+SHELL_WAIT case=0 w_us=1000 n=64 mean=32151 min=31998 max=32175
+SHELL_WAIT case=0 w_us=500 n=64 mean=32323 min=32303 max=32344
+SHELL_WAIT case=0 w_us=200 n=64 mean=32433 min=32413 max=32462
+SHELL_WAIT case=0 w_us=100 n=64 mean=32472 min=32437 max=32492
+SHELL_WAIT case=0 w_us=50 n=64 mean=32493 min=32456 max=32512
+SHELL_WAIT case=0 w_us=20 n=64 mean=32502 min=32477 max=32529
+SHELL_WAIT case=0 w_us=10 n=64 mean=32507 min=32484 max=32529
+SHELL_WAIT case=0 w_us=5 n=64 mean=32519 min=32491 max=32537
+SHELL_WAIT case=0 w_us=2 n=64 mean=32519 min=32496 max=32544
+SHELL_WAIT case=0 w_us=0 n=64 mean=32513 min=32495 max=32537
+SHELL_WAIT_CASE case=1 arm=0 victim_group=1 victim_ch=6 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=1 w_us=50000 n=64 mean=31929 min=31914 max=31943
+SHELL_WAIT case=1 w_us=20000 n=64 mean=31928 min=31910 max=31942
+SHELL_WAIT case=1 w_us=10000 n=64 mean=31929 min=31914 max=31940
+SHELL_WAIT case=1 w_us=5000 n=64 mean=31928 min=31916 max=31940
+SHELL_WAIT case=1 w_us=2000 n=64 mean=32119 min=32103 max=32140
+SHELL_WAIT case=1 w_us=1000 n=64 mean=32319 min=32299 max=32332
+SHELL_WAIT case=1 w_us=500 n=64 mean=32449 min=32431 max=32469
+SHELL_WAIT case=1 w_us=200 n=64 mean=32530 min=32515 max=32548
+SHELL_WAIT case=1 w_us=100 n=64 mean=32560 min=32545 max=32577
+SHELL_WAIT case=1 w_us=50 n=64 mean=32576 min=32561 max=32596
+SHELL_WAIT case=1 w_us=20 n=64 mean=32584 min=32566 max=32606
+SHELL_WAIT case=1 w_us=10 n=64 mean=32591 min=32575 max=32605
+SHELL_WAIT case=1 w_us=5 n=64 mean=32604 min=32579 max=32621
+SHELL_WAIT case=1 w_us=2 n=64 mean=32606 min=32593 max=32622
+SHELL_WAIT case=1 w_us=0 n=64 mean=32609 min=32590 max=32630
+SHELL_WAIT_CASE case=2 arm=0 victim_group=0 victim_ch=9 r_src=650 rung_tenths=15 codec=0
+SHELL_WAIT case=2 w_us=50000 n=64 mean=32747 min=32732 max=32768
+SHELL_WAIT case=2 w_us=20000 n=64 mean=32747 min=32728 max=32771
+SHELL_WAIT case=2 w_us=10000 n=64 mean=32747 min=32727 max=32768
+SHELL_WAIT case=2 w_us=5000 n=64 mean=32747 min=32732 max=32769
+SHELL_WAIT case=2 w_us=2000 n=64 mean=32752 min=32731 max=32774
+SHELL_WAIT case=2 w_us=1000 n=64 mean=32753 min=32735 max=32776
+SHELL_WAIT case=2 w_us=500 n=64 mean=32757 min=32747 max=32777
+SHELL_WAIT case=2 w_us=200 n=64 mean=32755 min=32731 max=32775
+SHELL_WAIT case=2 w_us=100 n=64 mean=32755 min=32740 max=32774
+SHELL_WAIT case=2 w_us=50 n=64 mean=32757 min=32740 max=32778
+SHELL_WAIT case=2 w_us=20 n=64 mean=32755 min=32734 max=32780
+SHELL_WAIT case=2 w_us=10 n=64 mean=32759 min=32747 max=32776
+SHELL_WAIT case=2 w_us=5 n=64 mean=32766 min=32749 max=32788
+SHELL_WAIT case=2 w_us=2 n=64 mean=32764 min=32742 max=32784
+SHELL_WAIT case=2 w_us=0 n=64 mean=32766 min=32752 max=32779
+SHELL_WAIT_CASE case=3 arm=0 victim_group=0 victim_ch=10 r_src=150 rung_tenths=15 codec=0
+SHELL_WAIT case=3 w_us=50000 n=64 mean=1 min=0 max=28
+SHELL_WAIT case=3 w_us=20000 n=64 mean=0 min=0 max=14
+SHELL_WAIT case=3 w_us=10000 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=3 w_us=5000 n=64 mean=0 min=0 max=20
+SHELL_WAIT case=3 w_us=2000 n=64 mean=0 min=0 max=12
+SHELL_WAIT case=3 w_us=1000 n=64 mean=0 min=0 max=9
+SHELL_WAIT case=3 w_us=500 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=3 w_us=200 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=3 w_us=100 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=3 w_us=50 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=3 w_us=20 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=3 w_us=10 n=64 mean=0 min=0 max=6
+SHELL_WAIT case=3 w_us=5 n=64 mean=0 min=0 max=32
+SHELL_WAIT case=3 w_us=2 n=64 mean=0 min=0 max=6
+SHELL_WAIT case=3 w_us=0 n=64 mean=0 min=0 max=5
+SHELL_WAIT_CASE case=4 arm=0 victim_group=1 victim_ch=3 r_src=150 rung_tenths=15 codec=0
+SHELL_WAIT case=4 w_us=50000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=4 w_us=20000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=4 w_us=10000 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=4 w_us=5000 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=4 w_us=2000 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=4 w_us=1000 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=4 w_us=500 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=4 w_us=200 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=4 w_us=100 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=4 w_us=50 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=4 w_us=20 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=4 w_us=10 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=4 w_us=5 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=4 w_us=2 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=4 w_us=0 n=64 mean=0 min=0 max=2
+SHELL_WAIT_CASE case=5 arm=0 victim_group=0 victim_ch=2 r_src=2650 rung_tenths=15 codec=0
+SHELL_WAIT case=5 w_us=50000 n=64 mean=31861 min=31842 max=31879
+SHELL_WAIT case=5 w_us=20000 n=64 mean=31861 min=31845 max=31878
+SHELL_WAIT case=5 w_us=10000 n=64 mean=31861 min=31843 max=31884
+SHELL_WAIT case=5 w_us=5000 n=64 mean=31862 min=31847 max=31882
+SHELL_WAIT case=5 w_us=2000 n=64 mean=32043 min=32027 max=32062
+SHELL_WAIT case=5 w_us=1000 n=64 mean=32237 min=32222 max=32258
+SHELL_WAIT case=5 w_us=500 n=64 mean=32360 min=32345 max=32376
+SHELL_WAIT case=5 w_us=200 n=64 mean=32439 min=32416 max=32468
+SHELL_WAIT case=5 w_us=100 n=64 mean=32469 min=32452 max=32489
+SHELL_WAIT case=5 w_us=50 n=64 mean=32483 min=32462 max=32505
+SHELL_WAIT case=5 w_us=20 n=64 mean=32491 min=32471 max=32509
+SHELL_WAIT case=5 w_us=10 n=64 mean=32499 min=32482 max=32518
+SHELL_WAIT case=5 w_us=5 n=64 mean=32508 min=32487 max=32525
+SHELL_WAIT case=5 w_us=2 n=64 mean=32507 min=32469 max=32534
+SHELL_WAIT case=5 w_us=0 n=64 mean=32504 min=32477 max=32529
+SHELL_WAIT_CASE case=6 arm=0 victim_group=0 victim_ch=6 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=6 w_us=50000 n=64 mean=31558 min=31541 max=31575
+SHELL_WAIT case=6 w_us=20000 n=64 mean=31559 min=31536 max=31578
+SHELL_WAIT case=6 w_us=10000 n=64 mean=31558 min=31538 max=31579
+SHELL_WAIT case=6 w_us=5000 n=64 mean=31557 min=31539 max=31576
+SHELL_WAIT case=6 w_us=2000 n=64 mean=31810 min=31762 max=31832
+SHELL_WAIT case=6 w_us=1000 n=64 mean=32084 min=32061 max=32105
+SHELL_WAIT case=6 w_us=500 n=64 mean=32255 min=32238 max=32279
+SHELL_WAIT case=6 w_us=200 n=64 mean=32373 min=32347 max=32392
+SHELL_WAIT case=6 w_us=100 n=64 mean=32412 min=32389 max=32438
+SHELL_WAIT case=6 w_us=50 n=64 mean=32430 min=32410 max=32447
+SHELL_WAIT case=6 w_us=20 n=64 mean=32442 min=32419 max=32461
+SHELL_WAIT case=6 w_us=10 n=64 mean=32449 min=32429 max=32470
+SHELL_WAIT case=6 w_us=5 n=64 mean=32463 min=32440 max=32482
+SHELL_WAIT case=6 w_us=2 n=64 mean=32461 min=32445 max=32481
+SHELL_WAIT case=6 w_us=0 n=64 mean=32460 min=32437 max=32478
+SHELL_WAIT_CASE case=7 arm=0 victim_group=1 victim_ch=2 r_src=2650 rung_tenths=15 codec=0
+SHELL_WAIT case=7 w_us=50000 n=64 mean=32120 min=32108 max=32133
+SHELL_WAIT case=7 w_us=20000 n=64 mean=32119 min=32103 max=32133
+SHELL_WAIT case=7 w_us=10000 n=64 mean=32120 min=32106 max=32132
+SHELL_WAIT case=7 w_us=5000 n=64 mean=32120 min=32108 max=32130
+SHELL_WAIT case=7 w_us=2000 n=64 mean=32246 min=32228 max=32260
+SHELL_WAIT case=7 w_us=1000 n=64 mean=32378 min=32361 max=32393
+SHELL_WAIT case=7 w_us=500 n=64 mean=32462 min=32449 max=32480
+SHELL_WAIT case=7 w_us=200 n=64 mean=32517 min=32503 max=32536
+SHELL_WAIT case=7 w_us=100 n=64 mean=32536 min=32523 max=32552
+SHELL_WAIT case=7 w_us=50 n=64 mean=32544 min=32533 max=32557
+SHELL_WAIT case=7 w_us=20 n=64 mean=32549 min=32535 max=32568
+SHELL_WAIT case=7 w_us=10 n=64 mean=32555 min=32537 max=32582
+SHELL_WAIT case=7 w_us=5 n=64 mean=32568 min=32543 max=32579
+SHELL_WAIT case=7 w_us=2 n=64 mean=32568 min=32511 max=32581
+SHELL_WAIT case=7 w_us=0 n=64 mean=32570 min=32552 max=32582
+SHELL_WAIT_CASE case=8 arm=1 victim_group=0 victim_ch=8 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=8 w_us=50000 n=64 mean=32468 min=32330 max=32490
+SHELL_WAIT case=8 w_us=20000 n=64 mean=32471 min=32456 max=32490
+SHELL_WAIT case=8 w_us=10000 n=64 mean=32469 min=32447 max=32490
+SHELL_WAIT case=8 w_us=5000 n=64 mean=32471 min=32451 max=32490
+SHELL_WAIT case=8 w_us=2000 n=64 mean=32469 min=32450 max=32489
+SHELL_WAIT case=8 w_us=1000 n=64 mean=32483 min=32470 max=32506
+SHELL_WAIT case=8 w_us=500 n=64 mean=32479 min=32458 max=32497
+SHELL_WAIT case=8 w_us=200 n=64 mean=32495 min=32477 max=32515
+SHELL_WAIT case=8 w_us=100 n=64 mean=32498 min=32476 max=32516
+SHELL_WAIT case=8 w_us=50 n=64 mean=32500 min=32476 max=32527
+SHELL_WAIT case=8 w_us=20 n=64 mean=32498 min=32357 max=32520
+SHELL_WAIT case=8 w_us=10 n=64 mean=32489 min=32460 max=32510
+SHELL_WAIT case=8 w_us=5 n=64 mean=32493 min=32474 max=32525
+SHELL_WAIT case=8 w_us=2 n=64 mean=32504 min=32479 max=32529
+SHELL_WAIT case=8 w_us=0 n=64 mean=32512 min=32494 max=32537
+SHELL_WAIT_CASE case=9 arm=1 victim_group=1 victim_ch=6 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=9 w_us=50000 n=64 mean=32576 min=32558 max=32598
+SHELL_WAIT case=9 w_us=20000 n=64 mean=32576 min=32562 max=32590
+SHELL_WAIT case=9 w_us=10000 n=64 mean=32575 min=32563 max=32588
+SHELL_WAIT case=9 w_us=5000 n=64 mean=32574 min=32520 max=32589
+SHELL_WAIT case=9 w_us=2000 n=64 mean=32579 min=32561 max=32597
+SHELL_WAIT case=9 w_us=1000 n=64 mean=32581 min=32565 max=32594
+SHELL_WAIT case=9 w_us=500 n=64 mean=32590 min=32578 max=32604
+SHELL_WAIT case=9 w_us=200 n=64 mean=32587 min=32572 max=32601
+SHELL_WAIT case=9 w_us=100 n=64 mean=32589 min=32560 max=32604
+SHELL_WAIT case=9 w_us=50 n=64 mean=32589 min=32578 max=32602
+SHELL_WAIT case=9 w_us=20 n=64 mean=32589 min=32573 max=32604
+SHELL_WAIT case=9 w_us=10 n=64 mean=32579 min=32566 max=32597
+SHELL_WAIT case=9 w_us=5 n=64 mean=32596 min=32582 max=32610
+SHELL_WAIT case=9 w_us=2 n=64 mean=32604 min=32593 max=32620
+SHELL_WAIT case=9 w_us=0 n=64 mean=32611 min=32599 max=32626
+SHELL_WAIT_CASE case=10 arm=1 victim_group=0 victim_ch=9 r_src=650 rung_tenths=15 codec=0
+SHELL_WAIT case=10 w_us=50000 n=64 mean=32753 min=32733 max=32773
+SHELL_WAIT case=10 w_us=20000 n=64 mean=32751 min=32738 max=32772
+SHELL_WAIT case=10 w_us=10000 n=64 mean=32752 min=32731 max=32769
+SHELL_WAIT case=10 w_us=5000 n=64 mean=32751 min=32735 max=32768
+SHELL_WAIT case=10 w_us=2000 n=64 mean=32752 min=32733 max=32772
+SHELL_WAIT case=10 w_us=1000 n=64 mean=32754 min=32741 max=32776
+SHELL_WAIT case=10 w_us=500 n=64 mean=32753 min=32740 max=32780
+SHELL_WAIT case=10 w_us=200 n=64 mean=32754 min=32741 max=32776
+SHELL_WAIT case=10 w_us=100 n=64 mean=32753 min=32741 max=32768
+SHELL_WAIT case=10 w_us=50 n=64 mean=32754 min=32740 max=32774
+SHELL_WAIT case=10 w_us=20 n=64 mean=32755 min=32740 max=32781
+SHELL_WAIT case=10 w_us=10 n=64 mean=32744 min=32724 max=32766
+SHELL_WAIT case=10 w_us=5 n=64 mean=32758 min=32741 max=32777
+SHELL_WAIT case=10 w_us=2 n=64 mean=32763 min=32748 max=32780
+SHELL_WAIT case=10 w_us=0 n=64 mean=32766 min=32745 max=32784
+SHELL_WAIT_CASE case=11 arm=1 victim_group=0 victim_ch=10 r_src=150 rung_tenths=15 codec=0
+SHELL_WAIT case=11 w_us=50000 n=64 mean=0 min=0 max=9
+SHELL_WAIT case=11 w_us=20000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=11 w_us=10000 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=11 w_us=5000 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=11 w_us=2000 n=64 mean=0 min=0 max=3
+SHELL_WAIT case=11 w_us=1000 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=11 w_us=500 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=11 w_us=200 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=11 w_us=100 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=11 w_us=50 n=64 mean=0 min=0 max=6
+SHELL_WAIT case=11 w_us=20 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=11 w_us=10 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=11 w_us=5 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=11 w_us=2 n=64 mean=0 min=0 max=6
+SHELL_WAIT case=11 w_us=0 n=64 mean=0 min=0 max=11
+SHELL_WAIT_CASE case=12 arm=1 victim_group=1 victim_ch=3 r_src=150 rung_tenths=15 codec=0
+SHELL_WAIT case=12 w_us=50000 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=12 w_us=20000 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=12 w_us=10000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=12 w_us=5000 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=12 w_us=2000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=12 w_us=1000 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=12 w_us=500 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=12 w_us=200 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=12 w_us=100 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=12 w_us=50 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=12 w_us=20 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=12 w_us=10 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=12 w_us=5 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=12 w_us=2 n=64 mean=0 min=0 max=6
+SHELL_WAIT case=12 w_us=0 n=64 mean=0 min=0 max=2
+SHELL_WAIT_CASE case=13 arm=1 victim_group=0 victim_ch=2 r_src=2650 rung_tenths=15 codec=0
+SHELL_WAIT case=13 w_us=50000 n=64 mean=32466 min=32448 max=32494
+SHELL_WAIT case=13 w_us=20000 n=64 mean=32465 min=32447 max=32482
+SHELL_WAIT case=13 w_us=10000 n=64 mean=32464 min=32445 max=32480
+SHELL_WAIT case=13 w_us=5000 n=64 mean=32464 min=32451 max=32482
+SHELL_WAIT case=13 w_us=2000 n=64 mean=32468 min=32443 max=32488
+SHELL_WAIT case=13 w_us=1000 n=64 mean=32480 min=32444 max=32494
+SHELL_WAIT case=13 w_us=500 n=64 mean=32478 min=32464 max=32495
+SHELL_WAIT case=13 w_us=200 n=64 mean=32483 min=32464 max=32507
+SHELL_WAIT case=13 w_us=100 n=64 mean=32486 min=32470 max=32504
+SHELL_WAIT case=13 w_us=50 n=64 mean=32486 min=32464 max=32501
+SHELL_WAIT case=13 w_us=20 n=64 mean=32486 min=32463 max=32504
+SHELL_WAIT case=13 w_us=10 n=64 mean=32482 min=32454 max=32498
+SHELL_WAIT case=13 w_us=5 n=64 mean=32491 min=32467 max=32520
+SHELL_WAIT case=13 w_us=2 n=64 mean=32493 min=32471 max=32521
+SHELL_WAIT case=13 w_us=0 n=64 mean=32505 min=32485 max=32527
+SHELL_WAIT_CASE case=14 arm=1 victim_group=0 victim_ch=6 r_src=5150 rung_tenths=25 codec=0
+SHELL_WAIT case=14 w_us=50000 n=64 mean=32405 min=32387 max=32432
+SHELL_WAIT case=14 w_us=20000 n=64 mean=32405 min=32382 max=32428
+SHELL_WAIT case=14 w_us=10000 n=64 mean=32406 min=32383 max=32426
+SHELL_WAIT case=14 w_us=5000 n=64 mean=32405 min=32388 max=32426
+SHELL_WAIT case=14 w_us=2000 n=64 mean=32404 min=32384 max=32426
+SHELL_WAIT case=14 w_us=1000 n=64 mean=32422 min=32407 max=32441
+SHELL_WAIT case=14 w_us=500 n=64 mean=32425 min=32403 max=32466
+SHELL_WAIT case=14 w_us=200 n=64 mean=32436 min=32413 max=32460
+SHELL_WAIT case=14 w_us=100 n=64 mean=32435 min=32244 max=32461
+SHELL_WAIT case=14 w_us=50 n=64 mean=32442 min=32420 max=32464
+SHELL_WAIT case=14 w_us=20 n=64 mean=32443 min=32417 max=32465
+SHELL_WAIT case=14 w_us=10 n=64 mean=32432 min=32410 max=32452
+SHELL_WAIT case=14 w_us=5 n=64 mean=32449 min=32423 max=32469
+SHELL_WAIT case=14 w_us=2 n=64 mean=32453 min=32432 max=32474
+SHELL_WAIT case=14 w_us=0 n=64 mean=32460 min=32442 max=32488
+SHELL_WAIT_CASE case=15 arm=1 victim_group=1 victim_ch=2 r_src=2650 rung_tenths=15 codec=0
+SHELL_WAIT case=15 w_us=50000 n=64 mean=32546 min=32531 max=32560
+SHELL_WAIT case=15 w_us=20000 n=64 mean=32546 min=32533 max=32558
+SHELL_WAIT case=15 w_us=10000 n=64 mean=32546 min=32532 max=32560
+SHELL_WAIT case=15 w_us=5000 n=64 mean=32546 min=32533 max=32562
+SHELL_WAIT case=15 w_us=2000 n=64 mean=32551 min=32533 max=32564
+SHELL_WAIT case=15 w_us=1000 n=64 mean=32551 min=32537 max=32564
+SHELL_WAIT case=15 w_us=500 n=64 mean=32554 min=32539 max=32566
+SHELL_WAIT case=15 w_us=200 n=64 mean=32551 min=32537 max=32568
+SHELL_WAIT case=15 w_us=100 n=64 mean=32552 min=32539 max=32567
+SHELL_WAIT case=15 w_us=50 n=64 mean=32551 min=32538 max=32565
+SHELL_WAIT case=15 w_us=20 n=64 mean=32553 min=32539 max=32567
+SHELL_WAIT case=15 w_us=10 n=64 mean=32545 min=32535 max=32558
+SHELL_WAIT case=15 w_us=5 n=64 mean=32559 min=32546 max=32572
+SHELL_WAIT case=15 w_us=2 n=64 mean=32565 min=32549 max=32581
+SHELL_WAIT case=15 w_us=0 n=64 mean=32571 min=32555 max=32585
+SHELL_WAIT_CASE case=16 arm=2 victim_group=0 victim_ch=8 r_src=5150 rung_tenths=3875 codec=0
+SHELL_WAIT case=16 w_us=50000 n=64 mean=32764 min=32749 max=32781
+SHELL_WAIT case=16 w_us=20000 n=64 mean=32762 min=32752 max=32777
+SHELL_WAIT case=16 w_us=10000 n=64 mean=32760 min=32594 max=32777
+SHELL_WAIT case=16 w_us=5000 n=64 mean=32763 min=32750 max=32779
+SHELL_WAIT case=16 w_us=2000 n=64 mean=32764 min=32751 max=32780
+SHELL_WAIT case=16 w_us=1000 n=64 mean=32762 min=32749 max=32784
+SHELL_WAIT case=16 w_us=500 n=64 mean=32761 min=32745 max=32780
+SHELL_WAIT case=16 w_us=200 n=64 mean=32762 min=32745 max=32781
+SHELL_WAIT case=16 w_us=100 n=64 mean=32762 min=32748 max=32776
+SHELL_WAIT case=16 w_us=50 n=64 mean=32761 min=32748 max=32780
+SHELL_WAIT case=16 w_us=20 n=64 mean=32762 min=32750 max=32780
+SHELL_WAIT case=16 w_us=10 n=64 mean=32763 min=32749 max=32781
+SHELL_WAIT case=16 w_us=5 n=64 mean=32764 min=32750 max=32778
+SHELL_WAIT case=16 w_us=2 n=64 mean=32762 min=32750 max=32776
+SHELL_WAIT case=16 w_us=0 n=64 mean=32762 min=32748 max=32781
+SHELL_WAIT_CASE case=17 arm=2 victim_group=1 victim_ch=6 r_src=5150 rung_tenths=3875 codec=0
+SHELL_WAIT case=17 w_us=50000 n=64 mean=32792 min=32781 max=32804
+SHELL_WAIT case=17 w_us=20000 n=64 mean=32793 min=32785 max=32805
+SHELL_WAIT case=17 w_us=10000 n=64 mean=32793 min=32783 max=32811
+SHELL_WAIT case=17 w_us=5000 n=64 mean=32793 min=32784 max=32808
+SHELL_WAIT case=17 w_us=2000 n=64 mean=32792 min=32785 max=32803
+SHELL_WAIT case=17 w_us=1000 n=64 mean=32791 min=32784 max=32804
+SHELL_WAIT case=17 w_us=500 n=64 mean=32793 min=32782 max=32805
+SHELL_WAIT case=17 w_us=200 n=64 mean=32792 min=32782 max=32804
+SHELL_WAIT case=17 w_us=100 n=64 mean=32793 min=32784 max=32804
+SHELL_WAIT case=17 w_us=50 n=64 mean=32793 min=32786 max=32805
+SHELL_WAIT case=17 w_us=20 n=64 mean=32793 min=32782 max=32808
+SHELL_WAIT case=17 w_us=10 n=64 mean=32793 min=32785 max=32802
+SHELL_WAIT case=17 w_us=5 n=64 mean=32792 min=32782 max=32808
+SHELL_WAIT case=17 w_us=2 n=64 mean=32792 min=32786 max=32805
+SHELL_WAIT case=17 w_us=0 n=64 mean=32792 min=32784 max=32806
+SHELL_WAIT_CASE case=18 arm=2 victim_group=0 victim_ch=9 r_src=650 rung_tenths=3875 codec=0
+SHELL_WAIT case=18 w_us=50000 n=64 mean=32761 min=32749 max=32784
+SHELL_WAIT case=18 w_us=20000 n=64 mean=32763 min=32747 max=32780
+SHELL_WAIT case=18 w_us=10000 n=64 mean=32761 min=32747 max=32783
+SHELL_WAIT case=18 w_us=5000 n=64 mean=32763 min=32750 max=32778
+SHELL_WAIT case=18 w_us=2000 n=64 mean=32763 min=32742 max=32778
+SHELL_WAIT case=18 w_us=1000 n=64 mean=32763 min=32748 max=32779
+SHELL_WAIT case=18 w_us=500 n=64 mean=32762 min=32749 max=32780
+SHELL_WAIT case=18 w_us=200 n=64 mean=32762 min=32744 max=32780
+SHELL_WAIT case=18 w_us=100 n=64 mean=32762 min=32747 max=32782
+SHELL_WAIT case=18 w_us=50 n=64 mean=32761 min=32746 max=32778
+SHELL_WAIT case=18 w_us=20 n=64 mean=32762 min=32749 max=32778
+SHELL_WAIT case=18 w_us=10 n=64 mean=32762 min=32749 max=32776
+SHELL_WAIT case=18 w_us=5 n=64 mean=32762 min=32744 max=32776
+SHELL_WAIT case=18 w_us=2 n=64 mean=32762 min=32744 max=32779
+SHELL_WAIT case=18 w_us=0 n=64 mean=32761 min=32744 max=32785
+SHELL_WAIT_CASE case=19 arm=2 victim_group=0 victim_ch=10 r_src=150 rung_tenths=3875 codec=0
+SHELL_WAIT case=19 w_us=50000 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=19 w_us=20000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=19 w_us=10000 n=64 mean=0 min=0 max=3
+SHELL_WAIT case=19 w_us=5000 n=64 mean=0 min=0 max=12
+SHELL_WAIT case=19 w_us=2000 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=19 w_us=1000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=19 w_us=500 n=64 mean=0 min=0 max=21
+SHELL_WAIT case=19 w_us=200 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=19 w_us=100 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=19 w_us=50 n=64 mean=0 min=0 max=6
+SHELL_WAIT case=19 w_us=20 n=64 mean=0 min=0 max=3
+SHELL_WAIT case=19 w_us=10 n=64 mean=0 min=0 max=9
+SHELL_WAIT case=19 w_us=5 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=19 w_us=2 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=19 w_us=0 n=64 mean=0 min=0 max=8
+SHELL_WAIT_CASE case=20 arm=2 victim_group=1 victim_ch=3 r_src=150 rung_tenths=3875 codec=0
+SHELL_WAIT case=20 w_us=50000 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=20 w_us=20000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=20 w_us=10000 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=20 w_us=5000 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=20 w_us=2000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=20 w_us=1000 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=20 w_us=500 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=20 w_us=200 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=20 w_us=100 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=20 w_us=50 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=20 w_us=20 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=20 w_us=10 n=64 mean=0 min=0 max=2
+SHELL_WAIT case=20 w_us=5 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=20 w_us=2 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=20 w_us=0 n=64 mean=0 min=0 max=1
+SHELL_WAIT_CASE case=21 arm=2 victim_group=0 victim_ch=2 r_src=2650 rung_tenths=3875 codec=0
+SHELL_WAIT case=21 w_us=50000 n=64 mean=32681 min=32669 max=32694
+SHELL_WAIT case=21 w_us=20000 n=64 mean=32680 min=32667 max=32698
+SHELL_WAIT case=21 w_us=10000 n=64 mean=32680 min=32655 max=32696
+SHELL_WAIT case=21 w_us=5000 n=64 mean=32681 min=32667 max=32695
+SHELL_WAIT case=21 w_us=2000 n=64 mean=32682 min=32662 max=32698
+SHELL_WAIT case=21 w_us=1000 n=64 mean=32681 min=32667 max=32694
+SHELL_WAIT case=21 w_us=500 n=64 mean=32681 min=32669 max=32696
+SHELL_WAIT case=21 w_us=200 n=64 mean=32683 min=32669 max=32700
+SHELL_WAIT case=21 w_us=100 n=64 mean=32680 min=32665 max=32693
+SHELL_WAIT case=21 w_us=50 n=64 mean=32681 min=32666 max=32697
+SHELL_WAIT case=21 w_us=20 n=64 mean=32682 min=32661 max=32699
+SHELL_WAIT case=21 w_us=10 n=64 mean=32680 min=32661 max=32696
+SHELL_WAIT case=21 w_us=5 n=64 mean=32679 min=32666 max=32692
+SHELL_WAIT case=21 w_us=2 n=64 mean=32680 min=32663 max=32698
+SHELL_WAIT case=21 w_us=0 n=64 mean=32681 min=32666 max=32696
+SHELL_WAIT_CASE case=22 arm=2 victim_group=0 victim_ch=6 r_src=5150 rung_tenths=3875 codec=0
+SHELL_WAIT case=22 w_us=50000 n=64 mean=32719 min=32702 max=32735
+SHELL_WAIT case=22 w_us=20000 n=64 mean=32717 min=32704 max=32733
+SHELL_WAIT case=22 w_us=10000 n=64 mean=32719 min=32705 max=32736
+SHELL_WAIT case=22 w_us=5000 n=64 mean=32719 min=32706 max=32741
+SHELL_WAIT case=22 w_us=2000 n=64 mean=32718 min=32703 max=32732
+SHELL_WAIT case=22 w_us=1000 n=64 mean=32719 min=32704 max=32736
+SHELL_WAIT case=22 w_us=500 n=64 mean=32718 min=32703 max=32739
+SHELL_WAIT case=22 w_us=200 n=64 mean=32718 min=32694 max=32740
+SHELL_WAIT case=22 w_us=100 n=64 mean=32718 min=32706 max=32734
+SHELL_WAIT case=22 w_us=50 n=64 mean=32716 min=32564 max=32734
+SHELL_WAIT case=22 w_us=20 n=64 mean=32719 min=32708 max=32738
+SHELL_WAIT case=22 w_us=10 n=64 mean=32718 min=32703 max=32737
+SHELL_WAIT case=22 w_us=5 n=64 mean=32716 min=32549 max=32736
+SHELL_WAIT case=22 w_us=2 n=64 mean=32719 min=32702 max=32738
+SHELL_WAIT case=22 w_us=0 n=64 mean=32718 min=32703 max=32736
+SHELL_WAIT_CASE case=23 arm=2 victim_group=1 victim_ch=2 r_src=2650 rung_tenths=3875 codec=0
+SHELL_WAIT case=23 w_us=50000 n=64 mean=32688 min=32679 max=32701
+SHELL_WAIT case=23 w_us=20000 n=64 mean=32687 min=32676 max=32698
+SHELL_WAIT case=23 w_us=10000 n=64 mean=32687 min=32677 max=32696
+SHELL_WAIT case=23 w_us=5000 n=64 mean=32687 min=32678 max=32700
+SHELL_WAIT case=23 w_us=2000 n=64 mean=32688 min=32677 max=32698
+SHELL_WAIT case=23 w_us=1000 n=64 mean=32687 min=32677 max=32696
+SHELL_WAIT case=23 w_us=500 n=64 mean=32687 min=32677 max=32699
+SHELL_WAIT case=23 w_us=200 n=64 mean=32687 min=32677 max=32698
+SHELL_WAIT case=23 w_us=100 n=64 mean=32687 min=32679 max=32697
+SHELL_WAIT case=23 w_us=50 n=64 mean=32688 min=32678 max=32698
+SHELL_WAIT case=23 w_us=20 n=64 mean=32687 min=32676 max=32697
+SHELL_WAIT case=23 w_us=10 n=64 mean=32688 min=32676 max=32698
+SHELL_WAIT case=23 w_us=5 n=64 mean=32687 min=32678 max=32699
+SHELL_WAIT case=23 w_us=2 n=64 mean=32687 min=32677 max=32699
+SHELL_WAIT case=23 w_us=0 n=64 mean=32686 min=32677 max=32700
+SHELL_WAIT_CASE case=24 arm=3 victim_group=0 victim_ch=8 r_src=5150 rung_tenths=25 codec=1
+SHELL_WAIT case=24 w_us=10000 n=64 mean=31647 min=31632 max=31664
+SHELL_WAIT case=24 w_us=1000 n=64 mean=32157 min=32134 max=32176
+SHELL_WAIT case=24 w_us=200 n=64 mean=32430 min=32407 max=32451
+SHELL_WAIT case=24 w_us=0 n=64 mean=32513 min=32482 max=32538
+SHELL_WAIT_CASE case=25 arm=3 victim_group=1 victim_ch=6 r_src=5150 rung_tenths=25 codec=1
+SHELL_WAIT case=25 w_us=10000 n=64 mean=31926 min=31919 max=31936
+SHELL_WAIT case=25 w_us=1000 n=64 mean=32319 min=32307 max=32338
+SHELL_WAIT case=25 w_us=200 n=64 mean=32531 min=32518 max=32544
+SHELL_WAIT case=25 w_us=0 n=64 mean=32610 min=32588 max=32625
+SHELL_WAIT_CASE case=26 arm=3 victim_group=0 victim_ch=9 r_src=650 rung_tenths=15 codec=1
+SHELL_WAIT case=26 w_us=10000 n=64 mean=32746 min=32730 max=32770
+SHELL_WAIT case=26 w_us=1000 n=64 mean=32750 min=32732 max=32770
+SHELL_WAIT case=26 w_us=200 n=64 mean=32755 min=32738 max=32774
+SHELL_WAIT case=26 w_us=0 n=64 mean=32763 min=32716 max=32779
+SHELL_WAIT_CASE case=27 arm=3 victim_group=0 victim_ch=10 r_src=150 rung_tenths=15 codec=1
+SHELL_WAIT case=27 w_us=10000 n=64 mean=0 min=0 max=5
+SHELL_WAIT case=27 w_us=1000 n=64 mean=0 min=0 max=8
+SHELL_WAIT case=27 w_us=200 n=64 mean=0 min=0 max=4
+SHELL_WAIT case=27 w_us=0 n=64 mean=0 min=0 max=8
+SHELL_WAIT_CASE case=28 arm=3 victim_group=1 victim_ch=3 r_src=150 rung_tenths=15 codec=1
+SHELL_WAIT case=28 w_us=10000 n=64 mean=0 min=0 max=1
+SHELL_WAIT case=28 w_us=1000 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=28 w_us=200 n=64 mean=0 min=0 max=0
+SHELL_WAIT case=28 w_us=0 n=64 mean=0 min=0 max=5
+SHELL_WAIT_CASE case=29 arm=3 victim_group=0 victim_ch=2 r_src=2650 rung_tenths=15 codec=1
+SHELL_WAIT case=29 w_us=10000 n=64 mean=31859 min=31845 max=31873
+SHELL_WAIT case=29 w_us=1000 n=64 mean=32238 min=32220 max=32255
+SHELL_WAIT case=29 w_us=200 n=64 mean=32440 min=32412 max=32466
+SHELL_WAIT case=29 w_us=0 n=64 mean=32501 min=32468 max=32526
+SHELL_WAIT_CASE case=30 arm=3 victim_group=0 victim_ch=6 r_src=5150 rung_tenths=25 codec=1
+SHELL_WAIT case=30 w_us=10000 n=64 mean=31556 min=31542 max=31573
+SHELL_WAIT case=30 w_us=1000 n=64 mean=32083 min=32067 max=32106
+SHELL_WAIT case=30 w_us=200 n=64 mean=32370 min=32355 max=32388
+SHELL_WAIT case=30 w_us=0 n=64 mean=32457 min=32315 max=32476
+SHELL_WAIT_CASE case=31 arm=3 victim_group=1 victim_ch=2 r_src=2650 rung_tenths=15 codec=1
+SHELL_WAIT case=31 w_us=10000 n=64 mean=32119 min=32108 max=32128
+SHELL_WAIT case=31 w_us=1000 n=64 mean=32378 min=32368 max=32390
+SHELL_WAIT case=31 w_us=200 n=64 mean=32516 min=32502 max=32531
+SHELL_WAIT case=31 w_us=0 n=64 mean=32571 min=32550 max=32581
+SHELL_WAIT_SPAN zero=0 rail=65532 hi_spread=0 lo_spread=0 valid=1
+SHELL_WAIT_G5 victim_group=0 victim_ch=8 expect=2 mean=32513 ok=1
+SHELL_WAIT_G5 victim_group=1 victim_ch=6 expect=2 mean=32609 ok=1
+SHELL_WAIT_G5 victim_group=0 victim_ch=9 expect=2 mean=32766 ok=1
+SHELL_WAIT_G5 victim_group=0 victim_ch=10 expect=0 mean=0 ok=1
+SHELL_WAIT_G5 victim_group=1 victim_ch=3 expect=0 mean=0 ok=1
+SHELL_WAIT_G5 victim_group=0 victim_ch=2 expect=3 mean=32504 ok=1
+SHELL_WAIT_G5 victim_group=0 victim_ch=6 expect=3 mean=32460 ok=1
+SHELL_WAIT_G5 victim_group=1 victim_ch=2 expect=3 mean=32570 ok=1
+SHELL_WAIT_GATES g2=1 g4=1 g5=1 g7=1 g9=-1 gates_ok=1
+SHELL_WAIT_HEALTH missed_blocks=0 timeouts=0 block_ms=143417
+SHELL_WAIT_END
