@@ -130,6 +130,10 @@ def _is_complete(block):
             return False
         if num_pairs != pot_round.SETTLE_POT_PAIR0 + 2 * len(pot_round.POTS):
             return False
+    elif num_pairs > pot_round.SETTLE_POT_PAIR0:
+        # A pot block that lost every one of its SHELL_POT_* lines in transit
+        # must not be read as a plain, pre-round block and skip PG1.
+        return False
 
     want_points = Counter({p: block["cfg"]["grid_points"] for p in range(num_pairs)})
     if Counter(p["pair"] for p in block["points"]) != want_points:

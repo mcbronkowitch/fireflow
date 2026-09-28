@@ -14,6 +14,7 @@ CSV: before it, the knees, the offsets and the gate verdicts reached stderr
 only, and the file the document tells a reader to keep could not reproduce a
 single settle time.
 """
+import os
 import re
 import sys
 
@@ -269,6 +270,11 @@ check("14e pot lines on a six-pair block are refused",
       parse_block(six_with_pots) is None)
 check("14f a block with no pot lines has no readings",
       pot_readings(parse_block(build_block())) == [])
+check("14f2 a twelve-pair block with no pot lines at all is refused "
+      "(a pot block that lost every pot line must not read as a plain block)",
+      parse_block(build_block(num_pairs=12)) is None)
+check("14f3 the legacy 2-pair block (no pot lines) still parses",
+      parse_block(base) is not None)
 _, ok_mid = pot_report(pb)
 _, ok_off = pot_report(parse_block(pot_block(tail=28179)))
 _, ok_edge = pot_report(parse_block(pot_block(tail=28180)))
@@ -280,6 +286,32 @@ pmeta = {tuple(r.split(",")[:3]): r.split(",")[3]
 check("14j the metadata carries the pot lines",
       pmeta.get(("pot_cfg", "", "pots")) == "3"
       and pmeta.get(("pot_id", "1", "name")) == "RV4")
+
+# --- 15: the first complete block of the real board capture (spec 2026-09-28
+# section 10). The board's own values, read from the file, not invented: see
+# docs/hardware/captures/README.md for which file and which line. ---
+REAL_SETTLE_CAPTURE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "docs", "hardware",
+    "captures", "pot-settle-capture-618427c.txt")
+with open(REAL_SETTLE_CAPTURE, encoding="utf-8") as fh:
+    capture_lines = fh.readlines()
+# The first complete block starts at the SHELL_SETTLE_CFG at or after line
+# 708 (1-based); everything before it is a partial block that started before
+# the port opened (README.md).
+real = parse_block(capture_lines[707:])
+check("15a the real capture's first complete block parses", real is not None)
+check("15b it carries twelve knees",
+      real is not None and len(real["knees"]) == 12)
+check("15c its three pot readings match the board (RV2/RV4/RV6 tail_ref means)",
+      real is not None
+      and pot_readings(real) == [("RV2", 32480.0), ("RV4", 32430.5),
+                                 ("RV6", 32544.0)])
+check("15d PG1 passes on this block",
+      real is not None and pot_report(real)[1] is True)
+check("15e the block's own calibration gate is recorded as failed (gates_ok=0)",
+      real is not None and real["cal"]["gates_ok"] == 0)
+check("15f G3 is recorded as failed on this board (the known G3 finding)",
+      real is not None and real["gates"]["g3"] == 0)
 
 if FAILURES:
     for f in FAILURES:

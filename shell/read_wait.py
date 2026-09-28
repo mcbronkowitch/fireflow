@@ -34,9 +34,9 @@ The block format below was transcribed from `wait_probe.cpp`'s PrintLine
 calls, not from the spec -- see docs/gotchas.md on a probe spec's output
 section drifting from its firmware.
 
-Default timeout: 300 s. A block is estimated at ~90 s (spec section 6,
-`wait_block_estimate_ms()`); 300 s is that plus a host that starts
-listening mid-block and has to wait for the next _CFG.
+Default timeout: 450 s. A pot-round block is ~143 s (measured 143417 ms,
+docs/hardware/captures/pot-wait-capture-e20b8fd.txt); 450 s is that plus a
+host that starts listening mid-block and has to wait for the next _CFG.
 """
 import sys
 import time
@@ -482,7 +482,7 @@ def main() -> int:
     if len(sys.argv) not in (3, 4):
         raise SystemExit("usage: read_wait.py PORT out.csv [timeout_s]")
     port, out = sys.argv[1], sys.argv[2]
-    limit = float(sys.argv[3]) if len(sys.argv) > 3 else 300.0
+    limit = float(sys.argv[3]) if len(sys.argv) > 3 else 450.0
 
     block = _read_one_block(port, limit)
     if block is None:

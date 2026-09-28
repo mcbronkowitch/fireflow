@@ -256,6 +256,33 @@ check("H6 arm L is flat within 2 counts on every victim and W",
 check("H7 arm B leaves a residue: REF_A between -30 and -45 from 1 ms up",
       all(-45 <= real(1, (0, 8), w) <= -30 for w in (1000, 5000, 10000, 50000)))
 
+# --- Q: the first complete block of the real pot-round wait capture (spec
+# 2026-09-28 section 10). The board's own values, read from the file, not
+# invented: see docs/hardware/captures/README.md for which file and line. ---
+REAL_WAIT_CAPTURE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "docs", "hardware",
+    "captures", "pot-wait-capture-e20b8fd.txt")
+with io.open(REAL_WAIT_CAPTURE, encoding="utf-8") as fh:
+    wait_capture_lines = fh.readlines()
+# The first complete block starts at the SHELL_WAIT_CFG at or after line 412
+# (1-based); everything before it is a partial block that started before the
+# port opened (README.md).
+pot_rb = parse_block(wait_capture_lines[411:])
+check("Q1 the real pot-round capture's first complete block parses",
+      pot_rb is not None)
+check("Q2 it carries eight victims and 32 cases",
+      pot_rb is not None and victims(pot_rb) == 8 and len(pot_rb["cases"]) == 32)
+check("Q3 its three pot readings match the board (arm L, W=0)",
+      pot_rb is not None
+      and pot_readings(pot_rb) == [("RV2", 32681), ("RV4", 32718),
+                                   ("RV6", 32687)])
+check("Q4 the block's own health line records the measured block time",
+      pot_rb is not None and pot_rb["health"]["block_ms"] == 143417)
+check("Q5 G9 reads -867 on this block", pot_rb is not None
+      and g9(pot_rb) == (True, -867))
+check("Q6 the block passes every gate, G9 and PG1",
+      pot_rb is not None and run_report(pot_rb)[0] == 0)
+
 if FAILURES:
     for f in FAILURES:
         print("FAIL: %s" % f, file=sys.stderr)

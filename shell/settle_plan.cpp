@@ -32,6 +32,8 @@ const SettlePair kSettlePotPlan[kSettlePotPairs] = {
     {1, 3, 2, 2650, 955, false},    // P11  ch3 (AGND)  -> RV6
 };
 
+static_assert(kSettlePotPairs == 2 * kPotCount, "two settle pairs per pot");
+
 const SettlePair& settle_pair(int p)
 {
     return (p < kSettlePairs) ? kSettlePlan[p] : kSettlePotPlan[p - kSettlePairs];

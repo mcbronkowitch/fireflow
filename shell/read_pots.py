@@ -113,6 +113,22 @@ def settle_rows(meta):
     return out
 
 
+def _settle_tag(r):
+    """The tag main()'s settle table appends to a pair with no settle_ns:
+    which of the two reasons `at_or_below_offset` distinguishes, or "" when
+    the pair settled normally or the metadata itself is missing
+    (`at_or_below_offset` is None, not 0) -- a block from an older image
+    simply does not carry the field, and that is not the same as knowing the
+    pair never settled."""
+    if r["settle_ns"] is not None:
+        return ""
+    if r["at_or_below_offset"] == 1:
+        return " (at or below offset %s ns)" % r["offset_ns"]
+    if r["at_or_below_offset"] == 0:
+        return " (did not settle within the grid)"
+    return ""
+
+
 def wait_summary(rows):
     names = [(p[0], (p[1], p[2])) for p in pot_round.POTS]
     names += [("REF_A", REF_A), ("REF_C", REF_C), ("REF_B", REF_B)]
@@ -193,8 +209,7 @@ def main(argv):
 
     print("\nsettle -- true settle = knee + offset:", file=err)
     for r in settle_rows(settle_meta):
-        tag = " (at or below offset %s ns)" % r["offset_ns"] \
-            if r["settle_ns"] is None and r["at_or_below_offset"] else ""
+        tag = _settle_tag(r)
         print("  P%-2d settle_ns=%s predicted_ns=%s ratio=%s%s"
               % (r["pair"], _fmt(r["settle_ns"]), _fmt(r["predicted_ns"]),
                  _fmt(r["ratio"], "%.2f"), tag), file=err)

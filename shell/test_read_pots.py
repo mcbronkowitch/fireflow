@@ -125,6 +125,20 @@ check("C7 arm L's largest |shift| is reported per victim",
 check("C8 arm A's saturation is the mean of 10/20/50 ms",
       summary["REF_A"]["a_sat"] == -800)
 
+# --- D. the settle table's did-not-settle tag ---
+check("D1 a pair settled at or below its own offset is tagged that way",
+      rp._settle_tag({"settle_ns": None, "at_or_below_offset": 1,
+                      "offset_ns": 991}) == " (at or below offset 991 ns)")
+check("D2 a pair that never settled within the grid is tagged that way",
+      rp._settle_tag({"settle_ns": None, "at_or_below_offset": 0,
+                      "offset_ns": 991}) == " (did not settle within the grid)")
+check("D3 missing metadata (at_or_below_offset None, not 0) stays untagged",
+      rp._settle_tag({"settle_ns": None, "at_or_below_offset": None,
+                      "offset_ns": None}) == "")
+check("D4 a pair that settled carries no tag",
+      rp._settle_tag({"settle_ns": 1234, "at_or_below_offset": 0,
+                      "offset_ns": 991}) == "")
+
 if FAILURES:
     for f in FAILURES:
         print("FAIL: %s" % f, file=sys.stderr)
