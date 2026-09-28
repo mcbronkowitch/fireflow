@@ -14,9 +14,11 @@ CSV: before it, the knees, the offsets and the gate verdicts reached stderr
 only, and the file the document tells a reader to keep could not reproduce a
 single settle time.
 """
+import re
 import sys
 
-from read_settle import parse_block, format_csv, format_meta_csv
+import pot_round
+from read_settle import parse_block, format_csv, format_meta_csv, pot_readings, pot_report
 
 FAILURES = []
 
@@ -232,6 +234,52 @@ spliced_end = list(base)
 spliced_end[-1] = "S$$SHELL_SETTLE_END"
 check("a spliced end marker does not crash the parser, and yields no block",
       parse_block(spliced_end) is None)
+
+# --- 14: a pot-round block (spec 2026-09-28 sections 4, 6, 7) ---
+def pot_block(tail=32768, drop_id=False):
+    """build_block() at twelve pairs, the pot lines directly after _CFG, and
+    the pot pairs' tail_ref set to `tail` -- the reading PG1 judges."""
+    lines = build_block(num_pairs=12)
+    pot = pot_round.sample_lines()
+    if drop_id:
+        pot = pot[:2] + pot[3:]
+    lines[1:1] = pot
+    out = []
+    for line in lines:
+        m = re.match(r"SHELL_SETTLE_REF pair=(\d+) tail_ref=100 ", line)
+        if m and int(m.group(1)) >= 6:
+            line = line.replace("tail_ref=100 ", "tail_ref=%d " % tail)
+        out.append(line)
+    return out
+
+
+pb = parse_block(pot_block())
+check("14a a twelve-pair pot block parses", pb is not None)
+check("14b its pot lines are carried",
+      pb is not None and pb["pot_cfg"]["pots"] == 3 and len(pb["pot_ids"]) == 3)
+check("14c three readings, one per pot, from P6-P11's tail_ref",
+      pb is not None and pot_readings(pb) == [("RV2", 32768.0),
+                                              ("RV4", 32768.0),
+                                              ("RV6", 32768.0)])
+check("14d a pot block missing an ID line is refused",
+      parse_block(pot_block(drop_id=True)) is None)
+six_with_pots = build_block(num_pairs=6)
+six_with_pots[1:1] = pot_round.sample_lines()
+check("14e pot lines on a six-pair block are refused",
+      parse_block(six_with_pots) is None)
+check("14f a block with no pot lines has no readings",
+      pot_readings(parse_block(build_block())) == [])
+_, ok_mid = pot_report(pb)
+_, ok_off = pot_report(parse_block(pot_block(tail=28179)))
+_, ok_edge = pot_report(parse_block(pot_block(tail=28180)))
+check("14g PG1 passes at mid travel", ok_mid)
+check("14h PG1 refuses 28179", not ok_off)
+check("14i PG1 admits 28180", ok_edge)
+pmeta = {tuple(r.split(",")[:3]): r.split(",")[3]
+         for r in format_meta_csv(pb).strip().split("\n")[1:]}
+check("14j the metadata carries the pot lines",
+      pmeta.get(("pot_cfg", "", "pots")) == "3"
+      and pmeta.get(("pot_id", "1", "name")) == "RV4")
 
 if FAILURES:
     for f in FAILURES:

@@ -31,6 +31,8 @@ sweep_dir=1), SHELL_SETTLE_CAL, one SHELL_SETTLE_KNEE per pair, one
 SHELL_SETTLE_REF per pair, one SHELL_SETTLE_BAND per pair, SHELL_SETTLE_GATES,
 SHELL_SETTLE_END. (SHELL_SETTLE_WARMUP is printed once at boot, outside this
 repeating block, and is simply not one of the lines this parser looks for.)
+In a SHELL_POT_ROUND=1 image, SHELL_POT_CFG and three SHELL_POT_ID lines
+follow SHELL_SETTLE_CFG directly, and the block carries twelve pairs.
 
 A knee's d_settle_ns=-1 means two different things, and they are not
 collapsed here: at_or_below_offset=1 means the pair settled at or below its
@@ -56,6 +58,8 @@ run that failed a gate may not have its settle times quoted.
 import sys
 import time
 from collections import Counter
+
+import pot_round
 
 # sweep_dir is carried on every row (not just in cfg): Task 5's central
 # hardware finding rests on comparing an ascending block against a
@@ -88,7 +92,8 @@ def _fields(line, prefix):
 
 def _new_block():
     return {"cfg": None, "clk": None, "offsets": [], "points": [],
-            "cal": None, "knees": [], "refs": [], "bands": [], "gates": None}
+            "cal": None, "knees": [], "refs": [], "bands": [], "gates": None,
+            "pot_cfg": None, "pot_ids": []}
 
 
 def _one_per_pair(items, num_pairs):
@@ -116,6 +121,16 @@ def _is_complete(block):
         return False
     num_pairs = max(k["pair"] for k in block["knees"]) + 1
 
+    # A pot round (spec 2026-09-28): the pot lines must name exactly
+    # pot_round.POTS, and the block must carry their six pairs. Pot lines on
+    # a six-pair block, or twelve pairs whose ID lines lost one in transit,
+    # are refused rather than read against the wrong pots.
+    if block["pot_cfg"] is not None or block["pot_ids"]:
+        if not pot_round.ids_match(block["pot_cfg"], block["pot_ids"]):
+            return False
+        if num_pairs != pot_round.SETTLE_POT_PAIR0 + 2 * len(pot_round.POTS):
+            return False
+
     want_points = Counter({p: block["cfg"]["grid_points"] for p in range(num_pairs)})
     if Counter(p["pair"] for p in block["points"]) != want_points:
         return False
@@ -136,6 +151,12 @@ def parse_block(lines):
                 block["cfg"] = _fields(line, "SHELL_SETTLE_CFG")
             elif block is None:
                 continue
+            elif line.startswith("SHELL_POT_"):
+                kind, fields = pot_round.parse_pot_line(line) or (None, None)
+                if kind == "cfg":
+                    block["pot_cfg"] = fields
+                elif kind == "id":
+                    block["pot_ids"].append(fields)
             elif line.startswith("SHELL_SETTLE_CLK"):
                 block["clk"] = _fields(line, "SHELL_SETTLE_CLK")
             elif line.startswith("SHELL_SETTLE_OFFSET"):
@@ -176,6 +197,41 @@ def format_csv(block):
     return "\n".join(rows) + "\n"
 
 
+def pot_readings(block):
+    """[(name, reading)] per pot, in POTS order: the mean of the pot's two
+    pairs' tail_ref (SHELL_SETTLE_REF) -- the settled value the settle image
+    measured it at. [] for a block with no pot lines. A reading is None when
+    either pair's tail_ref is missing."""
+    if block["pot_cfg"] is None:
+        return []
+    tail = {r["pair"]: r["tail_ref"] for r in block["refs"]}
+    out = []
+    for i, pot in enumerate(pot_round.POTS):
+        a = tail.get(pot_round.SETTLE_POT_PAIR0 + 2 * i)
+        b = tail.get(pot_round.SETTLE_POT_PAIR0 + 2 * i + 1)
+        out.append((pot[0], None if a is None or b is None else (a + b) / 2.0))
+    return out
+
+
+def pot_report(block):
+    """(lines, ok): one line per pot with its reading, x and derived R_src,
+    and PG1's verdict. ok is True for a block with no pot lines."""
+    lines, ok = [], True
+    for (name, reading), pot in zip(pot_readings(block), pot_round.POTS):
+        passed = pot_round.pg1(reading)
+        ok = ok and passed
+        if reading is None:
+            lines.append("%s: no reading -- PG1 FAIL" % name)
+            continue
+        lines.append("%s: reading=%.1f x=%.4f r_src=%.0f ohm (R_track %d "
+                     "nominal) PG1 %s [%d, %d]"
+                     % (name, reading, reading / pot_round.FULL_SCALE,
+                        pot_round.r_src(reading, pot[5]), pot[5],
+                        "PASS" if passed else "FAIL",
+                        pot_round.PG1_LO, pot_round.PG1_HI))
+    return lines, ok
+
+
 def format_meta_csv(block):
     """Everything in the block that is not a grid point, as
     `scope,pair,key,value` rows.
@@ -196,6 +252,15 @@ def format_meta_csv(block):
                 if name == "pair":
                     continue
                 rows.append("%s,%d,%s,%d" % (scope, entry["pair"], name, value))
+    # Pot-round rows (spec 2026-09-28). %s, not %d: `name` and `git` are
+    # strings.
+    if block.get("pot_cfg") is not None:
+        for name, value in block["pot_cfg"].items():
+            rows.append("pot_cfg,,%s,%s" % (name, value))
+        for entry in sorted(block["pot_ids"], key=lambda e: e["idx"]):
+            for name, value in entry.items():
+                if name != "idx":
+                    rows.append("pot_id,%d,%s,%s" % (entry["idx"], name, value))
     return "\n".join(rows) + "\n"
 
 
@@ -265,6 +330,10 @@ def main() -> int:
             print("pair=%d settle_ns=%d predicted_ns=%d%s"
                   % (pair, settle_ns, k["predicted_ns"], tag), file=sys.stderr)
 
+    pot_lines, pot_ok = pot_report(block)
+    for line in pot_lines:
+        print(line, file=sys.stderr)
+
     # Not gates, and deliberately not folded into the exit code: these three
     # are the firmware's HAL return codes, and the four gates are the spec's,
     # so turning one of them into a fifth verdict here would be a spec change
@@ -289,6 +358,11 @@ def main() -> int:
                   if not block["gates"][g]]
         print("GATES FAILED (%s) -- no settle time from this run may be "
               "quoted" % ", ".join(failed), file=sys.stderr)
+        return 1
+    if not pot_ok:
+        print("PG1 FAILED -- a pot is outside its mid-travel window; set it "
+              "again and re-run before reading anything from this block",
+              file=sys.stderr)
         return 1
     return 0
 
