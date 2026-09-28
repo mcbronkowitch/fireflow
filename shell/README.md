@@ -233,6 +233,8 @@ written up under `docs/hardware/`:
 | `+ SHELL_TONE_PROBE=1` (`SHELL_TONE_DC`) | the codec's own output against a settled channel | `read_tone.py` | `codec-tone-measured.md` |
 | `+ SHELL_WAIT_PROBE=1` | the wait between conversions | `read_wait.py` | `wait-measured.md` |
 | `+ SHELL_POT_ROUND=1` (on settle or wait) | the pots at mid travel, both questions | `read_pots.py` | `pots-measured.md` |
+| `+ SHELL_SCAN_CHECK=1` | the panel scan's pattern: clean at one step per block, with the engine running | `read_scan_check.py` | `scan-measured.md` |
+| `SHELL_PANEL_SCAN=1` (± `SHELL_COUPON_PROBE=1`) | the playing image: the scan drives the engine through the board's control table | `SHELL_PLAY` line | — |
 
 The probe switches are mutually exclusive; the Makefile refuses a
 combination that makes no sense. Older switches still in the Makefile —
@@ -265,13 +267,16 @@ the 16:1, 48 ms on the 8:1.
 
 **Next, in order:**
 
-1. **The panel scan itself**, in the callback, in that pattern: write the next
-   address each block, read the DMA buffer the block after. Its first coupon
-   run checks the one input the budget took from documentation, the
-   oversampling order (`scan-budget.md` §7). `controls.{h,cpp}` holds the
-   channel → parameter map and still has exactly one channel filled; its
-   "STAND" comment predates the classification in `io-budget.md` §2, which is
-   now decided.
+1. **Part 1 of the panel scan is done.** Spec
+   [`docs/superpowers/specs/2026-09-28-coupon-panel-scan-design.md`](../docs/superpowers/specs/2026-09-28-coupon-panel-scan-design.md),
+   measured on the coupon and written up in
+   [`docs/hardware/scan-measured.md`](../docs/hardware/scan-measured.md).
+   Board session 2 played `SHELL_PANEL_SCAN` on the coupon, and RV2, RV4 and
+   RV6 all moved the engine audibly, stop to stop. **Part 2** — the 70-pot
+   table, the three keycaps on the 165 and the 19 LEDs on the 595 — waits for
+   the control PCB's pin map, which does not exist yet; the pin map should
+   give one spare channel to AGND and one to the rail, so the panel
+   calibrates its own span instead of trusting one coupon's number (spec §8).
 2. **Open on the coupon, if anyone wants it:** round one's four RV4 cases
    (`SHELL_XTALK_RV4=1`, skipped on the false belief that RV4 was unfitted),
    and a second populated board to separate board from design.

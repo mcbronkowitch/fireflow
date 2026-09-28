@@ -36,7 +36,15 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-09-28 (**the scan-budget pass is done** —
+- **Last updated:** 2026-09-28 (**part 1 of the panel scan is built, measured
+  on the coupon, and played twice** —
+  [`docs/hardware/scan-measured.md`](hardware/scan-measured.md): board
+  session 1's check image found every coupon channel clean one block after
+  its address was written, to within 0.6 counts against a criterion of 8;
+  board session 2 played `SHELL_PANEL_SCAN`, and RV2, RV4 and RV6 all reached
+  their stops and all three moved audibly, though `FILT_A` does not step
+  audibly at 48 ms per sweep; see the M6 entry of that date. Earlier the same
+  day: **the scan-budget pass is done** —
   [`docs/hardware/scan-budget.md`](hardware/scan-budget.md): the shell's
   existing free-running ADC pattern fits one mux step per block without the
   long rung; see the M6 entry of that date; earlier the same day: **round
@@ -4017,6 +4025,51 @@ than measured, the oversampling order the whole verdict rests on; the panel
 scan's first coupon run is to test it. `tools/scan_budget.py`, guard
 `scan_budget_guard`; `settle_budget_guard` is now in ctest as well. No
 firmware moved.
+
+**2026-09-28, later still — part 1 of the panel scan is built, measured on
+the coupon, and played twice.** Spec
+`docs/superpowers/specs/2026-09-28-coupon-panel-scan-design.md` (approved in
+conversation, section by section, the same day as the scan budget): two
+images, `SHELL_SCAN_CHECK`, the check image, and `SHELL_PANEL_SCAN`, the
+playing image on which RV2, RV4 and RV6 drive `RATE_A`, `DENSITY_A` and
+`FILT_A` (Bastian's choice).
+
+**Board session 1** (image `c04ba77`, `SHELL_COUPON_PROBE=1
+SHELL_SCAN_CHECK=1`) answers `scan-budget.md` §7: on all 24 coupon steps, in
+five complete run blocks, the value read one block after its address is
+written matches the value read with the address parked to within 0.6 counts,
+against a criterion of 8 — including the 15 steps whose predecessor sits
+14844–62605 counts away, where the same-block control read misses by 14843
+counts or more. Written up in
+[`docs/hardware/scan-measured.md`](hardware/scan-measured.md); the pots' own
+noise sets the value path's hysteresis at H = 16 (`shell/scan_value.h`'s
+`kPotHysteresis`).
+
+**Board session 2** (image `cbd6270`, `SHELL_COUPON_PROBE=1
+SHELL_PANEL_SCAN=1`, the wavetable bank already on the module from session 1)
+played the coupon through the engine. Idle, `SHELL_PLAY` showed `valid=1`,
+the span at 0..63482–63484, `rv2`/`rv4`/`rv6` at 0.498 (mid travel left from
+the pot round), and sweeps climbing about 21/s — the 48 ms per sweep the
+budget predicted. Bastian turned the pots stop to stop: RV2 (`RATE_A`)
+reached 0 and 1.000, RV6 (`FILT_A`) reached 0 and 1.000, RV4 (`DENSITY_A`)
+reached 1.000 and came down to 0.260 — 0 was not seen in the two recordings.
+By ear, all three move; `FILT_A` does not step audibly at 48 ms per sweep
+("alles hörbar, Filter stuft nicht").
+
+**Open, unattributed:** at the end of the second recording, RV2's emitted
+value moved within 0.434–0.436 over about 10 s — more than 60 raw counts,
+beyond the H = 16 hysteresis — while RV4 and RV6 held still. Whether the
+knob was being touched was not recorded. No cause claimed.
+
+**Carried into part 2, from the review:** the coupon playing image uses
+98.8 % of `SRAM_EXEC` (about 3 KB left; the growth looks like code, likely
+`apply_param` linked in for the first time — unverified). And on the panel
+profile, `find_control` keys on `(group, ch)` only, so part 2's 70-pot table
+must key on the sense pin too.
+
+**Next:** part 2 — the 70-pot table, the three keycaps on the 165 and the 19
+LEDs on the 595 — waits for the control PCB's pin map, which should give one
+spare channel to AGND and one to the rail (spec §8).
 
 **2026-09-27 — the next coupon instrument is built, and it waits on a board
 session.** Round two left one item bigger than it found it: a 5150 Ω channel
