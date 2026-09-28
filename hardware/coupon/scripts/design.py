@@ -73,8 +73,9 @@ AUDIO_L, AUDIO_R = "AUDIO_OUT_L", "AUDIO_OUT_R"
 # up at all. CH2 and CH6 on the 16:1 are those channels.
 #
 # The two reference dividers are the difference between "the scan is noisy" and
-# "the pot is noisy": REF_A has the source impedance of a 10k pot at mid travel,
-# REF_B is a tenth of that. If REF_B is quiet and REF_A is not, the noise came
+# "the pot is noisy": REF_A (10k/10k, 5k) has the source impedance of a 20k pot
+# at mid travel -- R/4; this said "10k pot" until 2026-09-28 -- and REF_B is a
+# tenth of that. If REF_B is quiet and REF_A is not, the noise came
 # in through the source impedance and not through the scan.
 MUX16_CHANNELS = [
     (0,  "RV1 wiper, 10k"),
