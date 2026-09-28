@@ -280,6 +280,25 @@ $(error SHELL_WAIT_PROBE=1 and SHELL_TONE_PROBE=1 are mutually exclusive)
 endif
 endif
 
+# Round four: adds the three pots (RV2, RV4, RV6 at mid travel) to the settle
+# probe as six extra pairs, or to the wait probe as three extra victims. It
+# selects nothing on its own, so it is an error without exactly one of those
+# two probes. Position 0 is today's six-pair / five-victim image, unchanged.
+# Spec:  ../docs/superpowers/specs/2026-09-28-coupon-pot-round-design.md
+# Plan:  ../docs/superpowers/plans/2026-09-28-coupon-pot-round.md
+SHELL_POT_ROUND ?= 0
+
+ifneq ($(filter $(SHELL_POT_ROUND),0 1),$(SHELL_POT_ROUND))
+$(error SHELL_POT_ROUND must be 0 or 1)
+endif
+
+ifeq ($(SHELL_POT_ROUND),1)
+ifeq ($(filter 1,$(SHELL_SETTLE_PROBE) $(SHELL_WAIT_PROBE)),)
+$(error SHELL_POT_ROUND=1 needs SHELL_SETTLE_PROBE=1 or SHELL_WAIT_PROBE=1: \
+it adds the pots to one of those two probes and selects nothing on its own)
+endif
+endif
+
 CPP_SOURCES = \
 	main.cpp \
 	sdram_mem.cpp \
@@ -295,6 +314,7 @@ CPP_SOURCES = \
 	tone_plan.cpp \
 	wait_probe.cpp \
 	wait_plan.cpp \
+	pot_report.cpp \
 	mux_scan.cpp \
 	../engine/body/mode_bank.cpp \
 	../engine/body/ks_string.cpp \
@@ -372,10 +392,11 @@ SWITCH_HEADERS := \
   $(shell python write_shell_xtalk_probe.py $(BUILD_DIR)/shell_xtalk_probe.h $(SHELL_XTALK_PROBE) $(SHELL_XTALK_RV4) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_tone_probe.py $(BUILD_DIR)/shell_tone_probe.h $(SHELL_TONE_PROBE) $(SHELL_TONE_DC) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_wait_probe.py $(BUILD_DIR)/shell_wait_probe.h $(SHELL_WAIT_PROBE) $(SWITCH_OBJECTS)) \
-  $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o)
+  $(shell python write_shell_pot_round.py $(BUILD_DIR)/shell_pot_round.h $(SHELL_POT_ROUND) $(SWITCH_OBJECTS)) \
+  $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/pot_report.o)
 
-# The git stamp deletes only xtalk_probe.o, tone_probe.o and wait_probe.o,
-# because those are the only objects that read it. Listing the whole SWITCH_OBJECTS there would
+# The git stamp deletes only xtalk_probe.o, tone_probe.o, wait_probe.o and
+# pot_report.o, because those are the only objects that read it. Listing the whole SWITCH_OBJECTS there would
 # force a full rebuild of seven objects on every commit for a string in one
 # format argument.
 
@@ -384,6 +405,8 @@ $(BUILD_DIR)/wait_probe.o: $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/shell_coup
 $(BUILD_DIR)/xtalk_probe.o: $(BUILD_DIR)/shell_xtalk_probe.h $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/shell_coupon_probe.h
 $(BUILD_DIR)/tone_probe.o: $(BUILD_DIR)/shell_tone_probe.h $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/shell_coupon_probe.h
 $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o: $(BUILD_DIR)/shell_coupon_probe.h
+$(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/wait_probe.o: $(BUILD_DIR)/shell_pot_round.h
+$(BUILD_DIR)/pot_report.o: $(BUILD_DIR)/shell_git_hash.h
 
 .PHONY: FORCE
 FORCE:

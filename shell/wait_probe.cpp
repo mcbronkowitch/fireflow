@@ -4,9 +4,11 @@
 #include "cycles.h"
 #include "mux_plan.h"
 #include "mux_scan.h"
+#include "pot_report.h"
 #include "probe_adc.h"
 #include "settle_plan.h"
 #include "shell_git_hash.h"
+#include "shell_pot_round.h"
 #include "wait_plan.h"
 #include "xtalk_plan.h"
 
@@ -16,6 +18,12 @@ namespace shell {
 // compiled on the host. This is where the copy is held to the original.
 static_assert(kWaitCoreMhz == kCoreMhz,
               "wait_plan.h's kWaitCoreMhz must equal cycles.h's kCoreMhz");
+
+// Round four (spec 2026-09-28-coupon-pot-round-design.md section 5): the
+// three pots join as victims 5-7 only in a SHELL_POT_ROUND=1 image. Every
+// per-victim loop and array runs to kVictims, and case = arm * kVictims +
+// victim, so position 0 numbers its twenty cases exactly as before.
+constexpr int kVictims = wait_victim_count(SHELL_POT_ROUND != 0);
 
 namespace {
 
@@ -183,8 +191,8 @@ Point measure_wait_point(uint32_t wait_us, bool discard, int* n_out)
 // back, codec stopped: the reading closest to the level both earlier probes
 // judged their address verdict on. -1/false when that point converted
 // nothing at all.
-int32_t g_wait_zero_mean[kXtalkVictims];
-bool    g_wait_zero_seen[kXtalkVictims];
+int32_t g_wait_zero_mean[kVictims];
+bool    g_wait_zero_seen[kVictims];
 
 uint32_t g_block_index = 0;
 
@@ -227,6 +235,13 @@ void run_wait_probe(bench::Board& hw)
                      "block_size=%d sr=%d sweep_dir=%d git=%s",
                      clk.measured_adc_khz, kWaitRepeats, kWaitPoints,
                      block_size, sr_hz, sweep_dir, SHELL_GIT_HASH);
+
+#if SHELL_POT_ROUND
+        // Directly after _CFG, never before it: read_wait.py opens a block at
+        // SHELL_WAIT_CFG and drops everything printed ahead of it.
+        print_pot_lines(hw);
+#endif
+
         hw.PrintLine("SHELL_WAIT_CLK span_short_cyc=%d span_long_cyc=%d "
                      "smp_short_tenths=%d smp_long_tenths=%d",
                      clk.span_short_cyc, clk.span_long_cyc, 165, 3875);
@@ -267,14 +282,14 @@ void run_wait_probe(bench::Board& hw)
                      lat_mean, lat_min, lat_max, b0,
                      static_cast<int>(probe_adc::timeouts()));
 
-        for(int v = 0; v < kXtalkVictims; ++v)
+        for(int v = 0; v < kVictims; ++v)
         {
             g_wait_zero_mean[v] = -1;
             g_wait_zero_seen[v] = false;
         }
         uint32_t missed_blocks = 0;
 
-        // --- The four arms, arm-major. case = arm * kXtalkVictims + victim.
+        // --- The four arms, arm-major. case = arm * kVictims + victim.
         for(int a = 0; a < kWaitArmCount; ++a)
         {
             const WaitArm arm   = static_cast<WaitArm>(a);
@@ -289,10 +304,10 @@ void run_wait_probe(bench::Board& hw)
                 hw.Delay(20);
             }
 
-            for(int v = 0; v < kXtalkVictims; ++v)
+            for(int v = 0; v < kVictims; ++v)
             {
-                const XtalkVictim& vv       = kXtalkVictimTable[v];
-                const int          case_idx = a * kXtalkVictims + v;
+                const XtalkVictim  vv       = wait_victim(v);
+                const int          case_idx = a * kVictims + v;
                 const int          rung     = rung_for(arm, vv);
 
                 // BYTE BUDGET: ~105 bytes at data-widest values, against
@@ -363,9 +378,9 @@ void run_wait_probe(bench::Board& hw)
                      sp.hi_spread, sp.lo_spread, sp.span.valid ? 1 : 0);
 
         bool address_ok = true;
-        for(int v = 0; v < kXtalkVictims; ++v)
+        for(int v = 0; v < kVictims; ++v)
         {
-            const XtalkVictim& vv = kXtalkVictimTable[v];
+            const XtalkVictim vv = wait_victim(v);
             const Expect e = coupon_expect(step_of(kCouponChain, vv.group, vv.channel));
             const bool ok = g_wait_zero_seen[v] && sp.span.valid
                             && coupon_verdict(e, static_cast<uint16_t>(g_wait_zero_mean[v]),

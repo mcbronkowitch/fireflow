@@ -4,6 +4,8 @@
 #include "mux_scan.h"
 #include "probe_adc.h"
 #include "settle_plan.h"
+#include "pot_report.h"
+#include "shell_pot_round.h"
 
 namespace shell {
 
@@ -18,6 +20,12 @@ namespace {
 // either must not assume the other moves with it, so they stay two
 // separate names.
 constexpr int kTailWindowPoints = 8;
+
+// Round four (spec 2026-09-28-coupon-pot-round-design.md section 4): P6-P11,
+// the pots, join the sweep only in a SHELL_POT_ROUND=1 image. Every per-pair
+// loop and array below runs to kPairs, never to kSettlePairs, so position 0
+// is exactly the six-pair probe it always was.
+constexpr int kPairs = settle_pair_count(SHELL_POT_ROUND != 0);
 
 // Fix round 4, item 1: there used to be a kConversionNs = 2034 here --
 // "16.5 sampling + 8.5 conversion = 25 ADC cycles, and at 12.29 MHz that is
@@ -176,11 +184,11 @@ void run_settle_probe(bench::Board& hw)
     // comes from sample_time_index_for() (settle_plan.h/.cpp), the same
     // pure, host-tested function the sweep uses to select each pair's
     // sampling time; -1 comes back for every pair when has_clk is false.
-    int32_t rung_idx[kSettlePairs];
-    int32_t offset_ns[kSettlePairs];
-    for(int p = 0; p < kSettlePairs; ++p)
+    int32_t rung_idx[kPairs];
+    int32_t offset_ns[kPairs];
+    for(int p = 0; p < kPairs; ++p)
     {
-        rung_idx[p]  = sample_time_index_for(kSettlePlan[p].r_src_ohm);
+        rung_idx[p]  = sample_time_index_for(settle_pair(p).r_src_ohm);
         offset_ns[p] = probe_adc::offset_ns_for_rung(clk, rung_idx[p]);
     }
 
@@ -266,6 +274,12 @@ void run_settle_probe(bench::Board& hw)
                      measured_adc_khz, kRepeats, kGridStepNs, kGridPoints,
                      static_cast<int>(kParkNs), ascending_this_block ? 0 : 1);
 
+#if SHELL_POT_ROUND
+        // Directly after _CFG, never before it: read_settle.py opens a block
+        // at SHELL_SETTLE_CFG and drops everything printed ahead of it.
+        print_pot_lines(hw);
+#endif
+
         // Printed every pass, beside SHELL_SETTLE_CAL, even though
         // clk.span_short_cyc/clk.span_long_cyc were measured once at
         // startup and never change (fix round 3): hw.StartLog(false) does
@@ -287,7 +301,7 @@ void run_settle_probe(bench::Board& hw)
         // (Task 5) prints the other half in SHELL_SETTLE_KNEE, with its own
         // at_or_below_offset flag for the pairs whose true settle falls
         // below what's printed here.
-        for(int p = 0; p < kSettlePairs; ++p)
+        for(int p = 0; p < kPairs; ++p)
         {
             hw.PrintLine("SHELL_SETTLE_OFFSET pair=%d offset_ns=%d smp_tenths=%d",
                          p, offset_ns[p], kSamplingLadderTenths[rung_idx[p]]);
@@ -362,38 +376,38 @@ void run_settle_probe(bench::Board& hw)
         summary.lat_mean_ns         = lat_mean;
         summary.settled_mean_spread = 0;
 
-        int32_t d_settle_ns_print[kSettlePairs];
-        bool    at_or_below_offset[kSettlePairs];
+        int32_t d_settle_ns_print[kPairs];
+        bool    at_or_below_offset[kPairs];
         // Fix round 3, item 1: the parked reference is demoted to a printed
         // cross-check (item 2 below explains why) but is still kept, pre
         // and post, so a reader can see it disagree with the curve's own
         // tail when it does.
-        int32_t settled_raw_pre[kSettlePairs];
-        int32_t settled_raw_post[kSettlePairs];
+        int32_t settled_raw_pre[kPairs];
+        int32_t settled_raw_post[kPairs];
         // The actual yardstick now: mean of the last kTailWindowPoints grid
         // points (fix round 3, item 2), and their own spread -- see below.
-        int32_t tail_ref[kSettlePairs];
-        int32_t tail_spread[kSettlePairs];
+        int32_t tail_ref[kPairs];
+        int32_t tail_spread[kPairs];
         // Fix round 4: the raw per-sample band no longer gates anything
         // (see the G3 comment below), but it is not thrown away -- kept per
         // pair, with the grid position of its widest point, purely as a
         // printed observation (SHELL_SETTLE_BAND). -1 where the pair has no
         // settled region to observe (idx < 0).
-        int32_t widest_band_counts[kSettlePairs];
-        int32_t widest_band_d_ns[kSettlePairs];
+        int32_t widest_band_counts[kPairs];
+        int32_t widest_band_d_ns[kPairs];
         // Final-review I2: the per-pair settled-region mean spread -- the
         // statistic G3 is decided on. summary.settled_mean_spread is the MAX
-        // across pairs and is consumed by settle_gates() without ever being
-        // printed, so the only way to say which pair carried it was to
-        // recompute it by hand from the SHELL_SETTLE rows. A number a
-        // document wants to quote has to leave the board printed. -1 where
-        // the pair has no settled region (idx < 0), same convention as
-        // widest_band_* above.
-        int32_t settled_mean_spread[kSettlePairs];
+        // across P0-P5 (g3_spread(), settle_plan.h) and is consumed by
+        // settle_gates() without ever being printed, so the only way to say
+        // which pair carried it was to recompute it by hand from the
+        // SHELL_SETTLE rows. A number a document wants to quote has to leave
+        // the board printed. -1 where the pair has no settled region (idx <
+        // 0), same convention as widest_band_* above.
+        int32_t settled_mean_spread[kPairs];
 
-        for(int p = 0; p < kSettlePairs; ++p)
+        for(int p = 0; p < kPairs; ++p)
         {
-            const SettlePair& sp = kSettlePlan[p];
+            const SettlePair& sp = settle_pair(p);
 
             // This pair's OWN rung (amendment 4), not the working sampling
             // time.
@@ -566,8 +580,6 @@ void run_settle_probe(bench::Board& hw)
                     }
                 }
                 const int32_t mean_spread = mean_max - mean_min;
-                if(mean_spread > summary.settled_mean_spread)
-                    summary.settled_mean_spread = mean_spread;
 
                 settled_mean_spread[p] = mean_spread;
                 widest_band_counts[p]  = widest_sample_band;
@@ -580,6 +592,12 @@ void run_settle_probe(bench::Board& hw)
                 widest_band_d_ns[p]    = -1;
             }
         }
+
+        // G3 reads P0-P5 only, at either switch position: a pot wiper that
+        // wanders more than a divider must not refuse the run measuring it
+        // (spec 2026-09-28 section 4). At position 0 this is the same max the
+        // sweep used to keep inline.
+        summary.settled_mean_spread = g3_spread(settled_mean_spread, kPairs);
 
         const Gates gates = settle_gates(summary);
 
@@ -605,13 +623,13 @@ void run_settle_probe(bench::Board& hw)
         // where it needs this comment to remember why not to re-merge them.
         // A reader who sees a line end in "$$" is looking at exactly this
         // failure mode, on whichever line hit it.
-        for(int p = 0; p < kSettlePairs; ++p)
+        for(int p = 0; p < kPairs; ++p)
         {
             hw.PrintLine("SHELL_SETTLE_KNEE pair=%d d_settle_ns=%d at_or_below_offset=%d "
                          "predicted_ns=%d reference=%d",
                          p, d_settle_ns_print[p], at_or_below_offset[p] ? 1 : 0,
-                         static_cast<int>(kSettlePlan[p].tau9_ns),
-                         kSettlePlan[p].is_reference ? 1 : 0);
+                         static_cast<int>(settle_pair(p).tau9_ns),
+                         settle_pair(p).is_reference ? 1 : 0);
         }
 
         // The cross-check line (fix round 3, item 2): tail_ref/tail_spread
@@ -623,7 +641,7 @@ void run_settle_probe(bench::Board& hw)
         // visible instead of silently discarded -- round 2's own board data
         // is the reason: pair 1's parked read sat 852 counts from its own
         // curve's tail while the curve itself was quiet to 3-4 counts.
-        for(int p = 0; p < kSettlePairs; ++p)
+        for(int p = 0; p < kPairs; ++p)
         {
             hw.PrintLine("SHELL_SETTLE_REF pair=%d tail_ref=%d tail_spread=%d "
                          "settled_raw_pre=%d settled_raw_post=%d",
@@ -648,7 +666,7 @@ void run_settle_probe(bench::Board& hw)
         // also the right neighbour: both fields are settled-region
         // observations over the same index range, one on the means and one
         // on the raw samples.
-        for(int p = 0; p < kSettlePairs; ++p)
+        for(int p = 0; p < kPairs; ++p)
         {
             hw.PrintLine("SHELL_SETTLE_BAND pair=%d widest_sample_band_counts=%d "
                          "at_d_ns=%d settled_mean_spread=%d",
