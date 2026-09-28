@@ -99,6 +99,13 @@ int group_of_step(const ChainProfile& p, int step);
 // is actually live for a step must read `sense_of_group` themselves.
 int mux_channel(const ChainProfile& p, int step, int sense);
 
+// Whether sense pin `sense` carries a live channel during `step`: the step's
+// group is the one enabled, and that group is wired to this pin (or to all
+// of them, sense_of_group == -1). mux_channel() deliberately ignores the
+// wiring; a reader that stores values must ask this first, because on the
+// coupon the other pin's mux is disabled and its node floats.
+bool sense_live(const ChainProfile& p, int step, int sense);
+
 // The scan step that selects channel `ch` on group `group`: group 0's
 // channels occupy the start of the step space, group 1's follow all of
 // group 0's -- the same layout step_pattern() and group_of_step() walk.

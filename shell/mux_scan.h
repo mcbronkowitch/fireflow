@@ -19,7 +19,7 @@
 #include "hw/board.h"
 // Which board this image is for. Included HERE and not left to main.cpp:
 // mux_scan.cpp sees only this header, and a profile that differs between
-// two objects gives g_mux_values two sizes in one link.
+// two objects gives g_mux_raw two sizes in one link.
 #include "shell_coupon_probe.h"
 #include "mux_plan.h"
 #include "cycles.h"
@@ -40,11 +40,34 @@ class MuxScan
   public:
     void init();
 
-    // Read the four sense pins for the step written last time, then clock out
-    // the next step.
-    void step(bench::Board& hw);
+    // Read the step selected last time, then select the next one. Returns
+    // the step whose values were just stored in g_mux_raw, or -1 on the
+    // first call (nothing was selected yet).
+    //
+    // The read is the RAW DMA word, hw.adc.Get(). Until 2026-09-28 this read
+    // hw.GetAdcValue(), which returns libDaisy's AnalogControl::Value() -- a
+    // filtered value that only moves when ProcessAnalogControls() runs, and
+    // nothing in shell/ calls it. The CPU run of 2026-08-23 priced those
+    // reads and was not affected; every value they stored was 0. The slew
+    // filter behind AnalogControl must never sit behind a mux in any case:
+    // it would average across channel changes.
+    // (spec 2026-09-28-coupon-panel-scan-design.md section 2)
+    int step(bench::Board& hw);
 
+    // The two halves of step(), for the scan-check image, whose arms park,
+    // re-order and repeat them.
+    void select(int step);
+    void read_step(bench::Board& hw, int step);
+
+    int      live_step() const { return live_step_; }
     uint32_t steps() const { return steps_; }
+
+    // step() walks the LED field by default, as the 2026-08-23 CPU probe
+    // needs: a constant word would let the compiler hoist the loop's work
+    // and price a scan nobody ships. The panel-scan images turn it off and
+    // keep the coupon's LEDs dark, so both images put the same digital load
+    // beside the analog read.
+    void set_walk_leds(bool on) { walk_leds_ = on; }
 
     // Public because the coupon bring-up probe drives the chain directly
     // instead of stepping the scan: it has to hold one address still while
@@ -88,12 +111,13 @@ class MuxScan
     int         next_step_ = 0;
     int         live_step_ = -1;
     uint32_t    steps_     = 0;
+    bool        walk_leds_ = true;
 };
 
-// Where the scan puts what it read. Volatile so a build that does not apply
-// the values still performs the reads -- the probe images deliberately do NOT
-// push these into the engine, because the operating point has to stay the one
-// the baseline image runs or the audio comparison compares two instruments.
-extern volatile float g_mux_values[mux_total(kActiveChain)];
+// Where the scan puts what it read: the raw 16-bit DMA word per channel,
+// indexed by mux_channel(). Only live (step, sense) pairs are ever written.
+// Volatile so a build that does not use the values still performs the reads
+// -- the CPU probe images deliberately do NOT push them into the engine.
+extern volatile uint16_t g_mux_raw[mux_total(kActiveChain)];
 
 } // namespace shell

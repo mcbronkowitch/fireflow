@@ -2,7 +2,7 @@
 
 namespace shell {
 
-volatile float g_mux_values[mux_total(kActiveChain)] = {};
+volatile uint16_t g_mux_raw[mux_total(kActiveChain)] = {};
 
 namespace {
 
@@ -124,29 +124,38 @@ uint32_t MuxScan::read_chain(uint32_t word)
     return in;
 }
 
-void MuxScan::step(bench::Board& hw)
+void MuxScan::select(int step)
 {
-    if(live_step_ >= 0)
-    {
-        for(int s = 0; s < kActiveChain.sense_pins; ++s)
-        {
-            const int ch = mux_channel(kActiveChain, live_step_, s);
-            if(ch >= 0)
-                g_mux_values[ch] = hw.GetAdcValue(kSenseAdcBase + s);
-        }
-    }
-
-    // The LED field changes every step, as it does in production. A constant
-    // word would let the compiler hoist the loop's work out of the hot path
-    // and price a scan nobody will ship.
-    leds_ = (leds_ + 1u) & ((1u << kActiveChain.led_bits) - 1u);
-
-    const StepPattern p = step_pattern(kActiveChain, next_step_);
+    const StepPattern p = step_pattern(kActiveChain, step);
     write_chain(chain_word(kActiveChain, p, leds_));
+    live_step_ = step;
+}
 
-    live_step_ = next_step_;
+void MuxScan::read_step(bench::Board& hw, int step)
+{
+    for(int s = 0; s < kActiveChain.sense_pins; ++s)
+    {
+        if(!sense_live(kActiveChain, step, s)) continue;
+        const int ch = mux_channel(kActiveChain, step, s);
+        if(ch >= 0)
+            g_mux_raw[ch] = hw.adc.Get(static_cast<uint8_t>(kSenseAdcBase + s));
+    }
+}
+
+int MuxScan::step(bench::Board& hw)
+{
+    const int read = live_step_;
+    if(read >= 0) read_step(hw, read);
+
+    // The LED field changes every step in the CPU probe, as it does in
+    // production -- see set_walk_leds() in the header.
+    if(walk_leds_)
+        leds_ = (leds_ + 1u) & ((1u << kActiveChain.led_bits) - 1u);
+
+    select(next_step_);
     next_step_ = (next_step_ + 1) % scan_steps(kActiveChain);
     ++steps_;
+    return read;
 }
 
 } // namespace shell

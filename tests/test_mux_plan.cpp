@@ -189,3 +189,38 @@ TEST_CASE("mux plan: step_of answers out of range instead of assuming") {
     CHECK(shell::step_of(shell::kCouponChain, 1, 8) == -1);
     CHECK(shell::step_of(shell::kCouponChain, 1, 7) == 23);
 }
+
+TEST_CASE("mux plan: on the panel every sense pin is live on every step") {
+    const shell::ChainProfile& p = shell::kPanelChain;
+    for(int s = 0; s < shell::scan_steps(p); ++s)
+        for(int pin = 0; pin < p.sense_pins; ++pin)
+            CHECK(shell::sense_live(p, s, pin));
+}
+
+TEST_CASE("mux plan: on the coupon only the group's own sense pin is live") {
+    // Group 0 (the 4067) is wired to ADC_9 only, group 1 (the 4051) to
+    // ADC_10 only. The other pin's mux is disabled during the step, so its
+    // node floats, and a scan that stored it would store noise under a real
+    // channel's index.
+    const shell::ChainProfile& p = shell::kCouponChain;
+    for(int s = 0; s < 16; ++s)
+    {
+        CHECK(shell::sense_live(p, s, 0));
+        CHECK_FALSE(shell::sense_live(p, s, 1));
+    }
+    for(int s = 16; s < 24; ++s)
+    {
+        CHECK_FALSE(shell::sense_live(p, s, 0));
+        CHECK(shell::sense_live(p, s, 1));
+    }
+}
+
+TEST_CASE("mux plan: sense_live refuses what does not exist") {
+    for(const auto& p : kProfiles)
+    {
+        CHECK_FALSE(shell::sense_live(p, -1, 0));
+        CHECK_FALSE(shell::sense_live(p, shell::scan_steps(p), 0));
+        CHECK_FALSE(shell::sense_live(p, 0, -1));
+        CHECK_FALSE(shell::sense_live(p, 0, p.sense_pins));
+    }
+}

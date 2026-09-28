@@ -51,6 +51,14 @@ int mux_channel(const ChainProfile& p, int step, int sense)
     return step * p.sense_pins + sense;
 }
 
+bool sense_live(const ChainProfile& p, int step, int sense)
+{
+    const int g = group_of_step(p, step);
+    if(g < 0 || sense < 0 || sense >= p.sense_pins) return false;
+    const int wired = p.sense_of_group[g];
+    return wired < 0 || wired == sense;
+}
+
 uint32_t chain_word(const ChainProfile& p, StepPattern s, uint32_t leds)
 {
     const uint32_t led_mask = (1u << p.led_bits) - 1u;
