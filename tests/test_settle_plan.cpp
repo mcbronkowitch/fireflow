@@ -7,6 +7,7 @@
 #include <doctest/doctest.h>
 #include "../shell/settle_plan.h"
 #include "../shell/mux_plan.h"
+#include "../shell/pot_plan.h"
 
 TEST_CASE("settle plan: the grid is monotonic and ends where the spec says") {
     // Fix round 5: 138 ns of measured aperture jitter on the coupon board
@@ -365,4 +366,93 @@ TEST_CASE("settle gates: G1 and G4's grid-step gates derive from kGridStepNs, "
     // without changing both gates to match.
     CHECK(shell::kKneeMaxNs == shell::kGridStepNs);
     CHECK(shell::kJitterMaxNs == shell::kGridStepNs);
+}
+
+// --- Round four: the pot pairs (spec 2026-09-28-coupon-pot-round-design.md
+// section 4) ---
+
+TEST_CASE("settle plan: the pot round adds six pairs and keeps P0-P5") {
+    CHECK(shell::kSettlePotPairs == 6);
+    CHECK(shell::kSettlePairsMax == 12);
+    CHECK(shell::settle_pair_count(false) == 6);
+    CHECK(shell::settle_pair_count(true) == 12);
+    // P0-P5 are kSettlePlan itself, not a copy that could drift.
+    for(int p = 0; p < shell::kSettlePairs; ++p) {
+        CAPTURE(p);
+        CHECK(&shell::settle_pair(p) == &shell::kSettlePlan[p]);
+    }
+}
+
+TEST_CASE("settle plan: each pot is stepped onto from its high, then its low "
+          "neighbour") {
+    for(int i = 0; i < shell::kPotCount; ++i) {
+        const shell::Pot& pot = shell::kPots[i];
+        const shell::SettlePair& from_hi = shell::settle_pair(6 + 2 * i);
+        const shell::SettlePair& from_lo = shell::settle_pair(7 + 2 * i);
+        CAPTURE(i);
+        CHECK(from_hi.group == pot.group);
+        CHECK(from_hi.to_ch == pot.channel);
+        CHECK(from_hi.from_ch == pot.hi_ch);
+        CHECK(from_lo.group == pot.group);
+        CHECK(from_lo.to_ch == pot.channel);
+        CHECK(from_lo.from_ch == pot.lo_ch);
+        CHECK(from_hi.r_src_ohm == shell::pot_r_src_mid(pot.r_track_ohm));
+        CHECK(from_lo.r_src_ohm == shell::pot_r_src_mid(pot.r_track_ohm));
+        // A pot is the thing measured, never the instrument's zero: G1
+        // reads reference pairs only, and a pot marked reference would
+        // turn a slow wiper into a failed instrument.
+        CHECK_FALSE(from_hi.is_reference);
+        CHECK_FALSE(from_lo.is_reference);
+    }
+}
+
+TEST_CASE("settle plan: the pot pairs' predictions are recomputed, not copied") {
+    const double kC[2]   = {65e-12, 40e-12};
+    const double kLn8192 = 9.0109;
+    for(int p = shell::kSettlePairs; p < shell::kSettlePairsMax; ++p) {
+        const shell::SettlePair& sp = shell::settle_pair(p);
+        CAPTURE(p);
+        const double ns = static_cast<double>(sp.r_src_ohm) * kC[sp.group] * kLn8192 * 1e9;
+        CHECK(std::abs(ns - static_cast<double>(sp.tau9_ns)) < 0.5);
+    }
+}
+
+TEST_CASE("settle plan: every pot pair's channels exist, its rung covers it, "
+          "and the park and grid still reach past it") {
+    for(int p = shell::kSettlePairs; p < shell::kSettlePairsMax; ++p) {
+        const shell::SettlePair& sp = shell::settle_pair(p);
+        CAPTURE(p);
+        const int n = shell::kCouponChain.channels[sp.group];
+        CHECK(sp.from_ch >= 0);
+        CHECK(sp.from_ch < n);
+        CHECK(sp.to_ch >= 0);
+        CHECK(sp.to_ch < n);
+        const int idx = shell::sample_time_index_for(sp.r_src_ohm);
+        CHECK(rung_window_s(idx) >= required_acq_s(sp.r_src_ohm));
+        if(idx > 0) CHECK(rung_window_s(idx - 1) < required_acq_s(sp.r_src_ohm));
+        CHECK(shell::kParkNs >= 5 * sp.tau9_ns);
+        CHECK(shell::grid_ns(shell::kGridPoints - 1) > 2 * sp.tau9_ns);
+    }
+}
+
+TEST_CASE("settle gates: G3's spread reads P0-P5 only") {
+    // Spec section 4: a wiper that wanders more than a divider must not
+    // refuse the run that is measuring it. -1 is "no settled region".
+    int32_t per_pair[shell::kSettlePairsMax] = {3, 4, 2, 4, 3, 1,
+                                                50, 60, -1, 70, 2, 2};
+    CHECK(shell::g3_spread(per_pair, shell::kSettlePairsMax) == 4);
+    CHECK(shell::g3_spread(per_pair, shell::kSettlePairs) == 4);
+    // The six-pair probe's own behaviour, unchanged: the max over what has
+    // a settled region, 0 when nothing has one.
+    int32_t none[shell::kSettlePairs] = {-1, -1, -1, -1, -1, -1};
+    CHECK(shell::g3_spread(none, shell::kSettlePairs) == 0);
+    int32_t wide[shell::kSettlePairs] = {1, 9, -1, 2, 3, 0};
+    CHECK(shell::g3_spread(wide, shell::kSettlePairs) == 9);
+}
+
+TEST_CASE("settle gates: a RunSummary holds a knee for every pair of the pot "
+          "round") {
+    shell::RunSummary s{};
+    CHECK(sizeof(s.knee_ns) / sizeof(s.knee_ns[0])
+          == static_cast<size_t>(shell::kSettlePairsMax));
 }

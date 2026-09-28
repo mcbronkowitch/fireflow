@@ -1,4 +1,5 @@
 #include "settle_plan.h"
+#include "pot_plan.h"
 
 namespace shell {
 
@@ -16,6 +17,25 @@ const SettlePair kSettlePlan[kSettlePairs] = {
     {1, 7, 6, 5150, 1856, false},   // P4  R_LO4 (AGND)  -> REF_C
     {1, 5, 3, 150, 54, true},       // P5  R_HI4 (A+3V3) -> R_LO3 (AGND)
 };
+
+// Round four's pot pairs. Channels and values from pot_plan.h's kPots (the
+// host test holds every row to it); R_src is pot_r_src_mid(), the pot at
+// 50/50; tau9 is tools/settle_budget.py's term A for that impedance, run
+// 2026-09-28 -- derived, and recomputed by the host test, not measured.
+const SettlePair kSettlePotPlan[kSettlePotPairs] = {
+    // group from  to   R_src  9.01 tau  reference
+    {0, 1, 2, 2650, 1552, false},   // P6   ch1 (A+3V3) -> RV2, 10k at mid
+    {0, 3, 2, 2650, 1552, false},   // P7   ch3 (AGND)  -> RV2
+    {0, 5, 6, 5150, 3016, false},   // P8   ch5 (A+3V3) -> RV4, 20k at mid
+    {0, 7, 6, 5150, 3016, false},   // P9   ch7 (AGND)  -> RV4
+    {1, 1, 2, 2650, 955, false},    // P10  ch1 (A+3V3) -> RV6, 10k at mid
+    {1, 3, 2, 2650, 955, false},    // P11  ch3 (AGND)  -> RV6
+};
+
+const SettlePair& settle_pair(int p)
+{
+    return (p < kSettlePairs) ? kSettlePlan[p] : kSettlePotPlan[p - kSettlePairs];
+}
 
 int d_settle_index(const Point* pts, int n, int32_t settled)
 {
@@ -95,6 +115,15 @@ Gates settle_gates(const RunSummary& s)
                   && (s.lat_max_ns - s.lat_min_ns) <= kJitterMaxNs;
 
     return g;
+}
+
+int32_t g3_spread(const int32_t* per_pair, int n)
+{
+    int32_t   worst   = 0;
+    const int counted = (n < kSettlePairs) ? n : kSettlePairs;
+    for(int p = 0; p < counted; ++p)
+        if(per_pair[p] > worst) worst = per_pair[p];
+    return worst;
 }
 
 // --- Fix round 4: the sampling-time choice, per pair ---

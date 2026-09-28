@@ -28,6 +28,25 @@ struct SettlePair
 inline constexpr int kSettlePairs = 6;
 extern const SettlePair kSettlePlan[kSettlePairs];
 
+// Round four (spec 2026-09-28-coupon-pot-round-design.md section 4): six more
+// pairs, two per pot, stepping onto the wiper from each of its rail-tied
+// neighbours -- P6..P11. The plan carries them at all times and reads no
+// switch, so the host suite holds both halves; only settle_probe.cpp decides,
+// from SHELL_POT_ROUND, how many pairs it sweeps. P0-P5 keep their numbers
+// and their meaning at either position.
+inline constexpr int kSettlePotPairs = 6;
+inline constexpr int kSettlePairsMax = kSettlePairs + kSettlePotPairs;
+extern const SettlePair kSettlePotPlan[kSettlePotPairs];
+
+constexpr int settle_pair_count(bool pot_round)
+{
+    return pot_round ? kSettlePairsMax : kSettlePairs;
+}
+
+// Pair p of the full numbering: kSettlePlan for P0-P5, kSettlePotPlan for
+// P6-P11. p must be in [0, kSettlePairsMax).
+const SettlePair& settle_pair(int p);
+
 // --- The ADC's own sampling-time ladder (fix round 4) ---
 //
 // The STM32H7 ADC1 HAL only offers eight sampling times, in ADC cycles x10
@@ -144,7 +163,7 @@ inline constexpr int32_t  kJitterMaxNs    = kGridStepNs;  // G4, one grid step
 // What a completed run reduces to before it is judged.
 struct RunSummary
 {
-    int32_t knee_ns[kSettlePairs];  // -1 where the pair never settled
+    int32_t knee_ns[kSettlePairsMax];  // -1 where the pair never settled
     int32_t b0;                     // spread of P0's settled reference read
     // Max - min of the per-point MEANS across the settled region (from the
     // pair's own knee onward), in raw ADC counts. G3 bounds THIS against
@@ -210,6 +229,14 @@ struct Gates
 
     bool ok() const { return g1_knee && g2_floor && g3_band && g4_jitter; }
 };
+
+// G3's input, reduced from the per-pair settled-region mean spreads the sweep
+// prints on SHELL_SETTLE_BAND (-1 = the pair has no settled region). Only
+// P0-P5 enter it, at either switch position: G3 judges the instrument, and a
+// pot wiper that wanders more than a divider must not refuse the run that is
+// measuring it (spec 2026-09-28 section 4). 0 when no counted pair has a
+// settled region -- the value the sweep's running max always started from.
+int32_t g3_spread(const int32_t* per_pair, int n);
 
 // A run that fails any gate prints its numbers and refuses to name a settle
 // time. It does NOT report a board defect -- the distinction is the entire
