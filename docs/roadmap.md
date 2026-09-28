@@ -4131,8 +4131,12 @@ dropped.** Both Bastian's decisions, after a short research pass.
 
 **Next:** a master plan for Rev A — the one board's pin map, schematic,
 layout, front panel, BOM and bring-up, in order and against the hardware
-roadmap's dates — then each piece as its own spec and plan. The depth of the
-socketed module against the Palette's 45.5 mm is the first number it needs.
+roadmap's dates — then each piece as its own spec and plan. First number in:
+the socketed module stands **15 mm** above the board at its highest point,
+USB socket included (measured on the coupon by Bastian, 2026-09-28, on the
+coupon's four 2×5 sockets). Against the Palette's 45.5 mm (37.4 at the outer
+HP) that leaves the panel-to-board gap and the power header as the other two
+terms; neither is measured yet.
 
 **2026-09-27 — the next coupon instrument is built, and it waits on a board
 session.** Round two left one item bigger than it found it: a 5150 Ω channel
