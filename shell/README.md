@@ -278,6 +278,12 @@ the 16:1, 48 ms on the 8:1.
    the control PCB's pin map, which does not exist yet; the pin map should
    give one spare channel to AGND and one to the rail, so the panel
    calibrates its own span instead of trusting one coupon's number (spec §8).
+   Code space for part 2 is tight: the coupon playing image uses 98.8 % of
+   `SRAM_EXEC`. The linker-map diff in `docs/roadmap.md` (M6, 2026-09-28)
+   puts most of the 13.4 KB it added on routing through `apply_param` and the
+   engine setters that drags in, a one-time cost; part 2's table rows are
+   what comes on top. Part 2's table must also key on the sense pin, not only
+   `(group, ch)`.
 2. **Open on the coupon, if anyone wants it:** round one's four RV4 cases
    (`SHELL_XTALK_RV4=1`, skipped on the false belief that RV4 was unfitted),
    and a second populated board to separate board from design.

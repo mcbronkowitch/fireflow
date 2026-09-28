@@ -4065,8 +4065,20 @@ knob was being touched was not recorded. No cause claimed.
 **Carried into part 2, from the review:** the coupon playing image uses
 98.8 % of `SRAM_EXEC` (about 3 KB left). In `shell/build/shell.map` of the
 coupon playing image, `apply_control` (with `apply_param` inlined) is 0xba0 =
-2976 bytes of the about 13.4 KB the image grew over the bring-up image; the
-rest of the growth is unattributed. And on the panel
+2976 bytes of the about 13.4 KB the image grew over the bring-up image.
+*Attributed later the same day*, from a section-by-section diff of the two
+images' linker maps (bring-up 246 408 B, coupon playing 259 788 B, `.text`
++13 376 B): `controls.o` +4882 (`apply_control` 2976, `kParams` 1072, its
+parameter-name strings 748), engine objects +8000 B together — the largest
+single sections are setters `apply_param` routes to that the fixed operating
+point never called (`ModLane::set_step` 1824, `set_smooth` 456,
+`BbdEngine::set_resonance` 452 and `set_decay` 428, `SamplerEngine::set_resonance`
+296, `SuperModulator::set_tide` 264) — and the scan itself (`panel_scan`,
+`scan_value`, `mux_plan`) about +1.1 KB, less `coupon_scan`/`coupon_expect`
+−0.8 KB. *Reasoned from that, not measured:* most of the growth is the cost of
+routing through `apply_param` at all, paid once, and part 2's 70-pot table
+should add mainly its own rows rather than another 13 KB; the 748 bytes of
+names in `kParams` are never read by the firmware. And on the panel
 profile, `find_control` keys on `(group, ch)` only, so part 2's 70-pot table
 must key on the sense pin too.
 
