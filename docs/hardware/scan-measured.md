@@ -195,11 +195,11 @@ at the one fixed operating point.
 
 Before the app was flashed, the wavetable bank `shell/build/shell-qspi.bin`
 was written to `0x90100000`. Whether a bank had been there before could not
-be checked: a DFU upload (`dfu-util -U`) of `0x90100000`, and one of
-`0x90040000` right after the app was flashed there, returned the same bytes,
-matching neither image, so a DFU upload does not read the flash on this
-bootloader. The engine ran during the measurement, which is why the bank is
-recorded here.
+be checked. *Observed in the session, not in the capture:* a DFU upload
+(`dfu-util -U`) of `0x90100000`, and one of `0x90040000` right after the app
+was flashed there, returned the same bytes, matching neither image, so the
+upload did not show what the flash holds. Why is not claimed. The engine ran
+during the measurement, which is why the bank is recorded here.
 
 | claim | class |
 |---|---|
@@ -211,6 +211,7 @@ recorded here.
 | The slack holds with the engine running | **measured**, at the fixed operating point |
 | The slack holds at other engine loads | **reasoned** (§4), not measured |
 | That `ticks` would show a missed audio block | **not claimed**; it would not (§2) |
+| The two DFU uploads returned the same bytes, matching neither image | **observed** in the session, not in the capture; no cause claimed |
 | Any mechanism | **none** |
 
 ## 7. Open, characterised, deliberately unexplained
