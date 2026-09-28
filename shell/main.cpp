@@ -17,6 +17,7 @@
 #include "shell_tone_probe.h"
 #include "shell_wait_probe.h"
 #include "shell_scan_check.h"
+#include "shell_panel_scan.h"
 #include "hw/board.h"
 #include "sdram_mem.h"
 #include "instrument.h"
@@ -60,12 +61,16 @@ volatile uint32_t g_block_tick = 0;
 #include "scan_check.h"
 #endif
 
+#if SHELL_PANEL_SCAN
+#include "panel_scan.h"
+#endif
+
 #if defined(SHELL_CPU_PROBE)
 #include <cstdint>
 #include "util/CpuLoadMeter.h"
 #endif
 
-#if defined(SHELL_CPU_PROBE) || SHELL_COUPON_PROBE || SHELL_SETTLE_PROBE || SHELL_XTALK_PROBE || SHELL_TONE_PROBE || SHELL_WAIT_PROBE
+#if defined(SHELL_CPU_PROBE) || SHELL_COUPON_PROBE || SHELL_SETTLE_PROBE || SHELL_XTALK_PROBE || SHELL_TONE_PROBE || SHELL_WAIT_PROBE || SHELL_PANEL_SCAN
 // libDaisy deklariert diese beiden in src/usbd/usbd_desc.c als
 // `extern const char*` und definiert sie nie -- die Anwendung besitzt ihre
 // eigene USB-Identitaet. Ohne sie scheitert der USB-Zweig beim LINKEN, nicht
@@ -166,6 +171,11 @@ static void AudioCallback(daisy::AudioHandle::InputBuffer  in,
     // load range that eats the ~300 us of slack scan-budget.md section 3
     // found (spec 2026-09-28-coupon-panel-scan-design.md section 2).
     shell::scan_check_tick(hw);
+#endif
+
+#if SHELL_PANEL_SCAN
+    // FIRST, before process(), for the same reason as the scan check above.
+    shell::panel_scan_tick(hw, inst);
 #endif
 
     inst.process(in[0], in[1], out[0], out[1], size);
@@ -298,7 +308,7 @@ int main(void)
     shell::run_settle_probe(hw);   // never returns
 #endif
 
-#if SHELL_COUPON_PROBE && !SHELL_SCAN_CHECK
+#if SHELL_COUPON_PROBE && !SHELL_SCAN_CHECK && !SHELL_PANEL_SCAN
     // The board under test is the coupon, not an instrument. No engine, no
     // audio, no operating point: this image exists to say whether the thing
     // is wired the way the netlist claims.
@@ -327,6 +337,14 @@ int main(void)
     shell::scan_check_init();
     hw.StartAudio(AudioCallback);
     shell::run_scan_check_report(hw);   // never returns
+#endif
+
+#if SHELL_PANEL_SCAN
+    // RATE_A and DENSITY_A above stay as the start point; on the coupon the
+    // pots override them with their first emission once the span is valid.
+    shell::panel_scan_init();
+    hw.StartAudio(AudioCallback);
+    shell::run_panel_scan_report(hw);   // never returns
 #endif
 
 #if SHELL_MUX_PROBE
