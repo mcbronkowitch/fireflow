@@ -72,10 +72,34 @@ check("B2 a failed wait gate refuses",
       not rp.verdict(settle_meta(), wait_meta(gates_ok=0), wait_rows())[0])
 check("B3 a failed G9 refuses",
       not rp.verdict(settle_meta(), wait_meta(g9_pass=0), wait_rows())[0])
-check("B4 PG1 in the settle image refuses",
-      not rp.verdict(settle_meta(28179), wait_meta(), wait_rows(28179))[0])
+ok, why = rp.verdict(settle_meta(28179), wait_meta(), wait_rows(28200))
+check("B4 PG1 in the settle image refuses, isolated from the wait image",
+      not ok and "PG1 failed for RV2 in the settle image" in why
+      and not any("wait image" in w for w in why))
 check("B5 a healthy pair of inputs passes",
       rp.verdict(settle_meta(), wait_meta(), wait_rows()) == (True, []))
+
+
+def settle_meta_no_pot_cfg():
+    """settle_meta() with its pot-block row removed."""
+    m = settle_meta()
+    del m[("pot_cfg", "", "pots")]
+    return m
+
+
+def wait_meta_wrong_pot_cfg():
+    """wait_meta() with its pot-block row set to a wrong pot count."""
+    m = wait_meta()
+    m[("pot_cfg", "", "pots")] = "0"
+    return m
+
+
+ok, why = rp.verdict(settle_meta_no_pot_cfg(), wait_meta(), wait_rows())
+check("B6 a settle image missing its pot-block row refuses",
+      not ok and any("not a pot-round block" in w for w in why))
+ok, why = rp.verdict(settle_meta(), wait_meta_wrong_pot_cfg(), wait_rows())
+check("B7 a wait image with the wrong pot count refuses",
+      not ok and any("not a pot-round block" in w for w in why))
 
 # --- C. the arithmetic ---
 check("C1 settle readings are the mean of each pot's two tail_refs",
