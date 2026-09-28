@@ -177,6 +177,11 @@ reservoir helps the S&H — is real but loses: the reservoir's recovery time gro
 linearly with the capacitance while the dip it suppresses shrinks only
 logarithmically.
 
+*(2026-09-28: the board test that could have falsified this — a capacitor
+fitted to `C_COM16`/`C_COM8` on a second coupon — was struck by Bastian. The
+finding stays what it is here: arithmetic, never measured with a capacitor
+fitted. The panel design fits none, and the empty footprint stays empty.)*
+
 **2. The pot value is a real design decision with a hard ceiling, and it lands
 on 10 k.** At 100 k the 16:1 falls off a cliff, because term C forces the
 sampling window from 64.5 to 387.5 cycles and the step cost multiplies: 0.88 of

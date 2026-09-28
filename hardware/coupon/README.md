@@ -161,6 +161,12 @@ the designed star point. It costs one rework cycle on a pad, and whether an
 0603 lands cleanly on `SolderJumper-2_P1.3mm_Open_Pad1.0x1.5mm`'s 1.3 mm
 pitch is unchecked.
 
+**Struck 2026-09-28: point 2's "capacitor at `COM`" case will not be
+measured.** Bastian decided against the capacitor test; `C_COM16`/`C_COM8`
+stay unpopulated on every board, and "fit none" (`docs/hardware/settle-budget.md`
+§4 finding 1) stays arithmetic. The paragraph below is kept as the record of
+what that board would have needed.
+
 **A second board for point 2's "capacitor at `COM`" case need not be fully
 stuffed.** It needs the submodule and its sockets, `J_PWR`, the bulk caps,
 both jumpers, `U_SR1`/`U_SR2`, one mux, `R_REFA1`/`R_REFA2`, the decoupling

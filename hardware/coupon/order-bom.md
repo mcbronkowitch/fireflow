@@ -88,7 +88,9 @@ copy rather than rework the first.
   with no ring contact). If the jack is wanted later, buy the actual
   **SJ1-3513N** from Digikey or Mouser on the back of an order that already
   clears their free-shipping threshold.
-- **`C_COM16` / `C_COM8`** — deliberately unpopulated, per requirement 2.
+- **`C_COM16` / `C_COM8`** — deliberately unpopulated, per requirement 2, and
+  staying that way: the capacitor test they existed for was struck on
+  2026-09-28, so no capacitor for them is ever bought.
 - **The ten test points and both solder jumpers** — bare pads; the jumpers are
   bridged with solder.
 

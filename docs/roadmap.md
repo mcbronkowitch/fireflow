@@ -65,7 +65,10 @@ is actually built today, and what is still design-only.
   the pots fitted. Only a wiring check has read them — clockwise stop, all
   seven at the rail — and mid travel, where a pot's source impedance peaks,
   is unmeasured. Round one's four `RV4` row-6 cases were skipped on a false
-  premise and can run with `SHELL_XTALK_RV4=1`. The 2026-09-03 entry below
+  premise and can run with `SHELL_XTALK_RV4=1`. **Also 2026-09-28: the
+  capacitor-at-`COM` test is struck** (Bastian's decision) — `C_COM16`/`C_COM8`
+  stay empty on every board, no second coupon gets populated for it, and
+  `settle-budget.md` §4's "fit none" stays arithmetic. The 2026-09-03 entry below
   still says the pots come from stock; that stopped being true on
   2026-09-16); earlier,
   2026-09-19 (**the coupon has been built, populated and
