@@ -4,9 +4,9 @@ namespace shell {
 
 // Spec section 6. Arms A and B at the working rung (B takes one conversion
 // more per repeat), arm L at the long rung, arm C at the working rung on its
-// four points only -- each summed over five victims and kWaitRepeats
+// four points only -- each summed over `victims` victims and kWaitRepeats
 // repeats. Integer microseconds throughout, divided once at the end.
-uint32_t wait_block_estimate_ms()
+uint32_t wait_block_estimate_ms(int victims)
 {
     uint64_t grid_us = 0;
     for(int i = 0; i < kWaitPoints; ++i) grid_us += kWaitGridUs[i];
@@ -20,7 +20,7 @@ uint32_t wait_block_estimate_ms()
              + (grid_us + kWaitPoints * 2u * kWaitConvUsLong)           // L
              + (codec_us + kWaitCodecPoints * 2u * kWaitConvUsWorking)); // C
 
-    return static_cast<uint32_t>(per_victim_us * kXtalkVictims / 1000u);
+    return static_cast<uint32_t>(per_victim_us * static_cast<uint64_t>(victims) / 1000u);
 }
 
 } // namespace shell

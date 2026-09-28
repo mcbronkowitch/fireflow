@@ -6,13 +6,16 @@
 // xtalk_plan.h and tone_plan.h -- so the host test suite can hold it.
 //
 // It defines NO victim table: the victims are round one's five, used directly
-// from xtalk_plan.h, exactly as round two uses them.
+// from xtalk_plan.h, exactly as round two uses them -- plus, in a
+// SHELL_POT_ROUND=1 image, pot_plan.h's three pots appended as victims 5-7
+// (wait_victim() below). The plan reads no switch; wait_probe.cpp does.
 //
 // Spec: ../docs/superpowers/specs/2026-09-27-coupon-wait-sweep-probe-design.md
 #include <cstdint>
 
 #include "settle_plan.h"
 #include "xtalk_plan.h"
+#include "pot_plan.h"
 
 namespace shell {
 
@@ -66,6 +69,28 @@ constexpr int wait_codec_grid_index(int k)
 
 inline constexpr int kWaitRepeats = kRepeats;
 
+// Round four (spec 2026-09-28-coupon-pot-round-design.md section 5): the
+// pots join round one's five victims as 5..7, in pot_plan.h's order. Case
+// numbering stays arm * victims + victim, so a five-victim image numbers its
+// cases exactly as it always did.
+inline constexpr int kWaitVictimsMax = kXtalkVictims + kPotCount;
+
+constexpr int wait_victim_count(bool pot_round)
+{
+    return pot_round ? kWaitVictimsMax : kXtalkVictims;
+}
+
+// Victim v of the full numbering, by value: kXtalkVictimTable for 0..4, a pot
+// at mid travel for 5..7. v must be in [0, kWaitVictimsMax).
+constexpr XtalkVictim wait_victim(int v)
+{
+    return v < kXtalkVictims
+               ? kXtalkVictimTable[v]
+               : XtalkVictim{kPots[v - kXtalkVictims].group,
+                             kPots[v - kXtalkVictims].channel,
+                             pot_r_src_mid(kPots[v - kXtalkVictims].r_track_ohm)};
+}
+
 // The 387.5-cycle rung, index 6 of kSamplingLadderTenths -- the rung
 // settle-measured.md section 7 measured landing on the divider's true value,
 // and the one tone_plan.h's kToneWinRung names for the same reason.
@@ -110,6 +135,7 @@ constexpr int wait_grid_order(int k, int n, int sweep_dir)
 // start overhead) and 66 us at 387.5 cycles (396 ADC cycles, 64.4 us).
 inline constexpr uint32_t kWaitConvUsWorking = 5;
 inline constexpr uint32_t kWaitConvUsLong    = 66;
-uint32_t wait_block_estimate_ms();
+// `victims` is the count the image sweeps -- wait_victim_count().
+uint32_t wait_block_estimate_ms(int victims = kXtalkVictims);
 
 } // namespace shell

@@ -1,8 +1,10 @@
 // The wait-sweep probe's grid, its arms and its microsecond-to-cycle
 // arithmetic. Spec section 8's first bullet, one TEST_CASE per claim.
+#include <cstdlib>
 #include <doctest/doctest.h>
 #include "../shell/wait_plan.h"
 #include "../shell/settle_plan.h"
+#include "../shell/pot_plan.h"
 
 TEST_CASE("wait grid: starts back to back, strictly increasing, fifteen points") {
     static_assert(shell::kWaitPoints == 15, "spec section 3 names fifteen points");
@@ -84,4 +86,41 @@ TEST_CASE("wait: the block estimate stays under two minutes") {
     CAPTURE(ms);
     CHECK(ms > 60000u);
     CHECK(ms < 120000u);
+}
+
+// --- Round four: the pot victims (spec 2026-09-28-coupon-pot-round-design.md
+// section 5) ---
+
+TEST_CASE("wait: the pot round appends three victims and keeps round one's") {
+    CHECK(shell::kWaitVictimsMax == 8);
+    CHECK(shell::wait_victim_count(false) == 5);
+    CHECK(shell::wait_victim_count(true) == 8);
+    for(int v = 0; v < shell::kXtalkVictims; ++v) {
+        CAPTURE(v);
+        const shell::XtalkVictim w = shell::wait_victim(v);
+        CHECK(w.group == shell::kXtalkVictimTable[v].group);
+        CHECK(w.channel == shell::kXtalkVictimTable[v].channel);
+        CHECK(w.r_src_ohm == shell::kXtalkVictimTable[v].r_src_ohm);
+    }
+    for(int i = 0; i < shell::kPotCount; ++i) {
+        CAPTURE(i);
+        const shell::XtalkVictim w = shell::wait_victim(shell::kXtalkVictims + i);
+        CHECK(w.group == shell::kPots[i].group);
+        CHECK(w.channel == shell::kPots[i].channel);
+        CHECK(w.r_src_ohm == shell::pot_r_src_mid(shell::kPots[i].r_track_ohm));
+    }
+}
+
+TEST_CASE("wait: the block estimate scales with the victim count") {
+    // Spec section 5: ~89.7 s at five victims, ~143.5 s at eight. The
+    // estimate is per-victim cost times the count, floored to ms once, so
+    // the two differ from an exact 8:5 by less than 8 ms.
+    const uint32_t five  = shell::wait_block_estimate_ms(5);
+    const uint32_t eight = shell::wait_block_estimate_ms(8);
+    CAPTURE(five);
+    CAPTURE(eight);
+    CHECK(five == shell::wait_block_estimate_ms());
+    CHECK(std::llabs(static_cast<long long>(eight) * 5 - static_cast<long long>(five) * 8) < 8);
+    CHECK(eight > 120000u);
+    CHECK(eight < 180000u);
 }
