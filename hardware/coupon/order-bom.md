@@ -3,8 +3,9 @@
 **Both orders are placed. Boards: JLCPCB, 2026-09-02, $22.02. Parts: Reichelt,
 2026-09-03, 14.19 € + 5.95 € shipping.** This file stays as the record of what
 was bought and why, and as the list to repeat from if a second board gets
-populated. **One line is still open:** the pots, which stopped being a stock
-item on 2026-09-16 — see "The pots" below.
+populated. The pots, which stopped being a stock item on 2026-09-16, were
+bought separately from Amazon and are soldered in since 2026-09-17 — see "The
+pots" below. **Nothing is left to order for the first board.**
 
 What to buy to populate one coupon. The board itself was ordered from JLCPCB
 on 2026-09-02 (5 pieces, bare boards, no assembly), so everything here is
@@ -74,8 +75,8 @@ copy rather than rework the first.
 
 - **The seven pots (RV1–RV7)** — 4 × 10 k and 3 × 20 k linear. Were "from
   stock" until 2026-09-16, when the stock parts turned out to be bodies too
-  large to reach the board without flying leads. They are now the **one open
-  order line**, and not a Reichelt one: see "The pots" below.
+  large to reach the board without flying leads. Bought from Amazon instead
+  and fitted on 2026-09-17: see "The pots" below.
 - **`J_AUDIO`, the 3.5 mm jack** — left unpopulated for now. It serves **none
   of the eight measurement points** in `proof/review.md` Section 1, the
   measurement rig is mono anyway (see `netlist.py`'s comment on the part), and
@@ -103,10 +104,14 @@ inside the same 16.5-cycle sampling window and the same 0.16 block — but at
 20 cm the 74HC4067 falls into the next window, and the crosstalk and noise
 points stop meaning anything long before that. So the pots go on the board.
 
-**What to buy: an RV09 9 mm vertical, 2.5 mm pitch, in 10 k and 20 k.** Checked
-2026-09-16: Amazon `B01HO8EFXI` (10 k) and `B01HO8ELFA` (20 k), 6.99 € per 10
-pieces each, which covers all seven positions with spares. Those are listing
-claims, not measurements — the checks below are what settles it.
+**What was bought: an RV09 9 mm vertical, 2.5 mm pitch, in 10 k and 20 k** —
+Amazon `B01HO8EFXI` (10 k) and `B01HO8ELFA` (20 k), 6.99 € per 10 pieces each,
+checked 2026-09-16, which covers all seven positions with spares. **Fitted on
+the first board on 2026-09-17**, RV3/RV4/RV7 at 20 k and the rest at 10 k. The
+pin row went in; the support lugs were slightly too large for the slots and
+were clipped off, and the pots hang on their three solder joints with no glue.
+The checks below were written before the parts arrived and stay as the list
+for the next board.
 
 **Reichelt cannot supply the pair.** Its only 9 mm vertical part is the ALPS
 `RK09K113-LIN10K` (manufacturer `RK09K1130A0H`, 1.10 €), and that line carries
@@ -129,7 +134,8 @@ Board figures below read from the committed board and the footprint,
   count, whether that 10.6 is read outer-to-outer or centre-to-centre. Measure
   the lugs before pressing anything down. If they miss, clip them off; the pot
   then hangs on three solder joints, so add a dab of hot glue under the body
-  before anything gets turned.
+  before anything gets turned. **On the first board the Amazon RV09's lugs
+  missed (slightly too large) and were clipped; no glue was added.**
 - **A standing body claims far less board area** — roughly the 9.8 mm square
   between the pin row and the lug slots, instead of a 20 mm body reaching out
   over its neighbours. Whether it still overhangs `JP_GND` or `R_SP11` at RV4

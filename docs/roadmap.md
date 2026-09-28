@@ -56,11 +56,18 @@ is actually built today, and what is still design-only.
   image `SHELL_COUPON_PROBE=1 SHELL_WAIT_PROBE=1`, reader `shell/read_wait.py`
   with guard `read_wait_guard`. Also committed the same day: the coupon's
   bring-up record of 2026-09-17, the module on four 2×5 sockets rather than
-  two 2×10, and the pots, which since 2026-09-16 are **the one open order
-  line** — the drawer parts turned out to reach the board only on flying
-  leads, and the RV09 vertical replacement is in
-  `hardware/coupon/order-bom.md`. The 2026-09-03 entry below still says the
-  pots come from stock; that stopped being true on 2026-09-16); earlier,
+  two 2×10, and the pots — the drawer parts turned out to reach the board only
+  on flying leads, and the RV09 vertical replacement is in
+  `hardware/coupon/order-bom.md`. **Correction, 2026-09-28:** that commit
+  called the pots "the one open order line"; they were bought from Amazon and
+  have been **soldered in since the evening of 2026-09-17** (RV3/RV4/RV7 20 k,
+  the rest 10 k, lugs clipped, no glue), so rounds one to three all ran with
+  the pots fitted. Only a wiring check has read them — clockwise stop, all
+  seven at the rail — and mid travel, where a pot's source impedance peaks,
+  is unmeasured. Round one's four `RV4` row-6 cases were skipped on a false
+  premise and can run with `SHELL_XTALK_RV4=1`. The 2026-09-03 entry below
+  still says the pots come from stock; that stopped being true on
+  2026-09-16); earlier,
   2026-09-19 (**the coupon has been built, populated and
   measured twice, and both rounds returned a NEGATIVE result on the question
   they were built to ask.** Round one, the crosstalk probe, pits the board's

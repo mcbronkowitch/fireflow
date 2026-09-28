@@ -234,10 +234,20 @@ against `TP_3V3`. The jumpers were bridged first, and after that both pairs
 read 0 Ω whether the moat is clean or shorted. On this board that answer is
 gone for good.
 
-**Still unpopulated: the seven pots.** The bring-up scan judges every channel
-against a table, so MUX16 0/2/4/6 and MUX8 0/2/4 will read as floating and
-report red until the pots are in. The reference and tie channels are the ones
-that carry a real verdict before then.
+**The seven pots went in the same evening, 2026-09-17** — the RV09 vertical
+parts from `order-bom.md`, RV3/RV4/RV7 at 20 k and the other four at 10 k. The
+support lugs were slightly too large for the board's slots and were clipped
+off; each pot hangs on its three solder joints alone, with no glue under the
+body. (This README said "still unpopulated" until 2026-09-28; the board had
+not been in that state since the 17th.)
+
+With the pots in, the bring-up scan read all seven wipers at **63481…63485**
+at the clockwise stop, against 63484…63486 on the rail-tied reference channels
+(commit `084d702`'s message; no capture is committed). The counter-clockwise
+readings were taken but not recorded. That is a **wiring check, not a
+characterisation**: at either stop a pot's source impedance is near zero, so
+neither reading says anything about settle time or the wait effect. The
+hard case — mid travel, R/4, 2.5 kΩ at 10 k and 5 kΩ at 20 k — is unmeasured.
 
 ## Layer and zone map
 
