@@ -299,6 +299,29 @@ it adds the pots to one of those two probes and selects nothing on its own)
 endif
 endif
 
+# The panel scan's measurement image (spec 2026-09-28-coupon-panel-scan-
+# design.md section 4). The engine plays at the fixed operating point, the
+# scan runs at the start of the callback in three arms, and nothing it reads
+# reaches the engine. Coupon only: its arms walk the coupon's 24 steps.
+SHELL_SCAN_CHECK ?= 0
+
+ifneq ($(filter $(SHELL_SCAN_CHECK),0 1),$(SHELL_SCAN_CHECK))
+$(error SHELL_SCAN_CHECK must be 0 or 1)
+endif
+
+ifeq ($(SHELL_SCAN_CHECK),1)
+ifneq ($(SHELL_COUPON_PROBE),1)
+$(error SHELL_SCAN_CHECK=1 needs SHELL_COUPON_PROBE=1: its arms walk the \
+coupon's 24 steps)
+endif
+ifneq ($(filter 1,$(SHELL_SETTLE_PROBE) $(SHELL_XTALK_PROBE) $(SHELL_TONE_PROBE) $(SHELL_WAIT_PROBE) $(SHELL_CPU_PROBE)),)
+$(error SHELL_SCAN_CHECK=1 excludes the settle, xtalk, tone, wait and CPU probes)
+endif
+ifneq ($(SHELL_MUX_PROBE),0)
+$(error SHELL_SCAN_CHECK=1 excludes SHELL_MUX_PROBE)
+endif
+endif
+
 CPP_SOURCES = \
 	main.cpp \
 	sdram_mem.cpp \
@@ -315,6 +338,8 @@ CPP_SOURCES = \
 	wait_probe.cpp \
 	wait_plan.cpp \
 	pot_report.cpp \
+	scan_check_plan.cpp \
+	scan_check.cpp \
 	mux_scan.cpp \
 	../engine/body/mode_bank.cpp \
 	../engine/body/ks_string.cpp \
@@ -365,7 +390,7 @@ include $(SYSTEM_FILES_DIR)/Makefile
 # Fehler zurueck, und er sieht wie eine Messung aus.
 C_INCLUDES += -I$(BUILD_DIR)
 
-SWITCH_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/probe_adc.o $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o
+SWITCH_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/probe_adc.o $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/scan_check.o
 
 # ZUR PARSE-ZEIT, nicht als Regel, und das ist der Kern der Reparatur vom
 # 2026-08-23. Als Regel mit FORCE hat es ZWEIMAL nicht gehalten:
@@ -393,20 +418,21 @@ SWITCH_HEADERS := \
   $(shell python write_shell_tone_probe.py $(BUILD_DIR)/shell_tone_probe.h $(SHELL_TONE_PROBE) $(SHELL_TONE_DC) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_wait_probe.py $(BUILD_DIR)/shell_wait_probe.h $(SHELL_WAIT_PROBE) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_pot_round.py $(BUILD_DIR)/shell_pot_round.h $(SHELL_POT_ROUND) $(SWITCH_OBJECTS)) \
-  $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/pot_report.o)
+  $(shell python write_shell_scan_check.py $(BUILD_DIR)/shell_scan_check.h $(SHELL_SCAN_CHECK) $(SWITCH_OBJECTS)) \
+  $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/pot_report.o $(BUILD_DIR)/scan_check.o)
 
-# The git stamp deletes only xtalk_probe.o, tone_probe.o, wait_probe.o and
-# pot_report.o, because those are the only objects that read it. Listing the whole SWITCH_OBJECTS there would
+# The git stamp deletes only xtalk_probe.o, tone_probe.o, wait_probe.o, pot_report.o and scan_check.o, because those are the only objects that read it. Listing the whole SWITCH_OBJECTS there would
 # force a full rebuild of seven objects on every commit for a string in one
 # format argument.
 
-$(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_selftest.h $(BUILD_DIR)/shell_cpu_probe.h $(BUILD_DIR)/shell_mux_probe.h $(BUILD_DIR)/shell_idle_fill.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_xtalk_probe.h $(BUILD_DIR)/shell_tone_probe.h $(BUILD_DIR)/shell_wait_probe.h
+$(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_selftest.h $(BUILD_DIR)/shell_cpu_probe.h $(BUILD_DIR)/shell_mux_probe.h $(BUILD_DIR)/shell_idle_fill.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_xtalk_probe.h $(BUILD_DIR)/shell_tone_probe.h $(BUILD_DIR)/shell_wait_probe.h $(BUILD_DIR)/shell_scan_check.h
 $(BUILD_DIR)/wait_probe.o: $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/shell_coupon_probe.h
 $(BUILD_DIR)/xtalk_probe.o: $(BUILD_DIR)/shell_xtalk_probe.h $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/shell_coupon_probe.h
 $(BUILD_DIR)/tone_probe.o: $(BUILD_DIR)/shell_tone_probe.h $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/shell_coupon_probe.h
 $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o: $(BUILD_DIR)/shell_coupon_probe.h
 $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/wait_probe.o: $(BUILD_DIR)/shell_pot_round.h
 $(BUILD_DIR)/pot_report.o: $(BUILD_DIR)/shell_git_hash.h
+$(BUILD_DIR)/scan_check.o: $(BUILD_DIR)/shell_scan_check.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_git_hash.h
 
 .PHONY: FORCE
 FORCE:
