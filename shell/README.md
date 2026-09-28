@@ -272,7 +272,8 @@ the 16:1, 48 ms on the 8:1.
    measured on the coupon and written up in
    [`docs/hardware/scan-measured.md`](../docs/hardware/scan-measured.md).
    Board session 2 played `SHELL_PANEL_SCAN` on the coupon, and RV2, RV4 and
-   RV6 all moved the engine audibly, stop to stop. **Part 2** — the 70-pot
+   RV6 all moved the engine audibly; RV2 and RV6 reached both stops, RV4 its
+   top stop (its low stop was not seen). **Part 2** — the 70-pot
    table, the three keycaps on the 165 and the 19 LEDs on the 595 — waits for
    the control PCB's pin map, which does not exist yet; the pin map should
    give one spare channel to AGND and one to the rail, so the panel

@@ -188,6 +188,12 @@ read it (`write_shell_scan_check.py`, `write_shell_panel_scan.py`).
   reached only by the plain `SHELL_COUPON_PROBE=1` image, as today.
 - `scan_check.o` and `panel_scan.o` join `SWITCH_OBJECTS` and the git stamp's
   deletion list.
+
+  *Erratum, 2026-09-28 (final review):* only `scan_check.o` joined the git
+  stamp's deletion list. `panel_scan.cpp` reads no git hash, and
+  `shell/Makefile`'s rule is that the stamp deletes only the objects that read
+  it, so `panel_scan.o` is deliberately left out. Both joined
+  `SWITCH_OBJECTS` as written.
 - Before any flash, build the `SHELL_COUPON_PROBE=1` bring-up image and both
   new coupon images (`+SHELL_SCAN_CHECK=1`, `+SHELL_PANEL_SCAN=1`), and `cmp`
   them pairwise: all three must differ. The stale-object trap produces

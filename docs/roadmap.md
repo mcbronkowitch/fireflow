@@ -40,10 +40,11 @@ is actually built today, and what is still design-only.
   on the coupon, and played twice** —
   [`docs/hardware/scan-measured.md`](hardware/scan-measured.md): board
   session 1's check image found every coupon channel clean one block after
-  its address was written, to within 0.6 counts against a criterion of 8;
-  board session 2 played `SHELL_PANEL_SCAN`, and RV2, RV4 and RV6 all reached
-  their stops and all three moved audibly, though `FILT_A` does not step
-  audibly at 48 ms per sweep; see the M6 entry of that date. Earlier the same
+  its address was written, to within 0.61 counts against a criterion of 8;
+  board session 2 played `SHELL_PANEL_SCAN`: RV2 and RV6 reached both stops,
+  RV4 its top stop (its low stop was not seen), all three moved audibly, and
+  `FILT_A` did not step audibly at 48 ms per sweep; see the M6 entry of that
+  date. Earlier the same
   day: **the scan-budget pass is done** —
   [`docs/hardware/scan-budget.md`](hardware/scan-budget.md): the shell's
   existing free-running ADC pattern fits one mux step per block without the
@@ -4037,7 +4038,7 @@ playing image on which RV2, RV4 and RV6 drive `RATE_A`, `DENSITY_A` and
 **Board session 1** (image `c04ba77`, `SHELL_COUPON_PROBE=1
 SHELL_SCAN_CHECK=1`) answers `scan-budget.md` §7: on all 24 coupon steps, in
 five complete run blocks, the value read one block after its address is
-written matches the value read with the address parked to within 0.6 counts,
+written matches the value read with the address parked to within 0.61 counts,
 against a criterion of 8 — including the 15 steps whose predecessor sits
 14844–62605 counts away, where the same-block control read misses by 14843
 counts or more. Written up in
@@ -4050,7 +4051,7 @@ SHELL_PANEL_SCAN=1`, the wavetable bank already on the module from session 1)
 played the coupon through the engine. Idle, `SHELL_PLAY` showed `valid=1`,
 the span at 0..63482–63484, `rv2`/`rv4`/`rv6` at 0.498 (mid travel left from
 the pot round), and sweeps climbing about 21/s — the 48 ms per sweep the
-budget predicted. Bastian turned the pots stop to stop: RV2 (`RATE_A`)
+budget predicted. Bastian turned the pots: RV2 (`RATE_A`)
 reached 0 and 1.000, RV6 (`FILT_A`) reached 0 and 1.000, RV4 (`DENSITY_A`)
 reached 1.000 and came down to 0.260 — 0 was not seen in the two recordings.
 By ear, all three move; `FILT_A` does not step audibly at 48 ms per sweep
@@ -4062,8 +4063,10 @@ beyond the H = 16 hysteresis — while RV4 and RV6 held still. Whether the
 knob was being touched was not recorded. No cause claimed.
 
 **Carried into part 2, from the review:** the coupon playing image uses
-98.8 % of `SRAM_EXEC` (about 3 KB left; the growth looks like code, likely
-`apply_param` linked in for the first time — unverified). And on the panel
+98.8 % of `SRAM_EXEC` (about 3 KB left). In `shell/build/shell.map` of the
+coupon playing image, `apply_control` (with `apply_param` inlined) is 0xba0 =
+2976 bytes of the about 13.4 KB the image grew over the bring-up image; the
+rest of the growth is unattributed. And on the panel
 profile, `find_control` keys on `(group, ch)` only, so part 2's 70-pot table
 must key on the sense pin too.
 

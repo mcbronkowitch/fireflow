@@ -48,9 +48,12 @@ class MuxScan
     // hw.GetAdcValue(), which returns libDaisy's AnalogControl::Value() -- a
     // filtered value that only moves when ProcessAnalogControls() runs, and
     // nothing in shell/ calls it. The CPU run of 2026-08-23 priced those
-    // reads and was not affected; every value they stored was 0. The slew
-    // filter behind AnalogControl must never sit behind a mux in any case:
-    // it would average across channel changes.
+    // reads and was not affected. Read from the source, not measured: every
+    // value they stored was 0. The slew filter behind AnalogControl must
+    // never sit behind a mux in any case: it would average across channel
+    // changes. SHELL_MUX_PROBE images now run this step() too (raw reads,
+    // live pins only), so rebuilding one does not reproduce the 2026-08-23
+    // instrument exactly.
     // (spec 2026-09-28-coupon-panel-scan-design.md section 2)
     int step(bench::Board& hw);
 

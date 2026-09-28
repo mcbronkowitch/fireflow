@@ -10,7 +10,7 @@
 >
 > **The answer, in one line:** **yes.** On all 24 coupon steps, in all five
 > blocks, the value read one block after its address was written matches
-> the value read with the address parked to within **0.6 counts**, against a
+> the value read with the address parked to within **0.61 counts**, against a
 > criterion of 8. That includes the **15 steps whose predecessor sits
 > 14 844–62 605 counts away**, and on every one of them the control arm,
 > which reads in the same block as the write, misses by **14 843 counts or
@@ -77,8 +77,9 @@ this image has no counter that would show a missed audio block.
 **What was not used.** The host opened the port mid-stream. Lines 1–75 are a
 partial opening: line 1 is a `blk=0` line, line 2 a truncated `blk=0` line
 carrying the `$$` overflow marker with `blk=1`'s first `CH` line fused onto
-it, and lines 3–75 the rest of `blk=1`, without its `CFG` line and one `CH`
-line short. The reader discards all of it. The complete blocks start at
+it, and lines 3–75 the rest of `blk=1`, without its `CFG` line. All 72 of
+`blk=1`'s `CH` lines are in the file, the first one fused onto line 2 behind
+the stray `blk=0` text. The reader discards all of it. The complete blocks start at
 lines 76, 151, 226, 301 and 376; the file ends on `blk=6`'s `END` at line 450.
 
 ## 3. The result
@@ -129,8 +130,11 @@ hardware average weights its 32 conversions equally: a read whose average
 held even one conversion of the previous address would sit about ΔP/32 away
 from the rest, at least **464 counts** on the qualifying step with the
 smallest ΔP (step 5, 14 844) and **1956** on the largest (step 20, 62 605).
-Arm S's `max − min` on the qualifying steps is 0–10 counts in every block, so
-none of those 15 × 64 × 5 = 4800 reads did.
+Two legs rule that out for all 15 × 64 × 5 = 4800 reads on those steps. Arm
+S's `max − min` on them is 0–10 counts in every block, which rules out a mix
+of such reads and clean ones within a step. And |S − P| is at most 0.61
+counts on every step, which rules out every read of a step being shifted
+alike.
 
 ## 4. What it answers for `scan-budget.md` §7
 
@@ -178,8 +182,10 @@ and `shell/scan_value.h` carries it as `kPotHysteresis = 16`.
 `read_scan_check_guard` recomputes H from the committed capture and fails if
 the two differ.
 
-**Measured**, the pots' P means across the five blocks, about 47 s: no pot
-moved more than **0.8 counts** (RV1 and RV5).
+**Measured**, the pots' P means across the five blocks: no pot moved more
+than **0.8 counts** (RV1 and RV5). *Derived:* the P readings compared, block 2
+against block 6, lie about 38 s apart (4 × 9.46 s); the five blocks together
+span about 47 s.
 
 What H covers: seven pots standing still, each read over about 3 s at a
 time, in one session. It does not cover a pot being turned, a longer drift,
@@ -219,7 +225,7 @@ during the measurement, which is why the bank is recorded here.
 - **Arm 0 at steps 0 and 16.** Arm 0 reads **10 732–10 757** counts on step
   0 and **5 983–6 033** on step 16. That is neither the step's own P nor its
   table predecessor's, and it moves 25–49 counts between blocks, where every
-  other arm-0 cell holds within 1.0 count. Both steps change sense pin,
+  other arm-0 cell holds within 1.03 counts. Both steps change sense pin,
   neither qualifies for G3, and arm S is clean on both. Recorded, not
   explained.
 - **The rail.** G1's rail reads 63483.2–63483.4, against the 63485 that
@@ -229,9 +235,14 @@ during the measurement, which is why the bank is recorded here.
   fixed operating point (§4).
 - **A missed-block counter.** The image cannot show one (§2). If a later image
   measures other engine loads, it needs one.
-- **H on a turned pot.** Board session 2 turns the pots with the playing
-  image; whether 16 counts is quiet enough and still responsive is judged
-  there, by ear and on `SHELL_PLAY`.
+- **H on a turned pot.** Board session 2 (2026-09-28, image `cbd6270`)
+  turned the pots with the playing image. By ear (Bastian), `FILT_A` did not
+  step audibly. *Observed, unattributed:* at the end of the second
+  recording, after the turning, RV2's emitted value moved by more than 60 raw
+  counts over about 10 s, beyond H, while RV4 and RV6 held still; whether the
+  knob was being touched was not recorded, and no cause is claimed. RV4's low
+  stop was not seen. The session is recorded in the M6 entry of 2026-09-28 in
+  [`docs/roadmap.md`](../roadmap.md).
 
 ## 8. How to repeat it
 

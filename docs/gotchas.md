@@ -607,3 +607,17 @@ invisible from reading the scripts, and each cost real time.
   data nobody could observe, mistaken for data. **Anything a reader has to see
   is printed inside the loop.** A boot line is still worth keeping for SWD or a
   logic analyser; it may never be the only place a fact appears.
+
+- **`hw.GetAdcValue(i)` is not a reading, it is a filter's output that only
+  moves when someone runs the filter.** On the Patch Submodule it returns
+  libDaisy's `AnalogControl::Value()`, which updates only when
+  `ProcessAnalogControls()` runs — and nothing in `shell/` called it. So
+  `MuxScan::step()` stored 0 for five weeks behind a green CPU run, which
+  priced the reads and never looked at their values. Found by reading the
+  source on 2026-09-28, not measured (spec
+  [`2026-09-28-coupon-panel-scan-design.md`](superpowers/specs/2026-09-28-coupon-panel-scan-design.md)
+  §2); the scan-check capture
+  ([`scan-measured.md`](hardware/scan-measured.md)) shows the raw path reading
+  real values. Use the raw DMA word, `hw.adc.Get(i)`. And never put
+  `AnalogControl`'s slew filter behind a mux: it would average across channel
+  changes.

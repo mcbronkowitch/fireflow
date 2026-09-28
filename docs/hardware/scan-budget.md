@@ -20,8 +20,8 @@
 > first thing the panel scan's bring-up has to confirm on the coupon (§7).
 >
 > *(Done 2026-09-28: [`scan-measured.md`](scan-measured.md). One block after
-> the write, every coupon channel reads its parked value to within 0.6
-> counts, with the engine running.)*
+> the write, every coupon channel reads its parked value to within 0.61
+> counts, with the engine running at the fixed operating point.)*
 >
 > Every number comes out of [`tools/scan_budget.py`](../../tools/scan_budget.py),
 > guarded by `tools/test_scan_budget.py`, which ctest runs as
@@ -181,7 +181,7 @@ document assumes. Until then, the 303 µs slack is 15 % of a block and the only
 margin there is.
 
 *Done 2026-09-28, in [`scan-measured.md`](scan-measured.md):* on all 24
-coupon steps, five run blocks, the shipping pattern reads within 0.6 counts
+coupon steps, five run blocks, the shipping pattern reads within 0.61 counts
 of the same channel parked, with the engine playing at the shell's fixed
 operating point — the outcome the documented oversampling order predicts. The
 comparison is against a parked read in the same image rather than the

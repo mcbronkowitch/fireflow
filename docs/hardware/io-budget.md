@@ -713,6 +713,10 @@ Die Liste von 2026-08-08 nannte an erster Stelle die Einstufung der Parameter.
   > cost 13 points against the 2.9-point reserve. The verdict rests on the
   > oversampling order, which is documented by the HAL and not measured; the
   > panel scan's first coupon run tests it (`scan-budget.md` §7).
+  >
+  > **Addendum, later still on 2026-09-28: that run is done** — clean at one
+  > step per block on every coupon channel, with the engine running at the
+  > fixed operating point ([`scan-measured.md`](scan-measured.md)).
 - **Der Mux-Scan selbst.** libDaisys `InitMux` kann 8:1 an GPIOs, gebraucht wird
   16:1 mit Adressen aus der 595-Kette (§3). Die Umschaltung muss geschrieben
   werden. **Die CPU-Seite ist seit dem 2026-08-23 nicht mehr offen, sondern
