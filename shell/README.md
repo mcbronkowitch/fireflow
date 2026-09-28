@@ -211,41 +211,65 @@ Betriebspunkt auf einem Daisy Seed mit dessen eigenem Audioausgang messen.
 Zeigt der es auch, steckt es im Modul; zeigt er es nicht, im Trägerboard.
 Das ist eine Messung und keine Vermutung, und sie kostet einen Boardwechsel.
 
-## Wo die nächste Arbeit hingeht
+## Where the work stands, and where it goes next
 
-`shell/controls.{h,cpp}` (Task 6 des Phase-0-Plans) bringt den ersten Poti
-über einen `74HC4051` herein und misst, was Mux-Scan und LED-Ausgabe auf die
-CPU-Reserve kosten. Keine Seed-Zahl darf dafür zitiert werden, auch nicht als
-Näherung (`docs/bench/2026-08-07-seed-vs-patch-sm.md`).
+*Rewritten 2026-09-28 in English, like everything added to the repo since
+mid-August. The section it replaces (German, last touched 2026-08-23) still
+pointed at a first pot on a breadboard `74HC4051`; that path was overtaken by
+the test coupon. Git history has the old text.*
 
-**Nachtrag 2026-08-23, zwei Korrekturen und ein Vorzieher.** Hier stand, die
-Reserve sei **2,17 Punkte**; das war eine Seed-Hochrechnung. Direkt gemessen
-liegt `instrument_worst_bbd_dtcm` auf diesem Board bei 97,02–97,16 % `pct_max`,
-die Reserve also bei **~2,9 Punkten**
-(`docs/bench/2026-08-19-3def5d5-feed-axi-o2-patch_sm-usb.md`, zwei Läufe).
-Und die 62,78 % / 65,30 % der CPU-Sonde weiter oben sind seit FEED eine
-historische Zeile, kein Vergleichspartner mehr — wer den Aufschlag misst,
-misst die Basis im selben Stand neu.
+**What this shell is today: the measuring firmware for the control
+hardware.** Since 2026-09-17 it drives the test coupon (`hardware/coupon/`) —
+a small board with the real 74HC4067/4051 multiplexers, the 595/165 chain,
+seven pots and fixed reference dividers — through a family of probe images,
+each behind its own build switch, each with a host reader and a guard, each
+written up under `docs/hardware/`:
 
-Vorgezogen wird der Teil, der **kein Panel braucht**: eine periodische
-Ketten-Salve auf den vier Produktionspins (B7, B8, D1, D10) beantwortet, ob
-der Scan überhaupt in den Callback muss und ob er den Störton auf der
-Blockrate bewegt. Plan:
-[`docs/superpowers/plans/2026-08-23-mux-scan-placement-probe.md`](../docs/superpowers/plans/2026-08-23-mux-scan-placement-probe.md).
+| switch | what it measures | reader | write-up |
+|---|---|---|---|
+| `SHELL_COUPON_PROBE=1` (alone) | bring-up: every channel, rescanned live | `read_coupon.py` | `hardware/coupon/README.md` |
+| `+ SHELL_SETTLE_PROBE=1` | settle time after a channel change | `read_settle.py` | `settle-measured.md` |
+| `+ SHELL_XTALK_PROBE=1` (`SHELL_XTALK_RV4`) | crosstalk from the board's own digital edges | `read_xtalk.py` | `crosstalk-measured.md` |
+| `+ SHELL_TONE_PROBE=1` (`SHELL_TONE_DC`) | the codec's own output against a settled channel | `read_tone.py` | `codec-tone-measured.md` |
+| `+ SHELL_WAIT_PROBE=1` | the wait between conversions | `read_wait.py` | `wait-measured.md` |
+| `+ SHELL_POT_ROUND=1` (on settle or wait) | the pots at mid travel, both questions | `read_pots.py` | `pots-measured.md` |
 
-**Die CPU-Hälfte ist am selben Tag gemessen**, Capture
-[`docs/bench/2026-08-23-978cbaf-shell-mux-placement.md`](../docs/bench/2026-08-23-978cbaf-shell-mux-placement.md):
-dieser Betriebspunkt liegt heute bei **74,33 % avg / 76,70 % max**, der Scan im
-Callback kostet weniger als die Messung auflöst, und der Vordergrund-Scan
-schafft `steps=2500` gegen `blocks=2500`. Die Audio-Hälfte steht aus und
-braucht das Board mit den Buchsen (`385138563330`).
+The probe switches are mutually exclusive; the Makefile refuses a
+combination that makes no sense. Older switches still in the Makefile —
+`SHELL_SELFTEST`, `SHELL_CPU_PROBE`, `SHELL_MUX_PROBE`, `SHELL_IDLE_FILL` —
+belong to the August engine-on-board work above.
 
-Drei Schalter steuern diesen Shell, alle drei per generiertem Header:
-`SHELL_SELFTEST`, `SHELL_CPU_PROBE` und seit dem 2026-08-23 `SHELL_MUX_PROBE`
-(0 aus / 1 Scan im Callback / 2 Scan im Vordergrund). **Die Header werden zur
-Parse-Zeit des Makefiles geschrieben, nicht als Regel** — mit einer Regel
-lieferte der Build am 2026-08-23 zwei byte-identische Images für zwei
-verschiedene Schalterstellungen, weil Make hier Sekundenauflösung hat und der
-Header in derselben Sekunde wie `main.o` landete. Die Begründung steht im
-Makefile über `SWITCH_HEADERS`; wer sie wegräumt, räumt eine Messfalle wieder
-auf.
+**Two results from August still hold and still steer the design.** The mux
+scan goes **in the audio callback**: it costs less than the CPU measurement
+resolves, and a foreground scan raised the block-rate tone by 7.3 dB while
+the callback left it unmoved (2026-08-23,
+[`docs/bench/2026-08-23-978cbaf-shell-mux-placement.md`](../docs/bench/2026-08-23-978cbaf-shell-mux-placement.md)).
+And the engine's CPU reserve on this board is **~2.9 points**, measured
+directly (`docs/bench/2026-08-19-3def5d5-feed-axi-o2-patch_sm-usb.md`) — no
+Seed number may stand in for it.
+
+**What the coupon has settled** (details in the write-ups): the ADC clock is
+6.146 MHz, not the 12.29 MHz libDaisy's comments imply; a channel change
+settles within 2.0–4.8 µs at pot impedance, measured on real pots; and a
+channel read once per audio block at the working sampling rung reads a pot up
+to ~650 counts low, which the 387.5-cycle rung removes at every wait.
+
+**Next, in order:**
+
+1. **The scan budget** — re-cost the panel's channel count against the audio
+   budget with the measured settle constants and the long rung's ~63 µs per
+   conversion (`docs/hardware/io-budget.md` §6). Arithmetic, no board.
+2. **The panel scan itself**, in the callback, at the rung the budget allows.
+   `controls.{h,cpp}` holds the channel → parameter map and still has exactly
+   one channel filled; its "STAND" comment predates the classification in
+   `io-budget.md` §2, which is now decided.
+3. **Open on the coupon, if anyone wants it:** round one's four RV4 cases
+   (`SHELL_XTALK_RV4=1`, skipped on the false belief that RV4 was unfitted),
+   and a second populated board to separate board from design.
+
+**The switch headers are written while the Makefile is parsed, not by a
+rule** — with a rule, the build produced two byte-identical images for two
+switch positions on 2026-08-23, because make has one-second resolution here
+and the header landed in the same second as `main.o`. The reasoning sits in
+the Makefile above `SWITCH_HEADERS`; whoever tidies it away reopens a
+measurement trap. `cmp` two switch positions before flashing either.
