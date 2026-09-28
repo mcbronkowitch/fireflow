@@ -238,7 +238,9 @@ gone for good.
 parts from `order-bom.md`, RV3/RV4/RV7 at 20 k and the other four at 10 k. The
 support lugs were slightly too large for the board's slots and were clipped
 off; each pot hangs on its three solder joints alone, with no glue under the
-body. (This README said "still unpopulated" until 2026-09-28; the board had
+body. RV4, the tight position between `JP_GND` and `R_SP11`, clears both
+with a visible gap, and its case reads open against GND (checked
+2026-09-28, board unpowered). (This README said "still unpopulated" until 2026-09-28; the board had
 not been in that state since the 17th.)
 
 With the pots in, the bring-up scan read all seven wipers at **63481…63485**

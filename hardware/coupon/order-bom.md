@@ -138,9 +138,10 @@ Board figures below read from the committed board and the footprint,
   missed (slightly too large) and were clipped; no glue was added.**
 - **A standing body claims far less board area** — roughly the 9.8 mm square
   between the pin row and the lug slots, instead of a 20 mm body reaching out
-  over its neighbours. Whether it still overhangs `JP_GND` or `R_SP11` at RV4
-  is **unmeasured**; the case is metal either way, so keep Kapton under it
-  until someone has looked.
+  over its neighbours. **Checked on the first board, 2026-09-28:** RV4's body
+  clears both `JP_GND` and `R_SP11` with a visible gap, and its case reads
+  open against GND on a continuity meter (board unpowered). No Kapton is
+  fitted, and none is needed there.
 - **If a right-angle part gets used after all**, the old clearance measurements
   still apply: the pots sit in two rows, RV1–RV4 at y 50.5 mm and RV5–RV7 at
   y 65.0 mm, pin rows running east–west, leaving **14.5 mm between the rows**
