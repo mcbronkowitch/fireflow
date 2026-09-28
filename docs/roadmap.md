@@ -36,8 +36,10 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-09-28 (**round four, the pot round, is built and
-  measured** — see the M6 entry of that date; earlier, 2026-09-27, evening:
+- **Last updated:** 2026-09-28 (**round four, the pot round, is built,
+  measured and written up** —
+  [`docs/hardware/pots-measured.md`](hardware/pots-measured.md), step 5b
+  closed on real pots; see the M6 entry of that date; earlier, 2026-09-27, evening:
   **round three is measured**:
   [`docs/hardware/wait-measured.md`](hardware/wait-measured.md). The shift
   saturates at about −860 counts on `REF_A` by 10 ms, the 387.5-cycle rung
@@ -685,7 +687,7 @@ is actually built today, and what is still design-only.
 | **PAN** | A per-deck bipolar balance knob, `PAN_A`/`PAN_B`, placing each deck's dry signal in the stereo field — `gL = min(1, 1 − p)`, `gR = min(1, 1 + p)`, unity at centre — while the reverb send deliberately stays centred (folding PAN into `ga`/`gb` would have been the tidy-looking way to do it, and is exactly what the send-stays-still gate exists to catch). PAN fills two slots that were already being held open rather than claiming new ones: `FX_BOT[1]` on the big panel, free since MULT was retired, and `LEVEL_SLOTS[0]` on the hardware plate, kept empty by a guard written specifically for this knob. **No control moved and no row was re-pitched** | ✅ **done** (engine + both VCV panels; spec `docs/superpowers/specs/2026-08-30-pan-design.md`, plan `docs/superpowers/plans/2026-08-30-pan.md`; branch `feat/pan`; released in 2.22.0. **Amended the same day it shipped** (`3b9afd8`): `PAN_B`'s mod ring reads deck **A**'s `LANE_SIZE` through deck A's master, negated, because both decks reading their own lane measured r = +1.0000 at equal RATE — one drift, twice, walking the whole mix to one side instead of opening a stereo image. The price is that `MOD_B` no longer reaches `PAN_B`; deck B's pan is switched off at its own depth ring. The arithmetic is gated in `tests/test_mod_layer.cpp`; the wiring is not, and cannot be — Rack does not link into `spky_tests`. **PAN has had no listening pass at all** — the balance law itself (against equal-power and against mid/side rotation), the 30 ms smoothing time copied from LVL, and `LANE_SIZE` as the mod ring's lane are all first-try values, see `docs/by-ear-decisions.md`. **In Rack, only the drawing was checked**: both panels were rendered headlessly from the built plugin (`Rack.exe -u <throwaway> -t 2`), confirming PAN's placement — `LINK PAN GRIT LVL` on the big panel's FX row, `FB PAN GRIT SEND TONE` across the plate's bottom line — and that both knobs boot at centre. **Nobody has dragged the knob, exercised its MOD ring under the latch, or saved and reloaded a patch**, the three things a screenshot cannot show) |
 | **Lane crossover** | A deck's lane output (LEVEL/MOTION/…) becomes a selectable modulation source for a target on the *other* deck — the first direct mod-to-mod bridge between the decks (today only audio and the rhythm view cross over) | ⬜ **planned** (from the 2026-08-22 dual-deck brainstorm, `docs/superpowers/specs/2026-08-22-dual-deck-brainstorm.md`; no spec; not yet ordered into the milestone sequence; spec together with "Mirror lanes" — same mod-glue) |
 | **Mirror lanes** | A deck follows a chosen lane of the sibling inverted or phase-shifted — direct per-lane counter-motion, deterministic call-and-response, complementing DRIFT's stochastic anti-correlation | ⬜ **planned** (from the 2026-08-22 dual-deck brainstorm, same doc as above; no spec; not yet ordered into the milestone sequence) |
-| **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel design closed as far as the drawing goes** — regrouping, redistribution and plate round 2a all shipped, in 2.21.1/2.21.2/2.21.3; **bring-up has no spec and is next**, the existing shell spec is superseded and no hardware is ordered; **form factor decided 2026-08-21: one brain, one 60 HP module, desktop as a shell decision** — see below) |
+| **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel design closed as far as the drawing goes** — regrouping, redistribution and plate round 2a all shipped, in 2.21.1/2.21.2/2.21.3; **bring-up is under way on a test coupon** — built 2026-09-17, five measurement rounds through 2026-09-28 (settle, crosstalk, codec tone, wait, pots), each with its own spec, plan and write-up under `docs/hardware/`; Phase-0 step 5b is closed on real pots; the panel-scan firmware is not written yet; **form factor decided 2026-08-21: one brain, one 60 HP module, desktop as a shell decision** — see below) |
 
 Milestone order follows the design spec's build order (audible first, hardware
 last). The scale layer was inserted after M1 because it only touches the PITCH
@@ -3479,13 +3481,18 @@ the milestone sequence. **No spec — needs a brainstorming/spec round.**
 Source: `docs/superpowers/specs/2026-08-22-dual-deck-brainstorm.md` (the full
 twelve-idea list, including what was deliberately left off the roadmap).
 
-### M6 — Hardware prototype ⬜ (after M5l; **needs a new spec**)
+### M6 — Hardware prototype ⬜ (after M5l; bring-up under way on the test coupon)
 
 An instrument of its own, built on a **Daisy Patch Submodule**: a thin shell
 hosting `engine/`, plus the physical surface around it — controls, LEDs, CV +
 gate + V/Oct + clock I/O, and preset persistence. **First milestone that runs on
-hardware.** No firmware of it is implemented; what exists is the panel, and only
-as a Rack design study (the `FireflowHW` module, still labelled `DRAFT`).
+hardware.** *Status 2026-09-28:* the panel exists as a Rack design study (the
+`FireflowHW` module, still labelled `DRAFT`); the control electronics are being
+measured on a test coupon (`hardware/coupon/`, built 2026-09-17) with the probe
+firmware in `shell/`, in five rounds so far — the dated entries below, newest
+first. The firmware that scans a whole panel and plays the engine is not
+written yet. (Until 2026-09-28 this paragraph said "No firmware of it is
+implemented", and the heading said "needs a new spec".)
 
 **2026-08-07 — the submodule is measurable without a debug probe.** The bench
 has a second transport (`--transport usb`): `dfu-util` loads it through the
@@ -3599,7 +3606,10 @@ spec, preamble to §1).
   asserts both words **absent** so a stale SVG cannot put them back.
 
 Step 1 is closed as far as the drawing goes; **step 2 (bring-up) still has no
-spec and is next**, and no hardware is ordered.
+spec and is next**, and no hardware is ordered. *(As of this entry's date. Both
+changed: the coupon was ordered 2026-09-02/03 and built 2026-09-17, and each
+measurement round since has its own spec — see the dated entries from
+2026-08-30 on.)*
 
 **2026-08-21 — the form-factor question is closed: one brain, one module, two
 shells.** A concept round examined splitting FireFlow into two or three
@@ -3959,8 +3969,13 @@ except the decision to place it. Recorded in `review.py`'s Section 3 (so
 `hardware/coupon/README.md`'s order list; docs only, no board or schematic
 file moved.
 
-**2026-09-28 — round four, the pot round, is built and measured; the write-up
-is next.** The pots have been on the coupon since 2026-09-17 and have had one
+**2026-09-28 — round four, the pot round, is built, measured and written up:
+[`docs/hardware/pots-measured.md`](hardware/pots-measured.md), and Phase-0
+step 5b is closed on real pots.** The long rung holds every pot flat within 3
+counts at every wait; at a 2 ms read cadence a 20 k pot at mid travel reads
+~650 counts low without it; a 20 k pot settles like its divider, but the 10 k
+pots settle 1.7–2.1× slower than the model (4067 ≤ 2.8 µs, 4051 ≤ 2.0 µs,
+20 k ≤ 4.8 µs). The pots have been on the coupon since 2026-09-17 and have had one
 reading, a wiring check at a stop. `SHELL_POT_ROUND=1` adds RV2, RV4 and RV6
 at mid travel to both existing probes — six pairs in the settle probe (P6–P11,
 from each pot's high and low neighbour), three victims in the wait probe — with
@@ -3974,13 +3989,13 @@ files into the round's tables. Spec
 `docs/superpowers/specs/2026-09-28-coupon-pot-round-design.md`, plan beside
 it. Measured on the board the same day — three settle blocks (image 618427c)
 and three wait blocks (image e20b8fd), both captures committed under
-`docs/hardware/captures/` — and the write-up, `docs/hardware/pots-measured.md`,
-is still to come. One thing it has to settle first: the settle image's G3
-failed in every block, on the dividers P1–P4 (settled-region spread 9–12
-counts against a bound of 8), which is the 2026-09-18 settle round's own G3
-behaviour and not the pots'; `read_pots.py` refuses the run for it, as
-designed. It closes Phase-0 Task 6 step 5b on real pots once the write-up
-has read the captures.
+`docs/hardware/captures/`. The settle image's G3 failed in every block, on
+the dividers P1–P4 (settled-region spread 9–12 counts against a bound of 8),
+which is the 2026-09-18 settle round's own G3 behaviour and not the pots';
+`read_pots.py` refuses the run for it, as designed, and the settle times are
+quoted anyway on `settle-measured.md` §4's terms — Bastian's decision of the
+same day. Not done: re-costing the panel's scan against the audio budget with
+these constants (`io-budget.md` §6).
 
 **2026-09-27 — the next coupon instrument is built, and it waits on a board
 session.** Round two left one item bigger than it found it: a 5150 Ω channel

@@ -13,8 +13,8 @@ citation:
 | `task-4-board-capture-c5631f4.txt` | boot 3 of the same |
 | `task-5-board-capture.txt` | boot 4, plus the whole window sweep |
 | `task-6-board-capture-silent-arm.txt` | boot 5 — the silent-cadence arm, which answers section 6 |
-| `pot-settle-capture-618427c.txt` | `shell/test_read_settle.py` (the real-block section) and the round-four write-up `docs/hardware/pots-measured.md` (not yet written) |
-| `pot-wait-capture-e20b8fd.txt` | `shell/test_read_wait.py` (the real-block section) and the round-four write-up `docs/hardware/pots-measured.md` (not yet written) |
+| `pot-settle-capture-618427c.txt` | `shell/test_read_settle.py` (the real-block section) and the round-four write-up `docs/hardware/pots-measured.md` |
+| `pot-wait-capture-e20b8fd.txt` | `shell/test_read_wait.py` (the real-block section) and the round-four write-up `docs/hardware/pots-measured.md` |
 
 The four-boot floor is `BOOT_VIRGIN_FLOOR` in `../../../shell/read_tone.py`,
 which gate G8(b) compares against, and the same four columns appear in the

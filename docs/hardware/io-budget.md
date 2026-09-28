@@ -677,6 +677,21 @@ Die Liste von 2026-08-08 nannte an erster Stelle die Einstufung der Parameter.
   > Messwert. Die Potis hängen an **A10**. (`VREFBUF` wird von libDaisy
   > nirgends konfiguriert — geprüft; wie das Board `VREF+` beschaltet, ist von
   > hier aus nicht prüfbar, die Anweisung steht aber für sich.)
+
+  > **Addendum 2026-09-28 (English, like everything added to the repo since):
+  > 5b is measured and closed.** The test coupon measured the settle time on
+  > fixed dividers (2026-09-17/18, [`settle-measured.md`](settle-measured.md))
+  > and then on real pots at mid travel (2026-09-28,
+  > [`pots-measured.md`](pots-measured.md) §11). Largest true settle seen:
+  > **4067, 10 k pot ≤ 2.8 µs; 4067, 20 k pot ≤ 4.8 µs; 4051, 10 k pot
+  > ≤ 2.0 µs** — against the 1.6 µs the paper half above predicted for 10 k
+  > (the model is 1.7–2.1× short for 10 k pots). A second finding matters here
+  > at least as much: read once per audio block at the working sampling rung,
+  > a 20 k pot at mid travel reads ~650 counts low; the 387.5-cycle rung
+  > removes that at every wait (`wait-measured.md`, `pots-measured.md` §7).
+  > **What is not done:** the panel's channel count has not been re-costed
+  > against the audio budget with these constants and the long rung's
+  > ~63 µs per conversion. That is the scan-budget pass, still open.
 - **Der Mux-Scan selbst.** libDaisys `InitMux` kann 8:1 an GPIOs, gebraucht wird
   16:1 mit Adressen aus der 595-Kette (§3). Die Umschaltung muss geschrieben
   werden. **Die CPU-Seite ist seit dem 2026-08-23 nicht mehr offen, sondern

@@ -255,7 +255,10 @@ at the clockwise stop, against 63484…63486 on the rail-tied reference channels
 readings were taken but not recorded. That is a **wiring check, not a
 characterisation**: at either stop a pot's source impedance is near zero, so
 neither reading says anything about settle time or the wait effect. The
-hard case — mid travel, R/4, 2.5 kΩ at 10 k and 5 kΩ at 20 k — is unmeasured.
+hard case — mid travel, R/4, 2.5 kΩ at 10 k and 5 kΩ at 20 k — was measured
+on 2026-09-28 on RV2, RV4 and RV6: [`docs/hardware/pots-measured.md`](../../docs/hardware/pots-measured.md).
+For that round the pots were set to mid travel on the bring-up scan, to what
+`REF_A` reads there, and not touched until both probe images had run.
 
 ## Layer and zone map
 

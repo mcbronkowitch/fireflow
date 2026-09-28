@@ -10,7 +10,10 @@
 > [`settle-measured.md`](settle-measured.md) — what the test coupon said on
 > 2026-09-17, which of the predictions below it confirms, and which it breaks.
 > The two are kept apart on purpose: this one stays the model, that one is the
-> measurement.
+> measurement. **On real pots** the answer is
+> [`pots-measured.md`](pots-measured.md) (2026-09-28), which closes step 5b: a
+> 20 k pot at mid travel settles like its 5150 Ω divider (1.4–1.6× the model),
+> but 10 k pots come out 1.7–2.1× the model — outside the dividers' band.
 >
 > **One constant here is no longer calculated.** The ADC conversion clock in §1
 > was measured on the coupon and came out at **half** the figure this document
