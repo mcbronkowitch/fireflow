@@ -4131,7 +4131,10 @@ dropped.** Both Bastian's decisions, after a short research pass.
 
 **Next:** a master plan for Rev A — the one board's pin map, schematic,
 layout, front panel, BOM and bring-up, in order and against the hardware
-roadmap's dates — then each piece as its own spec and plan. First number in:
+roadmap's dates — then each piece as its own spec and plan. *Written the same
+day:* [`2026-09-28-rev-a-master-plan-design.md`](superpowers/specs/2026-09-28-rev-a-master-plan-design.md)
+— seven sub-projects on two parallel tracks, an acrylic grip-test plate for
+H1, JLC SMD assembly, pin map due 16 Oct. First number in:
 the socketed module stands **15 mm** above the board at its highest point,
 USB socket included (measured on the coupon by Bastian, 2026-09-28, on the
 coupon's four 2×5 sockets). Against the Palette's 45.5 mm (37.4 at the outer
