@@ -3735,7 +3735,10 @@ it brings the sound back — same image, same md5, nothing else changed. The
 firmware meanwhile reports **74.33 % avg / 76.68 % max**, i.e. identical to the
 baseline it printed on the *other* submodule, so nothing about the engine is
 involved. Whatever that module provides electrically, the control PCB has to
-provide on purpose; what it is has not been traced. A by-product worth keeping:
+provide on purpose; what it is has not been traced. *(Superseded 2026-09-28:
+the MAX11300 is struck from the instrument — it was only ever on this desk
+rig — and the test coupon plays the engine audibly without it, so this is a
+fact about that rig, not a requirement on any board.)* A by-product worth keeping:
 those two figures are a 0.02-point reproduction of the CPU baseline across two
 different Patch Submodules.
 

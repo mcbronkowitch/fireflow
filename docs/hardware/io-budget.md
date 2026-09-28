@@ -894,9 +894,10 @@ und ob die dünnste Ressource des Projekts — die CPU-Reserve — ihn mitträgt
 > Der verschlechterte im Vordergrund ist dagegen eindeutig — und er ist in der
 > Serie eher größer. Sobald eine echte 595-Kette an B7/B8/D1/D10 hängt, ist die
 > Callback-Messung zu wiederholen.
-- **Ob ein `MAX11300` das Buchsenfeld übernimmt.** Der Kandidat ist real (ein
-  Modul ist vorhanden und verdrahtet), aber er kostet SPI2 und damit zwei rohe
-  ADC-Pins, und seine CPU-Kosten sind ungemessen.
+- ~~**Ob ein `MAX11300` das Buchsenfeld übernimmt.**~~ **Struck 2026-09-28
+  (Bastian):** the MAX11300 was only on the August desk rig and is not part of
+  the instrument. The jack field runs on the module's own pins, SPI2 stays
+  free, and the envelope spec's rule stands.
 - **Die exakte Pin-Map.** Task-2-Deliverable von Phase 0; die Envelope-Spec
   fixiert die Topologie, nicht die Pinnummern.
 - **Das Plattenwort für BEND** (§2, letzter Absatz).
