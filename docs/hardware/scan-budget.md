@@ -19,6 +19,10 @@
 > oversampling runs one channel's 32 conversions back to back (§3). It is the
 > first thing the panel scan's bring-up has to confirm on the coupon (§7).
 >
+> *(Done 2026-09-28: [`scan-measured.md`](scan-measured.md). One block after
+> the write, every coupon channel reads its parked value to within 0.6
+> counts, with the engine running.)*
+>
 > Every number comes out of [`tools/scan_budget.py`](../../tools/scan_budget.py),
 > guarded by `tools/test_scan_budget.py`, which ctest runs as
 > `scan_budget_guard`:
@@ -175,6 +179,14 @@ from `pots-measured.md`. That one run tests the oversampling order, the slack
 and F1's accuracy on real pots under a stepping mux, the three things this
 document assumes. Until then, the 303 µs slack is 15 % of a block and the only
 margin there is.
+
+*Done 2026-09-28, in [`scan-measured.md`](scan-measured.md):* on all 24
+coupon steps, five run blocks, the shipping pattern reads within 0.6 counts
+of the same channel parked, with the engine playing at the shell's fixed
+operating point — the outcome the documented oversampling order predicts. The
+comparison is against a parked read in the same image rather than the
+long-rung readings, which come from a different path and scale. The slack's
+size stays derived, and other engine loads are reasoned, not measured.
 
 Also on record, from outside this calculation: everything read through
 libDaisy sits about 3.1 % low at full scale (the rail reads 63485,

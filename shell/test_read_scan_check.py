@@ -165,6 +165,37 @@ def test_hysteresis_rule():
     check(r.hysteresis([b23, b32])[1] == 32, "H is not the widest block's")
 
 
+# Board session 1, 2026-09-28: docs/hardware/scan-measured.md is written from
+# this file, and kPotHysteresis is taken from it.
+CAPTURE = (HERE.parent / "docs" / "hardware" / "captures"
+           / "scan-check-capture-c04ba77.txt")
+
+
+def test_the_committed_capture():
+    blocks = r.parse_blocks(
+        CAPTURE.read_text(encoding="utf-8", errors="replace").splitlines())
+    check(len(blocks) >= 4, "capture: %d complete blocks, expected >= 4"
+          % len(blocks))
+    for b in blocks:
+        check(r.g1_span(b)[0], "capture blk %s: G1" % b["cfg"]["blk"])
+        check(r.g2_complete(b), "capture blk %s: G2" % b["cfg"]["blk"])
+        check(r.g3_control(b)[0], "capture blk %s: G3" % b["cfg"]["blk"])
+        # The write-up's verdict: every step of every block within 8 counts.
+        check(r.criterion(b), "capture blk %s: criterion" % b["cfg"]["blk"])
+
+
+def test_scan_value_h_carries_the_capture_s_hysteresis():
+    blocks = r.parse_blocks(
+        CAPTURE.read_text(encoding="utf-8", errors="replace").splitlines())
+    src = (HERE / "scan_value.h").read_text(encoding="utf-8")
+    m = re.search(r"kPotHysteresis\s*=\s*(\d+)\s*;", src)
+    check(m is not None, "scan_value.h has no kPotHysteresis")
+    if m and blocks:
+        check(int(m.group(1)) == r.hysteresis(blocks)[1],
+              "kPotHysteresis %s is not the capture's H %d"
+              % (m.group(1), r.hysteresis(blocks)[1]))
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

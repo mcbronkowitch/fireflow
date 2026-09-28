@@ -18,6 +18,14 @@ namespace shell {
 // the design.
 inline constexpr Span kPanelSpan{0, 63485, true};
 
+// The hysteresis band, in raw counts: the widest max - min any of the
+// coupon's seven pots showed in the scan-check image's arm S, across every
+// complete block of docs/hardware/captures/scan-check-capture-c04ba77.txt,
+// rounded up to a multiple of 16 and at least 16 (spec section 4).
+// shell/test_read_scan_check.py recomputes it from the capture and fails if
+// the two differ.
+inline constexpr int kPotHysteresis = 16;
+
 // (raw - zero) / (rail - zero), clamped to 0..1. The clamp belongs here, on
 // the reading side: only the reader knows the span. An invalid or inverted
 // span gives 0 rather than a division by zero or a negative scale.

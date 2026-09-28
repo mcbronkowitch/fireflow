@@ -1,4 +1,4 @@
-# Raw board captures — 2026-09-18/19 codec-tone campaign, 2026-09-28 pot round
+# Raw board captures — 2026-09-18/19 codec-tone campaign, 2026-09-28 pot round and scan check
 
 Serial output from the Daisy Patch Submodule, as captured. Unedited.
 
@@ -15,6 +15,7 @@ citation:
 | `task-6-board-capture-silent-arm.txt` | boot 5 — the silent-cadence arm, which answers section 6 |
 | `pot-settle-capture-618427c.txt` | `shell/test_read_settle.py` (the real-block section) and the round-four write-up `docs/hardware/pots-measured.md` |
 | `pot-wait-capture-e20b8fd.txt` | `shell/test_read_wait.py` (the real-block section) and the round-four write-up `docs/hardware/pots-measured.md` |
+| `scan-check-capture-c04ba77.txt` | `shell/test_read_scan_check.py` (the capture section), the write-up `docs/hardware/scan-measured.md`, and `kPotHysteresis` in `shell/scan_value.h` |
 
 The four-boot floor is `BOOT_VIRGIN_FLOOR` in `../../../shell/read_tone.py`,
 which gate G8(b) compares against, and the same four columns appear in the
@@ -61,6 +62,14 @@ line 708.
 same day on the same board with the same pot settings. It too holds three
 complete blocks after an opening partial one; the first complete block starts
 at line 412.
+
+`scan-check-capture-c04ba77.txt` is the panel scan's measurement image
+(`SHELL_COUPON_PROBE=1 SHELL_SCAN_CHECK=1`), captured 2026-09-28 on the same
+board, RV2, RV4 and RV6 still at mid travel from the pot round, the engine
+playing and the codec running. It holds five complete run blocks; lines 1–75
+are a partial opening (line 2 carries a `$$` marker), and the first complete
+block starts at line 76. The guard also compares `kPotHysteresis` with the H
+it computes from this file, so replacing the capture moves the constant.
 
 A capture is evidence, not a document. Nothing here is edited to read better,
 and where a capture contradicts a write-up, the capture wins.

@@ -88,3 +88,8 @@ TEST_CASE("scan value: the panel span is the coupon's rail reading") {
     CHECK(shell::kPanelSpan.rail == 63485);
     CHECK(shell::kPanelSpan.valid);
 }
+
+TEST_CASE("scan value: the hysteresis band obeys the spec's rule") {
+    CHECK(shell::kPotHysteresis >= 16);
+    CHECK(shell::kPotHysteresis % 16 == 0);
+}
