@@ -421,6 +421,16 @@ Bedarf ist **65 Mux-Kanäle**, nicht 67: die zwei `REC`-Pads hängen an der
 Taster-Kette, und `STAGES` teilt sich seinen Poti mit `ATTACK` — ein Poti, ein
 Kanal.
 
+> **Addendum 2026-09-28 (English): the demand is 70, not 65.** The 65 predates
+> the 2026-08-30 recount in §1 (67 → 73 positions) and was never carried
+> forward. `gen_hw_panel.py` today has 72 pot-class params on **70 pot
+> positions** (`STAGES_A/B` share `ATTACK_A/B`), plus the three keycaps
+> `REC_A/B` and `MODBTN`. Five 16:1 chips still carry it, with 10 spare instead
+> of 15; nine 8:1 chips would carry it with 2 spare. The sweep length does not
+> change (32 / 24 steps). Counted by `tools/scan_budget.py`, whose guard goes
+> red when the plate moves — [`scan-budget.md`](scan-budget.md) §5. The table
+> below is left as it was written; its mux row reads 70 / 10 today.
+
 | Ressource | Kapazität | Bedarf | Rest |
 |---|---:|---:|---:|
 | Sense-Pins (ADC, **nicht** aus dem GPIO-Pool) | 4 | 4 | 0 |
@@ -692,6 +702,17 @@ Die Liste von 2026-08-08 nannte an erster Stelle die Einstufung der Parameter.
   > **What is not done:** the panel's channel count has not been re-costed
   > against the audio budget with these constants and the long rung's
   > ~63 µs per conversion. That is the scan-budget pass, still open.
+  >
+  > **Addendum, later on 2026-09-28: the scan-budget pass is done** —
+  > [`scan-budget.md`](scan-budget.md), script `tools/scan_budget.py`, guard in
+  > ctest. The long rung is not needed: the shell's existing pattern (libDaisy's
+  > free-running DMA, 12 channels, `SPEED_16CYCLES_5`, `OVS_32`) never idles,
+  > reads at pot impedance what the long rung reads, and fits one mux step per
+  > audio block with ~300 µs to spare at no measurable CPU. Full sweep 64 ms on
+  > the 16:1, 48 ms on the 8:1. A blocking long-rung read in the callback would
+  > cost 13 points against the 2.9-point reserve. The verdict rests on the
+  > oversampling order, which is documented by the HAL and not measured; the
+  > panel scan's first coupon run tests it (`scan-budget.md` §7).
 - **Der Mux-Scan selbst.** libDaisys `InitMux` kann 8:1 an GPIOs, gebraucht wird
   16:1 mit Adressen aus der 595-Kette (§3). Die Umschaltung muss geschrieben
   werden. **Die CPU-Seite ist seit dem 2026-08-23 nicht mehr offen, sondern

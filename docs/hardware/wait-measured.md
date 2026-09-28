@@ -217,7 +217,9 @@ with no idle, each one following a *different* channel — `settle-measured.md`
 (`SPEED_16CYCLES_5` pays off a 19-count deficit at pot impedance). Nor does it
 say what a 387.5-cycle rung costs in a real scan: 63 µs of acquisition per
 conversion, times every channel the panel reads. That budget is a panel
-firmware question and has not been done.
+firmware question and has not been done. *(Done 2026-09-28:
+[`scan-budget.md`](scan-budget.md). The shipping pattern never idles and does
+not need the long rung.)*
 
 ## 10. How to repeat it
 

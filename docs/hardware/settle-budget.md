@@ -32,7 +32,15 @@
 > ```
 >
 > Neither script is wired to a runner — `tools/` has none in this repo — so they
-> are run by hand after any edit to either.
+> are run by hand after any edit to either. *(Since 2026-09-28 the guard runs in
+> ctest as `settle_budget_guard`.)*
+>
+> **What the scan costs is a separate document:**
+> [`scan-budget.md`](scan-budget.md) (2026-09-28) puts the measured constants
+> against the audio block and the CPU reserve. It also reads §4's
+> "~500 Hz per channel" as ADC time rather than a placement: a whole sweep
+> converted on demand costs its full duration in the callback, and the shell's
+> free-running pattern is limited by its rotation to one step per block.
 >
 > Written 2026-08-30, after the question "isn't this documented somewhere?" —
 > and the answer to that question is finding 0 below.

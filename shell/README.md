@@ -254,16 +254,25 @@ settles within 2.0–4.8 µs at pot impedance, measured on real pots; and a
 channel read once per audio block at the working sampling rung reads a pot up
 to ~650 counts low, which the 387.5-cycle rung removes at every wait.
 
+**And the scan budget is done** (arithmetic,
+[`docs/hardware/scan-budget.md`](../docs/hardware/scan-budget.md)): the long
+rung is not needed. The ~650 counts come from converting after an idle. The
+pattern this shell already runs never idles: libDaisy's free-running DMA,
+twelve channels, `SPEED_16CYCLES_5`, `OVS_32`. It reads at pot impedance what
+the long rung reads, and it fits one mux step per block, written in the
+callback and read one block later, with ~300 µs to spare. Full sweep 64 ms on
+the 16:1, 48 ms on the 8:1.
+
 **Next, in order:**
 
-1. **The scan budget** — re-cost the panel's channel count against the audio
-   budget with the measured settle constants and the long rung's ~63 µs per
-   conversion (`docs/hardware/io-budget.md` §6). Arithmetic, no board.
-2. **The panel scan itself**, in the callback, at the rung the budget allows.
-   `controls.{h,cpp}` holds the channel → parameter map and still has exactly
-   one channel filled; its "STAND" comment predates the classification in
-   `io-budget.md` §2, which is now decided.
-3. **Open on the coupon, if anyone wants it:** round one's four RV4 cases
+1. **The panel scan itself**, in the callback, in that pattern: write the next
+   address each block, read the DMA buffer the block after. Its first coupon
+   run checks the one input the budget took from documentation, the
+   oversampling order (`scan-budget.md` §7). `controls.{h,cpp}` holds the
+   channel → parameter map and still has exactly one channel filled; its
+   "STAND" comment predates the classification in `io-budget.md` §2, which is
+   now decided.
+2. **Open on the coupon, if anyone wants it:** round one's four RV4 cases
    (`SHELL_XTALK_RV4=1`, skipped on the false belief that RV4 was unfitted),
    and a second populated board to separate board from design.
 

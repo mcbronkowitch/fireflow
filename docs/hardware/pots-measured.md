@@ -254,6 +254,7 @@ largest value seen, at mid travel where the source impedance peaks):
 The model times 1.3–1.5 is **not** a safe settle constant for 10 k pots; the
 measured values above are. `docs/hardware/io-budget.md` has not been updated
 with them — that is the scan-budget pass, which this round does not do.
+*(Done the same day: [`scan-budget.md`](scan-budget.md).)*
 
 **The long rung is licensed for pots** as round three licensed it for
 dividers: flat within 3 counts at every wait. One discard is not: it leaves

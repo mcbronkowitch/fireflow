@@ -36,8 +36,11 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-09-28 (**round four, the pot round, is built,
-  measured and written up** —
+- **Last updated:** 2026-09-28 (**the scan-budget pass is done** —
+  [`docs/hardware/scan-budget.md`](hardware/scan-budget.md): the shell's
+  existing free-running ADC pattern fits one mux step per block without the
+  long rung; see the M6 entry of that date; earlier the same day: **round
+  four, the pot round, is built, measured and written up** —
   [`docs/hardware/pots-measured.md`](hardware/pots-measured.md), step 5b
   closed on real pots; see the M6 entry of that date; earlier, 2026-09-27, evening:
   **round three is measured**:
@@ -3996,6 +3999,24 @@ which is the 2026-09-18 settle round's own G3 behaviour and not the pots';
 quoted anyway on `settle-measured.md` §4's terms — Bastian's decision of the
 same day. Not done: re-costing the panel's scan against the audio budget with
 these constants (`io-budget.md` §6).
+
+**2026-09-28, later — the scan budget:
+[`docs/hardware/scan-budget.md`](hardware/scan-budget.md), arithmetic on the
+coupon's measured constants.** The long rung the pot round pointed at is
+not needed. The wait effect only happens after an idle, and the pattern the shell
+already runs never idles: libDaisy's free-running DMA over twelve channels at
+`SPEED_16CYCLES_5` and `OVS_32`, which `settle-measured.md` §7 had measured
+reading `REF_A` within 2 counts of the 387.5-cycle rung. Written once per
+block and read one block later, a mux step fits with ~300 µs to spare (1562 µs
+rotation + 130 µs group against 1995 µs) at no measurable CPU; a full sweep
+takes 64 ms on the 16:1, 48 ms on the 8:1. A blocking long-rung read in the
+callback would cost 13 points against a 2.9-point reserve. The pass also found
+`io-budget.md` §3's 65 mux channels stale since 2026-08-30: the plate has 70
+pot positions, which changes no step count. One input is documented rather
+than measured, the oversampling order the whole verdict rests on; the panel
+scan's first coupon run is to test it. `tools/scan_budget.py`, guard
+`scan_budget_guard`; `settle_budget_guard` is now in ctest as well. No
+firmware moved.
 
 **2026-09-27 — the next coupon instrument is built, and it waits on a board
 session.** Round two left one item bigger than it found it: a 5150 Ω channel

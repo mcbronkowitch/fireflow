@@ -415,3 +415,16 @@ add_test(NAME read_pots_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_read_pots.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
+
+# The two budget calculations under tools/. scan_budget imports settle_budget,
+# so a constant revised there reaches both guards; scan_budget also reads the
+# pot count from host/vcv/res/gen_hw_panel.py and goes red when the panel moves.
+add_test(NAME settle_budget_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_settle_budget.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tools)
+
+add_test(NAME scan_budget_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_scan_budget.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tools)

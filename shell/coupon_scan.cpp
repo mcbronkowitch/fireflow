@@ -8,11 +8,14 @@ namespace shell {
 
 namespace {
 
-// Nine full DMA rounds. libDaisy converts at 12.29 MHz (adc.cpp:229) with
-// SPEED_8CYCLES_5 sampling plus 8.5 cycles of 16-bit conversion = 17 ADC
-// cycles = 1.38 us, at OVS_32 over twelve channels = 531 us per round. Five
-// milliseconds is not a round number picked for comfort. That is arithmetic,
-// not a measurement -- same as mux_scan.h's sweep-rate comment.
+// Three full DMA rounds. This comment used to say nine: it assumed the
+// 12.29 MHz libDaisy's dividers predict and SPEED_8CYCLES_5. The coupon
+// measured the clock at 6.146 MHz (tools/settle_budget.py), and main.cpp runs
+// SPEED_16CYCLES_5, so one conversion is 25 ADC cycles = 4.07 us and a round
+// at OVS_32 over twelve channels is 1562 us. A clean read needs one round plus
+// one channel's 130 us group after the address settles
+// (docs/hardware/scan-budget.md section 3), so five milliseconds still covers
+// it with room. Arithmetic, not a measurement.
 constexpr uint32_t kHoldMs = 5;
 
 constexpr int kSteps = scan_steps(kCouponChain);
