@@ -2,19 +2,26 @@
 
 namespace shell {
 
-void map_control(int idx, float v, spky::Instrument& inst)
+const ControlEntry* find_control(const ControlTable& t, int group, int ch)
 {
-    // Kein Clamp auf 0..1 an dieser Stelle, und das ist Absicht: der
-    // Wertebereich ist Sache dessen, der den ADC liest, denn nur dort ist
-    // bekannt, ob ein Wert ausserhalb ein Messfehler oder eine
-    // Kalibrierfrage ist. Hier waere ein stiller Clamp genau die Art
-    // Korrektur, die einen halb angeschlossenen Poti wie einen richtigen
-    // aussehen laesst.
-    switch(idx)
-    {
-        case 0: inst.set_rate(spky::PART_A, v); break;
-        default: break;   // Kanal existiert nicht -> nichts tun
-    }
+    for(int i = 0; i < t.count; ++i)
+        if(t.entries[i].group == group && t.entries[i].ch == ch)
+            return &t.entries[i];
+    return nullptr;
+}
+
+float control_value(int param, float v)
+{
+    if(param < 0 || param >= spky::P_COUNT) return 0.0f;
+    const spky::ParamInfo& pi = spky::kParams[param];
+    return pi.lo + v * (pi.hi - pi.lo);
+}
+
+void apply_control(const ControlEntry& e, float v, spky::Instrument& inst)
+{
+    // No clamp here: v arrives clamped from scan_value's span_normalize(),
+    // and apply_param() clamps to the table range once more.
+    spky::apply_param(inst, e.param, control_value(e.param, v));
 }
 
 } // namespace shell

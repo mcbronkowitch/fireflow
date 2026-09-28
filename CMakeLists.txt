@@ -103,6 +103,8 @@ add_executable(spky_tests
     shell/wait_plan.cpp
     tests/test_wait_plan.cpp
     tests/test_pot_plan.cpp
+    shell/scan_value.cpp
+    tests/test_scan_value.cpp
     tests/test_seed_audition_init.cpp
     tests/test_seed_audition_protocol.cpp
     tests/test_bbd_edge_state.cpp

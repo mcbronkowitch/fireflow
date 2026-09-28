@@ -1,28 +1,56 @@
 #pragma once
 
-// Mux-Kanal -> Engine-Parameter.
+// Mux channel -> engine parameter, per board, as data. No hardware type:
+// tests/test_controls_map.cpp holds it on the host. A knob that does the
+// wrong thing is only audible on a board and expensive to find; here it is
+// one row.
 //
-// Diese Datei enthaelt bewusst KEINEN Hardwaretyp. Der Mux-Scan selbst
-// (Adressleitungen, ADC, Einschwingzeit) gehoert woanders hin; hier steht nur
-// die Abbildung, und genau deshalb laesst sie sich auf dem Host testen --
-// tests/test_controls_map.cpp haengt in spky_tests und sieht nie ein Board.
+// The coupon's table maps its three measured pots (pot_plan.h), Bastian's
+// choice of 2026-09-28. The panel's table is empty: which pot sits on which
+// mux channel is the control PCB's pin map, part 2 of the panel scan, and
+// filling it before that exists would decide the routing in code.
 //
-// Ein Poti, der das Falsche tut, ist auf der Hardware nur als "klingt
-// komisch" sichtbar und teuer zu suchen. Hier ist es eine Zeile.
-
+// Spec: ../docs/superpowers/specs/2026-09-28-coupon-panel-scan-design.md
 #include "instrument.h"
+#include "param_table.h"
 
 namespace shell {
 
-// Setzt den Parameter, der an Kanal `idx` haengt, auf den normalisierten
-// Wert `v` (0..1, so wie der ADC ihn liefert). Ein Kanal, den es nicht gibt,
-// aendert nichts -- der Mux liefert im Fehlerfall Indizes ausserhalb des
-// Bereichs, und ein Zugriff daneben waere ein Absturz im Audio-Callback.
-//
-// STAND: genau EIN Kanal ist belegt. Die vollstaendige Tabelle folgt, wenn
-// Task 2 des Phase-0-Plans entschieden hat, welche Kanaele es gibt
-// (docs/hardware/io-budget.md, Einstufungsspalte noch leer). Diese Funktion
-// vorher zu fuellen hiesse, die Entscheidung im Code vorwegzunehmen.
-void map_control(int idx, float v, spky::Instrument& inst);
+struct ControlEntry
+{
+    int group;   // mux group (chip) as in mux_plan.h
+    int ch;      // channel on that chip
+    int param;   // spky::ParamId
+};
+
+struct ControlTable
+{
+    const ControlEntry* entries;
+    int                 count;
+};
+
+inline constexpr ControlEntry kCouponControls[] = {
+    {0, 2, spky::P_RATE_A},      // RV2, 10 k, on the 4067
+    {0, 6, spky::P_DENSITY_A},   // RV4, 20 k, on the 4067
+    {1, 2, spky::P_FILT_A},      // RV6, 10 k, on the 4051
+};
+
+inline constexpr ControlTable kCouponTable{
+    kCouponControls,
+    static_cast<int>(sizeof(kCouponControls) / sizeof(kCouponControls[0]))};
+
+inline constexpr ControlTable kPanelTable{nullptr, 0};
+
+// The entry for (group, ch), or nullptr. A channel that is not in the table
+// changes nothing: a half-seated chip produces indices nobody planned, and
+// guessing would hand a foreign knob's voltage to a parameter.
+const ControlEntry* find_control(const ControlTable& t, int group, int ch);
+
+// lo + v * (hi - lo) of the parameter's range in param_table.h, or 0 for a
+// parameter that does not exist.
+float control_value(int param, float v);
+
+// Scales v into the entry's parameter range and routes it via apply_param().
+void apply_control(const ControlEntry& e, float v, spky::Instrument& inst);
 
 } // namespace shell
