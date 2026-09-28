@@ -170,8 +170,11 @@ within ±3 counts at every wait**, as it held every divider?
 
 At `SHELL_POT_ROUND=0`: nothing new.
 
-At `SHELL_POT_ROUND=1`, both images print, once per block, before their
-existing configuration line:
+At `SHELL_POT_ROUND=1`, both images print, once per block, **directly after**
+their existing configuration line (`SHELL_SETTLE_CFG` / `SHELL_WAIT_CFG`).
+After, not before: both readers open a block at that line and drop anything
+printed ahead of it (`read_settle.py` `parse_block()`, `read_wait.py`
+`_read_one_block()`), so a line printed before it would never be read.
 
 ```
 SHELL_POT_CFG round=1 pots=3 git=<hash>
@@ -231,8 +234,11 @@ A run that fails PG1 or PG2 is read for what failed and not for its numbers.
 ## 8. The joining reader
 
 `shell/read_pots.py` takes the files the two existing readers write
-(`settle.csv.meta.csv` from `read_settle.py`, `wait.csv` from `read_wait.py`)
-and prints the round's answer in one place. Where a value it needs is not yet
+(`settle.csv.meta.csv` from `read_settle.py`; `wait.csv` and, new in this
+round, `wait.csv.meta.csv` from `read_wait.py` — the wait reader gains the
+same `scope,pair,key,value` metadata file the settle reader already writes,
+because `wait.csv` alone carries no gate verdict) and prints the round's
+answer in one place. Where a value it needs is not yet
 in those files, the plan adds the column to the reader that owns it rather
 than having `read_pots.py` re-parse a capture:
 
@@ -281,7 +287,10 @@ board enumerates on.
    ```bash
    PATH="/c/Program Files/DaisyToolchain/bin:/c/Program Files/Git/usr/bin:$PATH" make -C shell -j8 images SHELL_COUPON_PROBE=1 SHELL_SETTLE_PROBE=1 SHELL_POT_ROUND=1
    ```
-   Flash, then `python shell/read_settle.py COM5 settle.csv`.
+   Flash, then `python shell/read_settle.py COM5 settle.csv 300`. The
+   explicit 300 s: the reader's default is 60 s, and a twelve-pair block runs
+   roughly twice a six-pair one — how long that is has not been measured, and
+   a host that connects mid-block waits for the next one.
 3. **Wait image, two complete blocks** (one per sweep direction).
    ```bash
    PATH="/c/Program Files/DaisyToolchain/bin:/c/Program Files/Git/usr/bin:$PATH" make -C shell -j8 images SHELL_COUPON_PROBE=1 SHELL_WAIT_PROBE=1 SHELL_POT_ROUND=1
