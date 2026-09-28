@@ -7,6 +7,13 @@ Punkten; alles dort nicht Genannte gilt weiter. In Teilen übersteuert durch
 `2026-08-09-hw-control-reduction-design.md` (§1: Zählbasis, Budget, „one in,
 one out" — siehe dortiges §1 und die Korrekturen unten).
 
+> **Superseded in part (2026-09-28, English):** §2's two boards are replaced by
+> **one board**, and "Main-PCB" / "Control-PCB" below both mean that board.
+> Reasons, prices and the depth limit are in the hardware roadmap spec
+> (`2026-08-07-fireflow-hardware-roadmap-design.md`, under
+> "Architekturentscheidung"). §5's claim that JLC assembles SMT only is
+> corrected there too (see §5).
+
 ## Entscheidung
 
 Die Hardware wird das **volle FireFlow** — beide Decks, jede Funktion mit
@@ -43,8 +50,8 @@ ist seit Task 6 ein einzelner gerasteter Knopf. Kanallisten werden aus
 | Potis (64 kontinuierlich: 18 groß, 46 klein) | 62 Positionen (2× Doppelbelegung: BEND teilt sich ATTACKs Knopf) | bis 128 Kanäle | 4067-Kette, 4 Sense-Pins (§2) |
 | Taster | 6 (`ENGINE` ×2, `REC` ×2, `MOD`, `SHIFT` — die letzten zwei ohne Funktion) | 24 | 74HC165-Kette (`src/hw/sr_165.h`) |
 | Status-LEDs | 20 (festgelegt, oberes Ende des Korridors) | 24 | 3× 74HC595 |
-| Buchsen | 18 (10 + 8 CV-Eingänge auf `CV_1..8`) | begrenzt durch Panelfläche, nicht durch die Main-PCB | Main-PCB |
-| SD-Slot | 1 | 1 | SDMMC 4-bit, Main-PCB, frontzugänglich |
+| Buchsen | 18 (10 + 8 CV-Eingänge auf `CV_1..8`) | begrenzt durch Panelfläche, nicht durch die Main-PCB | Main-PCB (since 2026-09-28: the one board) |
+| SD-Slot | 1 | 1 | SDMMC 4-bit, Main-PCB (since 2026-09-28: the one board), frontzugänglich |
 
 > **Nachtrag 10. August 2026:** Zählbasis, Buchsenzahl und LED-Zahl kommen aus
 > `2026-08-10-hw-panel-regroup-design.md`. Die dort beschlossenen acht
@@ -86,6 +93,13 @@ Taster, LEDs, Muxe, Schieberegister), Stiftleisten/Steckverbinder dazwischen.
 Bei ~300 mm Board-Länge: **ein** Steckverbinder plus mechanische Standoffs
 (zwei weit auseinanderliegende parallele Leisten klemmen bei normaler
 Fertigungstoleranz); Stützpunkte gegen Durchbiegung in Boardmitte.
+
+> **Replaced 2026-09-28 (Bastian): one board.** Everything panel-mounted
+> (pots, jacks, keycaps, LEDs, SD slot) on its front, the Patch Submodule
+> plugged into its back; no board-to-board connector. The split above put
+> jacks and pots — both panel-mounted — on different boards, which does not
+> build. The support against bending over ~300 mm still applies: standoffs
+> to the panel in the middle of the board.
 
 **Die zentrale Korrektur — es gibt nur 4 Mux-Sense-Pins.** Die acht
 CV-Eingänge des Patch SM (`CV_1..8`) sind hardwareseitig **bipolar** (±5 V)
@@ -266,6 +280,14 @@ FX/VOICE stimmig, Orbit-Knobs nicht) läuft als definierter Prozess **vor H1**:
   lose stecken, Panel aufschrauben, dann verlöten**; die
   Zwei-Board-Nachbestellzahlen der Roadmap (~40/150 €) skalieren auf 60 HP
   eher zu ~100/300 € — das Argument hält, die Zahlen nicht.
+
+  > **Corrected 2026-09-28.** JLCPCB now assembles through-hole parts too
+  > (wave soldering, mixed SMT + THT orders, per its PCBA capabilities page).
+  > The rule for pots and jacks stands anyway: hand-solder them with the panel
+  > screwed on, so they sit flush with it. The two-board reorder argument is
+  > withdrawn with the two boards: a bare 305 × 110 mm board is $20 (2 layers)
+  > / $46 (4 layers) for 5 pcs (JLCPCB quote, 2026-09-28), so the board was
+  > never the cost of a respin — the pots, jacks and soldering time are.
 
 **Nachzuziehende Dokumente** (sonst schlägt eine spätere Session die
 Halbierung wieder vor):

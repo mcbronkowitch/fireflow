@@ -9,6 +9,11 @@
 > — 60 HP, voller Bedienelementsatz, Termine als Korridor. Was dort nicht
 > genannt ist (Zwei-Board-Architektur, Coupon-Idee, CNY-Regel, Bezugsquellen,
 > Superbooth-Stufen), gilt hier unverändert.
+>
+> **Superseded in part (2026-09-28, English like everything added since):**
+> the two-board architecture below is replaced by **one board** — see the
+> note under "Architekturentscheidung". The second coupon turn under
+> "Puffer" is dropped: coupon round 1 answered what it was for.
 
 Das Datum ist selbst gesetzt und hängt an der Superbooth 27 (6.–8. Mai 2027, FEZ Berlin). Ein Stand ist nicht gebucht und nicht Voraussetzung — siehe *Der Stand*. Superbooth ist der Termin, nicht der Auftrag.
 
@@ -36,6 +41,33 @@ Main-PCB und Control-PCB getrennt, verbunden über Stiftleisten.
 - **Control-PCB** — Potis, Fader, Pads, LEDs, Multiplexer
 
 **Begründung:** Bei einem Fehler in Rev A betrifft dieser meist nur eines der beiden Boards. Nachbestellung kostet dann ~40 € statt ~150 €, und ein Board kann bereits final sein, während das andere in Rev B geht. Bei einem ersten eigenen Layout ist das der Unterschied zwischen einer und zwei teuren Korrekturrunden.
+
+> **Replaced 2026-09-28 (Bastian): one board.** All panel-mounted parts (pots,
+> jacks, keycaps, LEDs, the SD slot) on the front of a single 60 HP board,
+> the Patch Submodule plugged into its back — Electrosmith's own pattern
+> (patch.Init()). Three reasons, each checked rather than assumed:
+>
+> 1. **The split above cannot be built as drawn.** Jacks and pots both mount
+>    through the same front panel, so they must sit on the same board directly
+>    behind it; no documented Eurorack design splits them across two stacked
+>    boards (Mutable Instruments' panel guide, the Synth-DIY wiki, forum
+>    practice). A working two-board split would be *everything panel-mounted
+>    in front* plus *module, power and conditioning behind* — and then the
+>    front board is full size anyway.
+> 2. **The saving was never in the PCB.** JLCPCB quote, 2026-09-28, 5 pcs,
+>    bare boards: 305 × 110 mm is **$20 (2 layers) / $46 (4 layers)**; a
+>    150 × 100 mm rear board would add ~$11 / $34, plus a second assembly
+>    setup, the board-to-board connector and standoffs. What a rear-board-only
+>    respin would save is the front board's pots and jacks and the time to
+>    solder them — real, but not the "~40 € vs ~150 €" above, which had no
+>    source and referred to the old split.
+> 3. **Depth.** The planned desktop home, an Intellijel Palette 62, takes
+>    **45.5 mm** behind the panel (37.4 mm at the outermost HP, per its
+>    manual). A sandwich spends ~11 mm on the header stack alone before the
+>    socketed module.
+>
+> The price of one board: a Rev A defect hits the whole board. Accepted —
+> most first-layout defects are bodge-wire fixes, and Rev B is planned anyway.
 
 **Verworfen:** Ein-Board-Ansatz (jeder Fehler kostet die volle Runde und drei Wochen Lieferzeit) und „erstes PCB ist der Prototyp" (drei Runden am teuren Board statt an einem billigen).
 
@@ -224,7 +256,7 @@ Deshalb dreistufig:
 
 Drei, bewusst gestaffelt:
 
-1. **Zweiter Coupon-Dreh** (Okt) — kostet 10 € und eine Woche, kauft Layout-Sicherheit für Rev A.
+1. ~~**Zweiter Coupon-Dreh** (Okt) — kostet 10 € und eine Woche, kauft Layout-Sicherheit für Rev A.~~ *Dropped 2026-09-28 (Bastian): round 1 was evaluated on 2026-09-28, ahead of the 9 Oct date, and what it left open goes straight into Rev A.*
 2. **Reserve-Runde Rev C** — falls Rev B am 26. März noch etwas hat: Bestellung 2. April, Boards am 23. April. Möglich, frisst aber den kompletten Endpuffer. Die dritte Runde ist *eingeplant, aber nicht verplant*.
 3. **Zwei Wochen vor Superbooth** — reserviert für Demo und Reise, nicht fürs Löten.
 

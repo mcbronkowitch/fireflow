@@ -275,7 +275,8 @@ the 16:1, 48 ms on the 8:1.
    RV6 all moved the engine audibly, and all three reached both stops (RV4's
    low stop in a later read the same day). **Part 2** — the 70-pot
    table, the three keycaps on the 165 and the 19 LEDs on the 595 — waits for
-   the control PCB's pin map, which does not exist yet; the pin map should
+   the Rev A board's pin map (one board since 2026-09-28), which does not
+   exist yet; the pin map should
    give one spare channel to AGND and one to the rail, so the panel
    calibrates its own span instead of trusting one coupon's number (spec §8).
    Code space for part 2 is tight: the coupon playing image uses 98.8 % of

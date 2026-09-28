@@ -36,8 +36,10 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-09-28 (**part 1 of the panel scan is built, measured
-  on the coupon, and played twice** —
+- **Last updated:** 2026-09-28 (**Rev A is one board, not two**, and the
+  second coupon turn is dropped — Bastian's decisions after a research pass;
+  see the last M6 entry of that date. Earlier the same day: **part 1 of the
+  panel scan is built, measured on the coupon, and played twice** —
   [`docs/hardware/scan-measured.md`](hardware/scan-measured.md): board
   session 1's check image found every coupon channel clean one block after
   its address was written, to within 0.61 counts against a criterion of 8;
@@ -4099,6 +4101,38 @@ the coupon has nothing else open.
 **Next:** part 2 — the 70-pot table, the three keycaps on the 165 and the 19
 LEDs on the 595 — waits for the control PCB's pin map, which should give one
 spare channel to AGND and one to the rail (spec §8).
+
+**2026-09-28, last — Rev A is one board, and the second coupon turn is
+dropped.** Both Bastian's decisions, after a short research pass.
+
+- **One board, not two.** The August specs split the instrument into a
+  Main-PCB (module, power, conditioning, *all jacks*, SD slot) and a
+  Control-PCB (pots, keycaps, LEDs, muxes). That split does not build: jacks
+  and pots both mount through the front panel, so they must sit on the same
+  board directly behind it, and no documented Eurorack design splits them.
+  Rev A is now Electrosmith's own pattern (patch.Init()): everything
+  panel-mounted on the front of one 60 HP board, the Patch Submodule plugged
+  into its back. The two-board saving was never in the PCB — a bare
+  305 × 110 mm board is $20 (2 layers) / $46 (4 layers) for five (JLCPCB
+  quote, same day) — and the planned desktop case, an Intellijel Palette 62,
+  takes only 45.5 mm behind the panel. Both specs carry the correction
+  (`2026-08-07-fireflow-hardware-roadmap-design.md` under
+  "Architekturentscheidung", `2026-08-08-fireflow-hardware-envelope-design.md`
+  §2 and §5). **Wherever an older document says "control PCB" or "main PCB"
+  for the instrument, it now means this one board.**
+- **No second coupon turn.** The hardware roadmap's October buffer ("buys
+  layout safety for Rev A") is dropped: round 1 was evaluated on 2026-09-28,
+  ahead of its 9 Oct date, and what it left open — the pot footprint's
+  support slots, the LED timing, the keycap on the 165 (no write-up records it
+  being read) — goes into
+  Rev A or is testable on the existing coupon.
+- **The MAX11300 is struck** from the instrument (it was only on the August
+  desk rig); `io-budget.md` §6 and the 2026-08-23 entry below say so.
+
+**Next:** a master plan for Rev A — the one board's pin map, schematic,
+layout, front panel, BOM and bring-up, in order and against the hardware
+roadmap's dates — then each piece as its own spec and plan. The depth of the
+socketed module against the Palette's 45.5 mm is the first number it needs.
 
 **2026-09-27 — the next coupon instrument is built, and it waits on a board
 session.** Round two left one item bigger than it found it: a 5150 Ω channel

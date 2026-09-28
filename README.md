@@ -212,7 +212,7 @@ the desktop clang path); the build, install and I/O details live in
 | **MOD layer** | Hold MOD and every wreathed knob shows and edits its own modulation depth instead of its sound value. The depth knobs are bipolar: right of noon the lane's continuous output, left of noon the same lane sampled and held on its own slots, noon off | **done** (engine + VCV `FireflowHW`; released in 2.21.7 and 2.21.10) |
 | **AIR** | Noise/formant texture engine (working title): filtered noise through a resonant bank — wind, breath, vowel colours without sample material | planned (no spec yet) |
 | **M5k** | ZAP: monophonic percussion part engine | planned (spec ready; not implemented) |
-| **M6** | Hardware prototype: bring-up on a Daisy Patch Submodule — panel, controls, LEDs, CV/gate I/O, preset persistence | planned after AIR and M5k (panel design **done**, see above; **bring-up under way on a test coupon** — built 2026-09-17, measured in five rounds up to 2026-09-28; the panel scan's part 1 is built and measured on the coupon, part 2, the panel's table, waits on the control PCB's pin map) |
+| **M6** | Hardware prototype: bring-up on a Daisy Patch Submodule — panel, controls, LEDs, CV/gate I/O, preset persistence | planned after AIR and M5k (panel design **done**, see above; **bring-up under way on a test coupon** — built 2026-09-17, measured in five rounds up to 2026-09-28; the panel scan's part 1 is built and measured on the coupon, part 2, the panel's table, waits on the pin map of Rev A, one board since 2026-09-28) |
 
 Per-milestone detail and current status live in [`docs/roadmap.md`](docs/roadmap.md).
 
@@ -234,7 +234,8 @@ under `docs/hardware/` (`settle-measured.md` … `pots-measured.md`). **Part 1 o
 the panel scan is built and measured on the coupon**: it reads the mux pattern
 cleanly and plays the engine from three of the coupon's pots
 (`docs/hardware/scan-measured.md`). **Part 2**, the table for a whole panel —
-70 pots, keycaps, LEDs — waits on the control PCB's pin map.
+70 pots, keycaps, LEDs — waits on the pin map of Rev A, which is one board
+since 2026-09-28.
 
 CPU headroom on the target MCU is not guesswork, though. Selected workloads are
 measured on real Daisy hardware (a Daisy Seed, which carries the same STM32H750
