@@ -249,6 +249,9 @@ real outline, and the price follows from it.
 *A recommendation, not a decision. Bastian decides (master plan working
 rule 9).*
 
+**Decided 2026-09-29 by Bastian:** accepted as recommended. P4 routes with
+our own router on 4 layers.
+
 **Routing method: our own router.** Ruling R8 already chose it as the
 spike's winner by its first criterion: every gated step green. Ours was
 green on its first run (plus the adapter fix, Results footnote ³).

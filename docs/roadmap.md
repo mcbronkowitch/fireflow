@@ -4101,8 +4101,9 @@ the coupon has nothing else open.
 LEDs on the 595 — waits for the control PCB's pin map, which should give one
 spare channel to AGND and one to the rail (spec §8).
 
-**2026-09-29 — P4a routing spike done:** recommended (Bastian decides) that
-P4 routes with our own router on 4 layers (+$25.60 per five boards); report
+**2026-09-29 — P4a routing spike done; decided:** P4 routes with our own
+router on 4 layers (+$25.60 per five boards), Bastian accepted the
+recommendation the same day; report
 [`docs/hardware/routing-spike.md`](hardware/routing-spike.md).
 
 **2026-09-29 — P3's schematic is generated: Rev A exists as eleven A3 sheets
