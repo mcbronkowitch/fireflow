@@ -69,11 +69,32 @@ def check_anchors(s, pcb_path, prefix):
         len(s.holes), worst), bad
 
 
+def _drawn_outline(board):
+    """The centre-line box of the Edge.Cuts drawings: their bounding box
+    (which includes half the line width) shrunk by that half width, read from
+    the drawings. None when there are none."""
+    boxes, half = [], 0.0
+    for d in board.GetDrawings():
+        if d.GetLayer() != pcbnew.Edge_Cuts:
+            continue
+        boxes.append(PL.box(d.GetBoundingBox()))
+        half = max(half, pcbnew.ToMM(d.GetWidth()) / 2.0)
+    if not boxes:
+        return None
+    u = (min(b[0] for b in boxes), min(b[1] for b in boxes),
+         max(b[2] for b in boxes), max(b[3] for b in boxes))
+    return PL.grow(u, -half)
+
+
 def check_edge(s, pcb_path, prefix):
-    ob = PL.box(s.board.GetBoardEdgesBoundingBox())
-    if ob[2] - ob[0] <= 0 or ob[3] - ob[1] <= 0:
-        return False, "the board has no outline", []
-    lim = PL.grow(ob, -P.EDGE_CLEAR)
+    want = P.outline_box()
+    drawn = _drawn_outline(s.board)
+    if drawn is None:
+        return False, "the board has no outline (expected %s)" % (want,), []
+    if max(abs(a - b) for a, b in zip(drawn, want)) > 1e-3:
+        return False, "the drawn outline %s is not the spec outline %s" % (
+            tuple(round(v, 3) for v in drawn), want), []
+    lim = PL.grow(want, -P.EDGE_CLEAR)
     found, n = {}, 0
     for fp in s.board.GetFootprints():
         for num, b in PL.pad_boxes(fp):
