@@ -498,18 +498,15 @@ def _write_all(project, out_dir):
     sch_dir = os.path.join(out_dir, "sch")
     if os.path.isdir(sch_dir):
         shutil.rmtree(sch_dir)     # a renamed sheet's old file must not linger
-    layouts = W.write_project(project, sch_dir)
-    write_lib_tables(project.parts(), sch_dir, _lib_dirs(project),
-                     extra_sym_libs={"power"} if project.power else ())
-    write_project_file(sch_dir, project.name)
-    return sch_dir, layouts
+    return sch_dir, _write_tree(project, sch_dir)
 
 
 def _write_tree(project, dest):
-    W.write_project(project, dest)
+    layouts = W.write_project(project, dest)
     write_lib_tables(project.parts(), dest, _lib_dirs(project),
                      extra_sym_libs={"power"} if project.power else ())
     write_project_file(dest, project.name)
+    return layouts
 
 
 def _drawing(project, layouts, names, sabotage):

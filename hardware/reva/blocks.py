@@ -199,6 +199,8 @@ def jacks(refs, jack_holes):
 
 
 def sd(refs):
+    # J_SD has no domain on purpose: a digital part on SM_3V3 (spec addendum),
+    # so rail_domain does not examine it.
     j = make("sd", "J_SD", panel_id="SD", panel=True, strict=True)
     for number, net in (("1", "SD_D2"), ("2", "SD_D3"), ("3", "SD_CMD"), ("4", SM3V3),
                         ("5", "SD_CK"), ("6", GND), ("7", "SD_D0"), ("8", "SD_D1"),

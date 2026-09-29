@@ -22,8 +22,10 @@ def parts():
             Part("C9", "Device:C", "100n", "Capacitor_SMD:C_0603_1608Metric",
                  lcsc="C14663", dnp=True),
             Part("TP1", "Connector:TestPoint", "TP", "TestPoint:TestPoint_Pad_D1.5mm",
-                 in_bom=False),
-            Part("#FLG0001", "power:PWR_FLAG", "PWR_FLAG", ""),
+                 lcsc="C1", in_bom=False),
+            Part("TP2", "Connector:TestPoint", "TP", "TestPoint:TestPoint_Pad_D1.5mm",
+                 source="Fixture", in_bom=False),
+            Part("#FLG0001", "power:PWR_FLAG", "PWR_FLAG", "", lcsc="C2"),
             Part("D2", "Device:LED", "B", "LED_THT:LED_D3.0mm", source="Thonk", note="3 mm LED"),
             Part("D1", "Device:LED", "A", "LED_THT:LED_D3.0mm", source="Thonk", note="3 mm LED")]
 
