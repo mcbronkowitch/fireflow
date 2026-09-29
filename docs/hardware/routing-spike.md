@@ -1088,8 +1088,17 @@ file copied to the scratchpad after its run:
     cmp run2/freerouting-2L-top.png run7/freerouting-2L-top.png           exit=0
     cmp run2/freerouting-2L-bottom.png run7/freerouting-2L-bottom.png     exit=0
 
-The per-pass board hashes in the log agree as well (pass 18 on
-`ddf1a8510a63460b2eb0711dae637018` in runs 2-7).
+Runs 3-6 against run 2, `for f in ...; do cmp $S/run2/$f $S/run<k>/$f &&
+echo "same ..."; done` (no `cmp` output, only the echoes):
+
+    run 3: same freerouting-2L.ses, freerouting-2L.dsn, freerouting-2L.kicad_pcb, freerouting-2L-top.png, freerouting-2L-bottom.png
+    run 4: same as run2: freerouting-2L.ses, freerouting-2L.kicad_pcb, freerouting-2L-top.png, freerouting-2L-bottom.png
+    run 5: same as run2: freerouting-2L.ses, freerouting-2L.kicad_pcb, freerouting-2L-top.png, freerouting-2L-bottom.png
+    run 6: same as run2: freerouting-2L.ses, freerouting-2L.kicad_pcb, freerouting-2L-top.png, freerouting-2L-bottom.png
+
+(The DSN was compared for runs 3 and 7 only.) The per-pass board hashes in
+the log agree as well (pass 18 on `ddf1a8510a63460b2eb0711dae637018` in
+runs 2-7).
 
 **The pictures** (`routing-spike/freerouting-2L-top.png`,
 `routing-spike/freerouting-2L-bottom.png`; the bottom view is mirrored, the
