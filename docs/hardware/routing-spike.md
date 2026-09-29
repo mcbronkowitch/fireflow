@@ -911,9 +911,11 @@ No DSN change was needed for them; `items_not_allowed` is 0 on every run.
 
 `seconds` is the Java subprocess's wall time, including start-up; vias and
 length count every net except the three locked ones. Runs 3 to 7 wrote SES,
-board and both PNGs byte-identical to run 2 (`cmp`, below). The budget
-(first complete run plus six changed runs) is used up; run 7 is the
-method's result: **one gated red, `ratsnest` (LED14 unrouted)**.
+board and both PNGs byte-identical to run 2 (every run's outputs copied to
+the scratchpad as `run<k>/`; the `cmp` results are under Reproducibility).
+The budget is used up: the first complete run, five changed runs (2-6) and
+one repeat of run 2's configuration (run 7). Run 7 is the method's result:
+**one gated red, `ratsnest` (LED14 unrouted)**.
 
 **Run 1: Freerouting touched a locked net.** The proof's `locked` step:
 
@@ -925,14 +927,29 @@ method's result: **one gated red, `ratsnest` (LED14 unrouted)**.
 The SES (`run1/freerouting-2L.ses`, lines 1493-1506, units 0.1 um) holds
 two SENSE_1 wires, 0.5 um each, from a COM pad centre to the fixed wire's
 end: `2747675 -424125` -> `2747680 -424125` and `2244907 -424350` ->
-`2244910 -424350`. KiCad's DSN writes wire coordinates in whole um
-(`274768 -42412.5`) but component places to 0.001 um (`U_MUX4 272862.5
--39937.5`), so a locked track that ends on a pad centre arrives up to 0.5 um
-beside it. Freerouting also reported `Net 'SENSE_1' (1 unrouted
+`2244910 -424350`. The DSN's fixed wires do not end on the pad centres.
+`dry_fix.py` put the three SENSE_1 COM-pad ends from the board next to the
+exported wire ends (um, DSN y):
+
+    U_MUX4.3  pad 274767.5 -42412.5      wire end 274768 -42412.5     (x off 0.5)
+    U_MUX3.3  pad 224490.714 -42435      wire end 224491 -42435       (x off 0.286)
+    U_MUX5.3  pad 255967.857 -84550.714  wire end 255968 -84550.7     (x off 0.143, y off 0.014)
+
+Every number in the seven SENSE_1 wire lines has at most six significant
+digits (`274768`, `-42412.5`, `-84550.7`), while place lines carry more
+(`U_MUX5 258442.857 -82645.714`). That the export writes wire coordinates
+with six significant digits is *inferred* from these lines, not read in
+KiCad's source. The two stubs close the two larger offsets on the SES's
+0.1 um grid (`2244907` -> `2244910` is U_MUX3's 0.286 um; `2747675` ->
+`2747680` is U_MUX4's 0.5 um). U_MUX5's end, off by 0.143 um, got no stub.
+Why is unexplained. U_MUX5.3 is also the end of the connection Freerouting
+reported unrouted, but nothing in the log links the two. Freerouting also
+reported `Net 'SENSE_1' (1 unrouted
 connection): U_MUX4-3 -> U_MUX5-3`: the U_MUX5 branch ends at
 `246000 -64000`, on the interior of the trunk wire `232231 -64000  274768
--64000`, and Freerouting did not count that T-junction as connected (the
-geometry is KiCad-connected: `unrouted before fill: 0`). Everything else in
+-64000`. The *inferred* reading is that Freerouting did not count that
+T-junction as connected; the geometry is KiCad-connected (`unrouted before
+fill: 0`). Everything else in
 run 1 was green: `copper` gated 0 everywhere, `ratsnest` 0/0/0.
 
 **Run 2's DSN handling** (`fix_locked_wires()`): a fixed-wire end within
@@ -945,8 +962,9 @@ Freerouting then counted the SENSE_1 pins as connected (`85 of 91 SMD pins
 needing fanout (6 already connected` against run 1's `89 of 91 ... (2
 already connected`), its SES names no locked net at all (`grep -c
 "SENSE_1\|OUT_L\|OUT_R" run2/freerouting-2L.ses` -> 0), and `locked` went
-green. The
-routing then ended with LED14 unrouted instead.
+green. Snap and split arrived together in run 2, so the log does not show
+which of the two cleared SENSE_1 (the stubs, the reported unrouted
+connection, or both). The routing then ended with LED14 unrouted instead.
 
 **Why LED14 stays unrouted (probed, mechanism not established).**
 `probe_pocket.py` on the run-2 board around R32.1 (237.775, 39.208), B.Cu,
@@ -960,18 +978,41 @@ radius 7 mm (B.Cu lines only):
 and on F.Cu, radius 4.5 mm: `F.Cu GND (239.050,26.500)-(239.050,38.186)` and
 `(239.050,38.186)-(237.330,39.906)`, 0.18 mm from R32.1's centre. In run 1
 LED14 was routed, via F.Cu at x 237.021 from y 38.454 to 28.365 with a via
-at each end -- the corridor run 2's F.Cu GND run now occupies. The fanout
+at each end. Run 2's F.Cu GND run is not on that line: its vertical part at
+x 239.05 is 2.029 mm east of it. Only its diagonal end,
+`(239.050,38.186)-(237.330,39.906)`, comes close, at y 38-40. Its centreline
+passes 1.245 mm from the centre of run 1's lower via (237.021, 38.454),
+computed from these coordinates with a point-to-segment distance. So the
+old path is not simply occupied, and what stops LED14 in run 2 was not
+established. The fanout
 stage escaped 90 of 91 SMD pins (`escaped pins: 90/91`); which pin failed is
 not in the log. Freerouting gives no reason beyond "could not be routed".
 
-**No `FR_ARGS` lever reached it.** The routing stage stops itself:
-`The router's best score (947.35) has not improved by more than 0.5 points
-since pass #8. Stopping the auto-router after 18 passes (1 item still
-unconnected).` -- the same line in runs 2-7 with `-mp 20` and `-mp 100`.
-The optimizer runs after it and ends each time with `Stopping optimization
-pass #1 early after 50 consecutive items could not be improved` and an
-unchanged score, so `-us`, `-is` and `-mt` had nothing to change: runs 3-6
-are byte-identical to run 2. The jar also has router scoring settings
+**No `FR_ARGS` lever changed the result.** Runs 3-6 are byte-identical to
+run 2. The facts about each flag:
+
+- `-mp`: the routing stage stops itself. `The router's best score (947.35)
+  has not improved by more than 0.5 points since pass #8. Stopping the
+  auto-router after 18 passes (1 item still unconnected).` is the same line
+  with `-mp 20` and `-mp 100`, and the log confirms both values (`Applied
+  CLI router setting: router.max_passes = 100` in run 3).
+- `-mt 8` was applied: run 5 logs `Applied CLI router setting:
+  router.max_threads = 8`.
+- `-us global` and `-is sequential` left no trace beyond the command line.
+  In runs 4 and 6, `global` and `sequential` occur only in the adapter's
+  `RUN` line and Freerouting's `Command line arguments` line. The only
+  `Applied CLI router setting` lines are `max_passes`, `max_threads` and
+  `enabled`, and `CLI Arguments (priority 60): 2 fields changed` is the
+  same in runs 2, 4, 5 and 6.
+- The optimizer ends every run with `Stopping optimization pass #1 early
+  after 50 consecutive items could not be improved` and an unchanged score
+  (947.36).
+
+Two readings fit these facts. Either the optimizer found nothing to
+improve under any strategy, or `-us`/`-is` were not applied or were
+ignored. The data do not separate them. For `-mt 8` the log shows the
+setting was stored, but not whether the optimizer ran with 8 threads. The
+jar also has router scoring settings
 (`start_ripup_costs`, `via_costs`, `fanout` in `ScoringSettings` /
 `FanoutSettings`, string constants); they are outside this task's levers
 and were not tried.

@@ -57,19 +57,24 @@ def fix_locked_wires(txt, board):
     """DSN handling of the locked nets' fixed wires, for two faults found on
     Task 7's first strip run:
 
-    1. KiCad's export rounds wire coordinates to 1 um but writes pad places
-       to 0.001 um, so a locked track that ends on a pad centre arrives up to
-       0.5 um beside it; Freerouting then adds a 0.5 um stub from the pad
-       centre to the wire end, and the stub comes back as an unlocked track
-       on a locked net. Endpoints within SNAP_UM of a same-net pad centre are
-       moved onto it.
-    2. Freerouting did not count a fixed wire that ends on the interior of
-       another fixed wire of the same net (SENSE_1's U_MUX5 branch on the
-       trunk) as connected, and reported the branch unrouted. Such a wire is
-       split at that point, so the junction is a shared vertex.
+    1. The exported fixed wires do not end on the pad centres. Every number
+       in the SENSE_1 wire lines has at most six significant digits
+       (274768, -42412.5, -84550.7), while place lines carry more. That the
+       format is six significant digits is inferred, not read in KiCad's
+       source. The three COM-pad ends were off by 0.5, 0.286 and 0.143/0.014
+       um. Freerouting wrote stubs of 0.5 and 0.3 um from the pad centre to
+       the wire end for the first two (none for the third, unexplained), and
+       they came back as unlocked tracks on a locked net. Endpoints within
+       SNAP_UM of a same-net pad centre are moved onto it.
+    2. Freerouting reported SENSE_1's U_MUX4-3 -> U_MUX5-3 unrouted. The
+       U_MUX5 branch ends on the interior of the trunk wire, a T-junction.
+       Such a wire is split at that point, so the junction is a shared
+       vertex.
 
-    The copper is unchanged: the SES carries no fixed wire, and the locked
-    tracks on the board are never touched. Returns (text, snapped, split)."""
+    Both came in together (run 2), so the log does not show which of the two
+    cleared SENSE_1. The copper is unchanged: the SES carries no fixed wire,
+    and the locked tracks on the board are never touched. Returns (text,
+    snapped, split)."""
     pads = {}
     for fp in board.GetFootprints():
         for pad in fp.Pads():
