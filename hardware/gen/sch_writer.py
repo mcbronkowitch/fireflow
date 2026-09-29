@@ -383,7 +383,7 @@ def _global_label(net, x, y, rot, u):
             '\t\t(property "Intersheetrefs" "${INTERSHEET_REFS}"\n'
             '\t\t\t(at %s %s 0)\n\t\t\t(effects (font (size %s %s)) (hide yes))))\n'
             % (_esc(net), _n(x), _n(y), rot, FONT, FONT,
-               "right" if rot == 180 else "left", u, _n(x), _n(y), FONT, FONT))
+               "right" if rot in (180, 270) else "left", u, _n(x), _n(y), FONT, FONT))
 
 
 def _local_label(net, x, y, rot, u):

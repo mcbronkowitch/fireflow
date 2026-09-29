@@ -117,6 +117,21 @@ def write_lib_tables(parts, dest_dir, lib_dirs, extra_sym_libs=()):
     return sym_libs, fp_libs
 
 
+def write_project_file(dest_dir, name):
+    """Write a minimal <name>.kicad_pro next to the root schematic.
+
+    kicad-cli only loads the project-local sym-lib-table / fp-lib-table when a
+    project file sits next to the root schematic; without one, vendored
+    libraries (Daisy-Boards, Thonk) are reported as missing from "the current
+    configuration" while KiCad's own resolve through the global tables.
+    """
+    path = os.path.join(dest_dir, name + ".kicad_pro")
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(json.dumps({"meta": {"filename": name + ".kicad_pro", "version": 3}})
+                 + "\n")
+    return path
+
+
 def kicad_defines():
     """-D arguments kicad-cli needs to resolve the library tables.
 
@@ -486,6 +501,7 @@ def _write_all(project, out_dir):
     layouts = W.write_project(project, sch_dir)
     write_lib_tables(project.parts(), sch_dir, _lib_dirs(project),
                      extra_sym_libs={"power"} if project.power else ())
+    write_project_file(sch_dir, project.name)
     return sch_dir, layouts
 
 
@@ -493,6 +509,7 @@ def _write_tree(project, dest):
     W.write_project(project, dest)
     write_lib_tables(project.parts(), dest, _lib_dirs(project),
                      extra_sym_libs={"power"} if project.power else ())
+    write_project_file(dest, project.name)
 
 
 def _drawing(project, layouts, names, sabotage):
