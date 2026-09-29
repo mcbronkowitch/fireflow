@@ -397,7 +397,11 @@ class Router:
                 self._rip(k)
                 ok, paths = self._route_net(k, pres)
                 if not ok:
+                    # A failed net commits nothing: its partial paths never
+                    # reach `routes`, so their claims would only charge the
+                    # healthy nets for copper that does not exist.
                     failed.add(k)
+                    continue
                 self._commit(k, paths)
             bad = [(k, self._conflict_cells(k)) for k in order if k not in failed]
             bad = [(k, cc) for k, cc in bad if cc]
