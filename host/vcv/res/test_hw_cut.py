@@ -135,6 +135,28 @@ def test_cut_file_is_exactly_the_holes():
         check(cut.shape(h, cut.BLUE, "0.01") in svg, f"{h['id']} is not cut")
 
 
+def test_print_sheet_is_true_to_scale():
+    """The print goes under the clear acrylic. It must be the real plate
+    artwork, with every hole outlined for cutting out, and a 100 mm bar the
+    printer's scaling can be checked against with a ruler."""
+    path = os.path.join(HERE, "FireflowHW-print.svg")
+    if not os.path.exists(path):
+        FAILS.append("FireflowHW-print.svg is missing -- run res/gen_hw_cut.py")
+        return
+    svg = open(path, encoding="utf-8").read()
+    check(svg.startswith(hw.svg().rstrip()[:-len("</svg>")]),
+          "print sheet does not start with the plate artwork")
+    m = re.search(r'<line id="scale100" x1="([\d.]+)" y1="[\d.]+" '
+                  r'x2="([\d.]+)"', svg)
+    check(m is not None, "print sheet has no 100 mm scale bar")
+    if m:
+        check(abs(float(m.group(2)) - float(m.group(1)) - 100.0) < 1e-6,
+              "scale bar is not 100 mm long")
+    for h in cut.holes():
+        check(cut.shape(h, cut.PRINT_INK, "0.25") in svg,
+              f"{h['id']} is not outlined on the print sheet")
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

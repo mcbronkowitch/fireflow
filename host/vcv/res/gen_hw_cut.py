@@ -89,8 +89,35 @@ def cut_svg():
     return "\n".join(P) + "\n"
 
 
+PRINT_INK = "#ffffff"   # hole outlines and scale bar, light on the dark plate
+# 100 mm scale bar in the bottom rail zone, clear of the mounting slots.
+SCALE_X0, SCALE_Y = 102.4, 123.0
+
+
+def print_svg():
+    """The plate artwork at 1:1, every hole outlined to be cut out with a
+    knife, the trimmed plate edge, and a 100 mm bar to check the printer."""
+    base = hw.svg().rstrip()
+    body = base[:-len("</svg>")]
+    P = [body, '<g id="print-overlay">',
+         f'<rect x="{hw.mm(TRIM)}" y="0.000" width="{hw.mm(PLATE_W)}" '
+         f'height="{hw.mm(hw.Hh)}" fill="none" stroke="{PRINT_INK}" '
+         f'stroke-width="0.25"/>']
+    P += [shape(h, PRINT_INK, "0.25") for h in holes()]
+    P.append(f'<line id="scale100" x1="{hw.mm(SCALE_X0)}" y1="{hw.mm(SCALE_Y)}" '
+             f'x2="{hw.mm(SCALE_X0 + 100.0)}" y2="{hw.mm(SCALE_Y)}" '
+             f'stroke="{PRINT_INK}" stroke-width="0.3"/>')
+    P.append(f'<text x="{hw.mm(SCALE_X0 + 50.0)}" y="{hw.mm(SCALE_Y + 3.0)}" '
+             f'fill="{PRINT_INK}" text-anchor="middle" font-family="monospace" '
+             f'font-size="2.2">100 mm -- print at 100 %, check with a ruler</text>')
+    P.append("</g>")
+    P.append("</svg>")
+    return "\n".join(P) + "\n"
+
+
 OUTPUTS = [("FireflowHW-holes.json", holes_json),
-           ("FireflowHW-cut.svg", cut_svg)]
+           ("FireflowHW-cut.svg", cut_svg),
+           ("FireflowHW-print.svg", print_svg)]
 
 
 def write_all(here):
