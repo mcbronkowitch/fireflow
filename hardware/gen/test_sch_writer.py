@@ -27,8 +27,15 @@ import generate_schematic as coupon_sch         # noqa: E402
 def check_project(make, failures):
     proj = make()
     with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
-        W.write_project(proj, a)
+        layouts = W.write_project(proj, a)
         W.write_project(make(), b)
+        sheets = {s.name: s for s in proj.sheets}
+        for name, (placed, height) in sorted(layouts.items()):
+            for hit in W.overlaps(sheets[name].parts, placed, proj.power):
+                failures.append("%s/%s: overlap %s <-> %s" % (proj.name, name, hit[0], hit[1]))
+            if not W.fits(height, proj.paper):
+                failures.append("%s/%s: %.0f mm tall, does not fit %s"
+                                % (proj.name, name, height, proj.paper))
         names = sorted(os.listdir(a))
         if names != sorted(os.listdir(b)):
             failures.append("%s: file sets differ between runs" % proj.name)

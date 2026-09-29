@@ -108,7 +108,8 @@ def main():
     for label, bad_holes in (
             ("a duplicated pot id", holes + [dict(pots[0])]),
             ("81 pots", holes + [dict(pots[0], id="EXTRA_%d" % i, ids=["EXTRA_%d" % i])
-                                 for i in range(11)])):
+                                 for i in range(11)]),
+            ("a duplicated LED id", holes + [dict(next(h for h in holes if h["kind"] == "led"))])):
         try:
             A.assign(bad_holes)
             failures.append("assign() accepted %s" % label)

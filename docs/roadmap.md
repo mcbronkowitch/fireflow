@@ -4101,6 +4101,31 @@ the coupon has nothing else open.
 LEDs on the 595 — waits for the control PCB's pin map, which should give one
 spare channel to AGND and one to the rail (spec §8).
 
+**2026-09-29 — P3's schematic is generated: Rev A exists as eleven A3 sheets
+(overview + ten), ERC-clean against four waivers.**
+`python hardware/reva/build.py` writes the KiCad project under
+`hardware/reva/kicad/` (blocks in `hardware/reva/blocks.py`, pin assignment
+from `panel-map.json`), 217 parts on 189 nets: the power sheet, the
+Patch Submodule, four pot-scan regions (10 × 74HC4051 on `SENSE_0`–`SENSE_3`),
+the shift-register chains with the four keys, the 19 LEDs, the 18 jacks and
+the SD socket. The four ERC waivers each carry a reason
+(`hardware/reva/erc-waivers.txt`): D10 and the two shift-register pins that
+the firmware drives as GPIO, and J_SD's footprint, which stays open until P4
+picks the socket. JLC assembles 78 parts on 10 lines; two types are Extended
+and carry a loading fee (C9386 74HC4051, C5613 74HC165), the rest are Basic.
+The SD socket carries a 100 nF decoupling capacitor (C_SD1) plus a DNP 10 µF
+option (C_SD2), and the AMS1117 output has a DNP 22 µF low-ESR tantalum
+(C_LDO_T) for the bring-up stability check.
+Hand-soldered: the Thonk panel parts (70 pots, 18 jacks, 4 keys, 19 LEDs),
+the module with its four sockets, the power header and J_SD.
+`bom-jlc.csv`, `bom-hand.csv` and the review sheet
+[`hardware/reva/review.md`](../hardware/reva/review.md) are generated with the
+schematic; `reva_build_guard` compares every generated file byte for byte,
+`reva_check_guard` runs the check tool's full level (rules, netlist against the
+intent, ERC) and `hw_gen_bom_guard` covers the BOM grouping. The JLC stock
+check is still owed at the schematic freeze (13 Nov). Spec
+`docs/superpowers/specs/2026-09-29-rev-a-p3-schematic-design.md`.
+
 **2026-09-29 — P1's generator side is in: the acrylic plate can be ordered.**
 `host/vcv/res/gen_hw_cut.py` writes the laser cut file, a 1:1 print sheet for
 under the clear plate, and `FireflowHW-holes.json`, the hole list the Rev A

@@ -24,7 +24,7 @@ MUXES = {"SENSE_0": (0, 1, 2), "SENSE_1": (3, 4, 5),
 # Left-to-right order of the four regions -- the one knob P4 may turn.
 SENSE_ORDER = ("SENSE_0", "SENSE_2", "SENSE_3", "SENSE_1")
 CHANNELS = 8
-CALIBRATION = ("CAL_GND", "CAL_A3V3")   # panel-scan spec §8: the scan reads its span
+CALIBRATION = ("CAL_GND", "CAL_3V3")   # panel-scan spec §8: the scan reads its span
 
 
 def load_holes(path=HOLES):

@@ -39,6 +39,7 @@ CHAR_W = 0.75 * FONT # KiCad stroke font advance, near enough
 LABEL_PAD = 3.0      # a global label's arrow shape
 POWER_LEN = 5.08     # a power symbol's graphic plus the gap to its value text
 POWER_TEXT_GAP = 3.2 # pin to the near edge of the value text, on a horizontal stub
+ADJACENT = 2 * GRID  # same-net power pins this close share one power symbol
 
 
 class Uuids:
@@ -169,12 +170,20 @@ def ending_box(ex, ey, rot, net, power):
     return (ex - thick / 2, ey, ex + thick / 2, ey + length)
 
 
-def label_groups(part, unit, px=0.0, py=0.0):
+def label_groups(part, unit, px=0.0, py=0.0, power=()):
     """One stub and one ending per distinct connection point of `unit`.
 
     Electrosmith's Daisy_Patch_SM stacks A4 and A7 -- both GND -- on exactly
     the same coordinate. One stub per pin would double-strike the text. Pins
     that share a point but carry DIFFERENT nets are a short, so that raises.
+
+    Pins on the same power net that sit next to each other on one edge -- the
+    74HC4051's VEE and GND, 2.54 mm apart, both GND on a single supply --
+    share ONE power symbol: their stub ends are chained by wires. Two symbols
+    there print their values on top of each other ("GNGND").
+
+    Returns [((cx, cy), angle, net, pin numbers, other points)], where other
+    points are the connection points whose stubs join this group's ending.
     """
     groups = {}
     for number in unit_pins(part, unit):
@@ -189,8 +198,32 @@ def label_groups(part, unit, px=0.0, py=0.0):
                 "different nets (%s vs %s) -- that is a short"
                 % (part.ref, groups[key][1][0], number, groups[key][0], net))
         groups.setdefault(key, (net, []))[1].append(number)
-    return [(pin_point(px, py, dict(x=k[0], y=k[1])), k[2], net, nums)
-            for k, (net, nums) in sorted(groups.items())]
+
+    out, runs = [], {}
+    for key, (net, nums) in sorted(groups.items()):
+        if net in power:
+            vertical = key[2] in (90, 270)          # pins on the top/bottom edge
+            line = key[1] if vertical else key[0]
+            runs.setdefault((net, key[2], line), []).append((key, nums))
+        else:
+            out.append(((key[0], key[1]), key[2], net, nums, []))
+    for (net, angle, _line), members in sorted(runs.items()):
+        along = 0 if angle in (90, 270) else 1
+        members.sort(key=lambda m: m[0][along])
+        run = [members[0]]
+        for m in members[1:] + [None]:
+            if m is not None and m[0][along] - run[-1][0][along] <= ADJACENT + 1e-6:
+                run.append(m)
+                continue
+            head = run[0][0]
+            out.append(((head[0], head[1]), angle, net,
+                        [n for _, ns in run for n in ns],
+                        [(k[0], k[1]) for k, _ in run[1:]]))
+            run = [m] if m is not None else []
+    out.sort(key=lambda g: (g[0][0], g[0][1], g[1]))
+    return [(pin_point(px, py, dict(x=pt[0], y=pt[1])), angle, net, nums,
+             [pin_point(px, py, dict(x=o[0], y=o[1])) for o in others])
+            for pt, angle, net, nums, others in out]
 
 
 def label_margins(part, unit, power):
@@ -204,7 +237,7 @@ def label_margins(part, unit, power):
     """
     x0, x1, y0, y1 = sym_extent(part, unit)
     left = right = top = bottom = 0.0
-    for (cx, cy), angle, net, _ in label_groups(part, unit):
+    for (cx, cy), angle, net, _nums, _others in label_groups(part, unit, power=power):
         ex, ey, rot = stub_end(cx, cy, angle)
         bx0, by0, bx1, by1 = ending_box(ex, ey, rot, net, power)
         left = max(left, x0 - bx0)
@@ -274,7 +307,7 @@ def _boxes(parts, placed, power):
                 w = len(str(text)) * CHAR_W
                 out.append((px, ty - 0.9, px + w, ty + 0.9,
                             "%s text %r" % (name, text)))
-        for (cx, cy), angle, net, nums in label_groups(p, u, px, py):
+        for (cx, cy), angle, net, nums, _others in label_groups(p, u, px, py, power):
             ex, ey, rot = stub_end(cx, cy, angle)
             out.append(ending_box(ex, ey, rot, net, power)
                        + ("%s.%s %s" % (p.ref, "/".join(nums), net),))
@@ -322,16 +355,17 @@ def _prop(name, value, x, y, hide=False, justify="left", angle=0):
                " (hide yes)" if hide else ""))
 
 
-def _symbol(lib_id, ref, unit, x, y, rot, in_bom, sym_uuid, props, pins,
-            project, path):
-    yn = "yes" if in_bom else "no"
+def _symbol(lib_id, ref, unit, x, y, rot, in_bom, on_board, dnp, sym_uuid,
+            props, pins, project, path):
+    def yn(b):
+        return "yes" if b else "no"
     return ('\t(symbol\n\t\t(lib_id "%s")\n\t\t(at %s %s %d)\n\t\t(unit %d)\n'
             '\t\t(exclude_from_sim no)\n\t\t(in_bom %s)\n\t\t(on_board %s)\n'
-            '\t\t(dnp no)\n\t\t(uuid "%s")\n%s%s'
+            '\t\t(dnp %s)\n\t\t(uuid "%s")\n%s%s'
             '\t\t(instances\n\t\t\t(project "%s"\n'
             '\t\t\t\t(path "%s" (reference "%s") (unit %d))))\n\t)\n'
-            % (lib_id, _n(x), _n(y), rot, unit, yn, yn, sym_uuid,
-               "".join(props),
+            % (lib_id, _n(x), _n(y), rot, unit, yn(in_bom), yn(on_board),
+               yn(dnp), sym_uuid, "".join(props),
                "".join('\t\t(pin "%s" (uuid "%s"))\n' % pu for pu in pins),
                project, path, ref, unit))
 
@@ -349,7 +383,7 @@ def _global_label(net, x, y, rot, u):
             '\t\t(property "Intersheetrefs" "${INTERSHEET_REFS}"\n'
             '\t\t\t(at %s %s 0)\n\t\t\t(effects (font (size %s %s)) (hide yes))))\n'
             % (_esc(net), _n(x), _n(y), rot, FONT, FONT,
-               "right" if rot == 180 else "left", u, _n(x), _n(y), FONT, FONT))
+               "right" if rot in (180, 270) else "left", u, _n(x), _n(y), FONT, FONT))
 
 
 def _local_label(net, x, y, rot, u):
@@ -377,12 +411,20 @@ def emit_items(parts, placed, uuids, project, path, kind, power, pwr_counter):
                 props.append(_prop(name, val, px, py, hide=True))
         pins = [(n, uuids("pin", p.ref, n))
                 for n in sorted(unit_pins(p, u), key=ksexp._pin_sort_key)]
-        out.append(_symbol(p.lib_id, p.ref, u, px, py, 0, not virtual,
-                           uuids("sym", p.ref, u), props, pins, project, path))
-        for (cx, cy), angle, net, nums in label_groups(p, u, px, py):
+        out.append(_symbol(p.lib_id, p.ref, u, px, py, 0,
+                           p.in_bom and not virtual, p.on_board and not virtual,
+                           p.dnp, uuids("sym", p.ref, u), props, pins, project, path))
+        for (cx, cy), angle, net, nums, others in label_groups(p, u, px, py, power):
             ex, ey, rot = stub_end(cx, cy, angle)
             key = (p.ref, "/".join(nums))
             out.append(_wire(cx, cy, ex, ey, uuids("stub", *key)))
+            prev = (ex, ey)
+            for i, (ox, oy) in enumerate(others, 1):
+                oex, oey, _ = stub_end(ox, oy, angle)
+                out.append(_wire(ox, oy, oex, oey, uuids("stub", p.ref, key[1], i)))
+                # chain end to end, so no wire end lands mid-segment
+                out.append(_wire(prev[0], prev[1], oex, oey, uuids("join", p.ref, key[1], i)))
+                prev = (oex, oey)
             k = kind(net)
             if k == "power":
                 lib_id = power[net]
@@ -403,7 +445,7 @@ def emit_items(parts, placed, uuids, project, path, kind, power, pwr_counter):
                                 angle=90 if srot in (90, 270) else 0),
                           _prop("Footprint", "", ex, ey, hide=True),
                           _prop("Datasheet", "", ex, ey, hide=True)]
-                out.append(_symbol(lib_id, ref, 1, ex, ey, srot, False,
+                out.append(_symbol(lib_id, ref, 1, ex, ey, srot, False, False, False,
                                    uuids("pwr", *key), pprops,
                                    [(pnum, uuids("pwrpin", *key))], project, path))
             elif k == "global":
@@ -418,11 +460,34 @@ def emit_items(parts, placed, uuids, project, path, kind, power, pwr_counter):
     return out
 
 
+def _derived_node(sym):
+    """The base's drawing with the derived symbol's own fields.
+
+    KiCad compares the embedded copy with the library's flattened symbol, in
+    which a derived symbol's properties (Value, Description, Datasheet,
+    footprint filters) override its base's. Embedding the base's fields made
+    ERC report lib_symbol_mismatch on every derived part (TL072 in the demo;
+    AMS1117, SS14 and 74HC165 on Rev A).
+    """
+    own = {str(c[1]): c for c in ksexp.children(sym.node, "property")}
+    out, placed_extra = [], False
+    for c in sym.base.node:
+        is_prop = isinstance(c, list) and c and c[0] == "property"
+        if is_prop and str(c[1]) in own:
+            out.append(own.pop(str(c[1])))
+            continue
+        if not is_prop and not placed_extra and isinstance(c, list) and c and c[0] == "symbol":
+            out.extend(own.values())       # derived-only fields before the units
+            own, placed_extra = {}, True
+        out.append(c)
+    return out
+
+
 def lib_symbols(lib_ids):
     chunks = []
     for lib_id in sorted(lib_ids):
         sym = N.load(lib_id)
-        node = sym.base.node if sym.extends else sym.node
+        node = _derived_node(sym) if sym.extends else sym.node
         body = ksexp.dump(node, 2)
         # Naming, and it is asymmetric in a way that costs an afternoon if
         # guessed: the HEAD carries the library prefix ("74xx:74HC595"), the

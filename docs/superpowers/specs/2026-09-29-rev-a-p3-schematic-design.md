@@ -107,9 +107,10 @@ P3 builds the check tool **before** the first Rev A sheet exists (stage 2b,
 **Measured 2026-09-29** on the coupon schematic (~80 parts, one sheet), with
 `kicad-cli` 10.0: netlist export 0.9 s, ERC 6.1 s, PDF 0.4 s.
 **Measured 2026-09-29** on the 264-part, eleven-sheet load fixture
-(hardware/gen/fixtures/load.py): full level 3.5 s, of which ERC 1.5 s. The fixture uses three symbol types
-only; the coupon's single sheet took 6.1 s of ERC, so Rev A's real figure is
-measured again in plan 2.
+(hardware/gen/fixtures/load.py): full level 3.5 s, of which ERC 1.5 s. The
+fixture uses three symbol types only; the coupon's single sheet took 6.1 s of
+ERC; Rev A itself (measured 2026-09-29, 214 parts (217 with PWR_FLAGs), 11
+sheets): full level 5.4 s, ERC 1.7 s.
 
 Rules for the check tool:
 
@@ -304,6 +305,25 @@ https://daisy.nyc3.cdn.digitaloceanspaces.com/products/patch-sm/ES_Daisy_Patch_S
   datasheet's circuit: free, 2–3 and 5–6 are closed; pushed, 1–2 and 4–5.
   Rev A uses one pole — pin 2 common, pin 1 closes to it when pressed — and
   leaves 3–6 unconnected.
+
+## Addendum 2026-09-29 (b) — SD socket decoupling, AMS1117 tantalum option
+
+Decided by Bastian after a source check. **SD socket:** patch.Init() wires the
+socket with no parts (its schematic says so). On the Patch SM, `+3V3_D` (A10)
+carries 2 × 10 µF at the TPS621x buck, while the ADC reference `+3V3_A` sits
+behind ferrite FB5 with its own 10 µF: card current spikes on the shared
+`SM_3V3` trace reach the pots but not the reference. TI's TPS6213x datasheet
+(Table 9-2) allows 10–200 µF nominal output capacitance with the 2.2 µH
+inductor. Hence `C_SD1`, 100 nF, fitted at the socket, and `C_SD2`, 10 µF, DNP.
+**AMS1117:** the datasheet (Slkor's second-source text; AMS's own PDF could not
+be fetched) gives 10 µF tantalum as typical, output ESR must not exceed 0.5 Ω,
+and no upper capacitance limit. The 22 µF 0805 MLCC also loses capacitance
+under DC bias. Hence `C_LDO_T`, a 6032 low-ESR tantalum (C1967941, AVX
+TPSC226K016R0300, 300 mΩ), DNP. Sources:
+https://daisy.nyc3.cdn.digitaloceanspaces.com/products/patch-sm/ES_Daisy_Patch_SM_Schematic.pdf,
+https://daisy.nyc3.cdn.digitaloceanspaces.com/products/patch-init/patch_init_schematic.pdf,
+https://www.ti.com/lit/ds/symlink/tps62130.pdf,
+https://mm.digikey.com/Volume0/opasdata/d220001/medias/docus/8122/AMS11173.3SOT223.pdf.
 
 ## Out of scope
 

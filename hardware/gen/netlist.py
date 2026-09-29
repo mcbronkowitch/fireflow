@@ -21,16 +21,34 @@ EXTRA_SYMBOL_DIRS = [os.path.normpath(os.path.join(
 
 class Part:
     def __init__(self, ref, lib_id, value, footprint, note="", lcsc="",
-                 source="", panel_id="", domain="", strict=False):
+                 source="", panel_id="", domain="", strict=False, panel=False,
+                 dnp=False, in_bom=True, on_board=True, pin_types=None):
         self.ref, self.lib_id = ref, lib_id
         self.value, self.footprint = value, footprint
         self.note = note
         self.lcsc, self.source, self.panel_id = lcsc, source, panel_id
         self.domain = domain
         self.strict = strict       # every pin must carry a net or a no_connect
+        self.panel = panel         # mounted in a panel hole; needs a PanelId
+        self.dnp = dnp             # footprint fitted, part not populated
+        self.in_bom = in_bom       # False: a pad, not a part (test points)
+        self.on_board = on_board   # False: bought, but has no footprint (sockets)
         self.sym = load(lib_id)
+        self.pin_types = {str(k): v for k, v in (pin_types or {}).items()}
+        for number in self.pin_types:
+            self.sym.pin(number)   # raises if the override names no pin
         self.nets = {}             # pin number -> net name
         self.nc = set()            # pins left unconnected on purpose
+
+    def etype(self, number):
+        """The pin's electrical type, with this part's override applied.
+
+        Overrides exist for symbols whose pin types name a default role the
+        board does not use: the Patch SM declares D10 (SPI_SCK) an output, and
+        Rev A reads it as the 165's serial input (P2 §4).
+        """
+        number = str(number)
+        return self.pin_types.get(number, self.sym.pin(number)["etype"])
 
     def by_number(self, number, net):
         number = str(number)
