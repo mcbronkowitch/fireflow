@@ -60,7 +60,6 @@ desktop.ini
 # P3 check-tool output (hardware/gen/check.py, default --out)
 hardware/gen/fixtures/out/
 hardware/reva/out/
-hardware/reva/spike/out/
 # KiCad by-products of opening the generated Rev A project
 hardware/reva/kicad/*.kicad_prl
 hardware/reva/kicad/*-backups/
