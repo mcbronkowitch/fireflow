@@ -17,11 +17,25 @@ if HERE not in sys.path:
 
 import pcbnew          # noqa: E402
 import locked as LK   # noqa: E402
+import own as OWN     # noqa: E402
 import proof as PF    # noqa: E402
 import stripe as ST   # noqa: E402
 from gen import kipcb  # noqa: E402
+from gen import pcb_proof as PP  # noqa: E402
 
 OUT = os.path.join(HERE, "out")
+
+
+def finish(s):
+    """After any routing method: record what it left unrouted, then the
+    2-layer GND fill on both sides (spec §2.5), then fill all zones."""
+    s.unrouted_before_fill = PP.live_unconnected(s.board)
+    if s.layers == 2:
+        rect = [(ST.X0, ST.Y0), (ST.X1, ST.Y0), (ST.X1, ST.Y1), (ST.X0, ST.Y1)]
+        for layer in ("F.Cu", "B.Cu"):
+            kipcb.add_zone(s.board, layer, ST.SUPPLY_NETS[0], rect)
+        s.fill_nets = [ST.SUPPLY_NETS[0]]
+    kipcb.fill_zones(s.board)
 
 
 def main():
@@ -54,6 +68,11 @@ def main():
     for label, box in s.keepouts:
         print("   keepout %-10s x %.2f..%.2f y %.2f..%.2f" % (label, box[0], box[2], box[1], box[3]))
     routed = a.method != "none"
+    if a.method == "own":
+        print("own router:", OWN.route(s))
+    if routed:
+        finish(s)
+        print("unrouted before fill: %d" % s.unrouted_before_fill)
     if a.sabotage:
         PF.sabotage(s, a.sabotage)
     pcb = prefix + ".kicad_pcb"

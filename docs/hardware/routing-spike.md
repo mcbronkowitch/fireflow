@@ -336,3 +336,90 @@ covers pads as well as tracks.
    runs without `-mt` on this board).
 4. `class_class` is honoured: A-B edge-to-edge 0.435 mm without it, 3.658 mm
    (tracks) and 3.033 mm (track to pad) with a 3 mm rule.
+
+### Our own router, 2 layers (Task 6)
+
+`hardware/reva/spike/own.py` feeds the strip to `hardware/gen/route.py`
+(PITCH 0.2, VIA_RADIUS 0.3, VIA_COST 8.0, MAX_ITERS 30, default `run()`
+parameters, the router's own span order); `run.finish()` records the
+unrouted count, adds the GND fill on F.Cu and B.Cu and fills. Before the
+first run `via_dangling` joined the gated classes in `proof.py` (Freerouting
+leaves dangling fanout vias, Task 4; gated for both methods).
+
+    KIPY hardware/reva/spike/run.py --method own --layers 2
+
+| run | change | seconds | failed | conflicts | iterations | vias | length mm | unrouted before fill | gated reds |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | none (first complete run) | 14.2 | 0 | 0 | 6 | 74 | 2682.9 | 0 | none |
+
+Every gated step was green on the first run, so the budget stopped there:
+run 1 is the method's result. The router's own check (`conflicts 0`,
+`failed []`) printed before the proof; the full proof takes 3.1 s, well
+under the 30 s that would call for a separate partial checker. Final run:
+
+    own router: {'nets': 49, 'failed': [], 'conflicts': 0, 'iterations': 6, 'vias': 74, 'length_mm': 2682.9, 'seconds': 14.2}
+    unrouted before fill: 0
+    wrote hardware\reva\spike\out\own-2L.kicad_pcb
+        1. nets       52 nets, 0 differ from the intent node for node
+        2. anchors    36 panel parts, worst 0.0000 mm off its hole (limit 0.01)
+        3. decoupling 3 decouplers, worst 1.778 mm (limit 2.0)
+        4. locked     14 locked segments unchanged on SENSE_1, OUT_L, OUT_R
+        5. copper     gated: shorting_items 0, clearance 0, hole_clearance 0, hole_to_hole 0, tracks_crossing 0, track_dangling 0, via_dangling 0 (not gated: copper_edge_clearance 15, courtyards_overlap 6, items_not_allowed 1, pth_inside_courtyard 2, silk_edge_clearance 23, silk_over_copper 44, silk_overlap 20, starved_thermal 8)
+        6. ratsnest   unconnected: 0 before fill, 0 live, 0 kicad-cli
+        7. audio      nearest LED track to audio: 2.71 mm (OUT_L to LED16; coupon rule 10.0, not gated)
+        8. render     rendered own-2L-top.png, own-2L-bottom.png
+    proof took 3.1 s -- GREEN
+
+**The ungated `items_not_allowed 1` is a real defect.** The DRC report
+names `Track [MOD2_B] on F.Cu` at (213.1, 112.3), inside the F.Cu rule area
+(no tracks, no vias) that the PJ398SM footprint carries itself: J13's is
+x 212.80..215.81, y 112.50..115.50, and each of the six jacks has one
+(probe `probe_ruleareas.py`, scratchpad). `own.py` feeds the strip's own
+keepouts to the router but not the footprints' rule areas. A probe outside
+the budget (`probe_fp_ruleareas.py`, scratchpad: `own.route_strip` patched
+to add the six as netless obstacles, then `run.main()`) printed the same
+`own router:` numbers (74 vias, 2682.9 mm), `copper` without
+`items_not_allowed`, and GREEN; MOD2_B then runs at x 212.30 instead of
+213.10. Not adopted: the obstacle set is not among the budget's allowed
+changes, and `items_not_allowed` is not gated.
+
+**Routed-stage sabotages** (`--sabotage <name>` on the same configuration):
+
+    --sabotage ratsnest
+        6. ratsnest   unconnected: 0 before fill, 0 live, 0 kicad-cli
+    proof took 3.0 s -- GREEN          (exit 0)
+    --sabotage audio_missing
+    RED 7. audio      examined 7 audio and 0 LED segments
+    proof took 3.0 s -- RED            (exit 1)
+
+**The `ratsnest` RED is vacuous on this board.** The sabotage deletes the
+first candidate track, which here is a 0.102 mm pad-centre stub,
+`PITCH_B B.Cu (248.800,118.920)-(248.900,118.900)`, lying entirely inside
+J16.T's 2.13 mm pad, so nothing disconnects. Probe
+(`probe_sab_ratsnest.py`, scratchpad): 712 candidates, 255 of them shorter
+than 0.3 mm; unconnected after deleting the first candidate 0, after also
+deleting the longest (`LED15 B.Cu (222.500,19.700)-(258.500,19.700)`,
+36.0 mm) 1. The step itself can go red; the sabotage picks a segment whose
+removal cannot. `ratsnest` was green on the unsabotaged run, so the RED
+still has to be proven -- on the Freerouting board in Task 7, or with a
+sabotage that picks a segment whose deletion raises the live count.
+
+**Reproducibility.** Two runs of the final configuration, the first board
+copied to the scratchpad in between:
+
+    cmp "$S/own-2L-first.kicad_pcb" hardware/reva/spike/out/own-2L.kicad_pcb
+    (no output, exit 0)
+
+**The pictures** (`routing-spike/own-2L-top.png`,
+`routing-spike/own-2L-bottom.png`): the top side carries a vertical bundle of
+four to six tracks down the middle of the strip between the upper pot rows
+and a set of long 45-degree runs in the lower-left quarter between the
+jacks and the RV67/RV70 pots; the bottom side fans out into the port column
+along the west edge, with a diagonal bundle running from east of U_MUX5
+towards the lower ports and long straight runs such as LED15's 36 mm along
+y 19.7. Nothing hugs the outline except the port approaches and the locked
+OUT_R run; as far as the render's resolution shows, the vias sit singly at
+the ends of top-side runs, not in clusters.
+
+![own router, top](routing-spike/own-2L-top.png)
+![own router, bottom](routing-spike/own-2L-bottom.png)

@@ -20,8 +20,11 @@ from gen import pcb_proof as PP      # noqa: E402
 # track_dangling is gated beside the coupon's five: a track drawn onto a
 # foreign pad is renamed to that pad's net on save (probed 2026-09-29), so a
 # router's short arrives here as a dangling track, not as shorting_items.
+# via_dangling is gated too: Freerouting was seen leaving dangling fanout
+# vias (Task 4 probe), and gating the class for both methods keeps the
+# comparison fair.
 GATED = ("shorting_items", "clearance", "hole_clearance", "hole_to_hole",
-         "tracks_crossing", "track_dangling")
+         "tracks_crossing", "track_dangling", "via_dangling")
 
 
 def _fp(board, ref):
