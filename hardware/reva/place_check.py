@@ -13,8 +13,10 @@ from gen import kipcb
 from gen import pcb_proof as PP
 from gen import place as PL
 
-# Filled from the first full run of Task 3/4/6, restricted to the jack row and
-# the SONG clusters (spec §5.3); test_place.py asserts that restriction.
+# Filled from the first full run of Task 3/4/6, restricted to the jack row, the
+# SONG clusters and, by the owner's decision (Bastian, 2026-09-29), the
+# GATE_A_L/SOURCE_A and LVL_B_L/PAN_B pairs (spec §5.3); test_place.py
+# (Task 6) asserts exactly that set.
 KNOWN_PANEL = {
     "edge": {
         "CLOCK", "GATE_A", "GATE_B", "IN_L", "IN_R", "MOD1_A", "MOD1_B", "MOD2_A",
@@ -26,6 +28,12 @@ KNOWN_PANEL = {
         "body SONG_B/SONG_B_L",
         "pad SONG_A_L/SONG_A",
         "pad SONG_B_L/SONG_B",
+        # LED legs overlap SOURCE_A's / PAN_B's pins in every LED rotation; no
+        # pot rotation fixes it without breaking the cap marker (T18, 20 deg
+        # steps) or the jack row after the panel pass; waits for the panel
+        # pass (Bastian, 2026-09-29).
+        "rotation GATE_A_L",
+        "rotation LVL_B_L",
         "rotation SONG_A_L",
         "rotation SONG_B_L",
     },

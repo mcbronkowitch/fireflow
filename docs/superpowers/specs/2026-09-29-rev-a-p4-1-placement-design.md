@@ -111,6 +111,9 @@ What follows from these:
     PAN_A under LVL_A_L, PAN_B under LVL_B_L, and both SONG pots under their
     lamps.
   - The SONG pair at a 2.6 mm drop was not probed with this full check.
+  - The probe checked pot pins under LED bodies only. *Amended 2026-09-29
+    during execution:* pad-to-pad overlap was found in execution for
+    SOURCE_A/GATE_A_L and PAN_B/LVL_B_L (see §5.3).
 - **Pot pins under an LED body box are probably no collision.** The LED dome
   sits at the plate and the pot pins at the board, but no height is measured.
   The grip test's panel-to-board gap and the parts in hand decide it.
@@ -165,6 +168,8 @@ ones), so P4-1 generates one.
 - **Rotation, by rule and not by table:**
   - pot: 270 (pins north); 90 (pins south) on the top pot row, the row with
     the smallest pot y.
+  - Pot bodies turn only in 180° steps against each other, because the T18
+    knurl sets the cap marker in 20° steps (Bastian, 2026-09-29).
   - jack: 0.
   - key: 0.
   - LED: the first of 0, 90, 180, 270 whose pads avoid every foreign body box
@@ -318,6 +323,12 @@ will remove:
 
 - the jack-row pads past the edge (check 2)
 - the SONG lamps without a legal rotation (check 3)
+- GATE_A_L and LVL_B_L without a legal rotation (check 3): their legs
+  overlap SOURCE_A's and PAN_B's pins in every LED rotation. No pot rotation
+  helps: a 90° turn cannot put a T18 cap's marker straight (20° steps),
+  PAN_B pins south would meet the jack row after the panel pass, and
+  SOURCE_A sits between two LEDs. *Amended 2026-09-29 during execution
+  (Bastian).*
 
 A listed item that fails is printed as "known, waits for the panel pass". An
 unlisted failure fails the build. **A listed item that no longer fails also
