@@ -172,9 +172,17 @@ ones), so P4-1 generates one.
     §5.3 for the known cases.
 - **SD socket (J_SD):** on the front, through hole, centred on the `SD`
   slot's centre. Its footprint comes from `sd_footprint.py`, which writes a
-  `.kicad_mod` from the drawing's dimensions and cites the drawing's figure
-  numbers. The drawing is read during the plan, and every dimension in the
-  script names its source.
+  `.kicad_mod`. *Amended 2026-09-29 while planning:* the source is the
+  EasyEDA footprint `CONN-TH_PJS008U-3000-0` that LCSC publishes for C3177022
+  (`easyeda.com/api/products/C3177022/components`). The manufacturer's PDF
+  drawing could not be read while planning, so every dimension carries that
+  source and is marked secondary:
+  - pads 1–8: 1.20 mm round, 0.70 mm drill, 1.1 mm pitch in two rows
+    1.1 mm apart
+  - two NC pegs: 1.40 mm round, 0.90 mm drill, 8.6 mm apart
+  - body box: 12.83 × 5.66 mm around the origin
+
+  A socket in hand checks it before the order.
 
 ### 4.3 Back side: the fixed parts
 
@@ -189,15 +197,27 @@ J_PWR.
   - **Pins:** its through-hole pins must not enter a front-side body box, and
     they must keep the pad clearance to front pads. The search walks the
     spiral from the centre and takes the first spot that passes.
-  - **Rotation:** the one that points its USB connector at the nearer long
-    edge (top or bottom), so Bastian can flash over USB during bring-up.
-  - **USB corridor:** a keep-free rectangle from the connector to the board
-    edge, 12 mm wide. The width is an assumption for a USB-C plug's
-    overmold.
+  - **Rotation:** 0 or 180, whichever finds a spot nearer the centre
+    (amended 2026-09-29, see below).
+  - **USB clearance** (amended 2026-09-29 while planning): no part taller than
+    3 mm within 35 mm of the module shadow, on any side. Only J_PWR is that
+    tall on the back. The USB-C plug enters parallel to the board at module
+    height, so SMD parts under it do not matter. The rule needs no knowledge
+    of which module edge carries the USB socket. The Patch SM datasheet is
+    a PDF that could not be read while planning. This replaces the first
+    draft's "USB at the nearer long edge, 12 mm corridor".
   - **Shadow:** the module's outline is a keep-out for everything else on the
     back. The footprint has no courtyard (`kipcb.courtyard_boxes`
-    docstring), so the plan probes which layer carries the module outline,
-    or else measures it off the coupon's `SM_SHADOW`.
+    docstring). Its silkscreen box is x −34.09..34.08, y −20.09..20.09 around
+    the footprint origin (probed 2026-09-29), which matches the coupon's
+    68 × 40 mm `SM_SHADOW`. The shadow is that silkscreen box, read from the
+    footprint (B.Silkscreen once flipped).
+  - **Probed feasibility (2026-09-29, spec §4.2 rotations, current hole
+    list, 0.5 mm grid):**
+    - Free spots for the 40 module pads (no front body box, 0.2 mm to every
+      front pad) exist next to the centre: rot 0 at (151.0, 64.2), rot 180
+      at (154.0, 64.2).
+    - Rot 90 and 270 find nothing within 45 mm of the centre.
 - **Power header (J_PWR, 2×5 shrouded IDC):**
   - **Position:** on the back, in the board half that does not hold
     OUT_L/OUT_R, at mid height. The first free spot on the spiral from
@@ -234,7 +254,6 @@ J_PWR.
   - every through-hole pad box grown by 0.2 mm
   - the module shadow
   - J_PWR's courtyard
-  - the USB corridor
   - SMD parts placed earlier
 
   Step and radius are set per class (spike values: ICs 0.5/30,
@@ -258,7 +277,7 @@ J_PWR.
    - no pad lies inside a foreign body box
    - exception: a pot pad under an LED body box is reported, per §5.2
 4. **Module:** its pads miss every front body box; nothing on the back
-   enters its shadow; the USB corridor is empty.
+   enters its shadow; J_PWR's courtyard keeps 35 mm from the shadow.
 5. **Decoupling:** each 100 nF within 2.0 mm of its IC's VCC pad, pad to
    pad. C_SD1 likewise to J_SD.
 6. **KiCad DRC** on the placed, unrouted board, gated classes:
@@ -272,6 +291,12 @@ J_PWR.
    - `items_not_allowed`
 
    `unconnected_items` is expected and not gated; routing is P4-2.
+   *Amended 2026-09-29 while planning:* `courtyards_overlap` and
+   `pth_inside_courtyard` are gated only when a back-side part is involved.
+   Between front parts only, they are reported. The P4a strip already had 6
+   LED/pot/jack courtyard overlaps unrouted (routing-spike finding 3). On the
+   front, the physical question is check 3's body test; a courtyard's margin
+   is not a body.
 7. **Determinism:** two runs give byte-identical boards, and the committed
    board equals a fresh run.
 
@@ -352,7 +377,7 @@ closes the harness gaps from routing-spike finding 13 on the placement side:
 | Panel-to-board gap 10 mm | the grip test (`docs/hardware/grip-test.md`) |
 | Outline x margin 1.8 mm | nothing planned; revisit if a case disagrees |
 | Copper-to-edge 0.5 mm | JLC's rule, checked in P4-3 |
-| USB corridor 12 mm wide | the module and a cable in hand, at bring-up at the latest |
+| 35 mm around the module is enough for a USB-C plug | the module and a cable in hand, at bring-up at the latest |
 | Pot pins under an LED dome do not collide | the grip test, parts in hand |
 
 ## 9. Out of scope
