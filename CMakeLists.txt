@@ -373,6 +373,15 @@ add_test(
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
 )
 
+# Rev A P1: the acrylic cut file, the print sheet and the hole list the board
+# will be placed from (spec docs/superpowers/specs/2026-09-29-rev-a-p1-
+# panel-parts-design.md §4). Same runner shape as the two guards above.
+add_test(
+    NAME hw_cut_guard
+    COMMAND ${Python3_EXECUTABLE} res/test_hw_cut.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
+)
+
 # The Python guards need a runner or they rot unnoticed -- tools/test_*.py in
 # this repo is wired to nothing, and the VCV panel guard stood red for 23
 # days behind exactly that gap. pytest is not installed here, so it runs as
