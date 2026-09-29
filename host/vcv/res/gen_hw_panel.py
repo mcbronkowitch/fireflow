@@ -217,6 +217,16 @@ HW_SIZE = {
 }
 
 CLASS_R = {"G": 8.5, "S": 6.0, "P": 4.0, "J": 4.0, "L": 1.5}
+# Panel holes of the real parts (Rev A P1 spec 2026-09-29 §3.2), by class.
+# Datasheet values until the parts are measured (spec §6): Alpha 9 mm M7
+# bushing, Thonkiconn, Thonk low-profile button ("cutout 6.2 mm"), 3 mm LED.
+# gen_hw_cut.py cuts these; nothing here draws them.
+HOLE_D = {"G": 7.0, "S": 7.0, "J": 6.0, "P": 6.2, "L": 3.1}
+# Least material between two hole edges -- acrylic cracks at thinner webs.
+MIN_WEB = 2.0
+# Satellite lamp distance from its key or jack: the larger anchor hole, the
+# web, the LED hole -- 3.1 + 2.0 + 1.55 = 6.65, rounded up to 6.7.
+SAT_D = 6.7
 CLASS_LBL_DY = {cls: (0.0 if cls == "L" else r + CAPTION_GAP)
                 for cls, r in BODY_R.items()}
 # The jack row is the one place a shared BASELINE beats a shared gap: SHFT
@@ -474,13 +484,17 @@ def caption_led_cluster(knob):
 # Stay-put lamps only. Knob-owned entries are filled from caption_led_cluster
 # after HW_PARAMS exists -- do not hand-edit those back in here.
 LIGHT_POS = {"REC_A_L": (108.50, Y_TOP), "REC_B_L": (W - 108.50, Y_TOP),
-             "SYNC_L":     (130.50, 114.00),
-             "MODBTN_L":   (285.30, 114.00),  "SHIFTBTN_L": ( 19.50, 114.00),
+             # Jack-row satellites, all at SAT_D from their anchor (Rev A P1,
+             # 2026-09-29; they were at the class radius + 1.5 mm = 5.5,
+             # which left 0.85-0.95 mm of material to the real holes).
+             # SYNC_L is inboard of CLOCK, SHFT's lamp inboard of SHFT,
+             # MOD's inboard of MOD, the limiter lamp outboard of OUT_R.
+             "SYNC_L":     (136.00 - SAT_D, JACK_Y),
+             "MODBTN_L":   (290.80 - SAT_D, JACK_Y),
+             "SHIFTBTN_L": (14.00 + SAT_D, JACK_Y),
              # Limiter lamp: jack-row satellite of OUT_R, outboard, same y as
              # MODBTN_L. Unsuffixed, so _twin_enum declares no mirror partner.
-             # Just outside the OUT frame (right edge 276.80); inside the
-             # frame the CLASS_R circles of jack and lamp overlap.
-             "CEIL_L":     (JACK_POS["OUT_R"] + CLASS_R["J"] + 1.5, JACK_Y)}
+             "CEIL_L":     (JACK_POS["OUT_R"] + SAT_D, JACK_Y)}
 
 
 def place(c):

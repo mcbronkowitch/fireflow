@@ -291,10 +291,10 @@ static const PanelCtl kLightCtls[] = {
     {SONG_A_L, WK_LIGHT, {50.600f, 21.708f}, "", {50.600f, 21.708f}, 0, 2.20f, 0xB9CDD7, ""},
     {SONG_B_L, WK_LIGHT, {259.400f, 21.708f}, "", {259.400f, 21.708f}, 0, 2.20f, 0xB9CDD7, ""},
     {TEMPO_L, WK_LIGHT, {142.000f, 41.208f}, "", {142.000f, 41.208f}, 0, 2.20f, 0xB9CDD7, ""},
-    {SYNC_L, WK_LIGHT, {130.500f, 114.000f}, "", {130.500f, 114.000f}, 0, 2.20f, 0xB9CDD7, ""},
-    {MODBTN_L, WK_LIGHT, {285.300f, 114.000f}, "", {285.300f, 114.000f}, 0, 2.20f, 0xB9CDD7, ""},
-    {SHIFTBTN_L, WK_LIGHT, {19.500f, 114.000f}, "", {19.500f, 114.000f}, 0, 2.20f, 0xB9CDD7, ""},
-    {CEIL_L, WK_LIGHT, {277.300f, 114.000f}, "", {277.300f, 114.000f}, 0, 2.20f, 0xB9CDD7, ""},
+    {SYNC_L, WK_LIGHT, {129.300f, 114.000f}, "", {129.300f, 114.000f}, 0, 2.20f, 0xB9CDD7, ""},
+    {MODBTN_L, WK_LIGHT, {284.100f, 114.000f}, "", {284.100f, 114.000f}, 0, 2.20f, 0xB9CDD7, ""},
+    {SHIFTBTN_L, WK_LIGHT, {20.700f, 114.000f}, "", {20.700f, 114.000f}, 0, 2.20f, 0xB9CDD7, ""},
+    {CEIL_L, WK_LIGHT, {278.500f, 114.000f}, "", {278.500f, 114.000f}, 0, 2.20f, 0xB9CDD7, ""},
 };
 // Light glow, parallel to kLightCtls, same order.
 static const FfAccent kLightAccent[] = {

@@ -609,14 +609,22 @@ def test_knob_lamps_sit_in_the_caption_cluster():
           f"expected {len(hw.KNOB_LAMPS)} clustered lamps, checked {checked}")
 
 
-def test_satellite_lamps_sit_at_anchor_radius_plus_1_5mm():
-    """Pads and the ceiling lamp keep the satellite rule: exactly the
-    anchor's class radius + 1.5 mm. CEIL_L is a satellite of OUT_R on the
-    jack row, same height as MODBTN_L. Knob-owned lamps left this rule."""
+def test_satellite_lamps_clear_their_anchor_hole():
+    """Satellite lamps sit on the jack row beside their key or jack, at ONE
+    derived distance SAT_D: the larger anchor hole's radius, the minimum
+    material web, and the LED hole's radius (Rev A P1 spec, 2026-09-29).
+    Until 2026-09-29 they sat at the anchor's class radius + 1.5 mm = 5.5,
+    which the real holes turned into a 0.85-0.95 mm web -- acrylic cracks
+    there. SYNC_L joins the rule; it was a literal before."""
     SATELLITES = {
-        "MODBTN_L": "MODBTN",  "SHIFTBTN_L": "SHIFTBTN",
-        "CEIL_L": "OUT_R",
+        "MODBTN_L": "MODBTN", "SHIFTBTN_L": "SHIFTBTN",
+        "CEIL_L": "OUT_R", "SYNC_L": "CLOCK",
     }
+    need = (max(hw.HOLE_D["P"], hw.HOLE_D["J"]) / 2 + hw.MIN_WEB
+            + hw.HOLE_D["L"] / 2)
+    check(hw.SAT_D >= need - 1e-9,
+          f"SAT_D {hw.SAT_D} leaves less than {hw.MIN_WEB} mm "
+          f"(needs {need:.2f})")
     by = {c.enum: c for c in hw.ALL_HW}
     checked = 0
     for lamp, anchor in SATELLITES.items():
@@ -625,12 +633,10 @@ def test_satellite_lamps_sit_at_anchor_radius_plus_1_5mm():
             continue
         l, a = by[lamp], by[anchor]
         d = ((l.x - a.x) ** 2 + (l.y - a.y) ** 2) ** 0.5
-        want = hw.CLASS_R[hw.hw_class(anchor)] + 1.5
-        check(abs(d - want) < 0.01,
-              f"{lamp} is {d:.3f} mm from {anchor}, not anchor radius + 1.5 "
-              f"({want:.2f} mm)")
+        check(abs(d - hw.SAT_D) < 0.01,
+              f"{lamp} is {d:.3f} mm from {anchor}, not SAT_D ({hw.SAT_D:.2f} mm)")
         checked += 1
-    check(checked == 3, f"expected 3 satellites, checked {checked}")
+    check(checked == 4, f"expected 4 satellites, checked {checked}")
 
 
 def test_mod_jacks_on_the_jack_row():

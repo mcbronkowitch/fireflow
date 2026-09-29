@@ -308,14 +308,14 @@
 <circle cx="259.400" cy="21.708" r="0.750" fill="#855a3c"/>
 <circle cx="142.000" cy="41.208" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
 <circle cx="142.000" cy="41.208" r="0.750" fill="#4c6d79"/>
-<circle cx="130.500" cy="114.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="130.500" cy="114.000" r="0.750" fill="#4c6d79"/>
-<circle cx="285.300" cy="114.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="285.300" cy="114.000" r="0.750" fill="#4c6d79"/>
-<circle cx="19.500" cy="114.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="19.500" cy="114.000" r="0.750" fill="#4c6d79"/>
-<circle cx="277.300" cy="114.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="277.300" cy="114.000" r="0.750" fill="#4c6d79"/>
+<circle cx="129.300" cy="114.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="129.300" cy="114.000" r="0.750" fill="#4c6d79"/>
+<circle cx="284.100" cy="114.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="284.100" cy="114.000" r="0.750" fill="#4c6d79"/>
+<circle cx="20.700" cy="114.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="20.700" cy="114.000" r="0.750" fill="#4c6d79"/>
+<circle cx="278.500" cy="114.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="278.500" cy="114.000" r="0.750" fill="#4c6d79"/>
 <rect x="10.000" y="110.000" width="8.000" height="8.000" rx="1.2" fill="#151b1f" stroke="#7fb6c9" stroke-width="0.3"/>
 <text x="14.000" y="120.700" fill="#b9cdd7" text-anchor="middle" font-family="monospace" font-size="2.2">SHFT</text>
 <text x="12.000" y="9.000" fill="#7f9aa8" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">ENG</text>
