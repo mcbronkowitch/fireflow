@@ -289,6 +289,10 @@ def build(layers=2):
 
     s = Strip(layers)
     board = s.board = kipcb.new_board(X1 - X0, Y1 - Y0, layers, origin=(X0, Y0))
+    if layers == 4:
+        rect = _rect((X0, Y0, X1, Y1))
+        kipcb.add_zone(board, "In1.Cu", SUPPLY_NETS[0], rect)   # GND
+        kipcb.add_zone(board, "In2.Cu", SUPPLY_NETS[1], rect)   # SM_3V3
     by_ref = {p.ref: p for p in proj.parts()}
 
     tht = []

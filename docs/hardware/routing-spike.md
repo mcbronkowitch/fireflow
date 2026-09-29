@@ -1069,3 +1069,151 @@ histograms above), but less GND on B.Cu.
 
 ![Freerouting, top](routing-spike/freerouting-2L-top.png)
 ![Freerouting, bottom](routing-spike/freerouting-2L-bottom.png)
+
+### own, 4 layers (Task 8)
+
+The winner of the 2-layer runs, the own router, on four layers: GND as a
+plane on In1.Cu and SM_3V3 on In2.Cu (`stripe.build`, both over the whole
+outline), signals on F.Cu/B.Cu only. `own.py` skips the two supply nets,
+which reach their planes through holes and stitching vias. The stitching is
+the coupon's via search, moved out of `hardware/coupon/scripts/build_pcb.py`
+into `hardware/gen/stitch.py` (`stitch_plane_pads(board, plane_nets,
+segments=(), netless_blocks=False)`). It now puts each stitching track on the
+pad's own copper layer (the strip's SMD parts are on B.Cu) and keeps via and
+track midpoint clear of extra segment obstacles, here the 14 locked
+segments. `run.py` stitches right after locking, before routing, so
+`own.py` reads every stitching via and track as an obstacle. Router
+parameters as in Task 6 (PITCH 0.2, VIA_RADIUS 0.3, VIA_COST 8.0,
+MAX_ITERS 30).
+
+    KIPY hardware/reva/spike/run.py --method own --layers 4
+
+**The coupon still rebuilds unchanged.** `KIPY
+hardware/coupon/scripts/build_pcb.py` before and after the move printed the
+same step lines 1 to 10 (`stitched +3V3:12, A+3V3:14, AGND:23, GND:30`, no
+`UNRESOLVED` block), and `git hash-object hardware/coupon/coupon.kicad_pcb`
+gave `9f7b8226245deb3c758f5edfaf8418e8a83097c9` both times. The last check
+ran after the final `stitch.py`. `ctest --test-dir build -R
+"hw_gen|reva|coupon"`: 10 of 10 passed.
+
+| run | change | seconds | failed | conflicts | iterations | vias (router + stitching) | length mm | unrouted before fill | gated reds |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | none (first complete run) | 6.5 | 0 | 0 | 4 | 36 + 19 | 1729.8 | 75 (before the planes were filled) | `copper` (`shorting_items 10`, `hole_clearance 8`), `ratsnest` (2 live) |
+| 2 | stitch search: netless pads block (`netless_blocks=True`); harness: count after the plane fill | 6.2 | 0 | 0 | 4 | 36 + 19 | 1733.0 | 0 (75 before the plane fill) | none |
+
+Run 2 was green on every gated step, so the budget stopped there: one
+changed run of the three allowed. The stitch line was the same in both runs:
+`stitched {'GND': 12, 'SM_3V3': 7}; unresolved 0`. No pad was left
+unresolved.
+
+**Adapter fix before run 1 (not a budget change).** The first attempt hung
+for more than 10 minutes. The process was idle at 9.3 s CPU with a modal
+window, `wxWidgets Debug Alert`:
+`pcb_track.cpp(387): assert "false" failed in GetWidth(): Warning:
+PCB_VIA::GetWidth called without a layer argument`. On 2 layers the board
+holds no via when `own.py` reads it. On 4 layers the stitching vias are
+there first. `own.py` now reads a via's width as `GetWidth(pcbnew.F_Cu)`.
+Probe `probe_via_width.py` (scratchpad): 0.6 on F_Cu, In1_Cu and B_Cu.
+
+**Run 1: two GND vias on pot tabs.** From the DRC report of run 1:
+
+    [shorting_items]: ... (Netze  und GND)
+        @(228.3500 mm, 34.0000 mm): PTH pad [<no net>] of RV52
+        @(228.6307 mm, 35.7100 mm): Via [GND] on F.Cu - B.Cu
+    [hole_clearance]: ... (... Freiraum 0,2500 mm; tatsächlich 0,0225 mm)
+        @(278.3500 mm, 34.0000 mm): PTH pad [<no net>] of RV60
+        @(278.9075 mm, 35.6875 mm): Via [GND] on F.Cu - B.Cu
+
+All 10 `shorting_items` and 8 `hole_clearance` name these two pairs: the
+stitching vias of C14.2 (228.631, 36.710) and C15.2 (278.908, 36.688),
+both 1.0 mm north of their pad (`run.py --method none --layers 4 --where
+GND`), landed on the
+mounting tabs of RV52 and RV60. The tabs are netless PTH pads. The coupon's
+search skips netless pads (`_clear_of_pads`: "no-net pads don't exist
+electrically"), and the coupon has none to hit. The same two vias are the 2
+live unconnected pairs (`GND  C14.2, RV60.1, U_MUX3.4`). Run 2 passes
+`netless_blocks=True` from `run.py`. That changes the Rev A call only: the
+coupon keeps the default, `False`. Diff of the via lists, run 1 against
+run 2 (`via_diff.py`, scratchpad): the two GND vias now sit 1.0 mm east of
+their pads, at (229.631, 36.710) and (279.908, 36.688), the search's
+second direction. Seven signal vias
+moved with them, because the router saw different obstacles. The total
+stayed at 55.
+
+**Harness fix with run 2: "unrouted before fill" on 4 layers.** Run 1
+counted 75 before the fill. On 4 layers every supply connection runs
+through a plane, so before the planes are filled every one of them counts
+as unrouted. The step could not go green on this layer count. `finish()`
+now fills the zones first on 4 layers and then counts. There is no outer
+fill on 4 layers that could bridge a signal net, so for signals the count
+still means "left unrouted by the router". The raw count is printed beside
+it (`75 before it`). This is a change to what the proof step measures. The
+controller should rule on it.
+
+Final run (2):
+
+    stitched {'GND': 12, 'SM_3V3': 7}; unresolved 0
+    own router: {'nets': 47, 'failed': [], 'conflicts': 0, 'iterations': 4, 'vias': 36, 'length_mm': 1733.0, 'seconds': 6.2}
+    unrouted before fill: 0
+       (4 layers: counted after the plane fill; 75 before it)
+    wrote hardware\reva\spike\out\own-4L.kicad_pcb
+        1. nets       52 nets, 0 differ from the intent node for node
+        2. anchors    36 panel parts, worst 0.0000 mm off its hole (limit 0.01)
+        3. decoupling 3 decouplers, worst 1.778 mm (limit 2.0)
+        4. locked     14 locked segments unchanged on SENSE_1, OUT_L, OUT_R
+        5. copper     gated: shorting_items 0, clearance 0, hole_clearance 0, hole_to_hole 0, tracks_crossing 0, track_dangling 0, via_dangling 0, items_not_allowed 0 (not gated: copper_edge_clearance 15, courtyards_overlap 6, pth_inside_courtyard 2, silk_edge_clearance 23, silk_over_copper 44, silk_overlap 20)
+        6. ratsnest   unconnected: 0 before fill, 0 live, 0 kicad-cli
+        7. audio      nearest LED track to audio: 2.21 mm (OUT_L to LED16; coupon rule 10.0, not gated)
+        8. render     rendered own-4L-top.png, own-4L-bottom.png
+    proof took 3.0 s -- GREEN
+
+Against 2 layers, the router has 47 nets instead of 49 (GND and SM_3V3 are
+planes). It places 36 vias instead of 74 and 1733.0 mm of track instead of
+2682.9, in 4 iterations instead of 6 and 6.2 s instead of 14.2. The nearest
+LED track to audio is 2.21 mm, against 2.71. `starved_thermal`, 8 on 2
+layers, does not appear.
+
+**Routed-stage sabotage on 4 layers** (`--sabotage ratsnest`, exit 1):
+
+    RED 5. copper     gated: ... track_dangling 1 ... (not gated: ... unconnected_items 1)
+    RED 6. ratsnest   unconnected: 0 before fill, 1 live, 1 kicad-cli
+    proof took 3.0 s -- RED
+
+The sabotage deletes a segment after `finish()`, so it reaches the live and
+kicad-cli counts, not the "before fill" one. Whether the after-plane count
+can go red on its own was not probed.
+
+**Reproducibility.** The final configuration ran twice, with run 2's files
+copied to the scratchpad in between:
+
+    cmp run2/own-4L.kicad_pcb hardware/reva/spike/out/own-4L.kicad_pcb     exit=0
+    cmp run2/own-4L-top.png hardware/reva/spike/out/own-4L-top.png         exit=0
+    cmp run2/own-4L-bottom.png hardware/reva/spike/out/own-4L-bottom.png   exit=0
+
+The order of the keys in the `stitched` dict changes from run to run
+(`plane_nets` is a set of strings, and Python randomizes string hashes per
+process). The board does not, because the vias are placed in footprint
+order.
+
+**2 layers unchanged.** `KIPY hardware/reva/spike/run.py --method own
+--layers 2` after all changes: `own router: {'nets': 49, 'failed': [],
+'conflicts': 0, 'iterations': 6, 'vias': 74, 'length_mm': 2682.9, 'seconds':
+14.2}`, GREEN. Both PNGs are `cmp`-identical to the committed
+`routing-spike/own-2L-*.png`.
+
+**The pictures** (`routing-spike/own-4L-top.png`,
+`routing-spike/own-4L-bottom.png`; the bottom view is mirrored, with the
+port column on the right). There is no fill on the outer layers, so the
+tracks show as thin lines on bare board. Top: a horizontal bundle of about
+five tracks runs across the strip between the RV51-RV61 pot row and D15. A
+vertical bundle of two to four tracks drops from it down the middle, past
+RV62, to the RV66/RV68 level. Long single 45-degree runs cross the lower
+left quarter towards the jacks. Bottom: the three muxes fan out to the port
+column. The locked SENSE_1 trunk shows as the rectangle from under U_MUX4
+down to y 64 and across. A few long horizontal runs in the lower half lead
+to the lower ports. At the render's resolution the stitching vias show as
+dots beside the SMD parts and cannot be told apart from signal vias. Against
+2 layers, the top side is much emptier.
+
+![own router, 4 layers, top](routing-spike/own-4L-top.png)
+![own router, 4 layers, bottom](routing-spike/own-4L-bottom.png)

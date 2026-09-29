@@ -53,9 +53,12 @@ def route_strip(s):
                     (_mm(pad.GetPosition().x), _mm(pad.GetPosition().y), layers))
     for t in board.GetTracks():
         if t.Type() == pcbnew.PCB_VIA_T:
+            # A via's width needs a layer in KiCad 10: GetWidth() without one
+            # raises a modal wx debug alert that blocks the run (Task 8, the
+            # first board with vias before routing -- the plane stitching).
             r.add_obstacle(t.GetNetname(), range(len(LAYER_NAMES)),
                            ("circle", _mm(t.GetPosition().x), _mm(t.GetPosition().y),
-                            _mm(t.GetWidth()) / 2.0))
+                            _mm(t.GetWidth(pcbnew.F_Cu)) / 2.0))
         elif t.Type() == pcbnew.PCB_TRACE_T and t.GetLayerName() in LAYER_NAMES:
             r.add_obstacle(t.GetNetname(), (LAYER_NAMES.index(t.GetLayerName()),),
                            ("seg", _mm(t.GetStart().x), _mm(t.GetStart().y),
