@@ -387,12 +387,21 @@ The unrouted connection, `grep -A2 "could not be routed" $S/fr1.console.txt`:
   DSN variants below do show: (1) with the keepout on F.Cu only
   (`k12_FCu`), A runs on F.Cu up to x 25.46, drops to B.Cu under the keepout
   and returns to F.Cu at x 30.53 -- it avoids the keepout's layer and uses
-  the free one; (2) in every variant with the full two-layer keepout, A
-  stayed unrouted rather than cross it (no violation reported); (3) `nk1`
+  the free one; (2) with the full two-layer keepout, A routes in six
+  variants (`k9`, `k12_noLwires`, `k12_L18.5`, `k12_Lwest`, `k12_Least`,
+  `k12_LBonly`: `A 3`) and Freerouting reports `0 violations` for each;
+  KiCad's DRC was not run on those six, so there is no `items_not_allowed`
+  figure for them. `k12_L17` reports `1 unrouted and 1 violation`, of a
+  kind the log does not name (`grep -i -n violation` over
+  `$S/v_k12_L17.log` and `$S/v_k12_L17.console.txt` finds only the stage
+  summary lines). The table therefore does not settle whether
+  Freerouting would cross a keepout when no legal path exists; (3) `nk1`
   (keepout removed from the DSN only) runs A straight through the area, and
   KiCad's DRC on the imported board flags it (`items_not_allowed 1`) -- that
   shows the DRC check, not Freerouting. So Freerouting honoured the keepout
-  in the one positive case (1); a wider test of keepout respect was not run.
+  in the one positive case (1); a wider test was not run here. Task 7
+  measured it on the real strip (its "Fairness" paragraph below: the DSN
+  carried every rule area, and `items_not_allowed` stayed 0 on every run).
 
 **Surprise: net A is never routed on the brief's board.** Freerouting
 reports `1 unrouted` (A) in every run with the keepout and L's locked
