@@ -88,7 +88,7 @@ def write_lib_tables(parts, dest_dir, lib_dirs, extra_sym_libs=()):
     directory uri holding <lib>.kicad_sym and/or <lib>.pretty} -- the coupon
     passes "${KIPRJMOD}/../lib/DaisyKiCad" for Daisy-Boards, so nothing
     machine-specific reaches the repository. A footprint without a library
-    (the open "P4") gets no row.
+    (the placeholder "P4", which no current project uses) gets no row.
     """
     sym_libs = sorted({p.lib_id.split(":")[0] for p in parts} | set(extra_sym_libs))
     fp_libs = sorted({p.footprint.split(":")[0] for p in parts if ":" in p.footprint})
@@ -175,7 +175,8 @@ def intended_nets(project):
 # --- the three check levels (P3 spec §4) ------------------------------------
 
 VENDORED_DIR = os.path.join(_HW, "lib", "DaisyKiCad").replace("\\", "/")
-OPEN_FOOTPRINT = "P4"       # the SD socket, chosen in P4 (spec §6); allowed once
+OPEN_FOOTPRINT = "P4"       # placeholder for a not-yet-chosen footprint; at most one allowed
+                            # (Rev A's SD socket used it until P4-1 chose the part)
 KICAD_FP_DIR = os.path.join(ksexp.KICAD_ROOT, "share", "kicad", "footprints")
 OUTPUT_TYPES = {"output", "tri_state", "power_out"}
 PANEL_KINDS = {"pot", "jack", "key", "led", "sd"}
@@ -320,8 +321,8 @@ def _footprint_exists(project, footprint):
 
 def rule_footprints(project):
     """Every part on the board names a footprint that exists; parts off the
-    board (sockets bought for the BOM) name none; exactly one open "P4" is
-    allowed (spec §6)."""
+    board (sockets bought for the BOM) name none; zero or one placeholder
+    "P4" footprint is allowed (more than one is a finding)."""
     sheet = project.sheet_of()
     examined, found, open_refs = 0, [], []
     for p in project.parts():

@@ -18,7 +18,9 @@ from gen import bom as B            # noqa: E402
 from gen import netlist as N        # noqa: E402
 
 OPEN_ITEMS = (
-    "SD socket footprint is open (`P4`); J_SD's part and LCSC number come with it.",
+    "J_SD's footprint (Yamaichi PJS008U-3000-0) is generated from the EasyEDA footprint "
+    "of LCSC C3177022, a secondary source; check it against a socket in hand before the "
+    "order. The catalogue carries no LCSC number for J_SD: it is hand-soldered.",
     "P2's pin table calls C1 'CV out 1' and C10 'CV out 2'; the Patch SM datasheet "
     "names C1 CV_OUT_2 and C10 CV_OUT_1. The wiring (C1 = PITCH_A, C10 = PITCH_B) "
     "follows P2 by pin; P6's firmware table must follow the pins, not the names.",

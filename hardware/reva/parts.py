@@ -4,8 +4,8 @@
 LCSC numbers and Basic/Extended types are the spec addendum's, checked on
 jlcpcb.com 2026-09-29 (C45783 the same day); stock is checked at the freeze.
 Panel parts carry Source="Thonk" and are hand-soldered with the panel on;
-THT connectors are hand-soldered too. The SD socket's footprint, once the open
-"P4", is chosen: the generated FireFlow:SD_Yamaichi_PJS008U-3000-0 (P4-1 spec §4.2).
+THT connectors are hand-soldered too. The SD socket's footprint is the generated
+FireFlow:SD_Yamaichi_PJS008U-3000-0 (P4-1 spec §4.2).
 """
 import os
 import sys
