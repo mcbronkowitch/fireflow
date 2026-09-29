@@ -242,9 +242,9 @@ measured on real Daisy hardware (a Daisy Seed, which carries the same STM32H750
 at 480 MHz as the Patch Submodule) — method and every number in
 [`bench/`](bench/README.md) and [`docs/bench/`](docs/bench/).
 
-The original Spotykach firmware this project started from is still in the tree
-and still builds; its setup, compile and DFU-flash instructions live in
-[`docs/upstream-firmware.md`](docs/upstream-firmware.md).
+The original Spotykach firmware this project started from was removed from the
+tree on 2026-09-29; [`docs/upstream-firmware.md`](docs/upstream-firmware.md)
+says where it went and what of it stayed.
 
 ## License & credits
 

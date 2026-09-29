@@ -5,12 +5,12 @@
 A measurement app that has never shipped and never will. It boots the Daisy
 Seed straight into a cycle-counting harness instead of the FireFlow firmware,
 runs a fixed table of workloads, and reports cycle counts and checksums back
-over the debug probe. The shipping firmware is the repo-root `Makefile`,
-`main.cpp`, `app.cpp`/`app.h`, `src/**`, `third_party/**` and `engine/**` —
-none of that is touched by anything under `bench/`. This directory has its
-own `Makefile`, its own `main.cpp`, and links against `alt_sram.lds` only to
-reuse the same BOOT_SRAM placement the real firmware uses, so the timing
-context (SRAM vs SDRAM latency) matches production.
+over the debug probe. The shipping firmware is `shell/`, with its own
+`Makefile` and `main.cpp`; nothing under `bench/` touches it, and the two
+share exactly one board-init file, `src/hw/board.h`. This directory has its
+own `Makefile`, its own `main.cpp`, and links against `alt_sram.lds` — the
+same BOOT_SRAM placement `shell/` uses — so the timing context (SRAM vs SDRAM
+latency) matches production.
 
 ## Profiles, and one command per profile
 
@@ -96,8 +96,8 @@ Useful flags: `--profile NAME` (default `full`; see the table above and
 `C_USR_FLAGS = -ffast-math -funroll-loops` remains dormant in the underlying
 build and was deliberately not activated by the completed compiler-mode
 selection. The benchmark reports its requested `o2`, `o3`, or `o3-lto`
-identity; the measured winner is `o3`, the production root makefile now uses
-`OPT = -O3`, and LTO remains rejected.
+identity; the measured winner is `o3`, the shipping firmware sets
+`override OPT := -O3` (`shell/Makefile`), and LTO remains rejected.
 
 ## Programming the WAVE bank
 
@@ -440,8 +440,8 @@ This is **not** a change of measurement conditions. `SRAM_EXEC` and `SRAM` are
 the same physical AXI SRAM — one 512 KB block at `0x24000000`, split into a
 code half and a data half by the `MEMORY` block, same bus, same latency, same
 MPU cache attributes. `grain_read_sram` measures exactly what it measured
-before. The section is additive and empty in the shipping firmware (nothing
-under `src/**` emits into it), so no shipping symbol moved either.
+before. The section is additive and empty in `shell/` (measured 2026-09-29),
+so no shipping symbol moved either.
 
 What it *is*: a warning. `SRAM_EXEC` now sits at **93 %** and `SRAM` at 82 %.
 The next thing that overflows will be code, not data, and there is no third

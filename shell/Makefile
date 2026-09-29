@@ -1,10 +1,9 @@
 # Die erste FireFlow-Firmware, die engine/ enthaelt. Auslieferbar gedacht,
 # anders als bench/ -- deshalb KEIN USE_DAISYSP_LGPL hier (siehe unten).
 #
-# Vorlage ist bench/Makefile und nicht das Root-Makefile: die Root-Firmware
-# ist die alte Upstream-Spotykach-Firmware auf src/core und kompiliert
-# engine/** ueberhaupt nicht. Wer die drei verwechselt, baut das falsche
-# Instrument.
+# Modelled on bench/Makefile. (The repo root used to carry the upstream
+# Spotykach firmware, which compiled no engine/ at all; it was removed on
+# 2026-09-29, see docs/upstream-firmware.md.)
 
 TARGET = shell
 
@@ -24,9 +23,8 @@ DAISYSP_DIR  = ../lib/DaisySP
 # diese Zeile eingeschaltet.
 # USE_DAISYSP_LGPL = 1
 
-# Gleiche Linkage wie Bench und Root-Firmware. Beides ist Absicht: gegen die
-# Root-Firmware, damit der Speicherplan der ausgelieferte bleibt, und gegen
-# die Bench, damit deren Zahlen etwas ueber diese Firmware aussagen.
+# Same linkage as the bench, on purpose: that is what makes the bench's
+# numbers say something about this firmware.
 APP_TYPE = BOOT_SRAM
 LDSCRIPT = ../alt_sram.lds
 

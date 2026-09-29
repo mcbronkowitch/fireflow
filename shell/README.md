@@ -18,19 +18,27 @@ Szenario durch `build/render.exe` liefert über 5 s Peak −7,5 dBFS und RMS
 Klangquelle erst gewählt werden. Der erste Poti kommt in Task 6 des
 Phase-0-Plans dazu, nicht hier.
 
-**Die Abgrenzung gegen die anderen zwei Firmware-Bäume**, weil sich das sonst
-garantiert jemand verwechselt: Das **Root-`Makefile`** baut die alte
-Upstream-Spotykach-Firmware auf `src/core` und kompiliert `engine/**`
-überhaupt nicht — sie ist ein anderes Instrument. **`bench/`** ist das
-Messwerkzeug: dieselbe Linkage, aber vollgepackt mit Workload-Familien,
-einem Report-Transport und Mess-Arenen, und mit vollem DaisySP inklusive der
-LGPL-Module, weil sie nie ausgeliefert wird. **`shell/`** ist der Anfang der
-Firmware, die einmal ausgeliefert wird. Geteilt wird zwischen `bench/` und
-`shell/` genau eine Datei, `src/hw/board.h` — und das ist Absicht: hätten
-beide eine eigene Board-Init, wäre jeder Vergleich zwischen Bench-Zahlen und
-Shell-Verhalten wertlos.
+**The line against the other firmware tree**, because the two get confused:
+**`bench/`** is the measuring tool — the same linkage, but packed with workload
+families, a report transport and measurement arenas, and with full DaisySP
+including the LGPL modules, because it never ships. **`shell/`** is the start
+of the firmware that will ship. The two share exactly one board-init file,
+`src/hw/board.h`, on purpose: if each had its own board init, no comparison
+between bench numbers and shell behaviour would mean anything. (The repo root
+used to hold a third tree, the upstream Spotykach firmware; it was removed on
+2026-09-29 — see [`docs/upstream-firmware.md`](../docs/upstream-firmware.md).)
 
 ## Bauen
+
+**Once per clone:** fetch the submodules and build the two libraries, from the
+repo root. (This used to be the root `Makefile`'s `make libs` target.)
+
+```bash
+git submodule update --init --recursive
+PATH="/c/Program Files/DaisyToolchain/bin:/c/Program Files/Git/usr/bin:$PATH"
+make -C lib/libDaisy -j8
+make -C lib/DaisySP -j8
+```
 
 Eigene Toolchain, ARM GCC über `make`. **Niemals `source env.sh`** — das ist
 die Clang-Umgebung für Engine, Tests und Render-Host, und die beiden dürfen

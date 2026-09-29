@@ -2,54 +2,31 @@
 
 This repository grew out of [Synthux-Academy/Spotykach](https://github.com/Synthux-Academy/Spotykach),
 the official firmware for the [Spotykach](https://synthux.academy/store/spotykach)
-hardware, and the original firmware tree is still here: `main.cpp`, `app.cpp`,
-`src/`, the root `Makefile`, and the libDaisy / DaisySP submodules.
+hardware. Until 2026-09-29 that firmware was still in the tree — `main.cpp`,
+`app.cpp`, `src/`, the root `Makefile` and `bootloader-spotykach-v2.bin` — and
+still built, although it compiled none of `engine/` and nothing built or tested
+it any more. It was removed on 2026-09-29.
 
-It is **not** what this project builds any more. FireFlow's own hardware target
-is a standalone Daisy Patch Submodule prototype (milestone M6); porting the
-modulation-first engine onto Spotykach hardware is no longer planned. The tree
-is kept because it still compiles, and because it documents the drivers,
-clocking and bootloader the project started from.
-
-The instructions below build and flash **that original firmware**, not the
-modulation-first engine.
-
-## Setup
-
-Clone recursively, or run `git submodule update --init --recursive` to fetch the
-submodules (libDaisy + DaisySP).
-
-Note: the ws2812 driver requires a slight modification to libDaisy, so the
-libDaisy submodule points at a specific branch within the bleeptools fork (based
-on the Infrasonic Audio fork), which also carries a few MIDI and mpr121 changes.
-
-## Compiling
-
-Build the libraries once (a `Makefile` target is provided):
+**Where it is now:** tag `attic/spotykach-firmware-2026-09-29` (commit `6093a957`).
+Read a single file, or check the whole tree out next to this one — not into
+it, because `src/hw/board.h` is still live here and would be overwritten:
 
 ```bash
-make -j8 libs
+git show attic/spotykach-firmware-2026-09-29:src/core/buffer.cpp
+git worktree add ../spotykach-attic attic/spotykach-firmware-2026-09-29
 ```
 
-Then build the firmware:
+Every `src/core/…`, `src/ui/…`, `src/memory/…`, `app.cpp:<line>` reference in
+`engine/` provenance comments and in dated docs points into that tag. The
+upstream repository linked above is the living original.
 
-```bash
-make -j8
-```
+**What stayed**, because `shell/` and `bench/` use it:
 
-On success the binaries land in `build/`: `spotykach.bin` (flashed via DFU) and
-`spotykach.elf` (for debugging).
+- `src/hw/board.h` — the one board-init header both firmware trees share.
+- `alt_sram.lds` — the BOOT_SRAM linker script of `shell/`, `bench/` and
+  `bench/audition/`.
+- `lib/libDaisy` (the bleeptools fork the upstream firmware needed for its
+  ws2812 driver) and `lib/DaisySP`.
 
-## Flashing
-
-The bootloader enables USB DFU updating from the **external** USB-C port on the
-rear of the main PCB (not the one on the Seed).
-
-1. Compile the firmware (above).
-2. Connect the main PCB's USB-C port to the computer (a data-capable cable).
-3. Hold `Reset` on the back of the unit for ~3 seconds — the bottom-pad LEDs
-   start to "breathe" in white.
-4. Run `make program-dfu`.
-
-The device then boots the new firmware. A bad flash can temporarily "brick" the
-unit and require reinstalling the bootloader, firmware, or both.
+The root `Makefile`'s `make libs` target is gone with it; build the two
+libraries directly — see [`shell/README.md`](../shell/README.md).

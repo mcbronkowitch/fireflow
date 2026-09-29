@@ -148,9 +148,8 @@ SECTIONS
 
 	_sidata = LOADADDR(.dtcmram_code);
 
-	/* Additive, and empty in the shipping firmware: nothing in main.cpp /
-	 * app.cpp / src/** emits into .sram_exec_bss, so this section has zero
-	 * size there and no shipping symbol moves. It exists for bench/, whose
+	/* Additive, and empty in shell/ (measured 2026-09-29), so no shipping
+	 * symbol moves. It exists for bench/, whose
 	 * .bss outgrew the 256K SRAM half once Part started carrying a
 	 * SamplerEngine.
 	 *
@@ -160,8 +159,9 @@ SECTIONS
 	 * data parked here is AXI SRAM in every sense a cycle count can see;
 	 * it is only on the other side of a bookkeeping line. Placed after the
 	 * .data LMA so it starts past everything SRAM_EXEC already carries. */
-	/* Empty in shipping firmware. The bench may reserve a small layout guard
-	 * here to keep cycle-sensitive AXI objects at their accepted addresses. */
+	/* Empty in shell/ (measured 2026-09-29). The bench may reserve a small
+	 * layout guard here to keep cycle-sensitive AXI objects at their
+	 * accepted addresses. */
 	.sram_exec_layout_guard (NOLOAD) :
 	{
 		. = ALIGN(4);

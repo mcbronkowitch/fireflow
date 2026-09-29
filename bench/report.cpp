@@ -14,9 +14,9 @@
 // libDaisy declares these `extern const char*` in src/usbd/usbd_desc.c and
 // never defines them -- the application owns its own USB identity. Nothing in
 // this repository defined them before, because nothing here had ever brought
-// up a USB device class; the shipping firmware logs over LOGGER_EXTERNAL.
-// Without these two the USB branch fails at link, not at runtime, which is
-// the good outcome.
+// up a USB device class; the upstream Spotykach firmware then in the tree
+// logged over LOGGER_EXTERNAL. Without these two the USB branch fails at link,
+// not at runtime, which is the good outcome.
 extern "C" {
 const char* USBD_MANUFACTURER_STRING = "FireFlow";
 const char* USBD_PRODUCT_STRING_HS   = "FireFlow Bench";

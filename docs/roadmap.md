@@ -11,8 +11,9 @@ is actually built today, and what is still design-only.
   the modulation-first engine on **Spotykach hardware is cancelled** — that port
   is not a milestone any more. The hardware milestone is now an instrument of
   its own, a **Daisy Patch Submodule prototype** (M6). The original Spotykach
-  firmware tree stays in the repository, buildable, documented in
-  `docs/upstream-firmware.md`; it is history, not a target.
+  firmware tree was removed on 2026-09-29 (tag
+  `attic/spotykach-firmware-2026-09-29`, see `docs/upstream-firmware.md`); it
+  was history, not a target.
   **2026-08-08:** the reducibility rule is retired — the hardware target is
   defined (60 HP, the full control set; envelope spec
   `docs/superpowers/specs/2026-08-08-fireflow-hardware-envelope-design.md`).
@@ -396,9 +397,9 @@ is actually built today, and what is still design-only.
   not measured and is deliberately not named there.
 - **`engine/` runs on the target board — and it does not sound clean yet.**
   Measured 2026-08-08. `shell/` is the first firmware that compiles `engine/`
-  ([its README](../shell/README.md) draws the line against `bench/` and the
-  root firmware). On a Patch Submodule with audio on 3.5 mm jacks it makes
-  sound, and `SHELL_CPU_PROBE=1` puts the operating point at **62.78 % avg /
+  ([its README](../shell/README.md) draws the line against `bench/`). On a
+  Patch Submodule with audio on 3.5 mm jacks it makes sound, and
+  `SHELL_CPU_PROBE=1` puts the operating point at **62.78 % avg /
   65.30 % max** (`sr=48000`, `block=96`, self-reported) — 35 points of room,
   consistent with the bench row `instrument_init` (66.58 / 77.96 %). **Those two
   numbers are 8 Aug numbers and nothing else:** re-measured on 2026-08-23 at the
@@ -1229,12 +1230,10 @@ note instead of tracking wherever the knob was last left.
 ### Bench ✅
 
 Plan: `docs/superpowers/plans/2026-07-18-bench-firmware.md`. `bench/` is a
-standalone Daisy app, never shipped and never linked into `spotykach.bin` —
+standalone Daisy app, never shipped and never linked into the firmware image —
 it boots the engine alone on a Daisy Seed and reads DWT cycle counts around
-fixed workloads, then prints a Markdown/CSV pair over semihosting. The
-shipping firmware (`main.cpp`, `app.cpp`, `src/`, `engine/`, the root
-Makefile) is untouched by its presence; Step 1 of the bench plan re-proves
-that on every run.
+fixed workloads, then prints a Markdown/CSV pair over semihosting. The shipping
+firmware is `shell/`; the bench touches none of it.
 
 The headline numbers are no longer estimates — they come from a real Daisy
 Seed at 480 MHz, 48 kHz, block 96 (`docs/bench/2026-07-19-6e38090.md`):
@@ -4340,5 +4339,4 @@ ctest --test-dir build --output-on-failure
 ```
 
 See the README for the full desktop build instructions, and
-`docs/upstream-firmware.md` for the original Spotykach firmware still in the
-tree.
+`docs/upstream-firmware.md` for where the original Spotykach firmware went.

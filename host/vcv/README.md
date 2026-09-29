@@ -36,7 +36,8 @@ because it bridges the two parts. Each part's
 32-LED ring is a **live** custom widget (`SpkyRing` in `src/Fireflow.cpp`): it
 draws in the light layer and lights a moving dot per modulation lane from
 `Instrument::lane_output()` / `lane_fired()`, so the rings animate with the
-engine (mirroring `src/ui/led.ring.h`). The SVG only provides the dim housing.
+engine (mirroring the upstream Spotykach firmware's LED ring). The SVG only
+provides the dim housing.
 The shared centre column beside MORPH used to also carry **PUSH**, the
 master drive into the output limiter; PUSH is gone (spec 2026-08-09
 hw-control-reduction task 9, "push steht immer auf 0.4") and the drive is

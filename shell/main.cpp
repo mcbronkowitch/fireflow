@@ -2,8 +2,7 @@
 //
 // Was sie ist: Board hoch, Speicher injizieren, process() im Audio-Callback.
 // Was sie ausdruecklich nicht ist: kein UI, keine Panel-Logik, kein Preset.
-// Die Abgrenzung gegen bench/ und gegen die Upstream-Firmware im Root steht
-// in shell/README.md.
+// The line against bench/ is drawn in shell/README.md.
 // shell_selftest.h vor allem anderen: der generierte Header traegt das
 // SHELL_SELFTEST-Define, und das Makefile gibt ihm eine echte
 // Abhaengigkeitskante auf dieses Objekt (siehe dort, "Selbsttest").

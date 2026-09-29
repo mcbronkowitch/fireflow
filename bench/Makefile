@@ -1,5 +1,5 @@
 # Standalone benchmark app. Never shipped -> full DaisySP (LGPL) is fine here.
-# The shipping firmware is built by the ROOT Makefile and is untouched.
+# The shipping firmware is shell/ (own Makefile); nothing here touches it.
 
 TARGET = bench
 
