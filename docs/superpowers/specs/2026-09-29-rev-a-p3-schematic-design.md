@@ -202,6 +202,83 @@ Dates are ceilings; the work is expected to run faster.
 The grip test runs alongside once the parts arrive; each panel change it
 brings is a re-run, not a redesign.
 
+## Addendum 2026-09-29 — stage 1 research (§6)
+
+Sources read on 2026-09-29: Electrosmith's patch.Init() schematic
+(`ES_Daisy_Patch_SM_Init_Rev1`, 9/10/2021,
+https://daisy.nyc3.cdn.digitaloceanspaces.com/products/patch-init/patch_init_schematic.pdf),
+the Patch SM datasheet v1.0.5
+(https://daisy.nyc3.cdn.digitaloceanspaces.com/products/patch-sm/ES_Patch_SM_datasheet_v1.0.5.pdf),
+JLCPCB part pages, the KiCad 10 footprint libraries, Thonk's low-profile
+button page.
+
+**Jacks: no circuit on the carrier.** Every patch.Init() jack goes straight
+to its module pin: tip to the pin, sleeve to GND, the switched (NORM) contact
+open — with one exception: `J_RIN`'s NORM contact is tied to `SIG_LIN`, so
+the right input takes the left signal when unpatched. The schematic's notes:
+CV inputs -5 V to 5 V, CV/gate outputs 0-5 V, gate inputs on BJT circuits,
+and the CV and gate outputs carry output resistors on the module. The
+datasheet's application figures agree (gate input 100 kΩ, audio/CV/gate
+outputs 100 Ω) and name the Thonkiconn (WQP518MA) as the example jack. Rev A
+therefore wires all 18 jacks 1:1, `IN_R` normalled to `IN_L` as on
+patch.Init() — **Bastian to confirm the normalling** (a behaviour, not a
+wiring detail). The Jacks sheet shrinks to 18 connectors and fits one A3.
+
+**SD: no parts on the carrier.** The datasheet: no pull-up resistors
+necessary; the module carries 47 kΩ pull-ups on the SDMMC lines. patch.Init()
+wires the socket straight: D2 → SD_D3 (CS pin), D3 → SD_D2, D4 → SD_D1,
+D5 → SD_D0, D6 → SD_CK, D7 → SD_CMD, socket VCC to **+3V3 (A10)**. Example
+socket: vertical microSD PJS008U-3000-0 (datasheet figure 1.7).
+**Open for plan 2 (Bastian):** patch.Init() feeds the card from A10, which on
+Rev A is the analog pot reference (P2 decision 3). Card current (tens of mA,
+write peaks higher) on A10 would ride on the pot reference; on `3V3D` it
+loads the AMS1117, whose dissipation from +12 V is already a P2 §7 bring-up
+item (~0.26 W at 30 mA; another 50 mA of card makes it ~0.95 W). One way
+out: feed the AMS1117 from the module's +5 V output (A6, rated 800 mA)
+instead of +12 V — a 1.7 V drop instead of 8.7 V.
+
+**A10 load: settled.** Datasheet Table 1: 3V3 output 500 mA maximum
+("firmware dependent"). 70 pots and 10 muxes (~23 mA, P2 §5) use under 5 %.
+
+**D8/D9: settled.** Datasheet Table 2: D8 = ADC_12 (PC2), D9 = ADC_11 (PC3)
+— libDaisy is right and the coupon's comment wrong (P2 §2).
+
+**Power:** patch.Init() notes that reverse protection is on the module but
+recommends your own for other parts on the rails; the datasheet needs no
+bypass caps at the module. P2's SS14 pair stays (the AMS1117 and the 595s
+sit on the rails).
+
+**JLC parts, checked on jlcpcb.com 2026-09-29** (type only; stock is checked
+at the freeze):
+
+| LCSC | Part | Type |
+|---|---|---|
+| C9386 | 74HC4051D,653 (Nexperia), SOIC-16 | Extended |
+| C5947 | 74HC595D,118 (Nexperia), SOIC-16 | Basic |
+| C5613 | 74HC165D,653 (Nexperia), SOIC-16 | Extended |
+| C6186 | AMS1117-3.3, SOT-223 | Basic |
+| C2480 | SS14, SMA | Basic |
+| C21190 | 1 kΩ 1 % 0603 | Basic |
+| C25804 | 10 kΩ 1 % 0603 | Basic |
+| C14663 | 100 nF 50 V X7R 0603 | Basic |
+| C15850 | 10 µF 25 V X5R 0805 | Basic |
+
+**Footprints (KiCad 10 libraries):** pot
+`Potentiometer_THT:Potentiometer_Alpha_RD901F-40-00D_Single_Vertical` (the
+coupon's); jack
+`Connector_Audio:Jack_3.5mm_QingPu_WQP-PJ398SM_Vertical_CircularHoles`; LED
+`LED_THT:LED_D3.0mm`; power header
+`Connector_IDC:IDC-Header_2x05_P2.54mm_Vertical` (the coupon's); module
+sockets `Connector_PinSocket_2.54mm:PinSocket_2x05_P2.54mm_Vertical` (four).
+**Thonk low-profile button:** DPDT, momentary OFF-(ON), 6.2 mm cutout; Thonk
+offers a KiCad footprint ZIP, downloaded with Bastian's go-ahead. It stands
+**16.5 mm above the board unlatched** (14.85 latched): the keys, not only
+pots and jacks, set the panel-to-board gap (P1 §6 measures it).
+
+**THT headers and sockets** (power header, four module sockets) are
+hand-soldered with the panel parts and carry `Source`, as on the coupon;
+JLC's THT assembly is not used.
+
 ## Out of scope
 
 Placement, routing, the SD socket and the board outline (P4, and the routing
