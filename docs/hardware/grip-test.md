@@ -5,6 +5,10 @@ Plate: clear 3 mm acrylic cut from `host/vcv/res/FireflowHW-cut.svg`, with
 `FireflowHW-print.svg` printed at 100 % underneath (check the 100 mm bar with
 a ruler before cutting the print).
 
+The rail slots leave 1.4 mm of acrylic to the plate edge (Eurorack standard,
+fine in aluminium), so screw the acrylic plate only hand-tight with nylon
+washers, or rest it in the rails unscrewed.
+
 ## Measurements (spec §6)
 
 | Date | What | Result |
@@ -16,6 +20,7 @@ a ruler before cutting the print).
 | | Panel-to-board height, pot and jack seated on a board | |
 | | Alpha anti-rotation tab: present? where? | |
 | | Actual plate width of a bought 60 HP blank, if one is at hand (the cut assumes 304.4 mm) | |
+| | Kerf: measure one pot hole and one LED hole (expected ~0.1–0.2 mm over size); the four satellite webs are 2.05–2.15 mm in the file, so about 1.9 mm in the plate | |
 
 ## Checklist (spec §5)
 

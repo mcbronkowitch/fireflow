@@ -4106,7 +4106,9 @@ spare channel to AGND and one to the rail (spec §8).
 `host/vcv/res/gen_hw_cut.py` writes the laser cut file, a 1:1 print sheet for
 under the clear plate, and `FireflowHW-holes.json`, the hole list the Rev A
 board will be placed from; `hw_cut_guard` in ctest checks one hole per
-control, 2 mm of material everywhere, and the files against the generator.
+control, 2 mm of material between holes (the four rail slots keep the
+Eurorack-standard 1.4 mm to the plate edge), and the files against the
+generator.
 The guard's first run moved four LEDs: the jack-row satellites left under
 1 mm of acrylic to their key or jack. Parts (all Thonk: genuine Alpha 9 mm
 T18 B10K, 1900H and Micro Knob caps, Thonkiconn, low-profile buttons, 3 mm

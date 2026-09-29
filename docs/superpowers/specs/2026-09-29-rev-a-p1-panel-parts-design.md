@@ -86,7 +86,9 @@ on delivery.
 
 ## 3. Generator changes
 
-All in `host/vcv/res/gen_hw_panel.py`; nothing is drawn by hand.
+Hole sizes and the satellite rule live in `host/vcv/res/gen_hw_panel.py`; the
+three outputs come from a separate generator, `host/vcv/res/gen_hw_cut.py`,
+which places nothing. Nothing is drawn by hand.
 
 1. ~~**Body radii follow the real caps.**~~ **Deferred 2026-09-29 (Bastian)**
    to the correction round after the grip test, before the freeze.
@@ -101,13 +103,13 @@ All in `host/vcv/res/gen_hw_panel.py`; nothing is drawn by hand.
 
    | Feature | Size |
    |---|---|
-   | Plate outline | 128.5 mm high; width **304.8 mm nominal — the real Eurorack panel is slightly narrower for fit; the exact value comes from Doepfer's A-100 mechanical spec** (assumption until read) |
+   | Plate outline | 128.5 mm high; width **304.4 mm** — 304.8 nominal minus 0.4, trimmed 0.2 off each side (assumption from Doepfer's A-100 table, where 20 HP is 101.30 of 101.60 mm; to check against a bought 60 HP blank) |
    | Pot hole | 7.0 mm (Alpha M7 bushing; to confirm on the part) |
    | Jack hole | 6.0 mm |
-   | Key hole | from the button datasheet |
+   | Key hole | 6.2 mm (Thonk low-profile button, recommended cutout) |
    | LED hole | 3.1 mm |
    | SD slot | 11 × 6 mm, as the generator already places it |
-   | Mounting | four slots at Doepfer's rail positions |
+   | Mounting | four 5.2 × 3.2 mm stadium slots, 7.5 mm in from the left edge and 57 HP apart, 3.0 mm from top and bottom (DIY convention; assumption) |
 
 3. **Print export.** `res/FireflowHW-print.pdf` (or SVG): the plate artwork at
    exactly 1:1, with each hole's outline drawn so it can be cut out, and a
@@ -129,7 +131,8 @@ asserts:
   cut file contains exactly those holes;
 - no two holes overlap, and **at least 2.0 mm of material** stays between
   any two hole edges (acrylic cracks at thin webs);
-- no hole enters the rail zones;
+- no hole enters the rail zones; holes keep 2.0 mm to the plate edges, the
+  rail slots the Eurorack-standard 1.4 mm;
 - the print export's scale bar measures 100 mm in the file.
 
 Each assertion is shown red once (a shifted hole, a thin web) before it is
