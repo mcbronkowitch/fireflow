@@ -89,8 +89,9 @@ def _net(board, name):
 KIID_SEED = 0xC0FFEE
 
 
-def new_board(width_mm, height_mm, copper_layers):
-    """Fresh board: rectangular Edge.Cuts outline at (0,0)-(w,h), copper
+def new_board(width_mm, height_mm, copper_layers, origin=(0.0, 0.0)):
+    """Fresh board: rectangular Edge.Cuts outline from `origin` to
+    `origin + (w, h)`, copper
     layer count set, design-rule minimums from the coupon plan's Global
     Constraints (track 0.25 mm, via 0.6 mm outer / 0.3 mm drill, clearance
     0.2 mm).
@@ -118,7 +119,9 @@ def new_board(width_mm, height_mm, copper_layers):
     bds.m_ViasMinSize = pcbnew.FromMM(0.6)
     bds.m_MinThroughDrill = pcbnew.FromMM(0.3)
     bds.m_MinClearance = pcbnew.FromMM(0.2)
-    corners = [(0, 0), (width_mm, 0), (width_mm, height_mm), (0, height_mm)]
+    ox, oy = origin
+    corners = [(ox, oy), (ox + width_mm, oy),
+               (ox + width_mm, oy + height_mm), (ox, oy + height_mm)]
     for a, b in zip(corners, corners[1:] + corners[:1]):
         seg = pcbnew.PCB_SHAPE(board)
         seg.SetShape(pcbnew.SHAPE_T_SEGMENT)
@@ -226,10 +229,13 @@ def courtyard_boxes(board):
     `DAISY_PATCH_SM` carries no courtyard geometry at all, so KiCad's DRC
     cannot see it collide with anything and a caller that needs to reason
     about the module's footprint has to ask for its outline instead.
+    A part flipped to the back has its courtyard on B.CrtYd and an empty
+    F.CrtYd box (probed, 10.0.5).
     """
     boxes = {}
     for fp in board.GetFootprints():
-        bb = fp.GetCourtyard(pcbnew.F_CrtYd).BBox()
+        layer = pcbnew.B_CrtYd if fp.IsFlipped() else pcbnew.F_CrtYd
+        bb = fp.GetCourtyard(layer).BBox()
         if not bb.GetWidth() and not bb.GetHeight():
             bb = fp.GetBoundingBox(False, False)
         boxes[fp.GetReference()] = (
@@ -250,3 +256,62 @@ def board_nets(board):
                 nets.setdefault(name, []).append(
                     (fp.GetReference(), pad.GetNumber()))
     return nets
+
+
+def add_keepout(board, points_mm, layer_names):
+    """Rule area forbidding tracks, vias and zone fill on `layer_names`;
+    pads and footprints stay allowed. KiCad's DSN export writes it as one
+    `(keepout ...)` per copper layer (probed, 10.0.5)."""
+    zone = pcbnew.ZONE(board)
+    zone.SetIsRuleArea(True)
+    zone.SetDoNotAllowTracks(True)
+    zone.SetDoNotAllowVias(True)
+    zone.SetDoNotAllowZoneFills(True)
+    zone.SetDoNotAllowPads(False)
+    zone.SetDoNotAllowFootprints(False)
+    layers = pcbnew.LSET()
+    for name in layer_names:
+        layers.AddLayer(LAYER[name])
+    zone.SetLayerSet(layers)
+    chain = pcbnew.SHAPE_LINE_CHAIN()
+    for x_mm, y_mm in points_mm:
+        chain.Append(_pt(x_mm, y_mm))
+    chain.SetClosed(True)
+    zone.Outline().AddOutline(chain)
+    board.Add(zone)
+    return zone
+
+
+def set_netclasses(board, default_width_mm, classes, clearance_mm=0.2,
+                   via_mm=0.6, drill_mm=0.3):
+    """The Default class plus `classes = {name: (width_mm, [net, ...])}`.
+    Call after every net exists. Probed (10.0.5): the classes reach the DSN
+    export as `(class <name> <nets> ... (rule (width ..) (clearance ..)))`,
+    and SaveBoard writes them into a .kicad_pro beside the board."""
+    ns = board.GetDesignSettings().m_NetSettings
+
+    def fill(nc, width_mm):
+        nc.SetTrackWidth(pcbnew.FromMM(width_mm))
+        nc.SetClearance(pcbnew.FromMM(clearance_mm))
+        nc.SetViaDiameter(pcbnew.FromMM(via_mm))
+        nc.SetViaDrill(pcbnew.FromMM(drill_mm))
+
+    fill(ns.GetDefaultNetclass(), default_width_mm)
+    for name, (width_mm, nets) in sorted(classes.items()):
+        nc = pcbnew.NETCLASS(name)
+        fill(nc, width_mm)
+        ns.SetNetclass(name, nc)
+        for net in nets:
+            ns.SetNetclassPatternAssignment(net, name)
+    board.SynchronizeNetsAndNetClasses(True)
+
+
+def lock_tracks(board, net_names):
+    """Lock every track and via on `net_names`; KiCad's DSN export then
+    writes them as `(type fix)` (probed, 10.0.5). Returns the count."""
+    n = 0
+    for t in board.GetTracks():
+        if t.GetNetname() in net_names:
+            t.SetLocked(True)
+            n += 1
+    return n
