@@ -435,6 +435,12 @@ add_test(NAME hw_gen_place_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/hardware/gen/test_place.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+# Rev A P4-1: the generated J_SD footprint equals a fresh generation and KiCad
+# loads it with the sourced pads; re-runs itself under KiCad's Python.
+add_test(NAME reva_sd_footprint_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/hardware/reva/test_sd_footprint.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
 # The Python guards need a runner or they rot unnoticed -- tools/test_*.py in
 # this repo is wired to nothing, and the VCV panel guard stood red for 23

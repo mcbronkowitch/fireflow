@@ -826,16 +826,16 @@
 		(property "Value" "microSD"
 			(at 57.15 22.86 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
-		(property "Footprint" "P4"
+		(property "Footprint" "FireFlow:SD_Yamaichi_PJS008U-3000-0"
 			(at 57.15 34.29 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Datasheet" ""
 			(at 57.15 34.29 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
-		(property "Description" "socket chosen in P4 (spec §6)"
+		(property "Description" "Yamaichi PJS008U-3000-0 vertical microSD, THT (P4-1 spec §4.2)"
 			(at 57.15 34.29 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
-		(property "Source" "P4"
+		(property "Source" "hand-soldered"
 			(at 57.15 34.29 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "PanelId" "SD"

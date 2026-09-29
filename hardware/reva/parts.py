@@ -4,8 +4,8 @@
 LCSC numbers and Basic/Extended types are the spec addendum's, checked on
 jlcpcb.com 2026-09-29 (C45783 the same day); stock is checked at the freeze.
 Panel parts carry Source="Thonk" and are hand-soldered with the panel on;
-THT connectors are hand-soldered too. Exactly one part, the SD socket, has
-the open footprint "P4" (chosen in P4, spec §6).
+THT connectors are hand-soldered too. The SD socket's footprint, once the open
+"P4", is chosen: the generated FireFlow:SD_Yamaichi_PJS008U-3000-0 (P4-1 spec §4.2).
 """
 import os
 import sys
@@ -70,8 +70,8 @@ CATALOGUE = {
     "module": PartType("Daisy-Boards:Daisy_Patch_SM", "Daisy Patch SM",
                        "Daisy-Boards:DAISY_PATCH_SM", "", "Electrosmith", "",
                        "Patch Submodule, socketed"),
-    "sd": PartType("Connector:Micro_SD_Card", "microSD", "P4", "", "P4", "",
-                   "socket chosen in P4 (spec §6)"),
+    "sd": PartType("Connector:Micro_SD_Card", "microSD", "FireFlow:SD_Yamaichi_PJS008U-3000-0",
+                   "", HAND, "", "Yamaichi PJS008U-3000-0 vertical microSD, THT (P4-1 spec §4.2)"),
     "tp": PartType("Connector:TestPoint", "TP", "TestPoint:TestPoint_Pad_D1.5mm", "", "",
                    "", "probe pad"),
 }

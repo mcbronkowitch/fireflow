@@ -30,6 +30,7 @@ FP_LIB = os.path.normpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "lib"))
 FP_VENDORED = os.path.join(FP_LIB, "DaisyKiCad")
 FP_THONK = os.path.join(FP_LIB, "Thonk")
+FP_FIREFLOW = os.path.join(FP_LIB, "FireFlow")
 
 LAYER = {"F.Cu": pcbnew.F_Cu, "In1.Cu": pcbnew.In1_Cu,
          "In2.Cu": pcbnew.In2_Cu, "B.Cu": pcbnew.B_Cu}
@@ -137,10 +138,11 @@ def new_board(width_mm, height_mm, copper_layers, origin=(0.0, 0.0)):
 def footprint(lib_id):
     """Load `"LibName:FootprintName"` from KiCad's share footprints dir, or
     the vendored `hardware/lib/DaisyKiCad` and `hardware/lib/Thonk`
-    `*.pretty` -- the same tiered lookup as `netlist.load()`'s
-    symbol-library search, one directory type down."""
+    `*.pretty`, or `hardware/lib/FireFlow` (generated footprints) -- the
+    same tiered lookup as `netlist.load()`'s symbol-library search, one
+    directory type down."""
     lib, _, name = lib_id.partition(":")
-    for base in (FP_SHARE, FP_VENDORED, FP_THONK):
+    for base in (FP_SHARE, FP_VENDORED, FP_THONK, FP_FIREFLOW):
         path = os.path.join(base, lib + ".pretty")
         if os.path.isdir(path):
             fp = pcbnew.FootprintLoad(path, name)

@@ -1,8 +1,8 @@
 # ERC waivers for Rev A. Format: type | exact item description | count | reason
-# Only two kinds belong here: a Patch SM symbol pin type that names a default
-# role Rev A does not use, and the one open P4 footprint (spec §6).
+# Only one kind belongs here: a Patch SM symbol pin type that names a default
+# role Rev A does not use. (The SD socket's open footprint waiver is gone: the
+# footprint was chosen in P4-1, spec §4.2.)
 # Everything else is fixed in blocks.py.
 pin_to_pin | Symbol U_SM Pin D10 [SPI_SCK, Output, Line] | 1 | D10 is a GPIO input in firmware (165 serial out); the symbol names its SPI_SCK default
 pin_not_driven | Symbol U_SR1 Pin 14 [SER, Input, Line] | 1 | B7 drives SR_DATA push-pull as GPIO; the symbol names its I2C1_SCL default
 pin_not_driven | Symbol U_IN1 Pin 2 [CP, Input, Line] | 1 | B8 drives SR_CLK push-pull as GPIO; the symbol names its I2C1_SDA default
-footprint_link_issues | Symbol J_SD [Micro_SD_Card] | 1 | the SD socket's footprint is open until P4 chooses the part (spec §6)
