@@ -3,7 +3,9 @@
 
 The check tool loads this file:
     python hardware/gen/check.py --project hardware/reva/build.py --fast|--sheet NAME|--full
-Task 4 of plan 2 adds main(), which writes the committed files.
+`python hardware/reva/build.py` writes the committed files under kicad/.
+Saving the project from the KiCad GUI rewrites kicad/reva.kicad_pro;
+reva_build_guard then reports it stale -- rerun build.py.
 """
 import json
 import os
@@ -65,11 +67,14 @@ def write_all(root=HERE):
     for name in os.listdir(kdir):                # a renamed sheet must not linger
         if name.endswith(".kicad_sch"):
             os.remove(os.path.join(kdir, name))
-    W.write_project(proj, kdir)
+    sheets = W.write_project(proj, kdir)         # {sheet name: (placed, height)}
     C.write_lib_tables(proj.parts(), kdir, LIB_URIS, extra_sym_libs={"power"})
     C.write_project_file(kdir, proj.name)
-    return sorted(os.path.relpath(os.path.join(kdir, n), root).replace("\\", "/")
-                  for n in os.listdir(kdir))
+    # What was written, not a directory listing: opening the project in KiCad
+    # leaves by-products (.kicad_prl, backups, caches) that are not ours.
+    names = ([proj.name + ".kicad_sch"] + [n + ".kicad_sch" for n in sheets]
+             + ["sym-lib-table", "fp-lib-table", proj.name + ".kicad_pro"])
+    return sorted("%s/%s" % (KICAD, n) for n in names)
 
 
 def main():

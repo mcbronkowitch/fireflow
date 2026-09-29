@@ -107,9 +107,10 @@ P3 builds the check tool **before** the first Rev A sheet exists (stage 2b,
 **Measured 2026-09-29** on the coupon schematic (~80 parts, one sheet), with
 `kicad-cli` 10.0: netlist export 0.9 s, ERC 6.1 s, PDF 0.4 s.
 **Measured 2026-09-29** on the 264-part, eleven-sheet load fixture
-(hardware/gen/fixtures/load.py): full level 3.5 s, of which ERC 1.5 s. The fixture uses three symbol types
-only; the coupon's single sheet took 6.1 s of ERC; Rev A itself (measured 2026-09-29, 217 parts, 11 sheets):
-full level 5.4 s, ERC 1.7 s.
+(hardware/gen/fixtures/load.py): full level 3.5 s, of which ERC 1.5 s. The
+fixture uses three symbol types only; the coupon's single sheet took 6.1 s of
+ERC; Rev A itself (measured 2026-09-29, 217 parts, 11 sheets): full level
+5.4 s, ERC 1.7 s.
 
 Rules for the check tool:
 
