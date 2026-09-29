@@ -279,6 +279,30 @@ pots and jacks, set the panel-to-board gap (P1 §6 measures it).
 hand-soldered with the panel parts and carry `Source`, as on the coupon;
 JLC's THT assembly is not used.
 
+**Decided 2026-09-29 (Bastian), after reading the Patch SM's own schematic
+(`ES_Daisy_Patch_SM_Rev3-REDUCED`,
+https://daisy.nyc3.cdn.digitaloceanspaces.com/products/patch-sm/ES_Daisy_Patch_SM_Schematic.pdf):**
+
+- The module makes its **3V3 with a TPS621x buck** (`+3V3_D`, the MCU's
+  rail, on pin A10) and feeds its ADC reference (`+3V3_A`) from the same rail
+  through a ferrite bead. Its **+5 V on A6 is the module's analog rail**
+  (LD1117-5V linear from +12 V, feeding the CV op-amps). So P2's "analog
+  3V3 = A10" is the module's digital rail; the coupon's pot measurements on
+  it stand. Plan 2 renames the net `A3V3` to `SM_3V3` so the name stops
+  promising "analog". A6 stays unconnected: loading the module's analog 5 V
+  with our digital parts is out.
+- **SD card VCC on A10**, as in patch.Init(). The AMS1117 keeps its P2 load
+  (~30 mA from +12 V). Whether card access disturbs the pot scan is a P7
+  bring-up check: scan noise while the card streams.
+- **`IN_R` is normalled to `IN_L`**, as in patch.Init().
+- **Thonk low-profile button**, footprint `SW_Push_LP_Button` from Thonk's
+  ZIP (https://www.thonk.co.uk/wp-content/uploads/2024/08/THONK-SW-Push-LP-Button.zip,
+  downloaded 2026-09-29; to be vendored under `hardware/lib/` in plan 2):
+  six pads in two rows of three at 2.5 × 5.4 mm, 0.7 mm drills. The
+  datasheet's circuit: free, 2–3 and 5–6 are closed; pushed, 1–2 and 4–5.
+  Rev A uses one pole — pin 2 common, pin 1 closes to it when pressed — and
+  leaves 3–6 unconnected.
+
 ## Out of scope
 
 Placement, routing, the SD socket and the board outline (P4, and the routing
