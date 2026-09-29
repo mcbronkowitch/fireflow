@@ -164,94 +164,72 @@
   },
   {
    "channel": 1,
-   "id": "SHAPE_A",
-   "ids": [
-    "SHAPE_A"
-   ],
-   "mux": 0,
-   "sense": "SENSE_0",
-   "x_mm": 18.25,
-   "y_mm": 34.0
-  },
-  {
-   "channel": 2,
-   "id": "MOD_A",
-   "ids": [
-    "MOD_A"
-   ],
-   "mux": 0,
-   "sense": "SENSE_0",
-   "x_mm": 21.75,
-   "y_mm": 53.0
-  },
-  {
-   "channel": 3,
-   "id": "TUNE_A",
-   "ids": [
-    "TUNE_A"
-   ],
-   "mux": 0,
-   "sense": "SENSE_0",
-   "x_mm": 17.0,
-   "y_mm": 74.4
-  },
-  {
-   "channel": 4,
-   "id": "DETUNE_A",
-   "ids": [
-    "DETUNE_A"
-   ],
-   "mux": 0,
-   "sense": "SENSE_0",
-   "x_mm": 30.0,
-   "y_mm": 74.4
-  },
-  {
-   "channel": 5,
-   "id": "COLOR_A",
-   "ids": [
-    "COLOR_A"
-   ],
-   "mux": 0,
-   "sense": "SENSE_0",
-   "x_mm": 23.5,
-   "y_mm": 95.0
-  },
-  {
-   "channel": 0,
    "id": "STEPS_A",
    "ids": [
     "STEPS_A"
    ],
-   "mux": 1,
+   "mux": 0,
    "sense": "SENSE_0",
    "x_mm": 35.0,
    "y_mm": 14.5
   },
   {
-   "channel": 1,
+   "channel": 2,
    "id": "SONG_A",
    "ids": [
     "SONG_A"
    ],
-   "mux": 1,
+   "mux": 0,
    "sense": "SENSE_0",
    "x_mm": 48.0,
    "y_mm": 14.5
   },
   {
-   "channel": 2,
+   "channel": 3,
+   "id": "RATE_A",
+   "ids": [
+    "RATE_A"
+   ],
+   "mux": 0,
+   "sense": "SENSE_0",
+   "x_mm": 61.0,
+   "y_mm": 14.5
+  },
+  {
+   "channel": 4,
+   "id": "MELODY_A",
+   "ids": [
+    "MELODY_A"
+   ],
+   "mux": 0,
+   "sense": "SENSE_0",
+   "x_mm": 74.0,
+   "y_mm": 14.5
+  },
+  {
+   "channel": 5,
    "id": "SMOOTH_A",
    "ids": [
     "SMOOTH_A"
    ],
-   "mux": 1,
+   "mux": 0,
    "sense": "SENSE_0",
    "x_mm": 31.25,
    "y_mm": 34.0
   },
   {
-   "channel": 3,
+   "channel": 0,
+   "id": "SHAPE_A",
+   "ids": [
+    "SHAPE_A"
+   ],
+   "mux": 1,
+   "sense": "SENSE_0",
+   "x_mm": 18.25,
+   "y_mm": 34.0
+  },
+  {
+   "channel": 1,
    "id": "RANGE_A",
    "ids": [
     "RANGE_A"
@@ -262,57 +240,13 @@
    "y_mm": 34.0
   },
   {
-   "channel": 4,
-   "id": "DENSITY_A",
-   "ids": [
-    "DENSITY_A"
-   ],
-   "mux": 1,
-   "sense": "SENSE_0",
-   "x_mm": 40.75,
-   "y_mm": 53.0
-  },
-  {
-   "channel": 5,
-   "id": "FLUXRATE_A",
-   "ids": [
-    "FLUXRATE_A"
-   ],
-   "mux": 1,
-   "sense": "SENSE_0",
-   "x_mm": 54.0,
-   "y_mm": 89.86
-  },
-  {
-   "channel": 0,
-   "id": "RATE_A",
-   "ids": [
-    "RATE_A"
-   ],
-   "mux": 2,
-   "sense": "SENSE_0",
-   "x_mm": 61.0,
-   "y_mm": 14.5
-  },
-  {
-   "channel": 1,
-   "id": "MELODY_A",
-   "ids": [
-    "MELODY_A"
-   ],
-   "mux": 2,
-   "sense": "SENSE_0",
-   "x_mm": 74.0,
-   "y_mm": 14.5
-  },
-  {
    "channel": 2,
    "id": "ATTACK_A",
    "ids": [
     "ATTACK_A",
     "STAGES_A"
    ],
-   "mux": 2,
+   "mux": 1,
    "sense": "SENSE_0",
    "x_mm": 68.25,
    "y_mm": 34.0
@@ -323,13 +257,57 @@
    "ids": [
     "SOURCE_A"
    ],
-   "mux": 2,
+   "mux": 1,
    "sense": "SENSE_0",
    "x_mm": 72.875,
    "y_mm": 50.22
   },
   {
    "channel": 4,
+   "id": "MOD_A",
+   "ids": [
+    "MOD_A"
+   ],
+   "mux": 1,
+   "sense": "SENSE_0",
+   "x_mm": 21.75,
+   "y_mm": 53.0
+  },
+  {
+   "channel": 5,
+   "id": "DENSITY_A",
+   "ids": [
+    "DENSITY_A"
+   ],
+   "mux": 1,
+   "sense": "SENSE_0",
+   "x_mm": 40.75,
+   "y_mm": 53.0
+  },
+  {
+   "channel": 0,
+   "id": "TUNE_A",
+   "ids": [
+    "TUNE_A"
+   ],
+   "mux": 2,
+   "sense": "SENSE_0",
+   "x_mm": 17.0,
+   "y_mm": 74.4
+  },
+  {
+   "channel": 1,
+   "id": "DETUNE_A",
+   "ids": [
+    "DETUNE_A"
+   ],
+   "mux": 2,
+   "sense": "SENSE_0",
+   "x_mm": 30.0,
+   "y_mm": 74.4
+  },
+  {
+   "channel": 2,
    "id": "FLUX_A",
    "ids": [
     "FLUX_A"
@@ -338,6 +316,28 @@
    "sense": "SENSE_0",
    "x_mm": 67.0,
    "y_mm": 79.0
+  },
+  {
+   "channel": 3,
+   "id": "FLUXRATE_A",
+   "ids": [
+    "FLUXRATE_A"
+   ],
+   "mux": 2,
+   "sense": "SENSE_0",
+   "x_mm": 54.0,
+   "y_mm": 89.86
+  },
+  {
+   "channel": 4,
+   "id": "COLOR_A",
+   "ids": [
+    "COLOR_A"
+   ],
+   "mux": 2,
+   "sense": "SENSE_0",
+   "x_mm": 23.5,
+   "y_mm": 95.0
   },
   {
    "channel": 5,
@@ -352,99 +352,11 @@
   },
   {
    "channel": 0,
-   "id": "DECAY_A",
-   "ids": [
-    "DECAY_A"
-   ],
-   "mux": 6,
-   "sense": "SENSE_2",
-   "x_mm": 81.25,
-   "y_mm": 34.0
-  },
-  {
-   "channel": 1,
-   "id": "RES_A",
-   "ids": [
-    "RES_A"
-   ],
-   "mux": 6,
-   "sense": "SENSE_2",
-   "x_mm": 94.25,
-   "y_mm": 34.0
-  },
-  {
-   "channel": 2,
-   "id": "SUB_A",
-   "ids": [
-    "SUB_A"
-   ],
-   "mux": 6,
-   "sense": "SENSE_2",
-   "x_mm": 107.25,
-   "y_mm": 34.0
-  },
-  {
-   "channel": 3,
-   "id": "DEPTH_A",
-   "ids": [
-    "DEPTH_A"
-   ],
-   "mux": 6,
-   "sense": "SENSE_2",
-   "x_mm": 104.875,
-   "y_mm": 50.22
-  },
-  {
-   "channel": 4,
-   "id": "FILT_A",
-   "ids": [
-    "FILT_A"
-   ],
-   "mux": 6,
-   "sense": "SENSE_2",
-   "x_mm": 88.875,
-   "y_mm": 53.0
-  },
-  {
-   "channel": 5,
-   "id": "COMP_A",
-   "ids": [
-    "COMP_A"
-   ],
-   "mux": 6,
-   "sense": "SENSE_2",
-   "x_mm": 106.5,
-   "y_mm": 79.0
-  },
-  {
-   "channel": 6,
-   "id": "LINK_A",
-   "ids": [
-    "LINK_A"
-   ],
-   "mux": 6,
-   "sense": "SENSE_2",
-   "x_mm": 80.0,
-   "y_mm": 89.86
-  },
-  {
-   "channel": 7,
-   "id": "PAN_A",
-   "ids": [
-    "PAN_A"
-   ],
-   "mux": 6,
-   "sense": "SENSE_2",
-   "x_mm": 103.75,
-   "y_mm": 97.0
-  },
-  {
-   "channel": 0,
    "id": "SCALE",
    "ids": [
     "SCALE"
    ],
-   "mux": 7,
+   "mux": 6,
    "sense": "SENSE_2",
    "x_mm": 132.9,
    "y_mm": 14.5
@@ -455,35 +367,90 @@
    "ids": [
     "DRIFT"
    ],
-   "mux": 7,
+   "mux": 6,
    "sense": "SENSE_2",
    "x_mm": 145.9,
    "y_mm": 14.5
   },
   {
    "channel": 2,
+   "id": "DECAY_A",
+   "ids": [
+    "DECAY_A"
+   ],
+   "mux": 6,
+   "sense": "SENSE_2",
+   "x_mm": 81.25,
+   "y_mm": 34.0
+  },
+  {
+   "channel": 3,
+   "id": "RES_A",
+   "ids": [
+    "RES_A"
+   ],
+   "mux": 6,
+   "sense": "SENSE_2",
+   "x_mm": 94.25,
+   "y_mm": 34.0
+  },
+  {
+   "channel": 4,
+   "id": "SUB_A",
+   "ids": [
+    "SUB_A"
+   ],
+   "mux": 6,
+   "sense": "SENSE_2",
+   "x_mm": 107.25,
+   "y_mm": 34.0
+  },
+  {
+   "channel": 5,
    "id": "TEMPO",
    "ids": [
     "TEMPO"
    ],
-   "mux": 7,
+   "mux": 6,
    "sense": "SENSE_2",
    "x_mm": 139.4,
    "y_mm": 34.0
   },
   {
-   "channel": 3,
+   "channel": 6,
    "id": "TIDE",
    "ids": [
     "TIDE"
    ],
-   "mux": 7,
+   "mux": 6,
    "sense": "SENSE_2",
    "x_mm": 136.4,
    "y_mm": 50.22
   },
   {
-   "channel": 4,
+   "channel": 7,
+   "id": "FILT_A",
+   "ids": [
+    "FILT_A"
+   ],
+   "mux": 6,
+   "sense": "SENSE_2",
+   "x_mm": 88.875,
+   "y_mm": 53.0
+  },
+  {
+   "channel": 0,
+   "id": "DEPTH_A",
+   "ids": [
+    "DEPTH_A"
+   ],
+   "mux": 7,
+   "sense": "SENSE_2",
+   "x_mm": 104.875,
+   "y_mm": 50.22
+  },
+  {
+   "channel": 1,
    "id": "REV_SIZE",
    "ids": [
     "REV_SIZE"
@@ -492,6 +459,39 @@
    "sense": "SENSE_2",
    "x_mm": 136.4,
    "y_mm": 74.4
+  },
+  {
+   "channel": 2,
+   "id": "COMP_A",
+   "ids": [
+    "COMP_A"
+   ],
+   "mux": 7,
+   "sense": "SENSE_2",
+   "x_mm": 106.5,
+   "y_mm": 79.0
+  },
+  {
+   "channel": 3,
+   "id": "LINK_A",
+   "ids": [
+    "LINK_A"
+   ],
+   "mux": 7,
+   "sense": "SENSE_2",
+   "x_mm": 80.0,
+   "y_mm": 89.86
+  },
+  {
+   "channel": 4,
+   "id": "PAN_A",
+   "ids": [
+    "PAN_A"
+   ],
+   "mux": 7,
+   "sense": "SENSE_2",
+   "x_mm": 103.75,
+   "y_mm": 97.0
   },
   {
    "channel": 5,
@@ -528,6 +528,17 @@
   },
   {
    "channel": 1,
+   "id": "PULL",
+   "ids": [
+    "PULL"
+   ],
+   "mux": 8,
+   "sense": "SENSE_3",
+   "x_mm": 171.9,
+   "y_mm": 14.5
+  },
+  {
+   "channel": 2,
    "id": "COUPLE",
    "ids": [
     "COUPLE"
@@ -538,7 +549,7 @@
    "y_mm": 34.0
   },
   {
-   "channel": 2,
+   "channel": 3,
    "id": "SHUFFLE",
    "ids": [
     "SHUFFLE"
@@ -549,7 +560,18 @@
    "y_mm": 34.0
   },
   {
-   "channel": 3,
+   "channel": 4,
+   "id": "SUB_B",
+   "ids": [
+    "SUB_B"
+   ],
+   "mux": 8,
+   "sense": "SENSE_3",
+   "x_mm": 197.55,
+   "y_mm": 34.0
+  },
+  {
+   "channel": 5,
    "id": "PACE",
    "ids": [
     "PACE"
@@ -560,7 +582,18 @@
    "y_mm": 50.22
   },
   {
-   "channel": 4,
+   "channel": 6,
+   "id": "DEPTH_B",
+   "ids": [
+    "DEPTH_B"
+   ],
+   "mux": 8,
+   "sense": "SENSE_3",
+   "x_mm": 199.925,
+   "y_mm": 50.22
+  },
+  {
+   "channel": 7,
    "id": "MORPH",
    "ids": [
     "MORPH"
@@ -571,73 +604,29 @@
    "y_mm": 53.0
   },
   {
-   "channel": 5,
+   "channel": 0,
    "id": "REV_DIFF",
    "ids": [
     "REV_DIFF"
    ],
-   "mux": 8,
+   "mux": 9,
    "sense": "SENSE_3",
    "x_mm": 168.4,
    "y_mm": 74.4
   },
   {
-   "channel": 6,
+   "channel": 1,
    "id": "REV_DECAY",
    "ids": [
     "REV_DECAY"
    ],
-   "mux": 8,
+   "mux": 9,
    "sense": "SENSE_3",
    "x_mm": 152.4,
    "y_mm": 79.0
   },
   {
-   "channel": 7,
-   "id": "REV_TONE",
-   "ids": [
-    "REV_TONE"
-   ],
-   "mux": 8,
-   "sense": "SENSE_3",
-   "x_mm": 152.4,
-   "y_mm": 97.0
-  },
-  {
-   "channel": 0,
-   "id": "PULL",
-   "ids": [
-    "PULL"
-   ],
-   "mux": 9,
-   "sense": "SENSE_3",
-   "x_mm": 171.9,
-   "y_mm": 14.5
-  },
-  {
-   "channel": 1,
-   "id": "SUB_B",
-   "ids": [
-    "SUB_B"
-   ],
-   "mux": 9,
-   "sense": "SENSE_3",
-   "x_mm": 197.55,
-   "y_mm": 34.0
-  },
-  {
    "channel": 2,
-   "id": "DEPTH_B",
-   "ids": [
-    "DEPTH_B"
-   ],
-   "mux": 9,
-   "sense": "SENSE_3",
-   "x_mm": 199.925,
-   "y_mm": 50.22
-  },
-  {
-   "channel": 3,
    "id": "COMP_B",
    "ids": [
     "COMP_B"
@@ -646,6 +635,17 @@
    "sense": "SENSE_3",
    "x_mm": 198.3,
    "y_mm": 79.0
+  },
+  {
+   "channel": 3,
+   "id": "REV_TONE",
+   "ids": [
+    "REV_TONE"
+   ],
+   "mux": 9,
+   "sense": "SENSE_3",
+   "x_mm": 152.4,
+   "y_mm": 97.0
   },
   {
    "channel": 4,
@@ -693,6 +693,17 @@
   },
   {
    "channel": 1,
+   "id": "RATE_B",
+   "ids": [
+    "RATE_B"
+   ],
+   "mux": 3,
+   "sense": "SENSE_1",
+   "x_mm": 243.8,
+   "y_mm": 14.5
+  },
+  {
+   "channel": 2,
    "id": "RES_B",
    "ids": [
     "RES_B"
@@ -703,7 +714,7 @@
    "y_mm": 34.0
   },
   {
-   "channel": 2,
+   "channel": 3,
    "id": "DECAY_B",
    "ids": [
     "DECAY_B"
@@ -714,7 +725,7 @@
    "y_mm": 34.0
   },
   {
-   "channel": 3,
+   "channel": 4,
    "id": "ATTACK_B",
    "ids": [
     "ATTACK_B",
@@ -726,7 +737,7 @@
    "y_mm": 34.0
   },
   {
-   "channel": 4,
+   "channel": 5,
    "id": "SOURCE_B",
    "ids": [
     "SOURCE_B"
@@ -737,7 +748,7 @@
    "y_mm": 50.22
   },
   {
-   "channel": 5,
+   "channel": 6,
    "id": "FILT_B",
    "ids": [
     "FILT_B"
@@ -748,40 +759,7 @@
    "y_mm": 53.0
   },
   {
-   "channel": 6,
-   "id": "FLUX_B",
-   "ids": [
-    "FLUX_B"
-   ],
-   "mux": 3,
-   "sense": "SENSE_1",
-   "x_mm": 237.8,
-   "y_mm": 79.0
-  },
-  {
-   "channel": 7,
-   "id": "LINK_B",
-   "ids": [
-    "LINK_B"
-   ],
-   "mux": 3,
-   "sense": "SENSE_1",
-   "x_mm": 224.8,
-   "y_mm": 89.86
-  },
-  {
    "channel": 0,
-   "id": "RATE_B",
-   "ids": [
-    "RATE_B"
-   ],
-   "mux": 4,
-   "sense": "SENSE_1",
-   "x_mm": 243.8,
-   "y_mm": 14.5
-  },
-  {
-   "channel": 1,
    "id": "SONG_B",
    "ids": [
     "SONG_B"
@@ -792,7 +770,7 @@
    "y_mm": 14.5
   },
   {
-   "channel": 2,
+   "channel": 1,
    "id": "STEPS_B",
    "ids": [
     "STEPS_B"
@@ -800,6 +778,17 @@
    "mux": 4,
    "sense": "SENSE_1",
    "x_mm": 269.8,
+   "y_mm": 14.5
+  },
+  {
+   "channel": 2,
+   "id": "ENGINE_B",
+   "ids": [
+    "ENGINE_B"
+   ],
+   "mux": 4,
+   "sense": "SENSE_1",
+   "x_mm": 288.55,
    "y_mm": 14.5
   },
   {
@@ -815,6 +804,28 @@
   },
   {
    "channel": 4,
+   "id": "SMOOTH_B",
+   "ids": [
+    "SMOOTH_B"
+   ],
+   "mux": 4,
+   "sense": "SENSE_1",
+   "x_mm": 273.55,
+   "y_mm": 34.0
+  },
+  {
+   "channel": 5,
+   "id": "SHAPE_B",
+   "ids": [
+    "SHAPE_B"
+   ],
+   "mux": 4,
+   "sense": "SENSE_1",
+   "x_mm": 286.55,
+   "y_mm": 34.0
+  },
+  {
+   "channel": 6,
    "id": "DENSITY_B",
    "ids": [
     "DENSITY_B"
@@ -825,73 +836,18 @@
    "y_mm": 53.0
   },
   {
-   "channel": 5,
-   "id": "FLUXRATE_B",
-   "ids": [
-    "FLUXRATE_B"
-   ],
-   "mux": 4,
-   "sense": "SENSE_1",
-   "x_mm": 250.8,
-   "y_mm": 89.86
-  },
-  {
-   "channel": 6,
-   "id": "FLUXFB_B",
-   "ids": [
-    "FLUXFB_B"
-   ],
-   "mux": 4,
-   "sense": "SENSE_1",
-   "x_mm": 237.8,
-   "y_mm": 97.0
-  },
-  {
-   "channel": 0,
-   "id": "ENGINE_B",
-   "ids": [
-    "ENGINE_B"
-   ],
-   "mux": 5,
-   "sense": "SENSE_1",
-   "x_mm": 288.55,
-   "y_mm": 14.5
-  },
-  {
-   "channel": 1,
-   "id": "SMOOTH_B",
-   "ids": [
-    "SMOOTH_B"
-   ],
-   "mux": 5,
-   "sense": "SENSE_1",
-   "x_mm": 273.55,
-   "y_mm": 34.0
-  },
-  {
-   "channel": 2,
-   "id": "SHAPE_B",
-   "ids": [
-    "SHAPE_B"
-   ],
-   "mux": 5,
-   "sense": "SENSE_1",
-   "x_mm": 286.55,
-   "y_mm": 34.0
-  },
-  {
-   "channel": 3,
+   "channel": 7,
    "id": "MOD_B",
    "ids": [
     "MOD_B"
    ],
-   "mux": 5,
+   "mux": 4,
    "sense": "SENSE_1",
    "x_mm": 283.05,
    "y_mm": 53.0
   },
   {
-   "channel": 4,
+   "channel": 0,
    "id": "DETUNE_B",
    "ids": [
     "DETUNE_B"
@@ -902,7 +858,7 @@
    "y_mm": 74.4
   },
   {
-   "channel": 5,
+   "channel": 1,
    "id": "TUNE_B",
    "ids": [
     "TUNE_B"
@@ -913,7 +869,40 @@
    "y_mm": 74.4
   },
   {
-   "channel": 6,
+   "channel": 2,
+   "id": "FLUX_B",
+   "ids": [
+    "FLUX_B"
+   ],
+   "mux": 5,
+   "sense": "SENSE_1",
+   "x_mm": 237.8,
+   "y_mm": 79.0
+  },
+  {
+   "channel": 3,
+   "id": "LINK_B",
+   "ids": [
+    "LINK_B"
+   ],
+   "mux": 5,
+   "sense": "SENSE_1",
+   "x_mm": 224.8,
+   "y_mm": 89.86
+  },
+  {
+   "channel": 4,
+   "id": "FLUXRATE_B",
+   "ids": [
+    "FLUXRATE_B"
+   ],
+   "mux": 5,
+   "sense": "SENSE_1",
+   "x_mm": 250.8,
+   "y_mm": 89.86
+  },
+  {
+   "channel": 5,
    "id": "COLOR_B",
    "ids": [
     "COLOR_B"
@@ -922,6 +911,17 @@
    "sense": "SENSE_1",
    "x_mm": 281.3,
    "y_mm": 95.0
+  },
+  {
+   "channel": 6,
+   "id": "FLUXFB_B",
+   "ids": [
+    "FLUXFB_B"
+   ],
+   "mux": 5,
+   "sense": "SENSE_1",
+   "x_mm": 237.8,
+   "y_mm": 97.0
   }
  ],
  "sense_order": [
@@ -964,7 +964,7 @@
   },
   {
    "channel": 7,
-   "mux": 4,
+   "mux": 3,
    "sense": "SENSE_1"
   },
   {

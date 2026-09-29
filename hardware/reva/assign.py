@@ -70,17 +70,86 @@ def _split_regions(pots):
     return regions, SENSE_ORDER[cal]
 
 
+def objective(groups):
+    """Grouping quality, smaller is better: (worst pot-to-centroid distance
+    over all groups, sum of squared pot-to-centroid distances). P4 places each
+    mux at its group's centre, so both are wire-length proxies. Rounded to
+    1e-9 so float noise cannot flip a tie. groups: list of lists of hole dicts.
+    """
+    worst = total = 0.0
+    for g in groups:
+        if not g:
+            continue
+        cx = sum(p["x_mm"] for p in g) / len(g)
+        cy = sum(p["y_mm"] for p in g) / len(g)
+        for p in g:
+            d2 = (p["x_mm"] - cx) ** 2 + (p["y_mm"] - cy) ** 2
+            worst = max(worst, math.sqrt(d2))
+            total += d2
+    return (round(worst, 9), round(total, 9))
+
+
 def _mux_groups(sense, pots):
-    """Split a region's pots, left to right, into one group per mux."""
+    """Split a region's pots into one proximity group per mux, at most
+    CHANNELS each (P3 spec §5).
+
+    Start from horizontal bands (pots sorted by y, cut into near-equal
+    chunks), then improve by local search: single moves into a group with
+    room and pairwise swaps, in a fixed order, each accepted only if it
+    strictly improves objective(); full passes until one changes nothing.
+    Deterministic. Returns {mux: pots in channel order (y, x, id)}.
+    """
     muxes = MUXES[sense]
-    ordered = sorted(pots, key=lambda p: (p["x_mm"], p["y_mm"], p["id"]))
+    ordered = sorted(pots, key=lambda p: (p["y_mm"], p["x_mm"], p["id"]))
     base, extra = divmod(len(ordered), len(muxes))
-    groups, i = {}, 0
-    for k, mux in enumerate(muxes):
+    groups, i = [], 0
+    for k in range(len(muxes)):
         size = base + (1 if k < extra else 0)
-        groups[mux] = sorted(ordered[i:i + size], key=lambda p: (p["y_mm"], p["x_mm"], p["id"]))
+        groups.append(ordered[i:i + size])
         i += size
-    return groups
+    if any(len(g) > CHANNELS for g in groups):
+        raise ValueError("%d pots do not fit %d muxes of %d channels"
+                         % (len(ordered), len(muxes), CHANNELS))
+    best = objective(groups)
+    n = len(groups)
+    changed = True
+    while changed:
+        changed = False
+        for gi in range(n):
+            for p in sorted(groups[gi], key=lambda q: q["id"]):
+                if p not in groups[gi]:
+                    continue
+                for gj in range(n):
+                    if gj == gi or len(groups[gj]) >= CHANNELS:
+                        continue
+                    groups[gi].remove(p)
+                    groups[gj].append(p)
+                    score = objective(groups)
+                    if score < best:
+                        best, changed = score, True
+                        break
+                    groups[gj].remove(p)
+                    groups[gi].append(p)
+        for gi in range(n):
+            for gj in range(gi + 1, n):
+                for a in sorted(groups[gi], key=lambda q: q["id"]):
+                    for b in sorted(groups[gj], key=lambda q: q["id"]):
+                        if a not in groups[gi] or b not in groups[gj]:
+                            continue
+                        groups[gi].remove(a)
+                        groups[gj].remove(b)
+                        groups[gi].append(b)
+                        groups[gj].append(a)
+                        score = objective(groups)
+                        if score < best:
+                            best, changed = score, True
+                            break
+                        groups[gi].remove(b)
+                        groups[gj].remove(a)
+                        groups[gi].append(a)
+                        groups[gj].append(b)
+    return {mux: sorted(g, key=lambda p: (p["y_mm"], p["x_mm"], p["id"]))
+            for mux, g in zip(muxes, groups)}
 
 
 def assign(holes):
