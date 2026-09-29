@@ -139,7 +139,8 @@ board when a router starts.
   out. Unit-tested like the other `hardware/gen/test_*.py`, each test with a
   demonstrated RED.
 - **Grid A\*** on F.Cu and B.Cu, 0.25 mm pitch, 8 neighbours (45° routing),
-  a via cost on every layer change.
+  a via cost on every layer change. *(Amended 2026-09-29: the plan set
+  0.2 mm for finer channels; the spike ran at 0.2 mm.)*
 - **Obstacles** are every other-net pad, track and via, inflated by half
   the track width plus clearance — the Minkowski arithmetic of
   `build_pcb.py`'s via search, rasterised.

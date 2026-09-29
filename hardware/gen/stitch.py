@@ -2,14 +2,21 @@
 """Plane stitching shared by the generated boards: one via and a short track
 per SMD pad on a plane net, placed by a collision search. Moved from the
 coupon's build_pcb.py (P4a); the docstrings keep the coupon's probe history.
-Runs under KiCad's Python."""
+Runs under KiCad's Python.
+
+Known limits (P4a review)
+-------------------------
+- The collision search ignores rule areas (keepouts).
+- The `segments` check tests only the via point and the track midpoint,
+  ignores layers, and has never been shown rejecting a candidate.
+"""
 import pcbnew
 
 from gen import kipcb
 from gen import pcb_proof as PP
 
 
-# Keepout arithmetic for the collision search in _stitch_plane_pads(): every
+# Keepout arithmetic for the collision search in stitch_plane_pads(): every
 # margin here is the Minkowski-sum radius that lets the search treat a via or
 # track as a POINT against an obstacle's own bounding box, inflated by
 # whatever gap the board's DesignSettings actually requires around it.
@@ -80,7 +87,7 @@ def _candidate_clear(px, py, vx, vy, net, obstacles, placed, segments=()):
 
 def _find_via_offset(px, py, fx, fy, half_w, half_h, net, obstacles, placed, segments=()):
     """Search for a clear via position, starting from the courtyard-
-    normalized outward direction (see `_stitch_plane_pads()`) and widening
+    normalized outward direction (see `stitch_plane_pads()`) and widening
     from there: that direction first, then the perpendicular one, then both
     reversed -- each at growing standoff, 1.0 mm to 3.0 mm -- before giving
     up. Reversed directions matter for parts wedged against a denser

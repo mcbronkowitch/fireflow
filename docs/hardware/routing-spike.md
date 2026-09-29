@@ -48,6 +48,9 @@ P4 has two open decisions, and this spike feeds both (spec §1, §4.4):
   - On 4 layers, GND is a plane on In1 and SM_3V3 a plane on In2.
   - Freerouting was v2.4.1 on Temurin 25.0.4.1
     ([Task 4](#freerouting-task-4)).
+- **Router parameters (our own):** grid pitch 0.2 mm, via cost 8, at most
+  30 iterations, as in `own.py`. Spec §3.2 said 0.25 mm; the plan set 0.2 mm
+  for finer channels, and the spike ran at 0.2 mm.
 
 ## Results
 
@@ -237,6 +240,9 @@ real outline, and the price follows from it.
     - On 4 layers, "unrouted before fill" is counted after the plane fill,
       and whether that count can go red on its own was not probed
       ([Task 8](#own-4-layers-task-8)).
+    - Spec §4.1's `*_missing` mode is absent for the `copper` and `ratsnest`
+      checks, and the `before is None` guard is untested. P4's proof should
+      close these.
 
 ## Recommendation
 
@@ -253,6 +259,10 @@ Freerouting ended with LED14 unrouted after its 7-run budget. That makes it
 - Its scoring and neck-down settings were never tried.
 - Runs 3–6 were byte-identical to run 2
   ([Task 7](#freerouting-2-layers-task-7)).
+
+Run accounting was not symmetric: our router's rule-area fix (1b) was not
+counted as a budget run, while Freerouting's DSN fix used run 2. Because runs
+3–6 were byte-identical to run 2, the outcome does not depend on it.
 
 Our router is deterministic, runs without Java and makes no network call.
 Freerouting checks api.github.com on every run
@@ -1590,7 +1600,7 @@ The placement stage again, for the placement facts the report cites:
 RV50, RV56, RV57 and RV58, all at y 7.0000 mm (for example `@(228.3000 mm,
 7.0000 mm): PTH pad 3 [SM_3V3] of RV49`).
 
-**SMD placement and port order.** `probe_smd.py` (scratchpad `task9/`)
+**SMD placement and port order.** `probe_smd.py` (`hardware/reva/spike/probes/`)
 builds the strip under `KIPY`. It prints each back-side part's search start
 (`target`: the pot-group centroid for a mux, the VCC pad for a 100 nF, the
 LED's hole for a resistor), where the search put it, and the distance
@@ -1643,8 +1653,8 @@ centre.
 
 These read the saved final boards in `hardware/reva/spike/out/`; nothing
 is refilled. `own-4L.kicad_pcb` is Task 8's final run, whose PNGs are
-`cmp`-identical to the committed ones. `probe_planes.py` (scratchpad
-`task9/`) prints, for each zone and layer, the outline count of the stored
+`cmp`-identical to the committed ones. `probe_planes.py`
+(`hardware/reva/spike/probes/`) prints, for each zone and layer, the outline count of the stored
 fill ("islands") and its area:
 
     KIPY probe_planes.py hardware/reva/spike/out/own-4L.kicad_pcb
@@ -1663,7 +1673,7 @@ have visible bays, so the column says nothing and is not used. Each plane is
 one connected island. How far the clearances around holes and vias
 perforate it was not measured.
 
-`probe_length.py` (scratchpad `task9/`) sums track length and counts
+`probe_length.py` (`hardware/reva/spike/probes/`) sums track length and counts
 segments and vias per net group: supply = GND and SM_3V3; locked = SENSE_1,
 OUT_L and OUT_R; signal = the rest.
 

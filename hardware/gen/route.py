@@ -34,6 +34,23 @@ overlaps another or the round limit is reached.
 
 Deterministic: fixed net order, fixed neighbour order, a counter as the heap
 tie-break, no randomness anywhere.
+
+Known limits (P4a review)
+-------------------------
+- Off-grid terminal stubs: `_geometry` emits a stub from the pad centre to a
+  cell up to about 0.57 mm away (the +-2-cell fallback in `_terminal_cells`).
+  The stub is never entered into occupancy, so it has no clearance guarantee.
+- Two foreign halos overlapping mark a cell BLOCKED (`_rasterise`), so
+  tight-pitch pads can become unreachable. The SOIC-16 at 1.27 mm worked; the
+  SD socket and the module are untested.
+- The A* heuristic aims at `tcells[j][0]` only. With multi-layer targets it is
+  not admissible, so paths may be suboptimal.
+- `_via_step` checks only the via class, which is safe only while
+  `via_radius >= half_width` (asserted in `run()`).
+- When the round limit is hit, `run()` still returns routes with overlapping
+  copper, and `Result.conflicts` counts NETS in conflict, not cells. Adapters
+  must fail on `conflicts > 0`.
+- The tree test checks endpoint contact, not connectivity.
 """
 import heapq
 import math
@@ -365,7 +382,15 @@ class Router:
 
     # --- the loop ----------------------------------------------------------------
     def run(self, max_iters=30, pres0=0.5, pres_mult=1.6, hist_inc=1.0):
-        ids = {name: k + 1 for k, (name, _hw, _t) in enumerate(self._nets)}
+        """Route every net. Returns a `Result`.
+
+        If `max_iters` is reached with nets still overlapping, the routes
+        returned still contain overlapping copper, and `Result.conflicts`
+        counts NETS in conflict, not cells. Adapters must treat
+        `conflicts > 0` (and a non-empty `failed`) as failure."""
+        assert all(hw <= self.via_radius for _n, hw, _t in self._nets), \
+            "via_radius must be >= every track half-width (see _via_step)"
+        ids ={name: k + 1 for k, (name, _hw, _t) in enumerate(self._nets)}
         for net, _l, _s in self._obstacles:
             if net is not None and net not in ids:
                 ids[net] = len(ids) + 1

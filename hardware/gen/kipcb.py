@@ -4,8 +4,9 @@
 Runs ONLY under KiCad's own Python (KIPY below); the system python has no
 pcbnew module at all -- importing this file under it raises ImportError on
 the `import pcbnew` line, which is the correct failure. Coordinates in the
-public API are millimetres, y grows downward, origin at the board's top-left
-corner; internal units (pcbnew's native nanometres) never cross this module's
+public API are millimetres, y grows downward, in board coordinates;
+`new_board(origin=...)` lets a board use absolute panel coordinates instead
+(the Rev A strip does); internal units (pcbnew's native nanometres) never cross this module's
 boundary.
 
 Two facts below came from a probe (10.0.5), not from the pcbnew docs, because
