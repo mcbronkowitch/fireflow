@@ -41,9 +41,23 @@ The four mux regions are vertical strips over the full panel height
 one, **SENSE_1**: 22 pots on U_MUX3/4/5, pots spanning x 210.6–288.6 mm and
 y 14.5–97.0 mm.
 
-**Outline (assumption; P4 owns the real board outline):** x 205–300 mm,
+**Outline (assumption; P4 owns the real board outline):** x 203–300 mm,
 y 6–122 mm, in the frame of `FireflowHW-holes.json`. The west edge is a cut,
 not a board edge.
+
+*Amended 2026-09-29 while planning, from a measurement:* the first draft
+cut at x 205, but the strip's own RES_B reaches west to x 204.09
+(courtyard), so the cut moves to x 203. No straight cut is clean: pads of
+neighbouring parts reach east past x 203 whatever the line (by the KiCad
+footprints: the mounting tabs of SUB_B, COMP_B, DEPTH_B and PAN_B, the pads
+of the MOD3_B jack and the REC_B key). A part's body is on the front and
+blocks no routing — only its **pads** do. So every foreign pad that reaches
+into the strip becomes a **keepout** (no tracks, no vias) over its pad box
+grown by the 0.2 mm clearance, clipped to the strip; the foreign footprint
+itself is not placed, so no foreign copper lies on the cut. The harness
+computes and prints this list; the one above is the planning probe's.
+KiCad's DSN export writes rule areas as `(keepout ...)` per copper layer
+(probed 2026-09-29).
 
 ### 2.2 Parts
 
@@ -53,10 +67,22 @@ is typed by hand (master plan, working rule 1).
 - **Front, through-hole, at their panel coordinates:** every hole in the
   strip — 22 pots, 6 jacks (MOD1_B, MOD2_B, GATE_B, PITCH_B, OUT_L, OUT_R),
   7 LEDs, the MODBTN key (list measured 2026-09-29 from the hole list).
+  The hole sits on the footprint's F.Fab circle centre (courtyard centre
+  where it has none); both are read from the footprint, never typed.
+  **Orientation (assumption, P4's call):** pots with their pins pointing
+  **north**; jacks, LEDs and the key at 0°. Probed while planning: pins
+  south puts five of the strip's LEDs onto pot pins (26 shorts before any
+  routing); pins west (0°) pushes RES_B's pads across the cut and its
+  13.84 mm courtyard over its 13 mm-pitch neighbours; pins east (180°)
+  leaves one decoupler no place within 2 mm of its mux. Pins north puts the
+  top row's pins at y ≈ 7 mm — close to the assumed edge and likely in the
+  rail zone, which goes to P4 as a finding.
 - **Back, SMD, placed by a small search:** U_MUX3/4/5 with one 100 nF each,
   and the 7 LED series resistors. Each mux starts at the centroid of its pot
   group, each resistor at its LED, and walks outward until its courtyard
-  clears every through-hole pad and courtyard. Each 100 nF sits within
+  clears every through-hole pad (grown by the clearance), every keepout
+  and every other SMD courtyard. Front-side bodies do not count: the SMD
+  parts are on the back. Each 100 nF sits within
   2.0 mm of its mux's VCC pad (the coupon's decoupling rule). The search exists for the
   spike; for P4 it is a proposal, not a decision.
 
@@ -163,10 +189,18 @@ Built on `build_pcb.py`'s steps, shared rather than copied (§5):
 2. Locked nets unchanged: geometry compared before and after routing.
 3. Ratsnest 0 — pcbnew and kicad-cli agree.
 4. Zero `shorting_items`, `clearance`, `hole_clearance`, `hole_to_hole`,
-   `tracks_crossing`.
-5. Analog rules, from the coupon's `check_layout.py`: OUT_L/OUT_R tracks at
-   least 10.0 mm from every LED-net track; every 100 nF at most 2.0 mm from
-   its mux's VCC pad. The SENSE_1 COM length is **printed, not gated**: the
+   `tracks_crossing` — and `track_dangling` (amended while planning: a
+   track drawn onto a foreign pad is renamed to that pad's net on save, so
+   a short reaches the DRC as a dangling track; probed 2026-09-29).
+5. Analog rules, from the coupon's `check_layout.py`: every 100 nF at most
+   2.0 mm from its mux's VCC pad (gated — placement controls it). The
+   distance from OUT_L/OUT_R to the nearest LED-net track is **measured and
+   compared, not gated** (amended while planning): neither router knows the
+   coupon's 10.0 mm rule, which the coupon met by hand-routing, so a gate
+   would be red for both methods and decide nothing. How each method could
+   be *given* the rule — for ours a per-net-pair clearance, for Freerouting
+   a Specctra `class_class` clearance if it honours one (probed in the
+   plan) — goes into the report as a P4 input. The SENSE_1 COM length is **printed, not gated**: the
    coupon's 15.0 mm limit ran from mux to module, and here COM runs to a
    port whose distance depends on where P4 puts the module. Being locked,
    it cannot differ between the methods anyway; step 2 is its gate.
