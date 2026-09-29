@@ -23,8 +23,13 @@ OPEN_ITEMS = (
     "names C1 CV_OUT_2 and C10 CV_OUT_1. The wiring (C1 = PITCH_A, C10 = PITCH_B) "
     "follows P2 by pin; P6's firmware table must follow the pins, not the names.",
     "AMS1117-3.3 output: 22 µF X5R MLCC (C45783). Stability with a low-ESR output "
-    "capacitor is a bring-up check (P7), with the regulator's temperature at full LED load.",
-    "SD card on SM_3V3 (A10): pot-scan noise while the card streams is a bring-up check.",
+    "capacitor is a bring-up check (P7), with the regulator's temperature at full LED load. "
+    "C_LDO_T is fitted DNP (6032 low-ESR tantalum, ESR at most 0.5 Ohm per the AMS1117 "
+    "datasheet); populate it if the regulator oscillates with the MLCC alone.",
+    "SD card on SM_3V3 (A10): pot-scan noise while the card streams is a bring-up check. "
+    "C_SD1 (100 nF) decouples the socket; C_SD2 (10 µF) is DNP, to fit if the scan shows "
+    "card noise -- the module's TPS6213x allows 10-200 µF output capacitance with its "
+    "2.2 µH inductor.",
     "The key symbol (Switch:SW_Push_DPDT) draws pin 1 as the rest contact; Thonk's "
     "button closes 1-2 when pushed. The netlist is right at the pads (pin 2 common, "
     "pin 1 to the key net); read the printed keys as normally open.",

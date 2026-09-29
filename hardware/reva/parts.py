@@ -44,6 +44,13 @@ CATALOGUE = {
     "c10u": PartType("Device:C", "10u 25V", FP_C0805, "C15850", "", "Basic", "X5R"),
     "c22u": PartType("Device:C", "22u 25V", FP_C0805, "C45783", "", "Basic",
                      "X5R; AMS1117 output"),
+    # C1967941 checked on jlcpcb.com 2026-09-29: Extended, 0 in stock -- irrelevant
+    # while it is DNP. Low-ESR because the AMS1117 datasheet caps the output
+    # capacitor's ESR at 0.5 Ohm. Pin 1 is +, pin 2 is - (probed).
+    "tant22u": PartType("Device:C_Polarized", "22u 16V tant",
+                        "Capacitor_Tantalum_SMD:CP_EIA-6032-28_Kemet-C", "C1967941", "",
+                        "Extended", "AVX TPSC226K016R0300 low-ESR tantalum, 300 mOhm; "
+                        "DNP option for AMS1117 stability"),
     "pot": PartType("Device:R_Potentiometer", "10k",
                     "Potentiometer_THT:Potentiometer_Alpha_RD901F-40-00D_Single_Vertical",
                     "", THONK, "", "Alpha RD901F-40 9 mm, T18 shaft, B10K"),

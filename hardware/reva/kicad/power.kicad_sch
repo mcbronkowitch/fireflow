@@ -558,6 +558,185 @@
 			)
 			(embedded_fonts no)
 		)
+		(symbol "Device:C_Polarized"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 0.254)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "C"
+				(at 0.635 2.54 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Value" "C_Polarized"
+				(at 0.635 -2.54 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Footprint" ""
+				(at 0.9652 -3.81 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Polarized capacitor"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "cap capacitor"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "CP_*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "C_Polarized_0_1"
+				(rectangle
+					(start -2.286 0.508)
+					(end 2.286 1.016)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -1.778 2.286)
+						(xy -0.762 2.286)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -1.27 2.794)
+						(xy -1.27 1.778)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(rectangle
+					(start 2.286 -0.508)
+					(end -2.286 -1.016)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type outline)
+					)
+				)
+			)
+			(symbol "C_Polarized_1_1"
+				(pin passive line
+					(at 0 3.81 270)
+					(length 2.794)
+					(name ""
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 -3.81 90)
+					(length 2.794)
+					(name ""
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
 		(symbol "Diode:SS14"
 			(pin_numbers
 				(hide yes)
@@ -2449,61 +2628,93 @@
 				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/565f096c-3c93-5bb3-ae29-71358df00935" (reference "#PWR0019") (unit 1))))
 	)
 	(symbol
-		(lib_id "power:PWR_FLAG")
-		(at 312.42 25.4 0)
+		(lib_id "Device:C_Polarized")
+		(at 312.42 39.37 0)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom no)
-		(on_board no)
-		(dnp no)
-		(uuid "00c670a6-4110-5f7c-9c32-48ae02f2fd36")
-		(property "Reference" "#FLG0001"
-			(at 312.42 20.32 0)
-			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
-		(property "Value" "PWR_FLAG"
-			(at 312.42 22.86 0)
-			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
-		(property "Footprint" ""
-			(at 312.42 25.4 0)
+		(in_bom yes)
+		(on_board yes)
+		(dnp yes)
+		(uuid "ef3c0cc9-f792-5153-b0c4-0c7b04573dd1")
+		(property "Reference" "C_LDO_T"
+			(at 312.42 19.05 0)
+			(effects (font (size 1.27 1.27)) (justify left)))
+		(property "Value" "22u 16V tant"
+			(at 312.42 21.59 0)
+			(effects (font (size 1.27 1.27)) (justify left)))
+		(property "Footprint" "Capacitor_Tantalum_SMD:CP_EIA-6032-28_Kemet-C"
+			(at 312.42 39.37 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Datasheet" ""
-			(at 312.42 25.4 0)
+			(at 312.42 39.37 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
-		(property "Description" ""
-			(at 312.42 25.4 0)
+		(property "Description" "DNP bring-up option: fit if the regulator oscillates with the MLCC alone"
+			(at 312.42 39.37 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
-		(pin "1" (uuid "5d3c43b9-7766-5cf6-a129-9660c74d3491"))
+		(property "LCSC" "C1967941"
+			(at 312.42 39.37 0)
+			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
+		(pin "1" (uuid "fe77605f-ae11-53ad-9118-5feebd51eedd"))
+		(pin "2" (uuid "0562ba6c-75bc-5fd2-bf9f-c928b20ebdd1"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/565f096c-3c93-5bb3-ae29-71358df00935" (reference "#FLG0001") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/565f096c-3c93-5bb3-ae29-71358df00935" (reference "C_LDO_T") (unit 1))))
 	)
-	(wire (pts (xy 312.42 25.4) (xy 312.42 29.21))
-		(stroke (width 0) (type default)) (uuid "fe3134cb-b87c-5f08-94f9-99601f2f93cd"))
+	(wire (pts (xy 312.42 43.18) (xy 312.42 46.99))
+		(stroke (width 0) (type default)) (uuid "a6d6a5de-ebef-5d0f-8f49-9da417197792"))
 	(symbol
-		(lib_id "power:+12V")
-		(at 312.42 29.21 180)
+		(lib_id "power:GND")
+		(at 312.42 46.99 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom no)
 		(on_board no)
 		(dnp no)
-		(uuid "1cafb89d-7046-56c3-a93f-b9522b0d071f")
+		(uuid "bd4da13a-e186-5bd3-84e6-f0831e4d0084")
 		(property "Reference" "#PWR0020"
-			(at 312.42 29.21 0)
+			(at 312.42 46.99 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
-		(property "Value" "+12V"
-			(at 312.42 34.29 0)
+		(property "Value" "GND"
+			(at 312.42 52.07 0)
 			(effects (font (size 1.27 1.27))))
 		(property "Footprint" ""
-			(at 312.42 29.21 0)
+			(at 312.42 46.99 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Datasheet" ""
-			(at 312.42 29.21 0)
+			(at 312.42 46.99 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
-		(pin "1" (uuid "17edef60-6ac2-55a9-8dd7-3cff7d7add31"))
+		(pin "1" (uuid "5a17b6f3-5f3a-511c-bef1-70a49c67081b"))
 		(instances
 			(project "reva"
 				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/565f096c-3c93-5bb3-ae29-71358df00935" (reference "#PWR0020") (unit 1))))
+	)
+	(wire (pts (xy 312.42 35.56) (xy 312.42 31.75))
+		(stroke (width 0) (type default)) (uuid "2a9d16ce-c043-57a7-a881-aba7998e25d4"))
+	(symbol
+		(lib_id "power:+3V3")
+		(at 312.42 31.75 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board no)
+		(dnp no)
+		(uuid "1b3b3671-b5b9-56c4-9f47-396e2a25989a")
+		(property "Reference" "#PWR0021"
+			(at 312.42 31.75 0)
+			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
+		(property "Value" "3V3D"
+			(at 312.42 26.67 0)
+			(effects (font (size 1.27 1.27))))
+		(property "Footprint" ""
+			(at 312.42 31.75 0)
+			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
+		(property "Datasheet" ""
+			(at 312.42 31.75 0)
+			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
+		(pin "1" (uuid "db57362a-67a3-5ac8-830e-109cb4c43bda"))
+		(instances
+			(project "reva"
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/565f096c-3c93-5bb3-ae29-71358df00935" (reference "#PWR0021") (unit 1))))
 	)
 	(symbol
 		(lib_id "power:PWR_FLAG")
@@ -2513,8 +2724,8 @@
 		(in_bom no)
 		(on_board no)
 		(dnp no)
-		(uuid "90214fe2-6165-51ed-a7bf-92d95734ff26")
-		(property "Reference" "#FLG0002"
+		(uuid "00c670a6-4110-5f7c-9c32-48ae02f2fd36")
+		(property "Reference" "#FLG0001"
 			(at 328.93 20.32 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "PWR_FLAG"
@@ -2529,26 +2740,26 @@
 		(property "Description" ""
 			(at 328.93 25.4 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
-		(pin "1" (uuid "5344468d-92da-5377-8881-8e50328937a0"))
+		(pin "1" (uuid "5d3c43b9-7766-5cf6-a129-9660c74d3491"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/565f096c-3c93-5bb3-ae29-71358df00935" (reference "#FLG0002") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/565f096c-3c93-5bb3-ae29-71358df00935" (reference "#FLG0001") (unit 1))))
 	)
 	(wire (pts (xy 328.93 25.4) (xy 328.93 29.21))
-		(stroke (width 0) (type default)) (uuid "c8f10012-f213-5ee9-af7e-e658e9403c15"))
+		(stroke (width 0) (type default)) (uuid "fe3134cb-b87c-5f08-94f9-99601f2f93cd"))
 	(symbol
-		(lib_id "power:-12V")
+		(lib_id "power:+12V")
 		(at 328.93 29.21 180)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom no)
 		(on_board no)
 		(dnp no)
-		(uuid "5e5c8357-af09-5fb3-84e9-5d9476f29ed0")
-		(property "Reference" "#PWR0021"
+		(uuid "1cafb89d-7046-56c3-a93f-b9522b0d071f")
+		(property "Reference" "#PWR0022"
 			(at 328.93 29.21 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
-		(property "Value" "-12V"
+		(property "Value" "+12V"
 			(at 328.93 34.29 0)
 			(effects (font (size 1.27 1.27))))
 		(property "Footprint" ""
@@ -2557,10 +2768,67 @@
 		(property "Datasheet" ""
 			(at 328.93 29.21 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
+		(pin "1" (uuid "17edef60-6ac2-55a9-8dd7-3cff7d7add31"))
+		(instances
+			(project "reva"
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/565f096c-3c93-5bb3-ae29-71358df00935" (reference "#PWR0022") (unit 1))))
+	)
+	(symbol
+		(lib_id "power:PWR_FLAG")
+		(at 344.17 25.4 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board no)
+		(dnp no)
+		(uuid "90214fe2-6165-51ed-a7bf-92d95734ff26")
+		(property "Reference" "#FLG0002"
+			(at 344.17 20.32 0)
+			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
+		(property "Value" "PWR_FLAG"
+			(at 344.17 22.86 0)
+			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
+		(property "Footprint" ""
+			(at 344.17 25.4 0)
+			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
+		(property "Datasheet" ""
+			(at 344.17 25.4 0)
+			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
+		(property "Description" ""
+			(at 344.17 25.4 0)
+			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
+		(pin "1" (uuid "5344468d-92da-5377-8881-8e50328937a0"))
+		(instances
+			(project "reva"
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/565f096c-3c93-5bb3-ae29-71358df00935" (reference "#FLG0002") (unit 1))))
+	)
+	(wire (pts (xy 344.17 25.4) (xy 344.17 29.21))
+		(stroke (width 0) (type default)) (uuid "c8f10012-f213-5ee9-af7e-e658e9403c15"))
+	(symbol
+		(lib_id "power:-12V")
+		(at 344.17 29.21 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board no)
+		(dnp no)
+		(uuid "5e5c8357-af09-5fb3-84e9-5d9476f29ed0")
+		(property "Reference" "#PWR0023"
+			(at 344.17 29.21 0)
+			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
+		(property "Value" "-12V"
+			(at 344.17 34.29 0)
+			(effects (font (size 1.27 1.27))))
+		(property "Footprint" ""
+			(at 344.17 29.21 0)
+			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
+		(property "Datasheet" ""
+			(at 344.17 29.21 0)
+			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(pin "1" (uuid "e831e709-6b12-5ae1-95b2-f424523d3086"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/565f096c-3c93-5bb3-ae29-71358df00935" (reference "#PWR0021") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/565f096c-3c93-5bb3-ae29-71358df00935" (reference "#PWR0023") (unit 1))))
 	)
 	(embedded_fonts no)
 )

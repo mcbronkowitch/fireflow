@@ -110,6 +110,11 @@ def power(refs):
     for kind, rail in (("c10u", P12), ("c100n", P12), ("c10u", N12), ("c100n", N12),
                        ("c10u", P12), ("c22u", D3V3)):
         parts.append(make(kind, refs("C")).by_number(1, rail).by_number(2, GND))
+    # DNP tantalum option at the AMS1117 output (fixed ref: nothing renumbers)
+    parts.append(make("tant22u", "C_LDO_T", dnp=True,
+                      note="DNP bring-up option: fit if the regulator oscillates with "
+                           "the MLCC alone")
+                 .by_number(1, D3V3).by_number(2, GND))
     parts += [flag("#FLG0001", P12), flag("#FLG0002", N12)]
     return Sheet("power", "Eurorack power, reverse protection, 3V3D", parts)
 
@@ -206,7 +211,12 @@ def sd(refs):
                         ("5", "SD_CK"), ("6", GND), ("7", "SD_D0"), ("8", "SD_D1"),
                         ("SH", GND)):
         j.by_number(number, net)
-    return Sheet("sd", "SD card, straight to the module (patch.Init())", [j])
+    c1 = make("c100n", "C_SD1", note="SD socket VDD decoupling, at the socket")
+    c2 = make("c10u", "C_SD2", dnp=True,
+              note="DNP bring-up option: fit if the pot scan shows SD card noise")
+    for c in (c1, c2):
+        c.by_number(1, SM3V3).by_number(2, GND)
+    return Sheet("sd", "SD card, straight to the module (patch.Init())", [j, c1, c2])
 
 
 CAL_NETS = {"CAL_GND": GND, "CAL_3V3": SM3V3}     # panel-scan spec §8

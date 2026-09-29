@@ -1151,7 +1151,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "159e54ec-fdcc-5838-a296-4ef90f232076")
-		(property "Reference" "#PWR0034"
+		(property "Reference" "#PWR0036"
 			(at 40.64 67.31 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -1166,7 +1166,7 @@
 		(pin "1" (uuid "0ce4c144-f50a-525b-9cea-aa0d8f41d67a"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0034") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0036") (unit 1))))
 	)
 	(wire (pts (xy 40.64 35.56) (xy 40.64 31.75))
 		(stroke (width 0) (type default)) (uuid "34e65ff9-363a-5ea7-a141-a4582c434f59"))
@@ -1179,7 +1179,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "cba392d1-07db-5b6a-966f-cd854c9739db")
-		(property "Reference" "#PWR0035"
+		(property "Reference" "#PWR0037"
 			(at 40.64 31.75 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -1194,7 +1194,7 @@
 		(pin "1" (uuid "a56d53a5-1dec-50e5-8d94-3818393ce76b"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0035") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0037") (unit 1))))
 	)
 	(wire (pts (xy 50.8 58.42) (xy 54.61 58.42))
 		(stroke (width 0) (type default)) (uuid "d1af9379-31c6-5b5b-bffd-7480108fc71f"))
@@ -1211,7 +1211,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "7dc61607-9c84-5bba-8504-10978d492c29")
-		(property "Reference" "#PWR0036"
+		(property "Reference" "#PWR0038"
 			(at 54.61 58.42 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -1226,7 +1226,7 @@
 		(pin "1" (uuid "d77595ee-9b59-5eed-ba10-921bd8b636ef"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0036") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0038") (unit 1))))
 	)
 	(wire (pts (xy 50.8 53.34) (xy 54.61 53.34))
 		(stroke (width 0) (type default)) (uuid "a5dc34bf-f69a-5dd2-8ce0-8b0b16c98b10"))
@@ -1308,7 +1308,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "1fae3678-6cc8-511a-b129-4e2fbee710c7")
-		(property "Reference" "#PWR0037"
+		(property "Reference" "#PWR0039"
 			(at 78.74 46.99 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -1323,7 +1323,7 @@
 		(pin "1" (uuid "92150c84-f218-59e5-bf42-d2bfb21469fc"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0037") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0039") (unit 1))))
 	)
 	(wire (pts (xy 78.74 35.56) (xy 78.74 31.75))
 		(stroke (width 0) (type default)) (uuid "82ec7270-ac1e-5d88-bccc-7f53223446ba"))
@@ -1336,7 +1336,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "3e445422-78fb-5c46-926d-aa454099a775")
-		(property "Reference" "#PWR0038"
+		(property "Reference" "#PWR0040"
 			(at 78.74 31.75 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -1351,7 +1351,7 @@
 		(pin "1" (uuid "d4bb22c6-7aa7-51f8-bc3a-f6368954f772"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0038") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0040") (unit 1))))
 	)
 	(symbol
 		(lib_id "74xx:74HC4051")
@@ -1470,7 +1470,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "fa7be0e4-ceeb-5bf9-8494-caa230fb3ee6")
-		(property "Reference" "#PWR0039"
+		(property "Reference" "#PWR0041"
 			(at 114.3 67.31 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -1485,7 +1485,7 @@
 		(pin "1" (uuid "82a2487c-e1c0-5ca0-b8f7-690fc7771292"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0039") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0041") (unit 1))))
 	)
 	(wire (pts (xy 114.3 35.56) (xy 114.3 31.75))
 		(stroke (width 0) (type default)) (uuid "7ff46e94-3dff-5615-8e34-bbddc2655409"))
@@ -1498,7 +1498,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "691f6ef4-451d-5f69-b89f-51eaacc6e079")
-		(property "Reference" "#PWR0040"
+		(property "Reference" "#PWR0042"
 			(at 114.3 31.75 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -1513,7 +1513,7 @@
 		(pin "1" (uuid "4135275e-f9b6-5819-a36b-685d8fb628a8"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0040") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0042") (unit 1))))
 	)
 	(wire (pts (xy 124.46 58.42) (xy 128.27 58.42))
 		(stroke (width 0) (type default)) (uuid "787e6312-594b-51b5-ae20-b0334fe34589"))
@@ -1526,7 +1526,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "84729a5c-a93d-589b-bd17-f8bbf2597fa4")
-		(property "Reference" "#PWR0041"
+		(property "Reference" "#PWR0043"
 			(at 128.27 58.42 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -1541,7 +1541,7 @@
 		(pin "1" (uuid "62555cad-6c26-58e8-9310-51695266cd6f"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0041") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0043") (unit 1))))
 	)
 	(wire (pts (xy 124.46 55.88) (xy 128.27 55.88))
 		(stroke (width 0) (type default)) (uuid "7deda4c0-b189-5656-a42d-4229a7d32dd4"))
@@ -1554,7 +1554,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "d569b0b9-c7f6-5521-a084-b455b9f661d7")
-		(property "Reference" "#PWR0042"
+		(property "Reference" "#PWR0044"
 			(at 128.27 55.88 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -1569,7 +1569,7 @@
 		(pin "1" (uuid "c6032b5e-873c-55df-82b1-34683eac6683"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0042") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0044") (unit 1))))
 	)
 	(wire (pts (xy 124.46 53.34) (xy 128.27 53.34))
 		(stroke (width 0) (type default)) (uuid "d9320204-0f1a-5f81-83a7-3b3245e10592"))
@@ -1651,7 +1651,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "62235232-cfce-5d43-bd59-f2d17446f5bb")
-		(property "Reference" "#PWR0043"
+		(property "Reference" "#PWR0045"
 			(at 153.67 46.99 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -1666,7 +1666,7 @@
 		(pin "1" (uuid "309097ce-9b2b-52e0-9fed-ee2f9df3eb81"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0043") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0045") (unit 1))))
 	)
 	(wire (pts (xy 153.67 35.56) (xy 153.67 31.75))
 		(stroke (width 0) (type default)) (uuid "e78f8c11-a325-5520-9f6d-4de7abd4c6e0"))
@@ -1679,7 +1679,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "e27efb20-be15-5c93-a137-2752daeecfe3")
-		(property "Reference" "#PWR0044"
+		(property "Reference" "#PWR0046"
 			(at 153.67 31.75 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -1694,7 +1694,7 @@
 		(pin "1" (uuid "d979c0a2-d3ac-58af-90cc-b8962d540fcd"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0044") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0046") (unit 1))))
 	)
 	(symbol
 		(lib_id "74xx:74HC4051")
@@ -1813,7 +1813,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "58c075c1-90a6-5f8e-8513-8cbe4532a542")
-		(property "Reference" "#PWR0045"
+		(property "Reference" "#PWR0047"
 			(at 190.5 67.31 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -1828,7 +1828,7 @@
 		(pin "1" (uuid "44419646-5293-5bcc-9146-fb526fa9e056"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0045") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0047") (unit 1))))
 	)
 	(wire (pts (xy 190.5 35.56) (xy 190.5 31.75))
 		(stroke (width 0) (type default)) (uuid "d8a7afaf-0421-5c46-bd0f-2f2c81167187"))
@@ -1841,7 +1841,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "910d2d2f-118b-5e1d-9211-5dade8a5039b")
-		(property "Reference" "#PWR0046"
+		(property "Reference" "#PWR0048"
 			(at 190.5 31.75 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -1856,7 +1856,7 @@
 		(pin "1" (uuid "1da4c09c-2f2d-597b-bbfb-074147e76a91"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0046") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0048") (unit 1))))
 	)
 	(wire (pts (xy 200.66 58.42) (xy 204.47 58.42))
 		(stroke (width 0) (type default)) (uuid "4aac7c1b-eccd-50bf-b28c-df8a45ff168e"))
@@ -1873,7 +1873,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "adfaef08-b5fa-5f77-bb57-7504ec43aea4")
-		(property "Reference" "#PWR0047"
+		(property "Reference" "#PWR0049"
 			(at 204.47 58.42 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -1888,7 +1888,7 @@
 		(pin "1" (uuid "c79d9575-e57b-534c-8f98-ed3d29f81b23"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0047") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0049") (unit 1))))
 	)
 	(wire (pts (xy 200.66 53.34) (xy 204.47 53.34))
 		(stroke (width 0) (type default)) (uuid "e72e9bc0-5486-55ce-99a9-b38ece6dd4f0"))
@@ -1970,7 +1970,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "58e3874b-d141-5a99-87d0-509492cd644e")
-		(property "Reference" "#PWR0048"
+		(property "Reference" "#PWR0050"
 			(at 227.33 46.99 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -1985,7 +1985,7 @@
 		(pin "1" (uuid "fd7314eb-7851-5c0c-9818-b171cad7bf6c"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0048") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0050") (unit 1))))
 	)
 	(wire (pts (xy 227.33 35.56) (xy 227.33 31.75))
 		(stroke (width 0) (type default)) (uuid "21cef149-0a80-5208-a60b-a9ce9fbd2843"))
@@ -1998,7 +1998,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "b34f7737-0b2c-573a-8156-541e2a3163dc")
-		(property "Reference" "#PWR0049"
+		(property "Reference" "#PWR0051"
 			(at 227.33 31.75 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -2013,7 +2013,7 @@
 		(pin "1" (uuid "19bdb815-12b3-586c-a5d8-a4024a9b8d8e"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0049") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0051") (unit 1))))
 	)
 	(symbol
 		(lib_id "Device:R_Potentiometer")
@@ -2063,7 +2063,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "64d6f960-2cb9-5188-ae68-7fe79b0f21e4")
-		(property "Reference" "#PWR0050"
+		(property "Reference" "#PWR0052"
 			(at 245.11 46.99 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -2078,7 +2078,7 @@
 		(pin "1" (uuid "c44ebd00-4d21-5001-a7c2-4c527626dd78"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0050") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0052") (unit 1))))
 	)
 	(wire (pts (xy 245.11 35.56) (xy 245.11 31.75))
 		(stroke (width 0) (type default)) (uuid "c63de3df-134a-59ed-bb08-1653401e77f4"))
@@ -2091,7 +2091,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "1727d967-14ac-5250-b84d-c427122fec16")
-		(property "Reference" "#PWR0051"
+		(property "Reference" "#PWR0053"
 			(at 245.11 31.75 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -2106,7 +2106,7 @@
 		(pin "1" (uuid "e9603736-88ad-5d8d-a0b9-af43c66ea880"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0051") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0053") (unit 1))))
 	)
 	(wire (pts (xy 248.92 39.37) (xy 252.73 39.37))
 		(stroke (width 0) (type default)) (uuid "35bc2612-c6d0-5599-bc22-f947b1a5e3ab"))
@@ -2162,7 +2162,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "db6c8093-8fa7-5752-bb84-0f3f5ac7a187")
-		(property "Reference" "#PWR0052"
+		(property "Reference" "#PWR0054"
 			(at 276.86 46.99 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -2177,7 +2177,7 @@
 		(pin "1" (uuid "418951eb-32ba-5206-8efd-8c41cdd48556"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0052") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0054") (unit 1))))
 	)
 	(wire (pts (xy 276.86 35.56) (xy 276.86 31.75))
 		(stroke (width 0) (type default)) (uuid "7f00815f-9375-5ac8-b1f5-e76fb3073bf0"))
@@ -2190,7 +2190,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "e44024e9-223e-5c22-8d88-d6efef9b0bf7")
-		(property "Reference" "#PWR0053"
+		(property "Reference" "#PWR0055"
 			(at 276.86 31.75 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -2205,7 +2205,7 @@
 		(pin "1" (uuid "23e1a3d2-c228-52bc-accd-b465cab4173c"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0053") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0055") (unit 1))))
 	)
 	(wire (pts (xy 280.67 39.37) (xy 284.48 39.37))
 		(stroke (width 0) (type default)) (uuid "15f67262-c6fa-5701-86cd-1acb7bde67fe"))
@@ -2261,7 +2261,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "5e1c2423-d361-5d2c-ac13-5039fdeada34")
-		(property "Reference" "#PWR0054"
+		(property "Reference" "#PWR0056"
 			(at 307.34 46.99 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -2276,7 +2276,7 @@
 		(pin "1" (uuid "7366c577-834e-5357-b8fe-87f811e0c55d"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0054") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0056") (unit 1))))
 	)
 	(wire (pts (xy 307.34 35.56) (xy 307.34 31.75))
 		(stroke (width 0) (type default)) (uuid "2a040d78-53da-5c54-8197-46f1c2e7381e"))
@@ -2289,7 +2289,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "90eae729-dcda-595f-90c9-5d00e4b7b975")
-		(property "Reference" "#PWR0055"
+		(property "Reference" "#PWR0057"
 			(at 307.34 31.75 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -2304,7 +2304,7 @@
 		(pin "1" (uuid "ee2729ef-4c5b-5535-acf2-6afdc6f5f57f"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0055") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0057") (unit 1))))
 	)
 	(wire (pts (xy 311.15 39.37) (xy 314.96 39.37))
 		(stroke (width 0) (type default)) (uuid "e65e363f-a0a1-5412-bf2f-837677182881"))
@@ -2360,7 +2360,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "240c96e9-5d14-54fb-bffc-5a31218feae2")
-		(property "Reference" "#PWR0056"
+		(property "Reference" "#PWR0058"
 			(at 339.09 46.99 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -2375,7 +2375,7 @@
 		(pin "1" (uuid "6d499503-d4d0-5452-98e7-c065a4242c28"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0056") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0058") (unit 1))))
 	)
 	(wire (pts (xy 339.09 35.56) (xy 339.09 31.75))
 		(stroke (width 0) (type default)) (uuid "677a898b-92d1-5916-9750-61c00c9fb4ab"))
@@ -2388,7 +2388,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "913c975d-27b1-5c92-95f1-3ae291db9942")
-		(property "Reference" "#PWR0057"
+		(property "Reference" "#PWR0059"
 			(at 339.09 31.75 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -2403,7 +2403,7 @@
 		(pin "1" (uuid "6eb77a16-305f-5af9-af06-519a12547335"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0057") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0059") (unit 1))))
 	)
 	(wire (pts (xy 342.9 39.37) (xy 346.71 39.37))
 		(stroke (width 0) (type default)) (uuid "ec72de5a-ebf8-5ca6-8d1e-54446b24a05a"))
@@ -2459,7 +2459,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "5cf0b59e-a703-5204-8c16-d7b639ede325")
-		(property "Reference" "#PWR0058"
+		(property "Reference" "#PWR0060"
 			(at 369.57 46.99 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -2474,7 +2474,7 @@
 		(pin "1" (uuid "177f2331-25ac-52c7-b503-bcb49ac252bb"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0058") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0060") (unit 1))))
 	)
 	(wire (pts (xy 369.57 35.56) (xy 369.57 31.75))
 		(stroke (width 0) (type default)) (uuid "8effb0ce-caba-5807-975c-c192edaa4f3d"))
@@ -2487,7 +2487,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "9c716320-55b0-5326-8b42-f66f345cc94e")
-		(property "Reference" "#PWR0059"
+		(property "Reference" "#PWR0061"
 			(at 369.57 31.75 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -2502,7 +2502,7 @@
 		(pin "1" (uuid "66d2a575-50f5-5b3c-8ea8-a20004249e6d"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0059") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0061") (unit 1))))
 	)
 	(wire (pts (xy 373.38 39.37) (xy 377.19 39.37))
 		(stroke (width 0) (type default)) (uuid "fa543294-2cc4-50b1-8cc8-eb2dceeee170"))
@@ -2558,7 +2558,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "debab6ad-f3f3-5a37-a1e2-a568df9bc5f3")
-		(property "Reference" "#PWR0060"
+		(property "Reference" "#PWR0062"
 			(at 22.86 111.76 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -2573,7 +2573,7 @@
 		(pin "1" (uuid "ddbc887a-dc01-559b-a93f-98ddec1d1b26"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0060") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0062") (unit 1))))
 	)
 	(wire (pts (xy 22.86 100.33) (xy 22.86 96.52))
 		(stroke (width 0) (type default)) (uuid "d2846854-3bfb-5fac-b649-40cbb0aa6b4c"))
@@ -2586,7 +2586,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "a3ec9ad7-08c2-529a-9737-4af9f373b66d")
-		(property "Reference" "#PWR0061"
+		(property "Reference" "#PWR0063"
 			(at 22.86 96.52 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -2601,7 +2601,7 @@
 		(pin "1" (uuid "86ecfad9-3504-544b-8840-dedc6109c673"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0061") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0063") (unit 1))))
 	)
 	(wire (pts (xy 26.67 104.14) (xy 30.48 104.14))
 		(stroke (width 0) (type default)) (uuid "bdafd10e-fd8c-5ee7-a365-eb8f9f72475b"))
@@ -2657,7 +2657,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "6a8f8b1d-f3c3-5cc4-912b-189382185330")
-		(property "Reference" "#PWR0062"
+		(property "Reference" "#PWR0064"
 			(at 54.61 111.76 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -2672,7 +2672,7 @@
 		(pin "1" (uuid "959e94c8-11f5-5146-bd2a-ca186f08a4a8"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0062") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0064") (unit 1))))
 	)
 	(wire (pts (xy 54.61 100.33) (xy 54.61 96.52))
 		(stroke (width 0) (type default)) (uuid "80ed797a-df55-5503-a4cd-9e93264b6ade"))
@@ -2685,7 +2685,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "236e7455-1994-515d-8200-c9b2b46e8aaf")
-		(property "Reference" "#PWR0063"
+		(property "Reference" "#PWR0065"
 			(at 54.61 96.52 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -2700,7 +2700,7 @@
 		(pin "1" (uuid "4f064f19-308a-52c1-8d28-04e31622ebd2"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0063") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0065") (unit 1))))
 	)
 	(wire (pts (xy 58.42 104.14) (xy 62.23 104.14))
 		(stroke (width 0) (type default)) (uuid "6936d745-8aeb-57b6-a135-95c173b3a776"))
@@ -2756,7 +2756,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "4ebd85cb-f1fb-5acb-98d7-f66d02d259b7")
-		(property "Reference" "#PWR0064"
+		(property "Reference" "#PWR0066"
 			(at 85.09 111.76 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -2771,7 +2771,7 @@
 		(pin "1" (uuid "6294ac88-9ef3-559e-8c94-a44ae0d3cf45"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0064") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0066") (unit 1))))
 	)
 	(wire (pts (xy 85.09 100.33) (xy 85.09 96.52))
 		(stroke (width 0) (type default)) (uuid "e24d9b6d-f41e-5bf1-bb2c-8c0b3202ba9f"))
@@ -2784,7 +2784,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "c7977a95-a52a-5847-9f29-25cbc0b570eb")
-		(property "Reference" "#PWR0065"
+		(property "Reference" "#PWR0067"
 			(at 85.09 96.52 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -2799,7 +2799,7 @@
 		(pin "1" (uuid "86027b0b-2ca0-598b-aa4c-b81929d7f311"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0065") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0067") (unit 1))))
 	)
 	(wire (pts (xy 88.9 104.14) (xy 92.71 104.14))
 		(stroke (width 0) (type default)) (uuid "6b45e8f0-292b-5dd0-8688-9528f1720931"))
@@ -2855,7 +2855,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "79fa0e6d-07b5-5a97-bf65-82a9f4db186e")
-		(property "Reference" "#PWR0066"
+		(property "Reference" "#PWR0068"
 			(at 116.84 111.76 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -2870,7 +2870,7 @@
 		(pin "1" (uuid "dedb0116-41fa-5bfc-89b4-ebc8252a21d5"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0066") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0068") (unit 1))))
 	)
 	(wire (pts (xy 116.84 100.33) (xy 116.84 96.52))
 		(stroke (width 0) (type default)) (uuid "25c574e4-885e-54f0-9629-cc5446f469a5"))
@@ -2883,7 +2883,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "ef4c4c15-8728-5deb-b0a0-2d71010a67b2")
-		(property "Reference" "#PWR0067"
+		(property "Reference" "#PWR0069"
 			(at 116.84 96.52 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -2898,7 +2898,7 @@
 		(pin "1" (uuid "8c89ba18-d98b-5edf-aa81-c81d4445c6d4"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0067") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0069") (unit 1))))
 	)
 	(wire (pts (xy 120.65 104.14) (xy 124.46 104.14))
 		(stroke (width 0) (type default)) (uuid "0969e417-48b3-5769-ab99-a37cf8e3011e"))
@@ -2954,7 +2954,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "5a79f29d-b13e-5e04-b9c3-c2fed579ce3b")
-		(property "Reference" "#PWR0068"
+		(property "Reference" "#PWR0070"
 			(at 147.32 111.76 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -2969,7 +2969,7 @@
 		(pin "1" (uuid "0266957f-62c5-5d98-8b3e-1deb633d590e"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0068") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0070") (unit 1))))
 	)
 	(wire (pts (xy 147.32 100.33) (xy 147.32 96.52))
 		(stroke (width 0) (type default)) (uuid "c09c4325-02b5-5b7e-becd-614fb5047921"))
@@ -2982,7 +2982,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "e4ee1756-828b-51e5-b1f5-e72e5f2225ae")
-		(property "Reference" "#PWR0069"
+		(property "Reference" "#PWR0071"
 			(at 147.32 96.52 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -2997,7 +2997,7 @@
 		(pin "1" (uuid "07448814-a0b2-5ac2-86af-33505c1f90c6"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0069") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0071") (unit 1))))
 	)
 	(wire (pts (xy 151.13 104.14) (xy 154.94 104.14))
 		(stroke (width 0) (type default)) (uuid "d6d98d9a-cedc-5151-9917-582e9694c1b4"))
@@ -3053,7 +3053,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "b18ebc04-e5e7-5c16-89ec-31884658ffb5")
-		(property "Reference" "#PWR0070"
+		(property "Reference" "#PWR0072"
 			(at 179.07 111.76 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -3068,7 +3068,7 @@
 		(pin "1" (uuid "68ebdf58-3599-58bb-a1f1-acb0bbd2ae2d"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0070") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0072") (unit 1))))
 	)
 	(wire (pts (xy 179.07 100.33) (xy 179.07 96.52))
 		(stroke (width 0) (type default)) (uuid "60aceb36-60db-587b-a893-3c8111743dac"))
@@ -3081,7 +3081,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "441781cc-34ce-5baa-8b82-e635315d4bb9")
-		(property "Reference" "#PWR0071"
+		(property "Reference" "#PWR0073"
 			(at 179.07 96.52 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -3096,7 +3096,7 @@
 		(pin "1" (uuid "36c18403-90a4-5194-a810-52e2f7f09547"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0071") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0073") (unit 1))))
 	)
 	(wire (pts (xy 182.88 104.14) (xy 186.69 104.14))
 		(stroke (width 0) (type default)) (uuid "6f3dbfc0-dfbe-566b-82bf-839c3e24c2bd"))
@@ -3152,7 +3152,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "784bde54-eac1-595b-9834-6c0ea8b6cadf")
-		(property "Reference" "#PWR0072"
+		(property "Reference" "#PWR0074"
 			(at 209.55 111.76 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -3167,7 +3167,7 @@
 		(pin "1" (uuid "3f715c61-7998-5b09-9ca1-8640eaec58c7"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0072") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0074") (unit 1))))
 	)
 	(wire (pts (xy 209.55 100.33) (xy 209.55 96.52))
 		(stroke (width 0) (type default)) (uuid "1ed6fbdb-18e3-5c33-b593-53795e856028"))
@@ -3180,7 +3180,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "af5c9d79-1d97-5515-8dbb-fba787f0e292")
-		(property "Reference" "#PWR0073"
+		(property "Reference" "#PWR0075"
 			(at 209.55 96.52 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -3195,7 +3195,7 @@
 		(pin "1" (uuid "c9d4afb3-07ac-5554-95c8-87cc0a2253fc"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0073") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0075") (unit 1))))
 	)
 	(wire (pts (xy 213.36 104.14) (xy 217.17 104.14))
 		(stroke (width 0) (type default)) (uuid "1f37cef9-52c4-5875-b874-1b973835f1e2"))
@@ -3251,7 +3251,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "daecf25c-5364-5c48-84be-f8d8c0752da7")
-		(property "Reference" "#PWR0074"
+		(property "Reference" "#PWR0076"
 			(at 241.3 111.76 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -3266,7 +3266,7 @@
 		(pin "1" (uuid "11902809-71da-588e-a44b-83ac938b3d77"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0074") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0076") (unit 1))))
 	)
 	(wire (pts (xy 241.3 100.33) (xy 241.3 96.52))
 		(stroke (width 0) (type default)) (uuid "34db78db-a299-5ba2-9891-4c1dd50d030a"))
@@ -3279,7 +3279,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "8c4b07ce-f8b5-5874-9bd0-79bdd7c7d59d")
-		(property "Reference" "#PWR0075"
+		(property "Reference" "#PWR0077"
 			(at 241.3 96.52 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -3294,7 +3294,7 @@
 		(pin "1" (uuid "676f42b1-375e-591b-bbe8-159db43a60b1"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0075") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0077") (unit 1))))
 	)
 	(wire (pts (xy 245.11 104.14) (xy 248.92 104.14))
 		(stroke (width 0) (type default)) (uuid "802d5106-584c-593b-a997-e1877d9ad6a8"))
@@ -3350,7 +3350,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "a466645e-dc6a-5d1b-9c49-9b5416d9465d")
-		(property "Reference" "#PWR0076"
+		(property "Reference" "#PWR0078"
 			(at 271.78 111.76 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -3365,7 +3365,7 @@
 		(pin "1" (uuid "c88f4eed-559f-5372-8ef1-42562824674c"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0076") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0078") (unit 1))))
 	)
 	(wire (pts (xy 271.78 100.33) (xy 271.78 96.52))
 		(stroke (width 0) (type default)) (uuid "101f0203-0e44-5fd0-8451-4857b06d004a"))
@@ -3378,7 +3378,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "7264c428-095c-587d-b3c6-1a6b8bc0874f")
-		(property "Reference" "#PWR0077"
+		(property "Reference" "#PWR0079"
 			(at 271.78 96.52 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -3393,7 +3393,7 @@
 		(pin "1" (uuid "35bf3bad-22a9-5612-bec5-1e320dd86fed"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0077") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0079") (unit 1))))
 	)
 	(wire (pts (xy 275.59 104.14) (xy 279.4 104.14))
 		(stroke (width 0) (type default)) (uuid "82a99f77-73c9-5ae0-97ba-c6f4397665ca"))
@@ -3449,7 +3449,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "7952ef65-9f01-5bed-ab70-bc42f9b822d3")
-		(property "Reference" "#PWR0078"
+		(property "Reference" "#PWR0080"
 			(at 303.53 111.76 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -3464,7 +3464,7 @@
 		(pin "1" (uuid "be3eafaf-f7c2-5fe8-abf2-f71a46e72fc5"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0078") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0080") (unit 1))))
 	)
 	(wire (pts (xy 303.53 100.33) (xy 303.53 96.52))
 		(stroke (width 0) (type default)) (uuid "71dd0c51-59f9-59d9-943c-1c95f9361955"))
@@ -3477,7 +3477,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "675d04cc-4471-5066-b691-0e4a409e389e")
-		(property "Reference" "#PWR0079"
+		(property "Reference" "#PWR0081"
 			(at 303.53 96.52 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -3492,7 +3492,7 @@
 		(pin "1" (uuid "8a893425-0561-51a5-8186-99c15439e651"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0079") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0081") (unit 1))))
 	)
 	(wire (pts (xy 307.34 104.14) (xy 311.15 104.14))
 		(stroke (width 0) (type default)) (uuid "47842070-28f6-5161-b46b-0ca194fe99f7"))
@@ -3548,7 +3548,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "f6ee4652-391b-51cc-becb-4839a8e67b0b")
-		(property "Reference" "#PWR0080"
+		(property "Reference" "#PWR0082"
 			(at 335.28 111.76 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -3563,7 +3563,7 @@
 		(pin "1" (uuid "330fe728-ef8d-5027-aa24-1981255afb0f"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0080") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0082") (unit 1))))
 	)
 	(wire (pts (xy 335.28 100.33) (xy 335.28 96.52))
 		(stroke (width 0) (type default)) (uuid "fc14b5de-50a4-5183-a81e-7d02cbaae3c4"))
@@ -3576,7 +3576,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "cdbcc0f2-4467-5e45-8bc4-c7cecbd66fd8")
-		(property "Reference" "#PWR0081"
+		(property "Reference" "#PWR0083"
 			(at 335.28 96.52 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -3591,7 +3591,7 @@
 		(pin "1" (uuid "713b475c-248f-5a4a-bf8b-976725f19422"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0081") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0083") (unit 1))))
 	)
 	(wire (pts (xy 339.09 104.14) (xy 342.9 104.14))
 		(stroke (width 0) (type default)) (uuid "ebccb398-7bb5-5efe-a757-b186b3ebeb1e"))
@@ -3647,7 +3647,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "d1d672c0-7e8e-589d-bc19-5262e7e18cef")
-		(property "Reference" "#PWR0082"
+		(property "Reference" "#PWR0084"
 			(at 365.76 111.76 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -3662,7 +3662,7 @@
 		(pin "1" (uuid "1d3abed7-d2f1-5327-a535-5001853f4cd2"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0082") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0084") (unit 1))))
 	)
 	(wire (pts (xy 365.76 100.33) (xy 365.76 96.52))
 		(stroke (width 0) (type default)) (uuid "5b1e94ae-1c8e-56f1-82f9-3af19335bc99"))
@@ -3675,7 +3675,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "9e39c784-8217-5835-8128-cab2ceb1e7a6")
-		(property "Reference" "#PWR0083"
+		(property "Reference" "#PWR0085"
 			(at 365.76 96.52 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -3690,7 +3690,7 @@
 		(pin "1" (uuid "eee8c714-5ecb-5054-973b-ba1fef69f00b"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0083") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0085") (unit 1))))
 	)
 	(wire (pts (xy 369.57 104.14) (xy 373.38 104.14))
 		(stroke (width 0) (type default)) (uuid "23326f27-e75f-57e4-8cfd-eaba336be052"))
@@ -3746,7 +3746,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "38009b61-169d-56e8-93c1-9fb80ff8b632")
-		(property "Reference" "#PWR0084"
+		(property "Reference" "#PWR0086"
 			(at 22.86 156.21 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "SM_3V3"
@@ -3761,7 +3761,7 @@
 		(pin "1" (uuid "90491221-a66c-51e9-aac7-61bd76f348c2"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0084") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0086") (unit 1))))
 	)
 	(wire (pts (xy 22.86 144.78) (xy 22.86 140.97))
 		(stroke (width 0) (type default)) (uuid "4b7c0e51-622a-5919-b646-d5541a53b582"))
@@ -3774,7 +3774,7 @@
 		(on_board no)
 		(dnp no)
 		(uuid "9023d1da-b6c1-58a7-bd7c-b47cb0383507")
-		(property "Reference" "#PWR0085"
+		(property "Reference" "#PWR0087"
 			(at 22.86 140.97 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(property "Value" "GND"
@@ -3789,7 +3789,7 @@
 		(pin "1" (uuid "955cdf44-30ee-569c-be5f-741d5a2ef5f9"))
 		(instances
 			(project "reva"
-				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0085") (unit 1))))
+				(path "/f95ef33a-cefb-5011-a30f-e0d40d3b300b/3f442aad-5e95-53d0-8fd8-dbe215daed82" (reference "#PWR0087") (unit 1))))
 	)
 	(wire (pts (xy 26.67 148.59) (xy 30.48 148.59))
 		(stroke (width 0) (type default)) (uuid "bd7872dc-f6f2-598e-aafa-5718ea416d2a"))
