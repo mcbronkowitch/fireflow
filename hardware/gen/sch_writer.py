@@ -12,8 +12,10 @@ hard to get right, while labels are exactly as connected and say the net name
 at every pin.
 
 Connectivity is NOT trusted to this file's geometry. check.py exports the
-netlist with kicad-cli and compares it against the intent; a wrong stub
-direction or a Y-flip shows up there as a missing node.
+netlist with kicad-cli and compares it against the intent; a Y-flip of the pin
+coordinates shows up there as a missing node. A wrong stub direction does not:
+the stub still joins the pin to its label, so the netlist stays green and only
+overlaps() (the drawing check) sees the clash.
 """
 import itertools
 import os
