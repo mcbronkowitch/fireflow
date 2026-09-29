@@ -37,7 +37,18 @@ def _power_sheet():
     j2.by_number(1, "A3V3").by_number(2, "3V3D")
     j3 = Part("J3", "Connector_Generic:Conn_01x02", "data in", FP_HDR2, source="fixture")
     j3.by_number(1, "DEMO_DATA").by_number(2, "DEMO_CLK")
-    parts += [j1, j2, j3]
+    j4 = Part("J4", "Connector_Generic:Conn_01x02", "sense out", FP_HDR2, source="fixture")
+    j4.by_number(1, "DEMO_SENSE").by_number(2, "GND")
+    j5 = Part("J5", "Connector_Generic:Conn_02x05_Odd_Even", "bus",
+              "Connector_IDC:IDC-Header_2x05_P2.54mm_Vertical", source="fixture", strict=True)
+    for n in (1, 2):
+        j5.by_number(n, "-12V")
+    for n in (3, 4, 5, 6):
+        j5.by_number(n, "GND")
+    for n in (9, 10):
+        j5.by_number(n, "+12V")
+    j5.no_connect(7, 8)
+    parts += [j1, j2, j3, j4, j5]
     for ref, rail in (("C1", "3V3D"), ("C2", "A3V3")):
         c = Part(ref, "Device:C", "100n", FP_C, lcsc=FX)
         parts.append(c.by_number(1, rail).by_number(2, "GND"))
@@ -53,8 +64,9 @@ def _logic_sheet():
     u1.by_name("VCC", "3V3D").by_name("GND", "GND").by_name("~{SRCLR}", "3V3D")
     u1.by_name("~{OE}", "GND").by_name("SER", "DEMO_DATA")
     u1.by_name("SRCLK", "DEMO_CLK").by_name("RCLK", "DEMO_CLK").by_name("QA", "LED_A")
+    u1.by_name("QB", "DEMO_EN")
     u1.no_connect(*[u1.sym.by_name(n) for n in
-                    ("QB", "QC", "QD", "QE", "QF", "QG", "QH", "QH'")])
+                    ("QC", "QD", "QE", "QF", "QG", "QH", "QH'")])
     u2 = Part("U2", "Amplifier_Operational:TL072", "TL072",
               "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm", lcsc=FX, domain="analog")
     u2.by_number(3, "POT_W").by_number(2, "BUF_OUT").by_number(1, "BUF_OUT")
@@ -66,7 +78,16 @@ def _logic_sheet():
     rv1.by_number(1, "GND").by_number(2, "POT_W").by_number(3, "A3V3")
     c3 = Part("C3", "Device:C", "100n", FP_C, lcsc=FX, domain="analog")
     c3.by_number(1, "A3V3").by_number(2, "GND")
-    return Sheet("logic", "Shift register and buffer", [u1, u2, rv1, c3])
+    u3 = Part("U3", "74xx:74HC4051", "74HC4051", "Package_SO:SOIC-16_3.9x9.9mm_P1.27mm",
+              lcsc=FX, domain="analog", strict=True)
+    u3.by_name("VCC", "A3V3").by_name("VEE", "GND").by_name("GND", "GND")
+    u3.by_name("A", "DEMO_SENSE").by_name("~{E}", "DEMO_EN")
+    for i in range(3):
+        u3.by_name("S%d" % i, "GND")
+    u3.by_name("A0", "POT_W")
+    for ch in range(1, 8):
+        u3.by_name("A%d" % ch, "GND")
+    return Sheet("logic", "Shift register and buffer", [u1, u2, rv1, c3, u3])
 
 
 def _led_sheet():

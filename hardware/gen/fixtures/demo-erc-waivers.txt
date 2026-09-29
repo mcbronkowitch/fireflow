@@ -1,4 +1,3 @@
 # ERC waivers for the hardware/gen demo fixture.
 # Format: type | text found in one item description | reason
 # Every line must match a violation; a line that matches nothing fails the check.
-lib_symbol_mismatch | Symbol U2 [TL072] | derived symbol (TL072 extends LM2904) embedded flattened by sch_writer; drawing identical. One violation per unit, all three matched by this line
