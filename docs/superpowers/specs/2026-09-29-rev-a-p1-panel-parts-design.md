@@ -88,12 +88,13 @@ on delivery.
 
 All in `host/vcv/res/gen_hw_panel.py`; nothing is drawn by hand.
 
-1. **Body radii follow the real caps.** `BODY_R` becomes the visible cap:
-   `G` 6.0 (1900H, unchanged), `S` 3.85 (Micro Knob, was 4.4), `P` round
-   3.0 (was an 8 mm square at 4.0; exact value from the button datasheet).
-   Frames and caption distances follow from `BODY_R` already; the existing
-   guards re-run and any row that no longer clears is re-pitched, not
-   squeezed.
+1. ~~**Body radii follow the real caps.**~~ **Deferred 2026-09-29 (Bastian)**
+   to the correction round after the grip test, before the freeze.
+   `BODY_R["S"]` feeds the LEVEL band's x positions and the derivation of
+   `Y_B2K`, so shrinking it to the Micro Knob's 3.85 moves controls; and the
+   header's `kFfPadR` is also used by the big module's ENGINE latch. The cut
+   file needs only hole sizes, which are independent, so the drawing gets one
+   round, after the test, instead of two.
 2. **Cut export.** A new output, `res/FireflowHW-cut.svg`, in Formulor's
    convention: pure blue (RGB 0,0,255) hairlines are cut, units are mm, one
    closed path per hole. Contents:
@@ -133,6 +134,13 @@ asserts:
 
 Each assertion is shown red once (a shifted hole, a thin web) before it is
 trusted.
+
+**Found by the guard before anything was cut (2026-09-29):** the four jack-row
+satellite LEDs (`MODBTN_L`, `SHIFTBTN_L`, `SYNC_L`, `CEIL_L`) sat at their
+anchor's class radius + 1.5 mm, leaving 0.85–0.95 mm of material to the real
+key and jack holes. They now sit at `SAT_D` = 6.7 mm (key hole 3.1 + web
+2.0 + LED hole 1.55, rounded up). Whether the jack and key nuts cover them is
+a §6 measurement.
 
 ## 5. Grip test and freeze
 

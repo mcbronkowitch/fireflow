@@ -4102,6 +4102,18 @@ the coupon has nothing else open.
 LEDs on the 595 — waits for the control PCB's pin map, which should give one
 spare channel to AGND and one to the rail (spec §8).
 
+**2026-09-29 — P1's generator side is in: the acrylic plate can be ordered.**
+`host/vcv/res/gen_hw_cut.py` writes the laser cut file, a 1:1 print sheet for
+under the clear plate, and `FireflowHW-holes.json`, the hole list the Rev A
+board will be placed from; `hw_cut_guard` in ctest checks one hole per
+control, 2 mm of material everywhere, and the files against the generator.
+The guard's first run moved four LEDs: the jack-row satellites left under
+1 mm of acrylic to their key or jack. Parts (all Thonk: genuine Alpha 9 mm
+T18 B10K, 1900H and Micro Knob caps, Thonkiconn, low-profile buttons, 3 mm
+LEDs; no standoffs) and the plate are ordered by 9 Oct; the grip test log is
+[`docs/hardware/grip-test.md`](hardware/grip-test.md). Spec
+`docs/superpowers/specs/2026-09-29-rev-a-p1-panel-parts-design.md`.
+
 **2026-09-28, last — Rev A is one board, and the second coupon turn is
 dropped.** Both Bastian's decisions, after a short research pass.
 
