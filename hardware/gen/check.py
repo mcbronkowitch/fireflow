@@ -305,9 +305,13 @@ def fast(project):
 
 # --- sabotage: every rule shows its RED on demand -----------------------------
 
+class SabotageError(ValueError):
+    """A sabotage that cannot be planted, or that the chosen level ignores."""
+
+
 def _first(items, what):
     if not items:
-        raise ValueError("this sabotage needs %s and the project has none" % what)
+        raise SabotageError("this sabotage needs %s and the project has none" % what)
     return items[0]
 
 
@@ -331,7 +335,7 @@ def _sab_driver_conflict(pr):
 def _sab_rail_domain(pr):
     domains = sorted(pr.domain_rails)
     if len(domains) < 2:
-        raise ValueError("rail_domain sabotage needs two domains")
+        raise SabotageError("rail_domain sabotage needs two domains")
     rail = sorted(pr.domain_rails[domains[1]])[0]
     _sab_add(pr, N.Part("R_SAB1", "Device:R", "1k", "", lcsc="C-SABOTAGE",
                         domain=domains[0]).by_number(1, rail).by_number(2, "GND"))
@@ -358,7 +362,15 @@ SABOTAGE = {"single_pin": _sab_single_pin,
             "panel_ids": _sab_panel_ids,
             "sourced": _sab_sourced,
             "erc": _sab_single_pin}          # a one-pin label: ERC must see it too
-LEVEL_SABOTAGE = {"overlap", "stability"}    # handled inside the levels
+# Handled inside the levels, not by editing the project. "X:empty" starves the
+# check's own examined-nothing guard, as RULE:empty does for the fast rules.
+LEVEL_SABOTAGE = {"overlap", "overlap:empty", "netlist", "netlist:empty",
+                  "sheet_edge", "stability"}
+FAST_SABOTAGE = ({r for r in SABOTAGE if r != "erc"} | {r + ":empty" for r in RULES})
+SHEET_SABOTAGE = FAST_SABOTAGE | {"overlap", "overlap:empty", "netlist",
+                                  "netlist:empty", "sheet_edge"}
+FULL_SABOTAGE = SHEET_SABOTAGE | {"erc", "stability"}
+HONOURED = {"fast": FAST_SABOTAGE, "sheet": SHEET_SABOTAGE, "full": FULL_SABOTAGE}
 
 
 def _empty(pr, rule):
@@ -376,15 +388,29 @@ def _empty(pr, rule):
 
 def apply_sabotage(project, spec):
     rule, _, mode = spec.partition(":")
-    if mode == "empty" and rule in RULES:
+    if spec in LEVEL_SABOTAGE:
+        pass
+    elif mode == "empty" and rule in RULES:
         _empty(project, rule)
     elif not mode and rule in SABOTAGE:
         SABOTAGE[rule](project)
-    elif not mode and rule in LEVEL_SABOTAGE:
-        pass
     else:
-        raise ValueError("unknown sabotage %r; known: %s, or RULE:empty"
-                         % (spec, ", ".join(sorted(set(SABOTAGE) | LEVEL_SABOTAGE))))
+        raise SabotageError("unknown sabotage %r; known: %s"
+                            % (spec, ", ".join(sorted(FULL_SABOTAGE))))
+
+
+def check_honoured(level, spec):
+    """A sabotage the chosen level ignores would report PASS -- a RED that is
+    no RED. Refuse it instead."""
+    if spec in HONOURED[level]:
+        return
+    if spec in FULL_SABOTAGE:
+        raise SabotageError("sabotage %r is not honoured by the %s level; it runs "
+                            "at: %s" % (spec, level, ", ".join(
+                                l for l in ("fast", "sheet", "full")
+                                if spec in HONOURED[l])))
+    raise SabotageError("unknown sabotage %r; known: %s"
+                        % (spec, ", ".join(sorted(FULL_SABOTAGE))))
 
 
 # --- levels 2 and 3 -------------------------------------------------------------
@@ -402,23 +428,37 @@ def _write_all(project, out_dir):
 def _drawing(project, layouts, names, sabotage):
     sheets = {s.name: s for s in project.sheets}
     found = []
+    planted = {"overlap": False, "sheet_edge": False}
     for name in names:
         placed, height = layouts[name]
-        if sabotage == "overlap" and len(placed) > 1:
+        if sabotage == "overlap" and not planted["overlap"] and len(placed) > 1:
             keys = list(placed)
             placed = dict(placed)
             placed[keys[1]] = placed[keys[0]]
-        for a, b in W.overlaps(sheets[name].parts, placed, project.power):
-            found.append(Finding("overlap", name, "%s <-> %s" % (a, b)))
+            planted["overlap"] = True
+        if sabotage == "overlap:empty":
+            placed = {}
+        if sabotage == "sheet_edge" and not planted["sheet_edge"]:
+            height = W.PAPER[project.paper][1]      # taller than the title block allows
+            planted["sheet_edge"] = True
+        if not placed:
+            found.append(Finding("overlap", name, "examined nothing -- a sheet with "
+                                 "no placed cells cannot pass"))
+        else:
+            for a, b in W.overlaps(sheets[name].parts, placed, project.power):
+                found.append(Finding("overlap", name, "%s <-> %s" % (a, b)))
         if not W.fits(height, project.paper):
             found.append(Finding("sheet_edge", name,
                                  "content is %.0f mm tall; %s leaves %.0f above the "
                                  "title block" % (height, project.paper,
                                                   W.PAPER[project.paper][1] - W.TITLE_BLOCK_H)))
+    if sabotage == "overlap" and not planted["overlap"]:
+        raise SabotageError("overlap sabotage needs a checked sheet with two "
+                            "cells; checked sheet(s) with fewer: %s" % ", ".join(names))
     return found
 
 
-def _netlist(project, sch_dir, refs=None):
+def _netlist(project, sch_dir, refs=None, sabotage=None):
     exported = {n: v for n, v in export_netlist(project, sch_dir).items()
                 if not n.startswith("unconnected-")}
     intended = intended_nets(project)
@@ -427,6 +467,16 @@ def _netlist(project, sch_dir, refs=None):
             return any(r in refs for r, _ in nodes)
         intended = {n: v for n, v in intended.items() if touches(v)}
         exported = {n: v for n, v in exported.items() if touches(v)}
+    if sabotage == "netlist:empty":
+        intended, exported = {}, {}
+    elif sabotage == "netlist":
+        if not intended:
+            raise SabotageError("netlist sabotage needs an intended net and the "
+                                "checked part has none")
+        del intended[sorted(intended)[0]]    # compare() must now see an unintended net
+    if not intended and not exported:
+        return [Finding("netlist", "-", "examined nothing -- neither the intent "
+                        "nor KiCad's export has a net to compare")]
     return [Finding("netlist", "-", bad) for bad in compare(intended, exported)]
 
 
@@ -538,7 +588,7 @@ def sheet_level(project, name, out_dir, sabotage=None):
     sch_dir, layouts = _write_all(project, out_dir)
     findings += _drawing(project, layouts, [name], sabotage)
     refs = {p.ref for s in project.sheets if s.name == name for p in s.parts}
-    findings += _netlist(project, sch_dir, refs)
+    findings += _netlist(project, sch_dir, refs, sabotage)
     for png in _pdf_and_pngs(project, sch_dir, out_dir, [name], overview=False):
         print("look at: " + png)
     return findings
@@ -558,7 +608,7 @@ def full_level(project, factory, out_dir, sabotage=None):
     names = [s.name for s in project.sheets]
     findings += _drawing(project, layouts, names, sabotage)
     t_write = lap()
-    findings += _netlist(project, sch_dir)
+    findings += _netlist(project, sch_dir, None, sabotage)
     t_net = lap()
     erc_found, n = _erc(project, sch_dir, out_dir)
     findings += erc_found
@@ -594,24 +644,31 @@ def main(argv=None):
     level.add_argument("--sheet", metavar="NAME", help="check and render one sheet")
     level.add_argument("--full", action="store_true", help="everything, incl. ERC")
     ap.add_argument("--sabotage", metavar="SPEC",
-                    help="break one thing on purpose: RULE, RULE:empty, erc, "
-                         "overlap or stability")
+                    help="break one thing on purpose: RULE, RULE:empty, overlap, "
+                         "overlap:empty, netlist, netlist:empty, sheet_edge "
+                         "(--sheet and --full), erc, stability (--full only); "
+                         "a level refuses a sabotage it does not run")
     ap.add_argument("--out", help="output dir (default: <project dir>/out)")
     args = ap.parse_args(argv)
 
     factory = load_factory(args.project)
     out = args.out or os.path.join(os.path.dirname(os.path.abspath(args.project)), "out")
+    level_name = "fast" if args.fast else "sheet" if args.sheet else "full"
     t0 = time.monotonic()
     project = factory()
-    if args.sabotage:
-        apply_sabotage(project, args.sabotage)
-    if args.fast:
-        label, findings = "fast", fast(project)
-    elif args.sheet:
-        label = "sheet " + args.sheet
-        findings = sheet_level(project, args.sheet, out, args.sabotage)
-    else:
-        label, findings = "full", full_level(project, factory, out, args.sabotage)
+    try:
+        if args.sabotage:
+            check_honoured(level_name, args.sabotage)
+            apply_sabotage(project, args.sabotage)
+        if args.fast:
+            label, findings = "fast", fast(project)
+        elif args.sheet:
+            label = "sheet " + args.sheet
+            findings = sheet_level(project, args.sheet, out, args.sabotage)
+        else:
+            label, findings = "full", full_level(project, factory, out, args.sabotage)
+    except SabotageError as e:
+        ap.error(str(e))
     dt = time.monotonic() - t0
     for f in findings:
         print(f)

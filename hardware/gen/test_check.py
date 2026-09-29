@@ -25,8 +25,11 @@ DEMO = os.path.join(HERE, "fixtures", "demo.py")
 
 def run_cli(args, out_dir):
     buf = io.StringIO()
-    with contextlib.redirect_stdout(buf):
-        rc = check.main(["--project", DEMO, "--out", out_dir] + args)
+    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+        try:
+            rc = check.main(["--project", DEMO, "--out", out_dir] + args)
+        except SystemExit as e:          # argparse's error(): a refused sabotage
+            rc = e.code if isinstance(e.code, int) else 1
     return rc, buf.getvalue()
 
 
@@ -56,7 +59,21 @@ def main():
         if not os.path.exists(os.path.join(out, "logic.png")):
             failures.append("the sheet level wrote no logic.png")
         expect(["--sheet", "logic", "--sabotage", "overlap"], 1, "[overlap]", out)
+        expect(["--sheet", "logic", "--sabotage", "netlist"], 1, "[netlist]", out)
+        expect(["--sheet", "logic", "--sabotage", "sheet_edge"], 1, "[sheet_edge]", out)
+        expect(["--sheet", "logic", "--sabotage", "netlist:empty"], 1,
+               "[netlist]: examined nothing", out)
+        expect(["--sheet", "logic", "--sabotage", "overlap:empty"], 1,
+               "[overlap]: examined nothing", out)
+        # a level must refuse a sabotage it does not run, never report PASS
+        expect(["--fast", "--sabotage", "overlap"], 2, "not honoured", out)
+        expect(["--fast", "--sabotage", "netlist:empty"], 2, "not honoured", out)
+        expect(["--sheet", "logic", "--sabotage", "stability"], 2, "not honoured", out)
+        expect(["--sheet", "logic", "--sabotage", "erc"], 2, "not honoured", out)
+        expect(["--fast", "--sabotage", "no_such_thing"], 2, "unknown sabotage", out)
         expect(["--full"], 0, "PASS full", out)
+        expect(["--full", "--sabotage", "netlist"], 1, "[netlist]", out)
+        expect(["--full", "--sabotage", "sheet_edge"], 1, "[sheet_edge]", out)
         for name in ("demo-overview.png", "power.png", "logic.png", "leds.png",
                      "demo.pdf", "erc.json"):
             if not os.path.exists(os.path.join(out, name)):
