@@ -74,7 +74,7 @@ def _logic_sheet():
     u2.by_number(8, "+12V").by_number(4, "-12V")
     rv1 = Part("RV1", "Device:R_Potentiometer", "10k",
                "Potentiometer_THT:Potentiometer_Alpha_RD901F-40-00D_Single_Vertical",
-               source="fixture", panel_id="DEMO_POT", domain="analog")
+               source="fixture", panel_id="DEMO_POT", domain="analog", panel=True)
     rv1.by_number(1, "GND").by_number(2, "POT_W").by_number(3, "A3V3")
     c3 = Part("C3", "Device:C", "100n", FP_C, lcsc=FX, domain="analog")
     c3.by_number(1, "A3V3").by_number(2, "GND")
@@ -92,7 +92,7 @@ def _logic_sheet():
 
 def _led_sheet():
     d1 = Part("D1", "Device:LED", "red", "LED_THT:LED_D3.0mm",
-              source="fixture", panel_id="DEMO_LED")
+              source="fixture", panel_id="DEMO_LED", panel=True)
     d1.by_name("A", "LED_A").by_name("K", "LED_A_K")
     r1 = Part("R1", "Device:R", "1k", FP_R, lcsc=FX)
     r1.by_number(1, "LED_A_K").by_number(2, "GND")

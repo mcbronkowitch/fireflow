@@ -15,7 +15,8 @@ class Sheet:
 
 class Project:
     def __init__(self, name, title, sheets, power=None, domain_rails=None,
-                 holes=None, waivers=None, paper="A3", flat=False, comments=()):
+                 holes=None, waivers=None, paper="A3", flat=False, comments=(),
+                 lib_dirs=None, ground="GND"):
         self.name, self.title = name, title
         self.sheets = list(sheets)
         self.power = dict(power or {})            # net -> power symbol lib_id
@@ -25,6 +26,8 @@ class Project:
         self.paper = paper
         self.flat = flat                          # one sheet, no overview (the coupon)
         self.comments = list(comments)
+        self.lib_dirs = dict(lib_dirs or {})      # lib name -> abs dir with <lib>.pretty / .kicad_sym
+        self.ground = ground
         if flat and len(self.sheets) != 1:
             raise ValueError("a flat project has exactly one sheet")
         names = [s.name for s in self.sheets]

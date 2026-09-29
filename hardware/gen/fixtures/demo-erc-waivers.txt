@@ -1,3 +1,5 @@
 # ERC waivers for the hardware/gen demo fixture.
-# Format: type | text found in one item description | reason
-# Every line must match a violation; a line that matches nothing fails the check.
+# Format: type | exact item description | count | reason
+# The item description is copied whole from erc.json; count is how many
+# violations the line covers. A line that matches nothing, or matches a
+# different number of violations than its count, fails the check.

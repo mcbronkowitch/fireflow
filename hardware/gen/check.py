@@ -25,9 +25,6 @@ from gen import ksexp  # noqa: E402
 from gen import netlist as N  # noqa: E402
 from gen import sch_writer as W  # noqa: E402
 
-VENDORED_LIBS = {"Daisy-Boards"}
-
-
 def run(args, what, quiet=False):
     r = subprocess.run(args, capture_output=True, text=True)
     out = (r.stdout + r.stderr).strip()
@@ -82,24 +79,26 @@ def compare(intended, exported):
     return bad
 
 
-def write_lib_tables(parts, dest_dir, vendored_uri, extra_sym_libs=()):
+def write_lib_tables(parts, dest_dir, lib_dirs, extra_sym_libs=()):
     """Emit sym-lib-table / fp-lib-table covering exactly what the parts use.
 
     Derived from the part list rather than hand-kept, so a new part cannot
     silently leave the tables behind. KiCad's own libraries go through its
-    ${KICAD10_*_DIR} variables; the vendored Daisy library through
-    `vendored_uri` (the coupon passes "${KIPRJMOD}/../lib/DaisyKiCad", so
-    nothing machine-specific reaches the repository).
+    ${KICAD10_*_DIR} variables; vendored ones through `lib_dirs`, {library:
+    directory uri holding <lib>.kicad_sym and/or <lib>.pretty} -- the coupon
+    passes "${KIPRJMOD}/../lib/DaisyKiCad" for Daisy-Boards, so nothing
+    machine-specific reaches the repository. A footprint without a library
+    (the open "P4") gets no row.
     """
     sym_libs = sorted({p.lib_id.split(":")[0] for p in parts} | set(extra_sym_libs))
-    fp_libs = sorted({p.footprint.split(":")[0] for p in parts if p.footprint})
+    fp_libs = sorted({p.footprint.split(":")[0] for p in parts if ":" in p.footprint})
 
     def rows(libs, kind):
         out = []
         for lib in libs:
-            if lib in VENDORED_LIBS:
-                uri = "%s/%s.%s" % (vendored_uri, lib,
-                                    "kicad_sym" if kind == "sym" else "pretty")
+            ext = "kicad_sym" if kind == "sym" else "pretty"
+            if lib in lib_dirs:
+                uri = "%s/%s.%s" % (lib_dirs[lib], lib, ext)
             elif kind == "sym":
                 uri = "${KICAD10_SYMBOL_DIR}/%s.kicad_sym" % lib
             else:
@@ -161,8 +160,17 @@ def intended_nets(project):
 # --- the three check levels (P3 spec §4) ------------------------------------
 
 VENDORED_DIR = os.path.join(_HW, "lib", "DaisyKiCad").replace("\\", "/")
+OPEN_FOOTPRINT = "P4"       # the SD socket, chosen in P4 (spec §6); allowed once
+KICAD_FP_DIR = os.path.join(ksexp.KICAD_ROOT, "share", "kicad", "footprints")
 OUTPUT_TYPES = {"output", "tri_state", "power_out"}
-PANEL_KINDS = {"pot", "jack", "key", "led"}
+PANEL_KINDS = {"pot", "jack", "key", "led", "sd"}
+
+
+def _lib_dirs(project):
+    """Vendored library dirs: Daisy-Boards always, plus the project's own."""
+    dirs = {"Daisy-Boards": VENDORED_DIR}
+    dirs.update({k: v.replace("\\", "/") for k, v in project.lib_dirs.items()})
+    return dirs
 
 
 class Finding:
@@ -200,7 +208,7 @@ def rule_driver_conflict(project):
         if net in project.power:
             continue
         drivers = [(p, pin) for p, pin in nodes
-                   if p.sym.pin(pin)["etype"] in OUTPUT_TYPES]
+                   if p.etype(pin) in OUTPUT_TYPES]
         if not drivers:
             continue
         examined += 1
@@ -268,6 +276,10 @@ def rule_panel_ids(project):
             found.append(Finding("panel_ids", sheet[refs[0]],
                                  "%s carries PanelId %s, which is no panel hole"
                                  % (", ".join(refs), pid)))
+    for p in project.parts():
+        if p.panel and not p.panel_id:
+            found.append(Finding("panel_ids", sheet[p.ref],
+                                 "%s is a panel part without a PanelId" % p.ref))
     return len(holes), found
 
 
@@ -275,7 +287,7 @@ def rule_sourced(project):
     """Every real part has exactly one of an LCSC number (JLC fits it) or a
     Source (bought elsewhere, hand-soldered) -- P3 spec §6."""
     sheet = project.sheet_of()
-    parts = [p for p in project.parts() if not N.is_virtual(p.ref)]
+    parts = [p for p in project.parts() if not N.is_virtual(p.ref) and p.in_bom]
     found = [Finding("sourced", sheet[p.ref],
                      "%s needs exactly one of LCSC or Source (LCSC=%r, Source=%r)"
                      % (p.ref, p.lcsc, p.source))
@@ -283,12 +295,47 @@ def rule_sourced(project):
     return len(parts), found
 
 
+def _footprint_exists(project, footprint):
+    lib, _, name = footprint.partition(":")
+    if not lib or not name:
+        return False
+    base = _lib_dirs(project).get(lib, KICAD_FP_DIR)
+    return os.path.exists(os.path.join(base, lib + ".pretty", name + ".kicad_mod"))
+
+
+def rule_footprints(project):
+    """Every part on the board names a footprint that exists; parts off the
+    board (sockets bought for the BOM) name none; exactly one open "P4" is
+    allowed (spec §6)."""
+    sheet = project.sheet_of()
+    examined, found, open_refs = 0, [], []
+    for p in project.parts():
+        if N.is_virtual(p.ref):
+            continue
+        if not p.on_board:
+            if p.footprint:
+                found.append(Finding("footprints", sheet[p.ref], "%s is off the board "
+                                     "but names footprint %s" % (p.ref, p.footprint)))
+            continue
+        examined += 1
+        if p.footprint == OPEN_FOOTPRINT:
+            open_refs.append(p.ref)
+        elif not _footprint_exists(project, p.footprint):
+            found.append(Finding("footprints", sheet[p.ref], "%s: footprint %r not found"
+                                 % (p.ref, p.footprint)))
+    if len(open_refs) > 1:
+        found.append(Finding("footprints", "-", "only one open %r footprint is allowed: %s"
+                             % (OPEN_FOOTPRINT, ", ".join(open_refs))))
+    return examined, found
+
+
 RULES = {"single_pin": rule_single_pin,
          "driver_conflict": rule_driver_conflict,
          "rail_domain": rule_rail_domain,
          "pins_accounted": rule_pins_accounted,
          "panel_ids": rule_panel_ids,
-         "sourced": rule_sourced}
+         "sourced": rule_sourced,
+         "footprints": rule_footprints}
 
 
 def fast(project):
@@ -321,13 +368,13 @@ def _sab_add(project, part):
 
 def _sab_single_pin(pr):
     _sab_add(pr, N.Part("R_SAB1", "Device:R", "1k", "", lcsc="C-SABOTAGE")
-             .by_number(1, "SAB_ALONE").by_number(2, "GND"))
+             .by_number(1, "SAB_ALONE").by_number(2, pr.ground))
 
 
 def _sab_driver_conflict(pr):
     driven = [n for n, nodes in sorted(_real_nets(pr).items())
               if n not in pr.power
-              and any(p.sym.pin(pin)["etype"] in OUTPUT_TYPES for p, pin in nodes)]
+              and any(p.etype(pin) in OUTPUT_TYPES for p, pin in nodes)]
     _sab_add(pr, N.Part("U_SAB1", "74xx:74HC595", "74HC595", "", lcsc="C-SABOTAGE")
              .by_name("QA", _first(driven, "a driven net")))
 
@@ -338,7 +385,7 @@ def _sab_rail_domain(pr):
         raise SabotageError("rail_domain sabotage needs two domains")
     rail = sorted(pr.domain_rails[domains[1]])[0]
     _sab_add(pr, N.Part("R_SAB1", "Device:R", "1k", "", lcsc="C-SABOTAGE",
-                        domain=domains[0]).by_number(1, rail).by_number(2, "GND"))
+                        domain=domains[0]).by_number(1, rail).by_number(2, pr.ground))
 
 
 def _sab_pins_accounted(pr):
@@ -355,12 +402,26 @@ def _sab_sourced(pr):
     p.lcsc = p.source = ""
 
 
+def _sab_footprints(pr):
+    p = _first([p for p in pr.parts() if not N.is_virtual(p.ref) and p.on_board],
+               "a part on the board")
+    p.footprint = "Nope:Missing"
+
+
+def _sab_panel_orphan(pr):
+    _sab_add(pr, N.Part("SW_SAB1", "Switch:SW_Push", "orphan", "",
+                        source="C-SABOTAGE", panel=True)
+             .by_number(1, pr.ground).by_number(2, pr.ground))
+
+
 SABOTAGE = {"single_pin": _sab_single_pin,
             "driver_conflict": _sab_driver_conflict,
             "rail_domain": _sab_rail_domain,
             "pins_accounted": _sab_pins_accounted,
             "panel_ids": _sab_panel_ids,
             "sourced": _sab_sourced,
+            "footprints": _sab_footprints,
+            "panel_orphan": _sab_panel_orphan,
             "erc": _sab_single_pin}          # a one-pin label: ERC must see it too
 # Handled inside the levels, not by editing the project. "X:empty" starves the
 # check's own examined-nothing guard, as RULE:empty does for the fast rules.
@@ -384,6 +445,9 @@ def _empty(pr, rule):
             p.strict = False
     elif rule == "panel_ids":
         pr.holes = []
+    elif rule == "footprints":
+        for p in pr.parts():
+            p.on_board, p.footprint = False, ""
 
 
 def apply_sabotage(project, spec):
@@ -420,9 +484,15 @@ def _write_all(project, out_dir):
     if os.path.isdir(sch_dir):
         shutil.rmtree(sch_dir)     # a renamed sheet's old file must not linger
     layouts = W.write_project(project, sch_dir)
-    write_lib_tables(project.parts(), sch_dir, VENDORED_DIR,
+    write_lib_tables(project.parts(), sch_dir, _lib_dirs(project),
                      extra_sym_libs={"power"} if project.power else ())
     return sch_dir, layouts
+
+
+def _write_tree(project, dest):
+    W.write_project(project, dest)
+    write_lib_tables(project.parts(), dest, _lib_dirs(project),
+                     extra_sym_libs={"power"} if project.power else ())
 
 
 def _drawing(project, layouts, names, sabotage):
@@ -505,7 +575,7 @@ def _pdf_and_pngs(project, sch_dir, out_dir, names, overview):
 
 
 def load_waivers(path):
-    """`type | text found in an item description | reason`, one per line."""
+    """`type | exact item description | count | reason`, one per line."""
     if path is None:
         return []
     out = []
@@ -515,36 +585,43 @@ def load_waivers(path):
             if not line or line.startswith("#"):
                 continue
             fields = [f.strip() for f in line.split("|")]
-            if len(fields) != 3 or not all(fields):
-                raise ValueError("%s:%d: want 'type | item text | reason', got %r"
-                                 % (path, i, line))
-            out.append(tuple(fields))
+            if len(fields) != 4 or not all(fields) or not fields[2].isdigit() \
+                    or int(fields[2]) < 1:
+                raise ValueError("%s:%d: want 'type | exact item | count | reason', "
+                                 "got %r" % (path, i, line))
+            out.append((fields[0], fields[1], int(fields[2]), fields[3]))
     return out
 
 
 def match_waivers(violations, waivers):
-    """violations: [(type, [item descriptions])]. Unwaived ones and waivers
-    that match nothing both come back as findings: a stale waiver is a hole
-    the next real violation would fall through."""
-    used, found = set(), []
+    """violations: [(type, [item descriptions])]. A waiver names one exact item
+    description and how many violations it covers. Unwaived violations, stale
+    waivers and waivers that cover more or fewer than their count are all
+    findings, so one line cannot quietly absorb a new violation on the same
+    part, and `Pin 9` never matches `Pin 90`."""
+    hits, found = [0] * len(waivers), []
     for vtype, items in violations:
-        hit = next((k for k, (wt, text, _) in enumerate(waivers)
-                    if wt == vtype and any(text in d for d in items)), None)
-        if hit is None:
+        k = next((k for k, (wt, item, _, _) in enumerate(waivers)
+                  if wt == vtype and item in items), None)
+        if k is None:
             found.append(Finding("erc", "-", "%s: %s" % (vtype, "; ".join(items) or "(no items)")))
         else:
-            used.add(hit)
-    for k, (wt, text, _) in enumerate(waivers):
-        if k not in used:
+            hits[k] += 1
+    for k, (wt, item, count, _) in enumerate(waivers):
+        if hits[k] == 0:
             found.append(Finding("erc_waiver", "-", "waiver matches nothing: %s | %s"
-                                 % (wt, text)))
+                                 % (wt, item)))
+        elif hits[k] != count:
+            found.append(Finding("erc_waiver", "-", "waiver %s | %s covers %d violation(s), "
+                                 "its count says %d" % (wt, item, hits[k], count)))
     return found
 
 
 def _erc(project, sch_dir, out_dir):
     """ERC through kicad-cli, JSON report. Waivers match on the violation type
-    and on text from an item description ("Symbol U1 Pin 9 ..."), never on
-    the top-level description, which KiCad localizes (German on this machine)."""
+    and on the exact text of an item description ("Symbol U1 Pin 9 [...]"),
+    never on the top-level description, which KiCad localizes (German on this
+    machine)."""
     report = os.path.join(out_dir, "erc.json")
     if os.path.exists(report):
         os.remove(report)
@@ -564,13 +641,13 @@ def _erc(project, sch_dir, out_dir):
 def _stability(factory, sabotage):
     found = []
     with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
-        W.write_project(factory(), a)
+        _write_tree(factory(), a)
         W.Uuids.random = sabotage == "stability"
         try:
-            W.write_project(factory(), b)
+            _write_tree(factory(), b)
         finally:
             W.Uuids.random = False
-        names = sorted(os.listdir(a))
+        names = sorted(set(os.listdir(a)) | set(os.listdir(b)))
         _, mismatch, errors = filecmp.cmpfiles(a, b, names, shallow=False)
         found += [Finding("stability", "-", "%s differs between two writes" % n)
                   for n in mismatch + errors]
@@ -655,8 +732,8 @@ def main(argv=None):
     out = args.out or os.path.join(os.path.dirname(os.path.abspath(args.project)), "out")
     level_name = "fast" if args.fast else "sheet" if args.sheet else "full"
     t0 = time.monotonic()
-    project = factory()
     try:
+        project = factory()
         if args.sabotage:
             check_honoured(level_name, args.sabotage)
             apply_sabotage(project, args.sabotage)
@@ -669,6 +746,11 @@ def main(argv=None):
             label, findings = "full", full_level(project, factory, out, args.sabotage)
     except SabotageError as e:
         ap.error(str(e))
+    except (ValueError, RuntimeError, KeyError) as e:
+        print(Finding("error", "-", "%s: %s" % (type(e).__name__, e)))
+        print("FAIL %s: the check could not run, %.1f s"
+              % (level_name, time.monotonic() - t0))
+        return 1
     dt = time.monotonic() - t0
     for f in findings:
         print(f)

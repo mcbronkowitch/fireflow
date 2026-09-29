@@ -39,7 +39,8 @@ def main():
     cli = ksexp.KICAD_CLI
 
     print("0. library tables")
-    s, f = C.write_lib_tables(N.build(), ROOT, "${KIPRJMOD}/../lib/DaisyKiCad")
+    s, f = C.write_lib_tables(N.build(), ROOT,
+                              {"Daisy-Boards": "${KIPRJMOD}/../lib/DaisyKiCad"})
     print("   %d symbol libraries, %d footprint libraries" % (len(s), len(f)))
 
     print("1. generate")

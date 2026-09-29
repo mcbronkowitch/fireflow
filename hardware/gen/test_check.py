@@ -55,6 +55,8 @@ def main():
             expect(["--fast", "--sabotage", rule], 1, "[%s]" % rule, out)
             expect(["--fast", "--sabotage", rule + ":empty"], 1,
                    "[%s]: examined nothing" % rule, out)
+        expect(["--fast", "--sabotage", "panel_orphan"], 1, "[panel_ids]", out)
+        expect(["--sheet", "no_such_sheet"], 1, "[error]", out)
         expect(["--sheet", "logic"], 0, "PASS sheet logic", out)
         if not os.path.exists(os.path.join(out, "logic.png")):
             failures.append("the sheet level wrote no logic.png")
@@ -81,16 +83,24 @@ def main():
         expect(["--full", "--sabotage", "erc"], 1, "[erc]", out)
         expect(["--full", "--sabotage", "stability"], 1, "[stability]", out)
 
-    found = check.match_waivers(
-        [("pin_to_pin", ["Symbol U1 Pin 9 [Q7, Output, Line]"])],
-        [("pin_to_pin", "Symbol U1 Pin 9", "reason"),
-         ("pin_not_driven", "Symbol U9", "stale")])
+    item = "Symbol U1 Pin 9 [Q7, Output, Line]"
+    found = check.match_waivers([("pin_to_pin", [item])],
+                                [("pin_to_pin", item, 1, "reason"),
+                                 ("pin_not_driven", "Symbol U9 Pin 1 [A, Input, Line]", 1, "stale")])
     if [f.rule for f in found] != ["erc_waiver"]:
         failures.append("match_waivers: wanted one stale-waiver finding, got %s"
                         % [str(f) for f in found])
     found = check.match_waivers([("pin_to_pin", ["Symbol U2 Pin 1"])], [])
     if [f.rule for f in found] != ["erc"]:
         failures.append("match_waivers: an unwaived violation went unreported")
+    found = check.match_waivers([("pin_to_pin", [item]), ("pin_to_pin", [item])],
+                                [("pin_to_pin", item, 1, "reason")])
+    if [f.rule for f in found] != ["erc_waiver"]:
+        failures.append("match_waivers: a waiver absorbed more violations than its count")
+    found = check.match_waivers([("pin_to_pin", ["Symbol U1 Pin 90 [X, Output, Line]"])],
+                                [("pin_to_pin", "Symbol U1 Pin 9", 1, "prefix only")])
+    if sorted(f.rule for f in found) != ["erc", "erc_waiver"]:
+        failures.append("match_waivers: a waiver matched by substring, not exactly")
 
     if failures:
         for f in failures:
