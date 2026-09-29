@@ -106,17 +106,21 @@ class Symbol:
         if not self.pins:
             raise ValueError("%s:%s has no pins" % (lib, name))
 
-    def _collect_pins(self, node):
-        """Pins live in the unit sub-symbols, so recurse rather than assume."""
+    def _collect_pins(self, node, unit=0):
+        """Pins live in the unit sub-symbols, so recurse rather than assume.
+
+        A sub-symbol is named NAME_UNIT_STYLE ("74HC595_1_1"); its pins belong
+        to that unit, and unit 0 means "common to every unit".
+        """
         for c in node:
             if not isinstance(c, list) or not c or not isinstance(c[0], Atom):
                 continue
             if c[0] == "pin":
-                self._add_pin(c)
+                self._add_pin(c, unit)
             elif c[0] == "symbol":
-                self._collect_pins(c)
+                self._collect_pins(c, _unit_of(str(c[1])))
 
-    def _add_pin(self, node):
+    def _add_pin(self, node, unit=0):
         etype = str(node[1])
         at = child(node, "at")
         x, y = float(at[1]), float(at[2])
@@ -127,7 +131,7 @@ class Symbol:
         if number in self.pins:
             raise ValueError("%s:%s duplicate pin %s" % (self.lib, self.name, number))
         self.pins[number] = dict(name=name, etype=etype, x=x, y=y,
-                                 angle=angle, length=length)
+                                 angle=angle, length=length, unit=unit)
 
     def pin(self, number):
         number = str(number)
@@ -157,6 +161,14 @@ def _pin_sort_key(number):
         return (0, int(number), "")
     except ValueError:
         return (1, 0, number)
+
+
+def _unit_of(sub_name):
+    """`74HC595_1_1` -> 1. KiCad names unit sub-symbols NAME_UNIT_STYLE."""
+    parts = sub_name.rsplit("_", 2)
+    if len(parts) != 3 or not parts[1].isdigit():
+        raise ValueError("not a unit sub-symbol name: %r" % sub_name)
+    return int(parts[1])
 
 
 _LIB_CACHE = {}

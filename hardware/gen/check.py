@@ -15,6 +15,7 @@ if _HW not in sys.path:
     sys.path.insert(0, _HW)
 
 from gen import ksexp  # noqa: E402
+from gen import netlist as N  # noqa: E402
 
 VENDORED_LIBS = {"Daisy-Boards"}
 
@@ -120,3 +121,30 @@ def kicad_defines():
     share = os.path.join(ksexp.KICAD_ROOT, "share", "kicad")
     return ["-D", "KICAD10_SYMBOL_DIR=" + os.path.join(share, "symbols"),
             "-D", "KICAD10_FOOTPRINT_DIR=" + os.path.join(share, "footprints")]
+
+
+def normalize(nets):
+    """Sheet-local nets export as /<sheet>/<name>; the intent knows only <name>."""
+    out = {}
+    for name, nodes in nets.items():
+        short = name.rsplit("/", 1)[-1] if name.startswith("/") else name
+        if short in out:
+            raise ValueError("two exported nets shorten to %r" % short)
+        out[short] = nodes
+    return out
+
+
+def export_netlist(project, sch_dir):
+    """kicad-cli's netlist of the written project, names normalized."""
+    sch = os.path.join(sch_dir, project.name + ".kicad_sch")
+    net = os.path.join(sch_dir, project.name + ".net")
+    rc, out = run([ksexp.KICAD_CLI, "sch", "export", "netlist", "-o", net, sch],
+                  "kicad-cli sch export netlist", quiet=True)
+    if rc != 0:
+        raise RuntimeError("netlist export failed (rc=%d):\n%s" % (rc, out))
+    return normalize(parse_exported_netlist(net))
+
+
+def intended_nets(project):
+    return {k: set(v) for k, v in
+            N.nets_from(project.parts(), include_virtual=False).items()}
