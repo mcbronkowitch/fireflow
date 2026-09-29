@@ -16,6 +16,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import pcbnew          # noqa: E402
+import freerouting as FR  # noqa: E402
 import locked as LK   # noqa: E402
 import own as OWN     # noqa: E402
 import proof as PF    # noqa: E402
@@ -70,6 +71,8 @@ def main():
     routed = a.method != "none"
     if a.method == "own":
         print("own router:", OWN.route(s))
+    if a.method == "freerouting":
+        print("freerouting:", FR.route(s, prefix))
     if routed:
         finish(s)
         print("unrouted before fill: %d" % s.unrouted_before_fill)

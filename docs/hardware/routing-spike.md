@@ -832,3 +832,231 @@ rule area; whether other nets moved as well was not diffed).
 
 ![own router, top](routing-spike/own-2L-top.png)
 ![own router, bottom](routing-spike/own-2L-bottom.png)
+
+### Freerouting, 2 layers (Task 7)
+
+`hardware/reva/spike/freerouting.py` exports the strip board with
+`pcbnew.ExportSpecctraDSN`, rewrites the locked nets' fixed wires in the DSN
+(from run 2 on, below), runs Freerouting v2.4.1 headless, and imports the SES
+with `pcbnew.ImportSpecctraSES`; `run.finish()` then records the unrouted
+count and fills GND as in Task 6. No `lock_tracks()` after the import
+(`RELOCK_AFTER_IMPORT = False`, Task 4). After every run the adapter cuts
+that run's section out of `%LOCALAPPDATA%\freerouting\logs\freerouting.log`
+(the last `INFO   Freerouting v` banner after the file's pre-run size, to
+the end), writes it with the console output to
+`out/freerouting-2L-freerouting.log`, echoes the stage and pass lines, and
+stops the run if the section has no `Analytics are disabled` line.
+
+    KIPY hardware/reva/spike/run.py --method freerouting --layers 2
+
+Final run, first line of `out/freerouting-2L-freerouting.log` and the
+version line of its section:
+
+    RUN java.exe -jar freerouting.jar -de C:\Users\bernd\Documents\AI\FireFlow\hardware\reva\spike\out\freerouting-2L.dsn -do C:\Users\bernd\Documents\AI\FireFlow\hardware\reva\spike\out\freerouting-2L.ses --gui.enabled=false -da -mp 20 -mt 1
+    2026-09-29 17:41:26.213 INFO   Freerouting v2.4.1 (build-date: 2026-09-03)
+
+**Analytics.** Every run's section carries the line (and, as in Task 4, the
+accepted version check `No new version available`); the arguments are
+Freerouting's own `Command line arguments` line, cut after the SES path:
+
+    run1: 2026-09-29 17:29:33.675 DEBUG  Analytics are disabled |  --gui.enabled=false -da -mp 20 -mt 1
+    run2: 2026-09-29 17:32:35.264 DEBUG  Analytics are disabled |  --gui.enabled=false -da -mp 20 -mt 1
+    run3: 2026-09-29 17:36:17.146 DEBUG  Analytics are disabled |  --gui.enabled=false -da -mp 100 -mt 1
+    run4: 2026-09-29 17:38:45.552 DEBUG  Analytics are disabled |  --gui.enabled=false -da -mp 100 -mt 1 -us global
+    run5: 2026-09-29 17:39:46.082 DEBUG  Analytics are disabled |  --gui.enabled=false -da -mp 100 -mt 8
+    run6: 2026-09-29 17:40:40.938 DEBUG  Analytics are disabled |  --gui.enabled=false -da -mp 20 -mt 1 -is sequential
+    run7: 2026-09-29 17:41:26.251 DEBUG  Analytics are disabled |  --gui.enabled=false -da -mp 20 -mt 1
+
+One more Freerouting process ran outside the budget: a check-only `-drc`
+probe on run 2's DSN (below). It passed `-da` and logged
+`2026-09-29 17:37:24.026 DEBUG  Analytics are disabled`.
+
+**Fairness: footprint rule areas reach Freerouting.** Probe
+`probe_dsn.py` (scratchpad `task7/`) builds and locks the strip, exports a
+DSN and counts:
+
+    board-level rule areas: 13 strip keepouts: 13
+    footprint rule areas: 6
+       ('J18', 'Jack_3.5mm_QingPu_WQP-PJ398SM_Vertical_CircularHoles', ['F.Cu'], True, True, 270.3, 112.5, 273.31, 115.5)
+       ... (J17, J16, J15, J14, J13 alike)
+    export True
+    keepout lines in DSN: 27
+    keepouts before (library: 26 inside library: 1
+
+26 = the 13 strip keepouts on F.Cu and B.Cu. The 27th is inside the
+PJ398SM `(image ...)` block: `(keepout "" (polygon F.Cu 0  1505.14 -6480
+...))`, a circle of radius 1.5 mm around the jack hole, which Freerouting
+applies to each of the six placements. So the DSN carries every rule area,
+the jacks' as their real circle (the own router got their bounding box).
+No DSN change was needed for them; `items_not_allowed` is 0 on every run.
+
+| run | change | seconds | vias | length mm | Freerouting routing stage | unrouted before fill | gated reds |
+|---|---|---|---|---|---|---|---|
+| 1 | none (first complete run) | 13.4 | 44 | 2915.0 | 18 passes, 947.36 (1 unrouted: SENSE_1 `U_MUX4-3 -> U_MUX5-3`) | 0 | `locked` |
+| 2 | DSN: 3 fixed-wire ends snapped onto pad centres, 1 fixed wire split at a junction | 15.5 | 45 | 2816.3 | 18 passes, 947.36 (1 unrouted: LED14 `PORT2-1 -> R32-1`) | 1 | `ratsnest` |
+| 3 | `-mp 100` | 15.5 | 45 | 2816.3 | as run 2 | 1 | `ratsnest` |
+| 4 | `-mp 100 -us global` | 14.9 | 45 | 2816.3 | as run 2 | 1 | `ratsnest` |
+| 5 | `-mp 100 -mt 8` | 14.9 | 45 | 2816.3 | as run 2 | 1 | `ratsnest` |
+| 6 | `-mp 20 -mt 1 -is sequential` | 14.9 | 45 | 2816.3 | as run 2 | 1 | `ratsnest` |
+| 7 | `-mp 20 -mt 1` (run 2's configuration again) | 15.0 | 45 | 2816.3 | as run 2 | 1 | `ratsnest` |
+
+`seconds` is the Java subprocess's wall time, including start-up; vias and
+length count every net except the three locked ones. Runs 3 to 7 wrote SES,
+board and both PNGs byte-identical to run 2 (`cmp`, below). The budget
+(first complete run plus six changed runs) is used up; run 7 is the
+method's result: **one gated red, `ratsnest` (LED14 unrouted)**.
+
+**Run 1: Freerouting touched a locked net.** The proof's `locked` step:
+
+    RED 4. locked     14 locked segments unchanged on SENSE_1, OUT_L, OUT_R
+            moved or added: ('SENSE_1', 'B.Cu', 224.491, 42.435, 224.491, 42.435, 0.25)
+            moved or added: ('SENSE_1', 'B.Cu', 274.767, 42.413, 274.768, 42.413, 0.25)
+            2 unlocked items on locked nets
+
+The SES (`run1/freerouting-2L.ses`, lines 1493-1506, units 0.1 um) holds
+two SENSE_1 wires, 0.5 um each, from a COM pad centre to the fixed wire's
+end: `2747675 -424125` -> `2747680 -424125` and `2244907 -424350` ->
+`2244910 -424350`. KiCad's DSN writes wire coordinates in whole um
+(`274768 -42412.5`) but component places to 0.001 um (`U_MUX4 272862.5
+-39937.5`), so a locked track that ends on a pad centre arrives up to 0.5 um
+beside it. Freerouting also reported `Net 'SENSE_1' (1 unrouted
+connection): U_MUX4-3 -> U_MUX5-3`: the U_MUX5 branch ends at
+`246000 -64000`, on the interior of the trunk wire `232231 -64000  274768
+-64000`, and Freerouting did not count that T-junction as connected (the
+geometry is KiCad-connected: `unrouted before fill: 0`). Everything else in
+run 1 was green: `copper` gated 0 everywhere, `ratsnest` 0/0/0.
+
+**Run 2's DSN handling** (`fix_locked_wires()`): a fixed-wire end within
+1 um of a same-net pad centre is moved onto it, and a fixed wire with
+another same-net fixed-wire end on its interior is split there. The locked
+copper on the board is not touched; only Freerouting's picture of it
+changes. Dry run on a fresh export before run 2 (`dry_fix.py`): `snapped 3
+split 1`, `fix wires before 14 after 15`, every other DSN line unchanged.
+Freerouting then counted the SENSE_1 pins as connected (`85 of 91 SMD pins
+needing fanout (6 already connected` against run 1's `89 of 91 ... (2
+already connected`), its SES names no locked net at all (`grep -c
+"SENSE_1\|OUT_L\|OUT_R" run2/freerouting-2L.ses` -> 0), and `locked` went
+green. The
+routing then ended with LED14 unrouted instead.
+
+**Why LED14 stays unrouted (probed, mechanism not established).**
+`probe_pocket.py` on the run-2 board around R32.1 (237.775, 39.208), B.Cu,
+radius 7 mm (B.Cu lines only):
+
+    B.Cu MUX_S0     (227.650,32.014)-(251.119,32.014) w 0.250 d 3.99
+    B.Cu GND        (230.113,38.192)-(233.339,41.418) w 0.400 d 5.71
+    B.Cu GND        (237.330,41.208)-(236.028,41.208) w 0.400 d 5.21
+    B.Cu LED14_A    (239.425,40.763)-(239.425,39.208) w 0.250 d 4.69
+
+and on F.Cu, radius 4.5 mm: `F.Cu GND (239.050,26.500)-(239.050,38.186)` and
+`(239.050,38.186)-(237.330,39.906)`, 0.18 mm from R32.1's centre. In run 1
+LED14 was routed, via F.Cu at x 237.021 from y 38.454 to 28.365 with a via
+at each end -- the corridor run 2's F.Cu GND run now occupies. The fanout
+stage escaped 90 of 91 SMD pins (`escaped pins: 90/91`); which pin failed is
+not in the log. Freerouting gives no reason beyond "could not be routed".
+
+**No `FR_ARGS` lever reached it.** The routing stage stops itself:
+`The router's best score (947.35) has not improved by more than 0.5 points
+since pass #8. Stopping the auto-router after 18 passes (1 item still
+unconnected).` -- the same line in runs 2-7 with `-mp 20` and `-mp 100`.
+The optimizer runs after it and ends each time with `Stopping optimization
+pass #1 early after 50 consecutive items could not be improved` and an
+unchanged score, so `-us`, `-is` and `-mt` had nothing to change: runs 3-6
+are byte-identical to run 2. The jar also has router scoring settings
+(`start_ripup_costs`, `via_costs`, `fanout` in `ScoringSettings` /
+`FanoutSettings`, string constants); they are outside this task's levers
+and were not tried.
+
+**Freerouting's "30 violations"** are present from pass 1 and never
+change. A check-only run, `java -jar freerouting.jar -de run2/freerouting-2L.dsn
+-drc drc-input.json --gui.enabled=false -da` (rc 0; the report lands in the
+working directory, moved to the scratchpad), lists them:
+
+    violations 30
+    10 ('holeClearance', 'Hole clearance violation between Pin [SM_3V3] and BoardOutline (expected: 0,2000')
+    10 ('holeClearance', 'Hole clearance violation between Pin [GND] and BoardOutline (expected: 0,2000 mm')
+    2 ('holeClearance', 'Hole clearance violation between Pin [M3_CH0] and BoardOutline ...
+    (2 each for M3_CH1, M4_CH0, M4_CH1, M4_CH2)
+
+The top pot row's pins at y 7.0 against the outline at y 6.0 (first entry:
+`Pin [SM_3V3]` at x 228.3, y -7.0, `actual: 0,0901 mm`): 15 pins (5 SM_3V3,
+5 GND, 5 channel pins), each listed twice -- the same count as KiCad's
+ungated `copper_edge_clearance 15`. A placement fact (the P4 rail-zone
+question), not a routing result.
+
+Final run (7):
+
+    freerouting: {'seconds': 15.0, 'rc': 0, 'vias': 45, 'length_mm': 2816.3, 'log': 'hardware\\reva\\spike\\out\\freerouting-2L-freerouting.log', 'analytics': '2026-09-29 17:41:26.251 DEBUG  Analytics are disabled'}
+    unrouted before fill: 1
+    wrote hardware\reva\spike\out\freerouting-2L.kicad_pcb
+        1. nets       52 nets, 0 differ from the intent node for node
+        2. anchors    36 panel parts, worst 0.0000 mm off its hole (limit 0.01)
+        3. decoupling 3 decouplers, worst 1.778 mm (limit 2.0)
+        4. locked     14 locked segments unchanged on SENSE_1, OUT_L, OUT_R
+        5. copper     gated: shorting_items 0, clearance 0, hole_clearance 0, hole_to_hole 0, tracks_crossing 0, track_dangling 0, via_dangling 0, items_not_allowed 0 (not gated: copper_edge_clearance 15, courtyards_overlap 6, pth_inside_courtyard 2, silk_edge_clearance 23, silk_over_copper 44, silk_overlap 20, starved_thermal 4, track_width 15, unconnected_items 1)
+    RED 6. ratsnest   unconnected: 1 before fill, 1 live, 1 kicad-cli
+            LED14        PORT2.1, R32.1
+            1 connections unrouted before the fill
+        7. audio      nearest LED track to audio: 0.50 mm (OUT_L to LED18; coupon rule 10.0, not gated)
+        8. render     rendered freerouting-2L-top.png, freerouting-2L-bottom.png
+    proof took 3.0 s -- RED            (exit 1)
+
+Unlike Task 6, `ratsnest` printed its per-net line here (`LED14 PORT2.1,
+R32.1`). No sabotage runs: the `ratsnest` RED is the real result, the
+`locked` RED of run 1 was a real one too, and Task 6 already proved the
+`ratsnest` and `items_not_allowed` REDs. No dangling vias on any run
+(`via_dangling 0`), unlike the Task 4 probe boards.
+
+**Ungated, but different from the own router:**
+
+- `track_width 15` (run 1: 11), DRC severity error: `min Breite 0,2500 mm;
+  tatsächlich 0,1874 mm`, on short tracks at U_MUX5's pins (e.g. `Track
+  [M5_CH0] on B.Cu, length 0.9110 mm`). Freerouting narrows the track at
+  SOIC pins; the jar has a `router.automatic_neckdown` setting (string
+  constant), which is *inferred*, not probed, to be the cause.
+- `audio`: nearest LED track to audio 0.50 mm (OUT_L to LED18), against
+  the own router's 2.71 mm.
+- GND fill (`probe_fill.py`, the saved boards):
+
+      own-2L.kicad_pcb
+          GND F.Cu 8430 mm2 in 10 islands
+          GND B.Cu 7515 mm2 in 21 islands
+          track widths: {0.25: 726, 0.4: 596} vias (all nets): 74
+      freerouting-2L.kicad_pcb (run 7)
+          GND F.Cu 8698 mm2 in 4 islands
+          GND B.Cu 6537 mm2 in 16 islands
+          track widths: {0.1874: 15, 0.25: 294, 0.3: 4, 0.4: 212} vias (all nets): 45
+
+  Freerouting leaves 978 mm2 less GND on B.Cu, 268 mm2 more on F.Cu.
+
+**Reproducibility.** Run 7 repeats run 2's configuration; each board and
+file copied to the scratchpad after its run:
+
+    cmp run2/freerouting-2L.ses run7/freerouting-2L.ses                   exit=0
+    cmp run2/freerouting-2L.dsn run7/freerouting-2L.dsn                   exit=0
+    cmp run2/freerouting-2L.kicad_pcb run7/freerouting-2L.kicad_pcb       exit=0
+    cmp run2/freerouting-2L-top.png run7/freerouting-2L-top.png           exit=0
+    cmp run2/freerouting-2L-bottom.png run7/freerouting-2L-bottom.png     exit=0
+
+The per-pass board hashes in the log agree as well (pass 18 on
+`ddf1a8510a63460b2eb0711dae637018` in runs 2-7).
+
+**The pictures** (`routing-spike/freerouting-2L-top.png`,
+`routing-spike/freerouting-2L-bottom.png`; the bottom view is mirrored, the
+port column on the right). Top: narrow bundles of two to four tracks run
+vertically through the pot columns (down the RV49/RV52 column, through
+RV56-RV57, the RV58-RV61 column and a long triple bundle from RV62 down
+towards RV64), with 45-degree doglegs between the pot rows; a few long single
+runs drop from the lower pot rows towards the jacks. Enclosed bays where the
+GND fill was removed show as dark patches, the largest between RV51, RV52
+and RV55 and inside RV56/RV57. Bottom: long straight runs, mostly horizontal
+or 45 degrees, fan from the three muxes to the port column; large unfilled
+dark areas sit along the port side, above the top pot row and in the lower
+right quarter between the jacks and the ports, where parallel runs cut the
+B.Cu fill into islands (the 978 mm2 above). As far as the render's
+resolution shows, the vias sit singly. Against the own router: fewer vias
+(45 against 74) and fewer track segments (525 against 1322, the width
+histograms above), but less GND on B.Cu.
+
+![Freerouting, top](routing-spike/freerouting-2L-top.png)
+![Freerouting, bottom](routing-spike/freerouting-2L-bottom.png)
