@@ -2,7 +2,233 @@
 
 Spec: [`../superpowers/specs/2026-09-29-rev-a-p4a-routing-spike-design.md`](../superpowers/specs/2026-09-29-rev-a-p4a-routing-spike-design.md)
 
-*Status: measuring. The recommendation is written in the last task.*
+**Status: done 2026-09-29.** Recommendation, for Bastian to decide (master
+plan working rule 9): **P4 routes with our own router** (`hardware/gen/route.py`)
+**on 4 layers.** Ours was the only method with every gated step green on
+2 layers. On 4 layers it needs 36 routed vias instead of 74 and 1733.0 mm of
+track instead of 2682.9, under an unbroken GND plane. The extra cost is
+$25.60 per order of five boards.
+
+## Question
+
+P4 has two open decisions, and this spike feeds both (spec §1, §4.4):
+
+1. **How does P4 route?** Our own grid router, or Freerouting through KiCad's
+   Specctra export. Both routers got the same board and the same proof.
+2. **2 or 4 layers?** The winner routed the strip once more on 4 layers, and
+   the JLC price was looked up for both.
+
+## Setup
+
+- **Strip:** the SENSE_1 mux region, the hardest of the four: outline x 203–300, y 6–122 mm. The outline is an assumption, and the west edge is a cut (spec §2.1).
+- **Parts:** 72 in total ([Strip](#strip-task-2)). 36 panel parts sit on their P1 holes: 22 pots (pins north), 6 jacks, 7 LEDs and 1 key. 13 SMD parts on the back were placed by a search: 3 muxes, 3 × 100 nF and 7 LED resistors. There are 23 ports and 52 nets.
+- **Keepouts:** 13 foreign pads that reach over the cut ([Strip](#strip-task-2)), plus each PJ398SM jack's own F.Cu rule area ([Task 6, fix 1](#our-own-router-2-layers-task-6); [Task 7, fairness](#freerouting-2-layers-task-7)).
+- **Ports:** 23 SMD pads in one column at x 204.5, on 2.54 mm slots, one for each net that leaves the strip ([Locked nets](#locked-nets-task-3)).
+- **Locked nets:** SENSE_1, OUT_L and OUT_R are hand-routed as 14 segments on B.Cu at 0.25 mm; a proof step fails if any of them changes ([Locked nets](#locked-nets-task-3)).
+- **Rules:** signal 0.25 mm, supply 0.4 mm, clearance 0.2 mm, via 0.6/0.3 mm. On 2 layers, GND and SM_3V3 are routed as tracks, then GND is filled on both sides. On 4 layers, GND is a plane on In1 and SM_3V3 a plane on In2. Freerouting was v2.4.1 on Temurin 25.0.4.1 ([Task 4](#freerouting-task-4)).
+
+## Results
+
+| | own, 2 layers | Freerouting, 2 layers | own, 4 layers |
+|---|---|---|---|
+| Gated reds, final run | **none** | **1**: `ratsnest`, LED14 `PORT2.1`–`R32.1` | **none** |
+| Unrouted before fill | 0 | 1 | 0 (counted after the plane fill, 75 before it) |
+| Vias | 74 | 45 | 36 + 19 stitching |
+| Track length ¹ | 2682.9 mm | 2816.3 mm | 1733.0 mm |
+| Routing seconds | 13.8 (re-runs 14.2–15.0) | 15.0 ² | 6.2 |
+| Runs to green | 1 (+ adapter fix 1b ³) | none in 7 (budget used up) | 2 |
+| Agent time to the first green run ⁴ | ≈ 12 min (16:13 → ≈ 16:25) | none; budget used 17:27 → ≈ 17:45 | ≤ ≈ 23 min (17:47 → green on run 2, task done ≈ 18:10) |
+| Reproducible (`cmp`) | yes: board | yes: SES, DSN, board, PNGs (run 2 = run 7) | yes: board, PNGs |
+| Audio: nearest LED track to OUT_L/OUT_R ⁵ | 2.71 mm (LED16) | 0.50 mm (LED18) | 2.21 mm (LED16) |
+| Ungated DRC classes that differ | `starved_thermal 8` | `track_width 15` (0.1874 mm), `starved_thermal 4` | neither |
+| GND fill, B.Cu | 7515 mm² in 21 islands | 6537 mm² in 16 islands | plane on In1 |
+| Source | [Task 6](#our-own-router-2-layers-task-6) | [Task 7](#freerouting-2-layers-task-7) | [Task 8](#own-4-layers-task-8) |
+
+¹ No figure includes the three locked nets. For our router it is the
+router's own sum over the nets it routes: 49 on 2 layers, and 47 on 4 layers,
+where the planes carry GND and SM_3V3. For Freerouting it was read off the
+board, counting every net except the locked three.
+² The Java subprocess's wall time, including start-up.
+³ Run 1 was green on every step gated at that time. It also carried
+`items_not_allowed 1`, which was not gated yet: a track through a jack's own
+rule area. The adapter fix (1b) feeds footprint rule areas to the router, and
+`items_not_allowed` is gated from 1b on.
+⁴ Approximate, read off the controller's clock (spec §4.2).
+⁵ The coupon's rule is 10.0 mm. Neither router knows it, so it is measured
+but not gated (spec §4.1, step 5).
+
+Every proof took about 3 s.
+
+## Pictures
+
+| | own, 2 layers | Freerouting, 2 layers | own, 4 layers |
+|---|---|---|---|
+| top | ![own 2L top](routing-spike/own-2L-top.png) | ![Freerouting 2L top](routing-spike/freerouting-2L-top.png) | ![own 4L top](routing-spike/own-4L-top.png) |
+| bottom (mirrored, ports on the right) | ![own 2L bottom](routing-spike/own-2L-bottom.png) | ![Freerouting 2L bottom](routing-spike/freerouting-2L-bottom.png) | ![own 4L bottom](routing-spike/own-4L-bottom.png) |
+
+- `own-2L-top.png`: a vertical bundle of four to six tracks runs down the middle between the upper pot rows, and long 45° runs cross the lower-left quarter towards the jacks.
+- `own-2L-bottom.png`: the three muxes fan out into the port column, and a diagonal bundle runs from U_MUX5 to the lower ports. Apart from the port approaches, only the locked OUT_R run follows the outline.
+- `freerouting-2L-top.png`: narrow bundles run through the pot columns. The dark bays are GND fill that was removed, the largest between RV51, RV52 and RV55.
+- `freerouting-2L-bottom.png`: long straight runs lead from the muxes to the ports. Large unfilled areas along the port side and in the lower right account for the 978 mm² of B.Cu GND that Freerouting has less than our router.
+- `own-4L-top.png`: the outer layers have no fill. The top side is mostly empty, with one horizontal bundle between the RV51–RV61 row and D15.
+- `own-4L-bottom.png`: the muxes fan out to the ports. The locked SENSE_1 trunk shows as the rectangle down to y 64, and the stitching vias are the dots beside the SMD parts.
+
+## Prices
+
+From [JLC prices](#jlc-prices-task-9), quoted for 5 boards of FR-4, 1.6 mm, at the **assumed** 295 × 116 mm, 2026-09-29:
+
+| | 2 layers | 4 layers |
+|---|---|---|
+| Calculated price, 5 boards | $20.50 | $46.10 |
+| Per board (price / 5) | $4.10 | $9.22 |
+| Build time | 2 days | 3–4 days |
+
+The difference is **$25.60 per order of five, or $5.12 per board**. Shipping
+($29.94) is the same for both. P4 sets the real outline, and the price
+follows from it.
+
+## Findings for P4
+
+1. **The audio rule has to be given to the router.** The nearest LED track
+   is 2.71, 0.50 and 2.21 mm from the audio nets, against the coupon's
+   10.0 mm ([Results](#results)). Freerouting honours a Specctra
+   `class_class` clearance as an edge-to-edge distance that covers pads too:
+   0.435 mm without the rule, 3.658 mm with a 3 mm rule
+   ([Task 4, class_class](#freerouting-task-4)). `route.py` has one board
+   clearance, and its clearance classes differ only by track half-width. P4
+   needs a per-net-pair clearance in it: audio nets against LED nets, to be
+   rasterised like the existing halo. Four layers do not solve this (2.21 mm).
+2. **Pot orientation and the rail zone.** With pins north, the top pot row's
+   15 pins (RV49, RV50, RV56, RV57, RV58) sit at y 7.0, 1 mm from the
+   assumed edge at y 6. KiCad counts them as `copper_edge_clearance 15`, and
+   Freerouting as 30 hole-clearance violations, each pin twice
+   ([Placement probes](#placement-probes-task-9);
+   [Task 7, "30 violations"](#freerouting-2-layers-task-7)). P4 has to choose
+   between the rail zone and this orientation. Pins south shorted five LEDs
+   onto pot pins (spec §2.2).
+3. **LED pads sit inside pot and jack courtyards.** Even the unrouted strip
+   has 6 `courtyards_overlap`: D16/RV56, D14/RV54, D17/J18, D15/RV53, D19/SW3
+   and D15/RV54. It also has 2 `pth_inside_courtyard`: D17's pad 1 inside
+   J18, and D15's pad 1 inside RV54
+   ([Placement probes](#placement-probes-task-9)). The positions come from
+   P1's hole list. Parts on the front can collide physically, and no gated
+   check looks at this.
+4. **Port order.** The port column orders nets by the mean y of their source
+   pads, and breaks ties by net name. All six jack nets tie at y 118.92, so
+   the column reads GATE_B, MOD1_B, MOD2_B, OUT_L, OUT_R, PITCH_B
+   ([Placement probes](#placement-probes-task-9)). That puts OUT_L above
+   OUT_R, although OUT_L's jack J17 is west of J18. OUT_R therefore leaves
+   its tip southward and passes under J17 along y 121.0, 0.875 mm from the
+   outline ([Locked nets](#locked-nets-task-3)). Any boundary P4 routes to,
+   such as the module header, should be ordered by the geometry of its
+   sources, with ties broken by x.
+5. **OUT_L and OUT_R run side by side for 50.0 mm**, from x 204.5 to 254.5,
+   2.54 mm apart centre to centre on B.Cu
+   ([Placement probes](#placement-probes-task-9)). L/R crosstalk was not
+   checked. P4 should set their spacing, or put a guard between them, on
+   purpose.
+6. **The SMD placement search** is a first fit on a square spiral. It found
+   a place for all 13 back-side parts, and the gated checks stayed at 0. The
+   muxes ended 8.2, 8.5 and 3.6 mm from the centroids of their pot groups,
+   and each 100 nF ended 1.778 mm from its VCC pad (limit 2.0). Every LED
+   resistor sits 2.00 mm north of its LED
+   ([Placement probes](#placement-probes-task-9)). The search does not
+   consider routing. A mux's rotation (90, 90, 0) comes from the order of
+   the ring, not from the direction of its pins. R32 lands in the pocket
+   between D15, RV53 and RV54 (item 3), and LED14 → R32.1 is the one
+   connection Freerouting left unrouted. Keep the search as a seed for P4,
+   not as its placement.
+7. **The port column does not carry over to the full board.** The column
+   exists only because of the cut. It packs 23 ports into keepout-free
+   2.54 mm slots, and the order-preserving assignment pushes some ports far
+   from their sources: LED14's port sits at y 20.70, 18.5 mm north of R32.1
+   ([Placement probes](#placement-probes-task-9)). Two things carry over:
+   the ordering lesson (item 4), and treating a region boundary as pads.
+8. **The stitch search needs `netless_blocks`.** The coupon's via search
+   skips netless pads. The Rev A pots' mounting tabs are netless PTH pads,
+   and on 4 layers two GND stitching vias landed on RV52's and RV60's tabs
+   (`shorting_items 10`, `hole_clearance 8`). Rev A passes
+   `netless_blocks=True`, and the coupon keeps the default
+   ([Task 8, run 1](#own-4-layers-task-8)).
+9. **Freerouting narrows tracks.** It left 15 tracks at 0.1874 mm against
+   the 0.25 mm class, at U_MUX5's SOIC pins (`track_width 15`, a DRC error).
+   The class stays ungated for this spike (Ruling R9). The cause is inferred
+   to be `router.automatic_neckdown` and was not probed
+   ([Task 7](#freerouting-2-layers-task-7)).
+10. **`PCB_VIA::GetWidth()` without a layer hangs pcbnew.** It opens a modal
+    wxWidgets debug alert, and the process sat idle for more than
+    10 minutes. Every P4 script that reads vias must call
+    `GetWidth(pcbnew.F_Cu)` ([Task 8](#own-4-layers-task-8)).
+11. **KiCad's DSN export rounds wire coordinates.** Locked wire ends missed
+    their pad centres by up to 0.5 µm. The export's six significant digits
+    are inferred, not read in KiCad's source. Freerouting added two 0.5 µm
+    stubs on SENSE_1, which turned the `locked` step red. `fix_locked_wires()`
+    snaps the ends onto the pads and splits a T-junction
+    ([Task 7, run 1](#freerouting-2-layers-task-7)). This matters only if
+    Freerouting comes back.
+12. **What the renders show that no check caught:**
+    - In all three runs, F.Cu tracks pass under the pot bodies, inside
+      their courtyards. The spec lets front-side bodies block nothing
+      (§2.2), so whether an Alpha 9 mm body over mask-covered track is
+      acceptable is P4's call.
+    - On 2 layers the GND fill leaves dark unfilled bays in both runs
+      (areas and island counts under [Results](#results)). No gated check
+      measures fill coverage.
+    - The port and reference labels overlap: silk, ungated.
+13. **Gaps in the harness P4 should close:**
+    - `unconnected_by_net()` printed nothing for our router's `ratsnest`
+      RED ([Task 6](#our-own-router-2-layers-task-6)).
+    - On 4 layers, "unrouted before fill" is counted after the plane fill,
+      and whether that count can go red on its own was not probed
+      ([Task 8](#own-4-layers-task-8)).
+
+## Recommendation
+
+*A recommendation, not a decision. Bastian decides (master plan working
+rule 9).*
+
+**Routing method: our own router.** Ruling R8 already chose it as the
+spike's winner, on the rule that every gated step must be green. Ours was
+green on its first run (plus the adapter fix, Results footnote ³). Freerouting ended with LED14 unrouted after its
+whole budget, and none of its switches changed the result: runs 3–6 were
+byte-identical to run 2. Our router is deterministic, runs without Java,
+and makes no network call; Freerouting checks api.github.com on every run
+([Task 4](#freerouting-task-4)). Our router also keeps the full track
+width. The price is untidier geometry: 74 vias against 45, and 1322 track
+segments against 525. We also still have to build the per-net-pair
+clearance that Freerouting already has (finding 1).
+
+**Layers: 4.** Our router routed 2 layers cleanly, so by the spec's own
+premise (§1) routability is no longer an argument. The argument is quality
+against price:
+
+- On 4 layers the same router places 36 routed vias instead of 74, and
+  1733.0 mm of track instead of 2682.9.
+- It needs 4 iterations instead of 6, and 6.2 s instead of 13.8.
+- GND is one plane, not a fill cut into 10 + 21 islands with 8 starved
+  thermals ([Task 6](#our-own-router-2-layers-task-6),
+  [Task 8](#own-4-layers-task-8)). The board carries pot readings through
+  analog muxes and the audio outputs.
+- This strip is one of four regions. The shift registers, the module and
+  the SD socket are not on it, so how much 2-layer room the full board
+  has is unmeasured.
+
+The cost is $25.60 per order of five ($5.12 per board), quoted for the
+assumed outline, plus one to two days of build time. 4 layers do not fix
+the audio distance (2.21 mm against 2.71). That is finding 1's job on
+either layer count.
+
+## What stays
+
+- `hardware/gen/kipcb.py`, `hardware/gen/pcb_proof.py` and
+  `hardware/gen/stitch.py` stay. The coupon rebuilds byte-identically on
+  them.
+- `hardware/gen/route.py` stays, because our router won. If Bastian picks
+  Freerouting instead, `route.py` is removed in a follow-up commit on this
+  branch and kept on the tag `attic/route-spike-2026-10`.
+- `hardware/reva/spike/`, which includes `freerouting.py`, is removed when
+  P4 starts. The Freerouting jar and the JRE live outside the repository,
+  in `%LOCALAPPDATA%\fireflow-tools\`.
 
 ## Measurement log
 
@@ -1267,3 +1493,112 @@ dots beside the SMD parts and cannot be told apart from signal vias. Against
 
 ![own router, 4 layers, top](routing-spike/own-4L-top.png)
 ![own router, 4 layers, bottom](routing-spike/own-4L-bottom.png)
+
+### Placement probes (Task 9)
+
+The placement stage again, for the placement facts the report cites:
+
+    KIPY hardware/reva/spike/run.py --method none --layers 2
+    built the strip: 72 parts, 13 keepouts, 23 ports in 8.4 s
+    locked 14 items on SENSE_1, OUT_L, OUT_R
+    (13 keepout lines as in Task 2)
+        5. copper     gated: shorting_items 0, clearance 0, hole_clearance 0, hole_to_hole 0, tracks_crossing 0, track_dangling 0, via_dangling 0, items_not_allowed 0 (not gated: copper_edge_clearance 15, courtyards_overlap 6, pth_inside_courtyard 2, silk_edge_clearance 23, silk_over_copper 44, silk_overlap 20, unconnected_items 128)
+    proof took 2.6 s -- GREEN                       (exit 0; steps 1-4 and 6 as in Task 3)
+
+**Courtyards.** From the report that run wrote,
+`grep -A3 "courtyards_overlap\]\|pth_inside_courtyard\]" hardware/reva/spike/out/none-2L-drc.rpt`
+(the `Rule:` lines dropped):
+
+    [courtyards_overlap]   @(258.1300 mm, 21.7080 mm): Footprint D16   @(259.3000 mm, 7.0000 mm): Footprint RV56
+    [courtyards_overlap]   @(233.2550 mm, 57.4280 mm): Footprint D14   @(234.4250 mm, 42.7200 mm): Footprint RV54
+    [courtyards_overlap]   @(277.2300 mm, 114.0000 mm): Footprint D17  @(271.8000 mm, 107.5200 mm): Footprint J18
+    [pth_inside_courtyard] @(277.2300 mm, 114.0000 mm): PTH pad 1 [GND] of D17   @(271.8000 mm, 107.5200 mm): Footprint J18
+    [courtyards_overlap]   @(239.0500 mm, 26.5000 mm): Footprint RV53  @(237.3300 mm, 41.2080 mm): Footprint D15
+    [courtyards_overlap]   @(282.8300 mm, 114.0000 mm): Footprint D19  @(290.8000 mm, 114.0000 mm): Footprint SW3
+    [courtyards_overlap]   @(237.3300 mm, 41.2080 mm): Footprint D15   @(234.4250 mm, 42.7200 mm): Footprint RV54
+    [pth_inside_courtyard] @(237.3300 mm, 41.2080 mm): PTH pad 1 [GND] of D15   @(234.4250 mm, 42.7200 mm): Footprint RV54
+
+**Edge clearance.** `grep -A3 "copper_edge_clearance\]" .../none-2L-drc.rpt | grep "@" | sort | uniq -c`:
+15 × `Segment on Edge.Cuts` at y 6.0, and one line each for pads 1-3 of RV49,
+RV50, RV56, RV57 and RV58, all at y 7.0000 mm (for example `@(228.3000 mm,
+7.0000 mm): PTH pad 3 [SM_3V3] of RV49`).
+
+**SMD placement and port order.** `probe_smd.py` (scratchpad `task9/`)
+builds the strip under `KIPY`. It prints each back-side part's search start
+(`target`: the pot-group centroid for a mux, the VCC pad for a 100 nF, the
+LED's hole for a resistor), where the search put it, and the distance
+between the two. It also prints the port column with the mean y of each
+net's source pads:
+
+    SMD part  target           placed           walked  rot
+    U_MUX3   ( 227.59, 33.46) ( 222.59, 39.96)   8.20  90
+    U_MUX4   ( 272.86, 31.44) ( 272.86, 39.94)   8.50  90
+    U_MUX5   ( 256.44, 85.65) ( 258.44, 82.65)   3.61  0
+    C14      ( 227.03, 37.48) ( 228.63, 37.48)   1.60  90  pad1-to-VCC 1.778
+    C15      ( 277.31, 37.46) ( 278.91, 37.46)   1.60  90  pad1-to-VCC 1.778
+    C16      ( 260.92, 87.09) ( 260.92, 88.69)   1.60  0  pad1-to-VCC 1.778
+    R36      ( 284.10,114.00) ( 284.10,112.00)   2.00  0  (LED D19)
+    R35      ( 283.90,103.81) ( 283.90,101.81)   2.00  0  (LED D18)
+    R34      ( 278.50,114.00) ( 278.50,112.00)   2.00  0  (LED D17)
+    R33      ( 259.40, 21.71) ( 259.40, 19.71)   2.00  0  (LED D16)
+    R32      ( 238.60, 41.21) ( 238.60, 39.21)   2.00  0  (LED D15)
+    R31      ( 234.53, 57.43) ( 234.53, 55.43)   2.00  0  (LED D14)
+    R30      ( 218.53, 61.81) ( 218.53, 59.81)   2.00  0  (LED D13)
+
+    port order source (mean pad y) for the locked audio nets and neighbours:
+      PORT1   y    8.00  LED15        mean source y   19.708 over 1 pads
+      PORT2   y   20.70  LED14        mean source y   39.208 over 1 pads
+      PORT3   y   23.24  MUX_EN4      mean source y   42.413 over 1 pads
+      ...
+      PORT17  y   74.04  LED18        mean source y  112.000 over 1 pads
+      PORT18  y   84.20  GATE_B       mean source y  118.920 over 1 pads
+      PORT19  y   86.74  MOD1_B       mean source y  118.920 over 1 pads
+      PORT20  y   91.82  MOD2_B       mean source y  118.920 over 1 pads
+      PORT21  y  101.98  OUT_L        mean source y  118.920 over 1 pads
+      PORT22  y  104.52  OUT_R        mean source y  118.920 over 1 pads
+      PORT23  y  114.68  PITCH_B      mean source y  118.920 over 1 pads
+
+The six jack nets tie at 118.920. `_port_rows()` in `stripe.py` sorts by
+`(mean y, net name)`, so the tie is broken alphabetically. LED14's port sits
+18.5 mm north of its source (20.70 against 39.208).
+
+**OUT_L / OUT_R parallel run.** The corners in `locked.py` (lines 61 and 69):
+
+    (OUT_L, "B.Cu", W, [("pad", "J17", "T"), (263.5, 115.72), (263.5, 101.98), ("port", OUT_L)]),
+    (OUT_R, "B.Cu", W, [("pad", "J18", "T"), (271.8, 121.0), (254.5, 121.0), (254.5, 104.52), ("port", OUT_R)]),
+
+Both ports are at x 204.500 (`--where`, Task 3). OUT_L runs west along
+y 101.98 from x 263.5, and OUT_R along y 104.52 from x 254.5. They are
+parallel from x 204.5 to 254.5, which is 50.0 mm at 2.54 mm centre to
+centre.
+
+### JLC prices (Task 9)
+
+The controller looked these up on 2026-09-29 at jlcpcb.com/quote, which
+redirects to cart.jlcpcb.com/quote. It was not logged in and added nothing
+to a cart. Inputs: FR-4, quantity 5, 295 × 116 mm, 1.6 mm; everything else
+stayed at its default (green, HASL). Assembly was left out (spec §4.3).
+
+| | Engineering fee | Board | Build time | Calculated price |
+|---|---|---|---|---|
+| 2 layers | $4.00 | $16.50 | 2 days, $0.00 | **$20.50** |
+| 4 layers | $25.00 | $21.10 | 3–4 days, $0.00 | **$46.10** |
+
+The shipping estimate was $29.94 in both cases (DHL Express DDP, 0.71 kg).
+The difference is $25.60 per order of 5 boards. The quote is for the
+assumed 295 × 116 mm, not for Rev A's real outline, which P4 decides.
+
+### Verification (Task 9)
+
+    ctest --test-dir build -R "hw_gen|reva|coupon" --output-on-failure
+     1/10 Test  #8: hw_gen_coupon_guard ..............   Passed    2.87 sec
+     2/10 Test  #9: hw_gen_writer_guard ..............   Passed    3.72 sec
+     3/10 Test #10: hw_gen_check_guard ...............   Passed   18.11 sec
+     4/10 Test #11: reva_assign_guard ................   Passed    0.19 sec
+     5/10 Test #12: reva_build_guard .................   Passed    3.69 sec
+     6/10 Test #13: reva_check_guard .................   Passed    7.16 sec
+     7/10 Test #14: hw_gen_bom_guard .................   Passed    1.18 sec
+     8/10 Test #15: hw_gen_pcb_proof_guard ...........   Passed    3.34 sec
+     9/10 Test #16: hw_gen_route_guard ...............   Passed    0.06 sec
+    10/10 Test #17: read_coupon_guard ................   Passed    0.02 sec
+    100% tests passed, 0 tests failed out of 10
