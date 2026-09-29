@@ -59,9 +59,13 @@ class Task8Contract(unittest.TestCase):
         cls.makefile = MAKEFILE.read_text(encoding="utf-8")
 
     def test_shipping_recipe_uses_the_accepted_o3_mode(self) -> None:
-        root_makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
-        self.assertRegex(root_makefile, r"(?m)^OPT\s*=\s*-O3$")
-        self.assertNotRegex(root_makefile, r"(?m)^LDFLAGS\s*\+=\s*-flto$")
+        # shell/ is the firmware that ships. This used to read the root
+        # Makefile of the upstream Spotykach firmware, which compiled no
+        # engine/ at all and was removed; the bench's o3 verdict has to hold
+        # where engine/ is built.
+        shell_makefile = (ROOT / "shell" / "Makefile").read_text(encoding="utf-8")
+        self.assertRegex(shell_makefile, r"(?m)^override OPT\s*:=\s*-O3$")
+        self.assertNotRegex(shell_makefile, r"(?m)^[^#\n]*-flto")
 
     def test_engine_2x4_is_hoisted_and_included_not_copied(self) -> None:
         # The pure-move contract itself: both workload files reach the shared
