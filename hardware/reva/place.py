@@ -162,11 +162,28 @@ def place_panel(s, proj):
             fp.SetPosition(kipcb._pt(h["x_mm"] - hx, h["y_mm"] - hy))
 
 
-def _silk_box(fp):
+SM_SHADOW_MM = (68.17, 40.18)   # spec §4.3: x -34.09..34.08, y -20.09..20.09 (the coupon's SM_SHADOW)
+SM_SHADOW_TOL = 0.1
+_TEXT_CLASSES = ("PCB_TEXT", "PCB_TEXTBOX", "PCB_FIELD")
+
+
+def module_shadow(fp):
+    """The module's shadow: the box of the silkscreen SHAPES on the part's own
+    side, text excluded (probed 2026-09-29: the footprint's "INSTALL ON THIS
+    SIDE" PCB_TEXT alone reaches 9 mm past the module outline). Raises
+    ValueError naming the part when the box is not SM_SHADOW_MM."""
     layer = pcbnew.B_SilkS if fp.IsFlipped() else pcbnew.F_SilkS
-    boxes = [PL.box(g.GetBoundingBox()) for g in fp.GraphicalItems() if g.GetLayer() == layer]
-    return (min(b[0] for b in boxes), min(b[1] for b in boxes),
-            max(b[2] for b in boxes), max(b[3] for b in boxes))
+    boxes = [PL.box(g.GetBoundingBox()) for g in fp.GraphicalItems()
+             if g.GetLayer() == layer and g.GetClass() not in _TEXT_CLASSES]
+    if not boxes:
+        raise ValueError("%s: no silkscreen shapes for the module shadow" % fp.GetReference())
+    b = (min(b[0] for b in boxes), min(b[1] for b in boxes),
+         max(b[2] for b in boxes), max(b[3] for b in boxes))
+    w, h = b[2] - b[0], b[3] - b[1]
+    if abs(w - SM_SHADOW_MM[0]) > SM_SHADOW_TOL or abs(h - SM_SHADOW_MM[1]) > SM_SHADOW_TOL:
+        raise ValueError("%s: shadow is %.2f x %.2f mm, spec §4.3 says %.2f x %.2f"
+                         % (fp.GetReference(), w, h, SM_SHADOW_MM[0], SM_SHADOW_MM[1]))
+    return b
 
 
 def _tht_clear_of_front(fp, bodies, pads):
@@ -181,7 +198,7 @@ def _tht_clear_of_front(fp, bodies, pads):
 
 
 def back_tht_refs(s):
-    return [r for r in ("U_SM", "J_PWR") if r in s.anchors]
+    return [r for r in ("U_SM", "J_PWR") if s.board.FindFootprintByReference(r) is not None]
 
 
 def _tht_blocked(s):
@@ -210,7 +227,7 @@ def place_module(s, proj):
         for x, y in PL.spiral(cx, cy, 0.5, 60.0):
             fp.SetOrientationDegrees(rot)
             fp.SetPosition(kipcb._pt(x, y))
-            if PL.inside(_silk_box(fp), inner) and _tht_clear_of_front(fp, bodies, pads):
+            if PL.inside(module_shadow(fp), inner) and _tht_clear_of_front(fp, bodies, pads):
                 d = math.hypot(x - cx, y - cy)
                 if best is None or d < best[0]:
                     best = (d, x, y, rot)
@@ -221,7 +238,7 @@ def place_module(s, proj):
     fp.SetOrientationDegrees(rot)
     fp.SetPosition(kipcb._pt(x, y))
     s.parts["U_SM"] = part
-    s.shadow = _silk_box(fp)
+    s.shadow = module_shadow(fp)
     s.anchors["U_SM"] = (x, y)
 
 
@@ -280,10 +297,10 @@ def place_power_header(s, proj, blocked):
         return (_tht_clear_of_front(f, bodies, pads)
                 and PL.gap(PL.courtyard_box(f), s.shadow) >= USB_CLEAR_MM)
 
-    PL.first_fit(fp, target, blocked, PL.grow(outline_box(), -EDGE_INSET), 0.5, 60.0,
-                 rotations=(rot,), accept=ok)
+    x, y, _rot = PL.first_fit(fp, target, blocked, PL.grow(outline_box(), -EDGE_INSET),
+                              0.5, 60.0, rotations=(rot,), accept=ok)
     s.parts["J_PWR"] = part
-    s.anchors["J_PWR"] = target
+    s.anchors["J_PWR"] = (x, y)           # the placed position, spec §4.4
 
 
 def build():

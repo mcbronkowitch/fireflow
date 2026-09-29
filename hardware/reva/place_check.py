@@ -151,24 +151,34 @@ def check_front(s, pcb_path, prefix):
 def check_module(s, pcb_path, prefix):
     if s.shadow is None:
         return False, "no module shadow recorded", []
+    um = _fp(s.board, "U_SM")
+    if um is None:
+        return False, "U_SM is not on the board", []
+    try:
+        shadow = P.module_shadow(um)          # measured from the board, not the placer's record
+    except ValueError as e:
+        return False, str(e), []
     bad = []
+    if max(abs(a - b) for a, b in zip(shadow, s.shadow)) > 1e-3:
+        bad.append("U_SM's shadow %s differs from the recorded %s" % (
+            tuple(round(v, 2) for v in shadow), tuple(round(v, 2) for v in s.shadow)))
     for fp in s.board.GetFootprints():
         ref = fp.GetReference()
         if ref == "U_SM" or not fp.IsFlipped():
             continue
         c = PL.courtyard_box(fp)
-        if c is not None and PL.overlaps(c, s.shadow):
+        if c is not None and PL.overlaps(c, shadow):
             bad.append("%s's courtyard enters the module shadow" % ref)
     jp = _fp(s.board, "J_PWR")
     if jp is None:
         bad.append("J_PWR is not on the board")
     else:
-        g = PL.gap(PL.courtyard_box(jp), s.shadow)
+        g = PL.gap(PL.courtyard_box(jp), shadow)
         if g < P.USB_CLEAR_MM:
             bad.append("J_PWR is %.1f mm from the module shadow (limit %.0f)" % (g, P.USB_CLEAR_MM))
     return not bad, "shadow %s, J_PWR %.1f mm away (limit %.0f)" % (
-        tuple(round(v, 2) for v in s.shadow),
-        PL.gap(PL.courtyard_box(jp), s.shadow) if jp else -1, P.USB_CLEAR_MM), bad
+        tuple(round(v, 2) for v in shadow),
+        PL.gap(PL.courtyard_box(jp), shadow) if jp else -1, P.USB_CLEAR_MM), bad
 
 
 SD_HEIGHT_MM = 14.18      # LCSC C3177022
@@ -278,15 +288,27 @@ def _sab_module_missing(s):
     s.shadow = None
 
 
+def _sab_front_back_tht(s):
+    """U_SM moved so its first pad (A1) sits on the first pot's hole point: a
+    back THT pin inside a front body."""
+    pot = sorted(r for r in s.front if r.startswith("RV"))[0]
+    um = _fp(s.board, "U_SM")
+    pb = PL.pad_boxes(um)[0][1]
+    px, py = s.holes[pot]
+    um.Move(kipcb._pt(px - (pb[0] + pb[2]) / 2.0, py - (pb[1] + pb[3]) / 2.0))
+
+
 SABOTAGES = {"anchors": _sab_anchors, "anchors_missing": _sab_anchors_missing,
              "edge": _sab_edge, "edge_missing": _sab_edge_missing,
              "front": _sab_front, "front_missing": _sab_front_missing,
              "known_stale": _sab_known_stale,
-             "module": _sab_module, "module_missing": _sab_module_missing}
+             "module": _sab_module, "module_missing": _sab_module_missing,
+             "front_back_tht": _sab_front_back_tht}
 # which step each sabotage must turn red (test_place.py reads this)
 TURNS_RED = {"anchors": "anchors", "anchors_missing": "anchors", "edge": "edge",
              "edge_missing": "edge", "front": "front", "front_missing": "front",
-             "known_stale": "edge", "module": "module", "module_missing": "module"}
+             "known_stale": "edge", "module": "module", "module_missing": "module",
+             "front_back_tht": "front"}
 
 
 def sabotage(s, name):
