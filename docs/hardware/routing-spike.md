@@ -5,9 +5,12 @@ Spec: [`../superpowers/specs/2026-09-29-rev-a-p4a-routing-spike-design.md`](../s
 **Status: done 2026-09-29.** Recommendation, for Bastian to decide (master
 plan working rule 9): **P4 routes with our own router** (`hardware/gen/route.py`)
 **on 4 layers.** Ours was the only method with every gated step green on
-2 layers. On 4 layers it needs 36 routed vias instead of 74 and 1733.0 mm of
-track instead of 2682.9, under an unbroken GND plane. The extra cost is
-$25.60 per order of five boards.
+2 layers. On 4 layers, GND and SM_3V3 become planes instead of 0.4 mm
+tracks. GND is then one island on In1, where 2 layers leave 10 + 21 fill
+islands. The signal routing stays about the same: 1733.0 mm against
+1742.5 mm, and 36 signal vias against 53. In total the board has 55 vias
+instead of 74. The extra cost is $25.60 per order of five boards, $21.00 of
+it the engineering fee.
 
 ## Question
 
@@ -20,12 +23,31 @@ P4 has two open decisions, and this spike feeds both (spec §1, §4.4):
 
 ## Setup
 
-- **Strip:** the SENSE_1 mux region, the hardest of the four: outline x 203–300, y 6–122 mm. The outline is an assumption, and the west edge is a cut (spec §2.1).
-- **Parts:** 72 in total ([Strip](#strip-task-2)). 36 panel parts sit on their P1 holes: 22 pots (pins north), 6 jacks, 7 LEDs and 1 key. 13 SMD parts on the back were placed by a search: 3 muxes, 3 × 100 nF and 7 LED resistors. There are 23 ports and 52 nets.
-- **Keepouts:** 13 foreign pads that reach over the cut ([Strip](#strip-task-2)), plus each PJ398SM jack's own F.Cu rule area ([Task 6, fix 1](#our-own-router-2-layers-task-6); [Task 7, fairness](#freerouting-2-layers-task-7)).
-- **Ports:** 23 SMD pads in one column at x 204.5, on 2.54 mm slots, one for each net that leaves the strip ([Locked nets](#locked-nets-task-3)).
-- **Locked nets:** SENSE_1, OUT_L and OUT_R are hand-routed as 14 segments on B.Cu at 0.25 mm; a proof step fails if any of them changes ([Locked nets](#locked-nets-task-3)).
-- **Rules:** signal 0.25 mm, supply 0.4 mm, clearance 0.2 mm, via 0.6/0.3 mm. On 2 layers, GND and SM_3V3 are routed as tracks, then GND is filled on both sides. On 4 layers, GND is a plane on In1 and SM_3V3 a plane on In2. Freerouting was v2.4.1 on Temurin 25.0.4.1 ([Task 4](#freerouting-task-4)).
+- **Strip:** the SENSE_1 mux region, the hardest of the four: outline
+  x 203–300, y 6–122 mm. The outline is an assumption, and the west edge is
+  a cut (spec §2.1).
+- **Parts:** 72 in total ([Strip](#strip-task-2)). 36 panel parts sit on
+  their P1 holes: 22 pots (pins north), 6 jacks, 7 LEDs and 1 key. 13 SMD
+  parts on the back were placed by a search: 3 muxes, 3 × 100 nF and 7 LED
+  resistors. There are 23 ports and 52 nets.
+- **Keepouts:** 13 foreign pads that reach over the cut
+  ([Strip](#strip-task-2)), plus each PJ398SM jack's own F.Cu rule area
+  ([Task 6, fix 1](#our-own-router-2-layers-task-6);
+  [Task 7, fairness](#freerouting-2-layers-task-7)).
+- **Ports:** 23 SMD pads in one column at x 204.5, on 2.54 mm slots, one for
+  each net that leaves the strip ([Locked nets](#locked-nets-task-3)).
+- **Locked nets:** SENSE_1, OUT_L and OUT_R are hand-routed as 14 segments
+  on B.Cu at 0.25 mm; a proof step fails if any of them changes
+  ([Locked nets](#locked-nets-task-3)).
+- **Rules:** signal 0.25 mm, supply 0.4 mm, clearance 0.2 mm, via 0.6 mm
+  with a 0.3 mm drill. These are spec §3.1's values, the coupon's. The
+  widths are set in `stripe.py` (`W_SIGNAL`, `W_SUPPLY`), and the clearance
+  and via come from the defaults of `kipcb.set_netclasses()`.
+  - On 2 layers, GND and SM_3V3 are routed as tracks, then GND is filled on
+    both sides.
+  - On 4 layers, GND is a plane on In1 and SM_3V3 a plane on In2.
+  - Freerouting was v2.4.1 on Temurin 25.0.4.1
+    ([Task 4](#freerouting-task-4)).
 
 ## Results
 
@@ -33,15 +55,16 @@ P4 has two open decisions, and this spike feeds both (spec §1, §4.4):
 |---|---|---|---|
 | Gated reds, final run | **none** | **1**: `ratsnest`, LED14 `PORT2.1`–`R32.1` | **none** |
 | Unrouted before fill | 0 | 1 | 0 (counted after the plane fill, 75 before it) |
-| Vias | 74 | 45 | 36 + 19 stitching |
+| Vias | 74 | 45 | 55 (36 routed + 19 stitching) |
 | Track length ¹ | 2682.9 mm | 2816.3 mm | 1733.0 mm |
+| … of which signal / supply (own router only) ⁶ | 1742.5 / 940.4 mm, vias 53 / 21 | — | 1733.0 / 19.0 mm (stitching stubs), vias 36 / 19 |
 | Routing seconds | 13.8 (re-runs 14.2–15.0) | 15.0 ² | 6.2 |
 | Runs to green | 1 (+ adapter fix 1b ³) | none in 7 (budget used up) | 2 |
 | Agent time to the first green run ⁴ | ≈ 12 min (16:13 → ≈ 16:25) | none; budget used 17:27 → ≈ 17:45 | ≤ ≈ 23 min (17:47 → green on run 2, task done ≈ 18:10) |
 | Reproducible (`cmp`) | yes: board | yes: SES, DSN, board, PNGs (run 2 = run 7) | yes: board, PNGs |
 | Audio: nearest LED track to OUT_L/OUT_R ⁵ | 2.71 mm (LED16) | 0.50 mm (LED18) | 2.21 mm (LED16) |
-| Ungated DRC classes that differ | `starved_thermal 8` | `track_width 15` (0.1874 mm), `starved_thermal 4` | neither |
-| GND fill, B.Cu | 7515 mm² in 21 islands | 6537 mm² in 16 islands | plane on In1 |
+| Ungated DRC counts that differ between the runs ⁷ | `starved_thermal 8` | `starved_thermal 4`, `track_width 15` (0.1874 mm), `unconnected_items 1` (the LED14 connection of the `ratsnest` red) | none of the three |
+| GND copper | fill: F.Cu 8430 mm² in 10 islands, B.Cu 7515 mm² in 21 | fill: F.Cu 8698 mm² in 4 islands, B.Cu 6537 mm² in 16 | plane: In1 9722 mm² in 1 island ⁸ |
 | Source | [Task 6](#our-own-router-2-layers-task-6) | [Task 7](#freerouting-2-layers-task-7) | [Task 8](#own-4-layers-task-8) |
 
 ¹ No figure includes the three locked nets. For our router it is the
@@ -56,6 +79,19 @@ rule area. The adapter fix (1b) feeds footprint rule areas to the router, and
 ⁴ Approximate, read off the controller's clock (spec §4.2).
 ⁵ The coupon's rule is 10.0 mm. Neither router knows it, so it is measured
 but not gated (spec §4.1, step 5).
+⁶ Read off the saved boards by net group
+([Plane and length probes](#plane-and-length-probes-task-9)). On 2 layers
+the router routes 49 nets, the supply included, as 596 segments at 0.4 mm.
+On 4 layers it routes 47 nets, and the planes carry GND and SM_3V3. The
+drop in total length, 2682.9 → 1733.0 mm, is therefore almost all supply
+track (940.4 mm) moving into the planes. The signal length barely changes.
+⁷ Every other ungated class is the same in all three runs
+(`copper_edge_clearance 15`, `courtyards_overlap 6`, `pth_inside_courtyard 2`,
+`silk_edge_clearance 23`, `silk_over_copper 44`, `silk_overlap 20`). The
+copper step prints `unconnected_items` only when it is not 0.
+⁸ One island is what was measured: the fill's outline count. How much the
+clearances around holes and vias perforate the plane was not measured
+([Plane and length probes](#plane-and-length-probes-task-9)).
 
 Every proof took about 3 s.
 
@@ -66,34 +102,51 @@ Every proof took about 3 s.
 | top | ![own 2L top](routing-spike/own-2L-top.png) | ![Freerouting 2L top](routing-spike/freerouting-2L-top.png) | ![own 4L top](routing-spike/own-4L-top.png) |
 | bottom (mirrored, ports on the right) | ![own 2L bottom](routing-spike/own-2L-bottom.png) | ![Freerouting 2L bottom](routing-spike/freerouting-2L-bottom.png) | ![own 4L bottom](routing-spike/own-4L-bottom.png) |
 
-- `own-2L-top.png`: a vertical bundle of four to six tracks runs down the middle between the upper pot rows, and long 45° runs cross the lower-left quarter towards the jacks.
-- `own-2L-bottom.png`: the three muxes fan out into the port column, and a diagonal bundle runs from U_MUX5 to the lower ports. Apart from the port approaches, only the locked OUT_R run follows the outline.
-- `freerouting-2L-top.png`: narrow bundles run through the pot columns. The dark bays are GND fill that was removed, the largest between RV51, RV52 and RV55.
-- `freerouting-2L-bottom.png`: long straight runs lead from the muxes to the ports. Large unfilled areas along the port side and in the lower right account for the 978 mm² of B.Cu GND that Freerouting has less than our router.
-- `own-4L-top.png`: the outer layers have no fill. The top side is mostly empty, with one horizontal bundle between the RV51–RV61 row and D15.
-- `own-4L-bottom.png`: the muxes fan out to the ports. The locked SENSE_1 trunk shows as the rectangle down to y 64, and the stitching vias are the dots beside the SMD parts.
+- `own-2L-top.png`: a vertical bundle of four to six tracks runs down the
+  middle between the upper pot rows, and long 45° runs cross the lower-left
+  quarter towards the jacks.
+- `own-2L-bottom.png`: the three muxes fan out into the port column, and a
+  diagonal bundle runs from U_MUX5 to the lower ports. Apart from the port
+  approaches, only the locked OUT_R run follows the outline.
+- `freerouting-2L-top.png`: narrow bundles run through the pot columns. The
+  dark bays are GND fill that was removed, the largest between RV51, RV52
+  and RV55.
+- `freerouting-2L-bottom.png`: long straight runs lead from the muxes to the
+  ports. Large unfilled areas along the port side and in the lower right
+  account for the 978 mm² of B.Cu GND that Freerouting has less than our
+  router.
+- `own-4L-top.png`: the outer layers have no fill. The top side is mostly
+  empty, with one horizontal bundle between the RV51–RV61 row and D15.
+- `own-4L-bottom.png`: the muxes fan out to the ports. The locked SENSE_1
+  trunk shows as the rectangle down to y 64, and the stitching vias are the
+  dots beside the SMD parts.
 
 ## Prices
 
-From [JLC prices](#jlc-prices-task-9), quoted for 5 boards of FR-4, 1.6 mm, at the **assumed** 295 × 116 mm, 2026-09-29:
+From [JLC prices](#jlc-prices-task-9), quoted on 2026-09-29 for 5 boards
+of FR-4, 1.6 mm, at the **assumed** 295 × 116 mm:
 
-| | 2 layers | 4 layers |
-|---|---|---|
-| Calculated price, 5 boards | $20.50 | $46.10 |
-| Per board (price / 5) | $4.10 | $9.22 |
-| Build time | 2 days | 3–4 days |
+| | 2 layers | 4 layers | difference |
+|---|---|---|---|
+| Engineering fee | $4.00 | $25.00 | $21.00 |
+| Board | $16.50 | $21.10 | $4.60 |
+| Calculated price, 5 boards | $20.50 | $46.10 | **$25.60** |
+| Build time | 2 days | 3–4 days | |
 
-The difference is **$25.60 per order of five, or $5.12 per board**. Shipping
-($29.94) is the same for both. P4 sets the real outline, and the price
-follows from it.
+Most of the difference, $21.00 of $25.60, is the engineering fee. Whether
+a reorder of the same design pays that fee again is **unverified**: only a
+first order was quoted. Shipping ($29.94) is the same for both. P4 sets the
+real outline, and the price follows from it.
 
 ## Findings for P4
 
 1. **The audio rule has to be given to the router.** The nearest LED track
    is 2.71, 0.50 and 2.21 mm from the audio nets, against the coupon's
-   10.0 mm ([Results](#results)). Freerouting honours a Specctra
-   `class_class` clearance as an edge-to-edge distance that covers pads too:
-   0.435 mm without the rule, 3.658 mm with a 3 mm rule
+   10.0 mm ([Results](#results)). Freerouting honoured a Specctra
+   `class_class` clearance as an edge-to-edge distance that covers pads too.
+   With a 3 mm rule, two nets ran 3.658 mm apart track to track (0.435 mm
+   without the rule) and 3.033 mm from track to pad. That was shown only on
+   a 40 × 20 mm probe board with two nets, never on the real strip
    ([Task 4, class_class](#freerouting-task-4)). `route.py` has one board
    clearance, and its clearance classes differ only by track half-width. P4
    needs a per-net-pair clearance in it: audio nets against LED nets, to be
@@ -152,7 +205,8 @@ follows from it.
    ([Task 8, run 1](#own-4-layers-task-8)).
 9. **Freerouting narrows tracks.** It left 15 tracks at 0.1874 mm against
    the 0.25 mm class, at U_MUX5's SOIC pins (`track_width 15`, a DRC error).
-   The class stays ungated for this spike (Ruling R9). The cause is inferred
+   The class stays ungated for this spike (Ruling R9): gating it after both
+   methods had run would have changed the judge. The cause is inferred
    to be `router.automatic_neckdown` and was not probed
    ([Task 7](#freerouting-2-layers-task-7)).
 10. **`PCB_VIA::GetWidth()` without a layer hangs pcbnew.** It opens a modal
@@ -166,15 +220,17 @@ follows from it.
     snaps the ends onto the pads and splits a T-junction
     ([Task 7, run 1](#freerouting-2-layers-task-7)). This matters only if
     Freerouting comes back.
-12. **What the renders show that no check caught:**
-    - In all three runs, F.Cu tracks pass under the pot bodies, inside
-      their courtyards. The spec lets front-side bodies block nothing
-      (§2.2), so whether an Alpha 9 mm body over mask-covered track is
-      acceptable is P4's call.
-    - On 2 layers the GND fill leaves dark unfilled bays in both runs
-      (areas and island counts under [Results](#results)). No gated check
-      measures fill coverage.
-    - The port and reference labels overlap: silk, ungated.
+12. **What the renders show that no check caught**
+    ([Pictures, Task 9](#pictures-task-9)):
+    - In all three top renders, F.Cu tracks cross inside the drawn pot
+      outlines, under the pot bodies. The spec lets front-side bodies block
+      nothing (§2.2), so whether an Alpha 9 mm body over mask-covered track
+      is acceptable is P4's call.
+    - On 2 layers the GND fill leaves dark unfilled bays in both runs, on
+      both sides. No gated check measures fill coverage.
+    - In the bottom renders each port label lies across the next port's pad
+      and is cut off at the board edge, and C15's label runs into U_MUX4's
+      reference. This is silk, and ungated.
 13. **Gaps in the harness P4 should close:**
     - `unconnected_by_net()` printed nothing for our router's `ratsnest`
       RED ([Task 6](#our-own-router-2-layers-task-6)).
@@ -188,35 +244,46 @@ follows from it.
 rule 9).*
 
 **Routing method: our own router.** Ruling R8 already chose it as the
-spike's winner, on the rule that every gated step must be green. Ours was
-green on its first run (plus the adapter fix, Results footnote ³). Freerouting ended with LED14 unrouted after its
-whole budget, and none of its switches changed the result: runs 3–6 were
-byte-identical to run 2. Our router is deterministic, runs without Java,
-and makes no network call; Freerouting checks api.github.com on every run
-([Task 4](#freerouting-task-4)). Our router also keeps the full track
-width. The price is untidier geometry: 74 vias against 45, and 1322 track
-segments against 525. We also still have to build the per-net-pair
-clearance that Freerouting already has (finding 1).
+spike's winner by its first criterion: every gated step green. Ours was
+green on its first run (plus the adapter fix, Results footnote ³).
+Freerouting ended with LED14 unrouted after its 7-run budget. That makes it
+"not green within the budget", not "cannot":
+
+- `-us` and `-is` left no trace in its log beyond the command line.
+- Its scoring and neck-down settings were never tried.
+- Runs 3–6 were byte-identical to run 2
+  ([Task 7](#freerouting-2-layers-task-7)).
+
+Our router is deterministic, runs without Java and makes no network call.
+Freerouting checks api.github.com on every run
+([Task 4](#freerouting-task-4)). Ours also keeps the full track width. The
+price is untidier geometry: 74 vias against 45, and 1322 track segments
+against 525. We also have to build a per-net-pair clearance (finding 1).
+Freerouting's `class_class` was shown only on a two-net probe board, never
+on the strip, so Freerouting's version of that rule is not proven either.
 
 **Layers: 4.** Our router routed 2 layers cleanly, so by the spec's own
-premise (§1) routability is no longer an argument. The argument is quality
-against price:
+premise (§1) routability is no longer an argument. What 4 layers buy is the
+planes, not shorter signal routing
+([Plane and length probes](#plane-and-length-probes-task-9)):
 
-- On 4 layers the same router places 36 routed vias instead of 74, and
-  1733.0 mm of track instead of 2682.9.
-- It needs 4 iterations instead of 6, and 6.2 s instead of 13.8.
-- GND is one plane, not a fill cut into 10 + 21 islands with 8 starved
-  thermals ([Task 6](#our-own-router-2-layers-task-6),
-  [Task 8](#own-4-layers-task-8)). The board carries pot readings through
-  analog muxes and the audio outputs.
-- This strip is one of four regions. The shift registers, the module and
-  the SD socket are not on it, so how much 2-layer room the full board
-  has is unmeasured.
+- **GND:** one 9722 mm² island on In1, against a 2-layer fill cut into
+  10 + 21 islands with 8 starved thermals. Plane perforation was not
+  measured. The board carries pot readings through analog muxes, and the
+  audio outputs.
+- **Supply:** GND and SM_3V3 need no routing: 596 segments and 940.4 mm of
+  0.4 mm track on 2 layers become 19 stitching stubs.
+- **Signals:** about the same. 1733.0 mm against 1742.5 mm, and 36 signal
+  vias against 53. In total there are 55 vias against 74.
+- **The rest of the board:** this strip is one of four regions. The shift
+  registers, the module and the SD socket are not on it, so how much
+  2-layer room the full board has is unmeasured.
 
-The cost is $25.60 per order of five ($5.12 per board), quoted for the
-assumed outline, plus one to two days of build time. 4 layers do not fix
-the audio distance (2.21 mm against 2.71). That is finding 1's job on
-either layer count.
+The cost is $25.60 per order of five boards, quoted for the assumed
+outline: $21.00 of it the engineering fee, $4.60 the board. Whether a
+reorder pays the fee again is unverified. Build time is one to two days
+longer. 4 layers do not fix the audio distance (2.21 mm against 2.71); that
+is finding 1's job on either layer count.
 
 ## What stays
 
@@ -1571,6 +1638,69 @@ Both ports are at x 204.500 (`--where`, Task 3). OUT_L runs west along
 y 101.98 from x 263.5, and OUT_R along y 104.52 from x 254.5. They are
 parallel from x 204.5 to 254.5, which is 50.0 mm at 2.54 mm centre to
 centre.
+
+### Plane and length probes (Task 9)
+
+These read the saved final boards in `hardware/reva/spike/out/`; nothing
+is refilled. `own-4L.kicad_pcb` is Task 8's final run, whose PNGs are
+`cmp`-identical to the committed ones. `probe_planes.py` (scratchpad
+`task9/`) prints, for each zone and layer, the outline count of the stored
+fill ("islands") and its area:
+
+    KIPY probe_planes.py hardware/reva/spike/out/own-4L.kicad_pcb
+    board bbox 97.1 x 116.1 mm = 11273 mm2
+       (52 netless rule-area lines, all "islands  0 ... area 0 mm2", dropped here)
+       GND     In1.Cu islands  1  holes   0  area    9722 mm2
+       SM_3V3  In2.Cu islands  1  holes   0  area    9701 mm2
+    KIPY probe_planes.py hardware/reva/spike/out/own-2L.kicad_pcb
+       (bbox line as above; 26 netless rule-area lines dropped)
+       GND     F.Cu   islands 10  holes   0  area    8430 mm2
+       GND     B.Cu   islands 21  holes   0  area    7515 mm2
+
+The 2-layer lines repeat Task 7's `probe_fill.py` figures, which
+cross-checks the probe. `holes` reads 0 even for the 2-layer fills, which
+have visible bays, so the column says nothing and is not used. Each plane is
+one connected island. How far the clearances around holes and vias
+perforate it was not measured.
+
+`probe_length.py` (scratchpad `task9/`) sums track length and counts
+segments and vias per net group: supply = GND and SM_3V3; locked = SENSE_1,
+OUT_L and OUT_R; signal = the rest.
+
+    KIPY probe_length.py hardware/reva/spike/out/own-2L.kicad_pcb
+       signal segments  712  length  1742.5 mm  vias 53
+       supply segments  596  length   940.4 mm  vias 21
+       locked segments   14  length   302.5 mm  vias 0
+    KIPY probe_length.py hardware/reva/spike/out/own-4L.kicad_pcb
+       signal segments  620  length  1733.0 mm  vias 36
+       supply segments   19  length    19.0 mm  vias 19
+       locked segments   14  length   302.5 mm  vias 0
+
+On 2 layers, signal plus supply is 1742.5 + 940.4 = 2682.9 mm, which is the
+router's own figure. On 4 layers the signal length equals the router's
+1733.0 mm. The 19 supply segments and 19 vias there are the stitching.
+
+### Pictures (Task 9)
+
+Checked by eye on the committed PNGs, with enlarged crops (`crop.py`,
+scratchpad `task9/`):
+
+- **Tracks under pot bodies.** F.Cu tracks cross inside the drawn pot
+  outlines in all three top renders:
+  - `own-2L-top.png`: inside RV49 and RV51–RV53.
+  - `freerouting-2L-top.png`: a bundle of three tracks runs down through
+    RV49.
+  - `own-4L-top.png`: through RV51, RV52 and RV67.
+- **Unfilled GND bays.** There are dark, unfilled areas on both sides of
+  both 2-layer runs:
+  - `own-2L-top.png`: inside RV49 and RV51, and along the tracks between
+    them.
+  - `own-2L-bottom.png`: in the lower right, along the ports.
+  - `freerouting-2L-top.png` and `freerouting-2L-bottom.png`: as described
+    under Task 7.
+- **Silk.** In `own-2L-bottom.png`, each `PORT` label lies across the next
+  port's pad and is cut off at the board edge after "PORT" or "PORT1", so
+  the port numbers cannot be read. C15's label runs into U_MUX4's reference.
 
 ### JLC prices (Task 9)
 
