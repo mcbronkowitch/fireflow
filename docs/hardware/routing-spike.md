@@ -144,6 +144,7 @@ Freerouting 2.4 requires Java 25.
     "$LOCALAPPDATA/fireflow-tools/jre/bin/java.exe" -version
     openjdk version "25.0.4.1" 2026-08-18 LTS
     OpenJDK Runtime Environment Temurin-25.0.4.1+1 (build 25.0.4.1+1-LTS)
+    OpenJDK 64-Bit Server VM Temurin-25.0.4.1+1 (build 25.0.4.1+1-LTS, mixed mode, sharing)
 
     "$LOCALAPPDATA/fireflow-tools/jre/bin/java.exe" -jar "$LOCALAPPDATA/fireflow-tools/freerouting.jar" -l en -help
     USAGE
@@ -184,29 +185,64 @@ and a generic `--<section>.<key>=<value>` form (plus `FREEROUTING__*`
 environment variables) over the `freerouting.json` settings tree. The
 probe runs below are the authority for what each spelling does.
 
-**What the switches do (probed).** Every routing run's own log section
-(`%LOCALAPPDATA%\freerouting\logs\freerouting.log`, appended per run, DEBUG
-level) was checked:
+**Where to look.** Freerouting appends every run to one log file,
+`%LOCALAPPDATA%\freerouting\logs\freerouting.log`, at DEBUG level. The
+console shows INFO and above only, so the analytics line below never
+appears on the console. One run's section is the text from the last
+`INFO   Freerouting v` banner to the end of the file; the probes cut it out
+that way right after each run (`log[log.rfind("INFO   Freerouting v"):]`).
+
+**What the switches do (probed).** 29 routing runs in all. The first,
+aborted, run of `probe_fr.py` is one of them: its guard looked for the
+analytics line on the console, found nothing, and stopped after `fr1`; the
+guard was moved to the log section and the probe re-run. Counts over the
+shared log after the last run (16:08:42):
+
+    grep -c "INFO   Freerouting v"   "$LOCALAPPDATA/freerouting/logs/freerouting.log"   -> 30
+    grep -c "Analytics are disabled" "$LOCALAPPDATA/freerouting/logs/freerouting.log"   -> 29
+    grep -c "Screen:"                "$LOCALAPPDATA/freerouting/logs/freerouting.log"   -> 1
+    grep -c "No new version"         "$LOCALAPPDATA/freerouting/logs/freerouting.log"   -> 29
+
+30 banners = the first `-help` call (15:59:24) + 29 runs. (The second
+`-help` call, with `-l en`, logged elsewhere, see below.)
 
 - `-da`: every run logs `DEBUG  Analytics are disabled` right after the
-  startup banner, before the board loads (29 of 29 runs). The probe aborts
-  any run whose log lacks that line. `-da` is per run only:
-  `%APPDATA%\freerouting\freerouting.json` (created by the first `-help`
-  call) still reads `"allow_telemetry": true` and `"disable_analytics": false`
-  after all runs and was not rewritten by them.
-- `--gui.enabled=false`: headless. rc 0, about 2.1 s per run on the probe
-  board (`fr1`: banner 16:03:00.5, output saved 16:03:02.6) and no window.
-  `grep -c` over the shared log after all runs: 30 banners (1 `-help` + 29
-  runs), 29 `Analytics are disabled`, 29 version checks, 1 `Screen:` line
-  -- the `-help` call's (`Screen: 3440x1440, 96 DPI`), none from a run.
-- `-mp 20` / `-mt 1`: logged as `Applied CLI router setting:
-  router.max_passes = 20` / `router.max_threads = 1`.
+  startup banner, before the board loads (29 of 29, count above). `-da` is
+  per run only: `%APPDATA%\freerouting\freerouting.json` (created by the
+  first `-help` call) still read `"allow_telemetry": true` and
+  `"disable_analytics": false` after all 29 runs and was not rewritten by
+  them. Afterwards, at Bastian's decision, the controller changed that file
+  to `allow_telemetry=false`, `allow_contact=false`,
+  `disable_analytics=true`; runs still pass `-da`.
+- `--gui.enabled=false`: headless -- rc 0, no window, and the only
+  `Screen:` line in the log is the `-help` call's (`Screen: 3440x1440, 96
+  DPI`). Run time, banner to "Successfully saved output file", from
+  `grep -n "INFO   Freerouting v\|Successfully saved output file" <log>`:
+  `fr1` 16:03:00.473 -> 16:03:02.632 (2.16 s); over all 29 pairs of that
+  grep the shortest is `v_k12_noLwires` (16:06:04.392 -> 16:06:06.050,
+  1.66 s) and the longest `v_k12_LFonly` (16:07:30.791 -> 16:07:32.956,
+  2.17 s). The routing stage itself takes about 0.5 s of that
+  (`Auto-routing stage completed ... completed in 0.50 seconds`).
+- `-mp 20` / `-mt 1`, from `grep -h "Applied CLI router setting" $S/fr1.log`:
+
+      2026-09-29 16:03:01.593 DEBUG  Applied CLI router setting: router.max_passes = 20
+      2026-09-29 16:03:01.593 DEBUG  Applied CLI router setting: router.max_threads = 1
+      2026-09-29 16:03:01.593 DEBUG  Applied CLI router setting: router.enabled = true (implicit from -de/-do batch mode)
+
+  Whether 20 passes are enough on the real strip is unknown; on the probe
+  boards the router stopped before 20 on its own
+  (`grep -h "Stopping the auto-router" $S/fr1.log $S/nk1.log`):
+
+      INFO   [629BBE\AC39E8] The router's best score (666.64) has not improved by more than 0.5 points since pass #8. Stopping the auto-router after 18 passes (1 item still unconnect...
+      INFO   [6FAB30\8E695D] The router's score (999.97) has not improved by more than 0.5 points in the last 10 passes (0 items still unconnected). Stopping the auto-router.
 - `-inc Other`: accepted, no error, **no effect**. On `nk.dsn` (below) the
   SES with `-inc Other` is byte-identical to the one without it, and net B
   (class `Other`) is routed in both. `--router.ignore_net_classes=Other`
   is logged as `Applied CLI router setting: router.ignore_net_classes =
-  Other` and is equally byte-identical. In the jar, `ignoreNetClasses` is
-  consumed only by `gui/board/GuiManager`, i.e. not in a headless run.
+  Other` and is equally byte-identical (raw output under "DSN variants").
+  *Inferred, not probed:* the string `ignoreNetClasses` occurs, outside the
+  settings classes, only in `gui/board/GuiManager.class`, which suggests it
+  is applied only in the GUI path.
 - `-l en`: switches the help and GUI language, but **also moved the log
   file** to `<cwd>\en\freerouting.log` (startup log: `log file :
   C:\Users\bernd\Documents\AI\FireFlow\en\freerouting.log`). The stray
@@ -215,8 +251,10 @@ level) was checked:
   check (`DEBUG  No new version available. Current version is up to date:
   v2.4.1`); the jar's `util/VersionChecker` requests
   `https://api.github.com/repos/freerouting/freerouting/releases/latest`
-  with the User-Agent `Freerouting-Version-Checker`. No setting for it was
-  found in the jar's settings classes. It is not the analytics client.
+  with the User-Agent `Freerouting-Version-Checker` (string constants of
+  that class). No setting for it was found in the jar's settings classes.
+  It is not the analytics client. Bastian accepted this version check on
+  2026-09-29.
 - The two `-help` calls (one by the controller, one here) ran without
   `-da`; their logs contain neither `Analytics are disabled` nor a version
   check line, so whether they sent anything cannot be told from the log.
@@ -227,47 +265,285 @@ logging), under `KIPY`: 40 x 20 mm, 2 layers, SMD test-point pads. Nets A
 drawn on F.Cu and B.Cu and locked; a keepout covers x 26..30, y 0..12 on
 both layers; classes `Sig` = {A}, `Other` = {B}.
 
-    KIPY $S/probe_fr.py
+`$S` is the session scratchpad folder `...\scratchpad\task4`; the probe
+echoes a filtered part of each run's log section (the `|` lines; the first
+24 characters, the timestamp, are cut off). Full output of the second,
+complete run:
+
+    "/c/Users/bernd/AppData/Local/Programs/KiCad/10.0/bin/python.exe" "$S/probe_fr.py"
     export True
     resolution line: ['(resolution um 10)']
     fix wires in DSN: 2 keepouts: 2
     class lines: ['(class kicad_default L', '(class Sig A', '(class Other B']
     RUN java.exe -jar freerouting.jar -de fr.dsn -do fr1.ses --gui.enabled=false -da -mp 20 -mt 1
     freerouting rc 0 ses written True
+       | DEBUG  Command line arguments: '-de fr.dsn -do fr1.ses --gui.enabled=false -da -mp 20 -mt 1'
+       | DEBUG  GUI Language: de_DE
        | DEBUG  Analytics are disabled
-       | INFO   ... Auto-routing stage completed: started with 2 unrouted nets, completed in 0.50 seconds, final score: 666.65 (1 unrouted and 0 violations)
-    RUN ... -do fr2.ses ... (same)
+       | DEBUG  Set DEFAULT clearance (all layers): 2000 (0.05 mm) from DSN value 200.0
+       | DEBUG  Set clearance (all layers): smd_smd = 500 (0.0125 mm), classes [2,2]
+       | DEBUG  Set DEFAULT clearance (all layers): 2000 (0.05 mm) from DSN value 200.0
+       | DEBUG  Set clearance (all layers): smd_smd = 500 (0.0125 mm), classes [2,2]
+       | DEBUG  No new version available. Current version is up to date: v2.4.1
+       | DEBUG  Set DEFAULT clearance (all layers): 2000 (0.05 mm) from DSN value 200.0
+       | DEBUG  Set clearance (all layers): smd_smd = 500 (0.0125 mm), classes [2,2]
+       | DEBUG  Applied copper-to-edge clearance override: 500.0 um (5000 board units).
+       | DEBUG  Set DEFAULT clearance (all layers): 2000 (0.05 mm) from DSN value 200.0
+       | DEBUG  Set clearance (all layers): smd_smd = 500 (0.0125 mm), classes [2,2]
+       | INFO   [629BBE\AC39E8] Fanout stage completed: started with 6 total SMD pins, completed in 0.09 seconds, escaped pins: 6/6 (100.0%), using 0.08 total CPU seconds, 0.09 GB total allocated, and 123.4 MB peak
+       | s could not be routed -- please review your design (e.g. check pad clearances, trace width rules, and available routing space):
+       | INFO   [629BBE\AC39E8] Auto-routing stage completed: started with 2 unrouted nets, completed in 0.50 seconds, final score: 666.65 (1 unrouted and 0 violations), using 0.00 total CPU seconds, 0.00 GB total a
+       | INFO   [629BBE\AC39E8] Optimization stage completed: started with score 666.65 (1 unrouted and 0 violations), completed in 0.01 seconds, final score: 666.65 (1 unrouted and 0 violations), using 0.00 total C
+    RUN java.exe -jar freerouting.jar -de fr.dsn -do fr2.ses --gui.enabled=false -da -mp 20 -mt 1
+    freerouting rc 0 ses written True
+       | (the same lines; job id F02A4B\07FA12, auto-routing 0.49 s, final score 666.65 (1 unrouted and 0 violations))
     two runs byte-identical: True
     import True
     locked geometry unchanged: True
     still locked after import: True count 2
+      L before: [('L', 'B.Cu', 5000000, 15000000, 35000000, 15000000, True), ('L', 'F.Cu', 5000000, 15000000, 35000000, 15000000, True)]
+      L after : [('L', 'B.Cu', 5000000, 15000000, 35000000, 15000000, True), ('L', 'F.Cu', 5000000, 15000000, 35000000, 15000000, True)]
     tracks starting inside the keepout: 0
     unconnected after import: 2
     RUN java.exe -jar freerouting.jar -de fr-cc.dsn -do fr-cc.ses --gui.enabled=false -da -mp 20 -mt 1
+    freerouting rc 0 ses written True
+       | (the same lines; job id 7E75F0\E8C097, auto-routing 0.55 s, final score 666.65 (1 unrouted and 0 violations))
     class_class SES written: True
     RUN java.exe -jar freerouting.jar -de fr.dsn -do fr-inc.ses --gui.enabled=false -da -mp 20 -mt 1 -inc Other
+    freerouting rc 0 ses written True
+       | (the same lines; job id 36B433\7432E5, auto-routing 0.50 s, final score 666.65 (1 unrouted and 0 violations))
     -inc Other: SES mentions net B wires: 1 net A: 0
+    exit=0
 
-- Units: `(resolution um 10)`, so the brief's `3000` means 3 mm. (Freerouting's
-  own DEBUG lines label its board units wrongly -- `DSN=250.0 -> board=2500
-  (0.0625 mm)` -- but the SES writes width `2500` at `resolution um 10`, i.e.
-  0.25 mm.)
-- Locked tracks: the SES carries **no** wire of net L at all. They survive
-  because KiCad's import keeps locked tracks: the same board with L
-  *unlocked* before the import (`probe_fr6.py`) prints `L tracks before
-  import: 2 ... L tracks after import: 0`. So locking before the DSN export
-  is what protects them, and after the import they are still locked.
-- `unconnected after import: 2` = net A (unrouted, below) plus the probe
-  board's own artefact: L's B.Cu copy touches no pad (SMD pads, F.Cu), so
-  it is an island. Before any import the same board counts 3 (A, B, and
-  that island); `kicad-cli` DRC on the imported board: `track_dangling 1`
-  (L on B.Cu), `unconnected_items 2`, pads of net A only.
+The unrouted connection, `grep -A2 "could not be routed" $S/fr1.console.txt`:
+
+    The following connections could not be routed -- please review your design (e.g. check pad ...
+      Net 'A' (1 unrouted connection):
+        - TP_A0-1  ->  TP_A1-1
+
+- Units: `grep -n "(resolution\|(unit" $S/fr.dsn` prints `8:  (resolution
+  um 10)` and `9:  (unit um)`. Values in the DSN are in um (`(width 250)` is
+  KiCad's 0.25 mm), so the brief's `(clearance 3000)` means 3 mm.
+  `resolution um 10` is the internal grid, 10 steps per um; the SES writes
+  its coordinates in those steps (width `2500` = 0.25 mm). Freerouting's own
+  DEBUG lines label its units wrongly (`DSN=250.0 -> board=2500 (0.0625
+  mm)`, `DEFAULT clearance ... 2000 (0.05 mm) from DSN value 200.0`).
+- Locked tracks: the SES carries **no** wire of net L at all (`fr1.ses`:
+  `network_out` holds only `(net B ...)`). They survive because KiCad's
+  import keeps locked tracks; unlocked, the import deletes them:
+
+      "/c/Users/bernd/AppData/Local/Programs/KiCad/10.0/bin/python.exe" "$S/probe_fr6.py"
+      L tracks before import: 2 locked: [False, False]
+      import True
+      L tracks after import: 0
+      B tracks after import: 9
+
+  Proven for two straight locked tracks only; locked vias and zones were not
+  tested.
+- `unconnected after import: 2` is net A's one unrouted connection plus one
+  L-to-L pair: L's B.Cu copy touches no pad (the pads are SMD, F.Cu only),
+  so it is an island of net L, separate from the F.Cu copy. The DRC
+  `unconnected_items` block lists these two items, not two pads of A
+  (`probe_fr5.py` saves the imported board and runs `kicad-cli pcb drc`;
+  `pcb_proof.unconnected_by_net()` reads pads only, which is why it named A
+  alone):
+
+      "/c/Users/bernd/AppData/Local/Programs/KiCad/10.0/bin/python.exe" "$S/probe_fr5.py" "$S/fr1.ses"
+      import fr1 True
+        live unconnected: 2
+        vias: [('B', (5.5621, 16.2196)), ('B', (15.4688, 3.8923))]
+        drc: {'track_dangling': 1, 'unconnected_items': 2}
+        unconnected by net: {'A': {'TP_A0.1', 'TP_A1.1'}}
+
+      $S/drc-fr1.rpt, lines 5-18:
+      ** Found 1 DRC violations **
+      [track_dangling]: Track has unconnected end
+          Local override; warning
+          @(5.0000 mm, 15.0000 mm): Track [L] on B.Cu, length 30.0000 mm
+
+      ** Found 2 unconnected pads **
+      [unconnected_items]: Missing connection between items
+          Local override; error
+          @(5.0000 mm, 10.0000 mm): Pad 1 [A] of TP_A0 on F.Cu
+          @(35.0000 mm, 10.0000 mm): Pad 1 [A] of TP_A1 on F.Cu
+      [unconnected_items]: Missing connection between items
+          Local override; error
+          @(5.0000 mm, 15.0000 mm): Track [L] on F.Cu, length 30.0000 mm
+          @(5.0000 mm, 15.0000 mm): Track [L] on B.Cu, length 30.0000 mm
+
+  Before any import the same board counts 3 (A, B, and the L island):
+
+      "/c/Users/bernd/AppData/Local/Programs/KiCad/10.0/bin/python.exe" "$S/probe_fr5.py" "$S/none.ses"
+        L tracks: [('B.Cu', (5.0, 15.0), (35.0, 15.0), True), ('F.Cu', (5.0, 15.0), (35.0, 15.0), True)]
+        pad TP_L1 (35.0, 15.0) L F
+        pad TP_L0 (5.0, 15.0) L F
+        live unconnected: 3
+        vias: []
+        drc: {'track_dangling': 1, 'unconnected_items': 3}
+        unconnected by net: {'A': {'TP_A1.1', 'TP_A0.1'}, 'L': {'TP_L0.1'}, 'B': {'TP_B0.1', 'TP_B1.1'}}
+
+- Keepout: `tracks starting inside the keepout: 0` is **vacuous** on this
+  board -- A is unrouted and B's route runs nowhere near x 26..30. What the
+  DSN variants below do show: (1) with the keepout on F.Cu only
+  (`k12_FCu`), A runs on F.Cu up to x 25.46, drops to B.Cu under the keepout
+  and returns to F.Cu at x 30.53 -- it avoids the keepout's layer and uses
+  the free one; (2) in every variant with the full two-layer keepout, A
+  stayed unrouted rather than cross it (no violation reported); (3) `nk1`
+  (keepout removed from the DSN only) runs A straight through the area, and
+  KiCad's DRC on the imported board flags it (`items_not_allowed 1`) -- that
+  shows the DRC check, not Freerouting. So Freerouting honoured the keepout
+  in the one positive case (1); a wider test of keepout respect was not run.
 
 **Surprise: net A is never routed on the brief's board.** Freerouting
 reports `1 unrouted` (A) in every run with the keepout and L's locked
 F.Cu wire at y 15, although a 2.9 mm corridor (y 12..14.875) is free.
-DSN text variants (`probe_fr2.py`, `probe_fr3.py`), wires per net in the
-SES:
+
+*DSN variants.* All are text edits of `$S/fr.dsn` (DSN y = -KiCad y, in um).
+`probe_fr2.py`:
+
+    keep = re.findall(r"\n\s*\(keepout [^\n]*\)", txt)          # nk: both keepout lines removed
+    nob = re.sub(r"\n\s*\(net B\n\s*\(pins [^)]*\)\n\s*\)", "", txt, count=1)   # noB
+    nkcc: nk with "(network" -> "(network\n    (class_class (classes Sig Other) (rule (clearance 3000)))"
+    nkinc: nk.dsn + ["-inc", "Other"];  nkrinc: nk.dsn + ["--router.ignore_net_classes=Other"]
+    nkmt1, nkmt2: nk.dsn with "-mt", "1" dropped from the arguments
+
+`probe_fr3.py` (`base` = fr.dsn with both keepout lines removed; `keep(y)`
+re-inserts `(keepout "" (polygon <layer> 0  26000 0  30000 0  30000 -<y>
+26000 -<y>  26000 0))` for F.Cu and B.Cu before the first `(via` line;
+`k12` = `base` + `keep(12000)`, i.e. the export again):
+
+    "k12_Lnotfix":  k12.replace("(net L)(type fix)", "(net L)")
+    "k12_Lprotect": k12.replace("(type fix)", "(type protect)")
+    "k12_L17":      L wires "5000 -15000  35000 -15000" -> "5000 -17000  35000 -17000"
+    "k12_L18.5":    L wires -> "5000 -18500  35000 -18500"
+    "k12_Lwest":    L wires -> "5000 -15000  20000 -15000"
+    "k12_Least":    L wires -> "20000 -15000  35000 -15000"
+    "k12_LBonly":   the F.Cu L wire line removed
+    "k12_LFonly":   the B.Cu L wire line removed
+    "k12":          keep(12000)
+    "k11", "k10.5", "k9": keep(11000), keep(10500), keep(9000)
+    "k12_noLwires": both L wire lines removed, keep(12000)
+    "k12_FCu":      keep(12000, ("F.Cu",)) -- F.Cu keepout only
+
+Raw output, `probe_fr2.py route`:
+
+    "/c/Users/bernd/AppData/Local/Programs/KiCad/10.0/bin/python.exe" "$S/probe_fr2.py" route
+    keepout lines removed for nk: 2
+    net B removed for noB: True
+    RUN java.exe -jar freerouting.jar -de nk.dsn -do nk1.ses --gui.enabled=false -da -mp 20 -mt 1
+    freerouting rc 0 ses written True
+       | DEBUG  Analytics are disabled
+       | INFO   [6FAB30\8E695D] Auto-routing stage completed: started with 2 unrouted nets, completed in 0.37 seconds, final score: 999.97 (0 unrouted and 0 violations), using 0.00 tota
+       wires per net: {'A': 3, 'B': 3}
+    RUN java.exe -jar freerouting.jar -de nk.dsn -do nk2.ses --gui.enabled=false -da -mp 20 -mt 1
+    freerouting rc 0 ses written True
+       | DEBUG  Analytics are disabled
+       | INFO   [0D83BE\B5ED96] Auto-routing stage completed: started with 2 unrouted nets, completed in 0.37 seconds, final score: 999.97 (0 unrouted and 0 violations), using 0.00 tota
+       wires per net: {'A': 3, 'B': 3}
+    RUN java.exe -jar freerouting.jar -de nkcc.dsn -do nkcc.ses --gui.enabled=false -da -mp 20 -mt 1
+    freerouting rc 0 ses written True
+       | DEBUG  Analytics are disabled
+       | INFO   [1335B8\773861] Auto-routing stage completed: started with 2 unrouted nets, completed in 0.33 seconds, final score: 999.97 (0 unrouted and 0 violations), using 0.00 tota
+       wires per net: {'A': 3, 'B': 3}
+    RUN java.exe -jar freerouting.jar -de noB.dsn -do noB.ses --gui.enabled=false -da -mp 20 -mt 1
+    freerouting rc 0 ses written True
+       | DEBUG  Analytics are disabled
+       | INFO   [05C270\516741] Auto-routing stage completed: started with 1 unrouted nets, completed in 0.39 seconds, final score: 499.99 (1 unrouted and 0 violations), using 0.00 tota
+       wires per net: {}
+    RUN java.exe -jar freerouting.jar -de nk.dsn -do nkinc.ses --gui.enabled=false -da -mp 20 -mt 1 -inc Other
+    freerouting rc 0 ses written True
+       | DEBUG  Analytics are disabled
+       | INFO   [2DB63B\EBB964] Auto-routing stage completed: started with 2 unrouted nets, completed in 0.37 seconds, final score: 999.97 (0 unrouted and 0 violations), using 0.00 tota
+       wires per net: {'A': 3, 'B': 3}
+    RUN java.exe -jar freerouting.jar -de nk.dsn -do nkrinc.ses --gui.enabled=false -da -mp 20 -mt 1 --router.ignore_net_classes=Other
+    freerouting rc 0 ses written True
+       | DEBUG  Command line arguments: '-de nk.dsn -do nkrinc.ses --gui.enabled=false -da -mp 20 -mt 1 --router.ignore_net_classes=Other'
+       | DEBUG  Analytics are disabled
+       | DEBUG  Applied CLI router setting: router.ignore_net_classes = Other
+       | INFO   [B2B057\626BCD] Auto-routing stage completed: started with 2 unrouted nets, completed in 0.36 seconds, final score: 999.97 (0 unrouted and 0 violations), using 0.00 tota
+       wires per net: {'A': 3, 'B': 3}
+    byte-identical nk1.ses nk2.ses: True
+    byte-identical nk1.ses nkinc.ses: True
+    byte-identical nk1.ses nkrinc.ses: True
+    byte-identical nk1.ses nkcc.ses: False
+    RUN java.exe -jar freerouting.jar -de nk.dsn -do nkmt1.ses --gui.enabled=false -da -mp 20
+    freerouting rc 0 ses written True
+       | DEBUG  Analytics are disabled
+       | INFO   [DD93CD\314DAD] Auto-routing stage completed: started with 2 unrouted nets, completed in 0.37 seconds, final score: 999.97 (0 unrouted and 0 violations), using 0.00 tota
+    RUN java.exe -jar freerouting.jar -de nk.dsn -do nkmt2.ses --gui.enabled=false -da -mp 20
+    freerouting rc 0 ses written True
+       | DEBUG  Analytics are disabled
+       | INFO   [142896\D22CB4] Auto-routing stage completed: started with 2 unrouted nets, completed in 0.37 seconds, final score: 999.97 (0 unrouted and 0 violations), using 0.00 tota
+    byte-identical nkmt1.ses nkmt2.ses (no -mt): True
+    exit=0
+
+Raw output, `probe_fr3.py` (three invocations; each run also echoes its
+`Analytics are disabled` line, dropped here after the first):
+
+    "/c/Users/bernd/AppData/Local/Programs/KiCad/10.0/bin/python.exe" "$S/probe_fr3.py"
+    == variant k12 keepout lines 2 fix wires 2
+    RUN java.exe -jar freerouting.jar -de v_k12.dsn -do v_k12.ses --gui.enabled=false -da -mp 20 -mt 1
+    freerouting rc 0 ses written True
+       | DEBUG  Analytics are disabled
+       | INFO   [4F6D6A\AC849F] Auto-routing stage completed: started with 2 unrouted nets, completed in 0.49 seconds, final score: 666.65 (1 unrouted and 0 violations), using 0.00 tota
+       wires per net: {'B': 3}
+    == variant k11 keepout lines 2 fix wires 2
+       | INFO   [79A0A3\5D8481] Auto-routing stage completed: started with 2 unrouted nets, completed in 0.47 seconds, final score: 666.65 (1 unrouted and 0 violations), using 0.00 tota
+       wires per net: {'B': 3}
+    == variant k10.5 keepout lines 2 fix wires 2
+       | INFO   [C75903\A4DD88] Auto-routing stage completed: started with 2 unrouted nets, completed in 0.47 seconds, final score: 666.65 (1 unrouted and 0 violations), using 0.00 tota
+       wires per net: {'B': 3}
+    == variant k9 keepout lines 2 fix wires 2
+       | INFO   [C3CDD3\87FEFC] Auto-routing stage completed: started with 2 unrouted nets, completed in 0.34 seconds, final score: 999.97 (0 unrouted and 0 violations), using 0.00 tota
+       wires per net: {'A': 3, 'B': 3}
+    == variant k12_noLwires keepout lines 2 fix wires 0
+       | INFO   [13C522\9D0B5D] Auto-routing stage completed: started with 3 unrouted nets, completed in 0.18 seconds, final score: 999.98 (0 unrouted and 0 violations), using 0.00 tota
+       wires per net: {'A': 3, 'B': 1, 'L': 1}
+    == variant k12_FCu keepout lines 1 fix wires 2
+       | INFO   [7D8752\F3D44B] Auto-routing stage completed: started with 2 unrouted nets, completed in 0.48 seconds, final score: 999.97 (0 unrouted and 0 violations), using 0.00 tota
+       wires per net: {'A': 3, 'B': 3}
+    exit=0
+
+    "/c/Users/bernd/AppData/Local/Programs/KiCad/10.0/bin/python.exe" "$S/probe_fr3.py" k12_Lnotfix k12_Lprotect k12_L17 k12_L18.5
+    == variant k12_Lnotfix keepout lines 2 fix wires 0
+       | INFO   [615A7E\644415] Auto-routing stage completed: started with 2 unrouted nets, completed in 0.35 seconds, final score: 666.66 (1 unrouted and 0 violations), using 0.00 tota
+       wires per net: {'B': 3, 'L': 1}
+    == variant k12_Lprotect keepout lines 2 fix wires 0
+       | INFO   [F86297\83FA24] Auto-routing stage completed: started with 2 unrouted nets, completed in 0.50 seconds, final score: 666.65 (1 unrouted and 0 violations), using 0.00 tota
+       wires per net: {'B': 3, 'L': 2}
+    == variant k12_L17 keepout lines 2 fix wires 2
+       | INFO   [B70D8E\42D015] Auto-routing stage completed: started with 3 unrouted nets, completed in 0.69 seconds, final score: 599.99 (1 unrouted and 1 violation), using 0.00 total
+       wires per net: {'A': 1, 'L': 2}
+    == variant k12_L18.5 keepout lines 2 fix wires 2
+       | INFO   [242D5C\FE34DB] Auto-routing stage completed: started with 3 unrouted nets, completed in 0.39 seconds, final score: 999.98 (0 unrouted and 0 violations), using 0.00 tota
+       wires per net: {'A': 3, 'B': 2, 'L': 2}
+    exit=0
+
+    "/c/Users/bernd/AppData/Local/Programs/KiCad/10.0/bin/python.exe" "$S/probe_fr3.py" k12_Lwest k12_Least k12_LBonly k12_LFonly
+    == variant k12_Lwest keepout lines 2 fix wires 2
+       | INFO   [488948\F23BB5] Auto-routing stage completed: started with 3 unrouted nets, completed in 0.41 seconds, final score: 999.97 (0 unrouted and 0 violations), using 0.00 tota
+       wires per net: {'A': 3, 'B': 3, 'L': 2}
+    == variant k12_Least keepout lines 2 fix wires 2
+       | INFO   [5B31A3\E3BD02] Auto-routing stage completed: started with 3 unrouted nets, completed in 0.37 seconds, final score: 999.97 (0 unrouted and 0 violations), using 0.00 tota
+       wires per net: {'A': 3, 'B': 3, 'L': 2}
+    == variant k12_LBonly keepout lines 2 fix wires 1
+       | INFO   [B38E3C\9A3733] Auto-routing stage completed: started with 3 unrouted nets, completed in 0.48 seconds, final score: 999.98 (0 unrouted and 0 violations), using 0.00 tota
+       wires per net: {'A': 3, 'B': 1, 'L': 2}
+    == variant k12_LFonly keepout lines 2 fix wires 1
+       | INFO   [9536FE\6E8ED9] Auto-routing stage completed: started with 2 unrouted nets, completed in 0.36 seconds, final score: 666.66 (1 unrouted and 0 violations), using 0.00 tota
+       wires per net: {'B': 3}
+    exit=0
+
+A's routes in the two variants the keepout text cites (SES `network_out`,
+whitespace collapsed, units 0.1 um, y negated):
+
+    v_k12_noLwires  (net A (wire (path B.Cu 2500 59017 -109017 73416 -123416 313433 -123416 336852 -99997 ) ) ...
+    v_k12_FCu       (net A (wire (path F.Cu 2500 50000 -100000 254596 -100000 ) )
+                           (wire (path B.Cu 2500 305295 -99997 254599 -99997 254596 -100000 ) )
+                           (wire (path F.Cu 2500 350000 -100000 349997 -99997 305295 -99997 ) ) ...
+
+Summary (unrouted = the final `N unrouted` of the run; wires per net as
+printed):
 
     variant                                   unrouted  wires
     as exported (keepout y<=12, L F+B)          1       B 3
@@ -284,38 +560,138 @@ SES:
     L moved to y 17 / y 18.5                    1 / 0   A 1, L 2 (1 violation) / A 3, B 2, L 2
 
 So with L's full-length F.Cu wire in place, A cannot detour around the
-keepout even with 4 mm of room (keepout to y 10.5), and without L it takes
+keepout even with 4.375 mm of room (keepout edge y 10.5 to L's copper edge
+y 14.875), and without L it takes
 that corridor at once. Mechanism not established. For Task 7: Freerouting
 can leave a connection unrouted where the grid router would see room, when
 a keepout and a fixed wire bound the same corridor.
 
-**Determinism.** `nk.dsn` (both nets routed): two runs with `-mt 1`
-byte-identical (`True`); two runs *without* `-mt` (default thread pool, 31
-here) also byte-identical (`True`). On this small board the thread count
-did not break determinism; `-mt 1` stays in `FR_ARGS` anyway.
+**Determinism.** Byte-identical SES on two small probe boards (routing
+stage about 0.5 s): `fr1`/`fr2` (`two runs byte-identical: True`, above)
+and `nk1`/`nk2` (`byte-identical nk1.ses nk2.ses: True`). Two `nk.dsn` runs
+*without* `-mt` were also byte-identical (`byte-identical nkmt1.ses
+nkmt2.ses (no -mt): True`); the log of those runs names no thread count
+(no `router.max_threads` line), so the pool size there is *inferred* from
+`-help` ("one fewer than the number of logical processors") and the log's
+`Hardware: 32 CPU cores` -- 31, not measured. Task 7 must re-run the real
+strip twice and `cmp` the SES files; `-mt 1` stays in `FR_ARGS`.
 
-**Leftover vias.** Freerouting keeps the vias of its fanout stage even when
-both sides of the via end up on F.Cu: `nk1.ses` imported gives
-`via_dangling 2` (A at (5.902, 9.098) and (33.728, 10.000)), and `par.ses`
-(below) has 4 vias with every wire on F.Cu. Task 7 should expect
-`via_dangling` warnings on imported boards.
+**Leftover vias (inferred mechanism).** Imported Freerouting boards carry
+vias that connect on one layer only:
+
+    "/c/Users/bernd/AppData/Local/Programs/KiCad/10.0/bin/python.exe" "$S/probe_fr5.py" "$S/nk1.ses"
+    import nk1 True
+      live unconnected: 1
+      vias: [('B', (5.5621, 16.2196)), ('B', (15.4688, 3.8923)), ('A', (33.7281, 9.9997)), ('A', (5.9019, 9.0981))]
+      drc: {'items_not_allowed': 1, 'via_dangling': 2, 'track_dangling': 1, 'unconnected_items': 1}
+      unconnected by net: {}
+
+    $S/drc-nk1.rpt:
+    [items_not_allowed]: Items not allowed
+        Local override; error
+        @(5.9019 mm, 9.0981 mm): Track [A] on F.Cu, length 26.9246 mm
+    [via_dangling]: Via is not connected or connected on only one layer
+        Local override; warning
+        @(5.9019 mm, 9.0981 mm): Via [A] on F.Cu - B.Cu
+    [via_dangling]: Via is not connected or connected on only one layer
+        Local override; warning
+        @(33.7281 mm, 9.9997 mm): Via [A] on F.Cu - B.Cu
+    [track_dangling]: Track has unconnected end
+        Local override; warning
+        @(5.0000 mm, 15.0000 mm): Track [L] on B.Cu, length 30.0000 mm
+    [unconnected_items]: Missing connection between items
+        Local override; error
+        @(5.0000 mm, 15.0000 mm): Track [L] on F.Cu, length 30.0000 mm
+        @(5.0000 mm, 15.0000 mm): Track [L] on B.Cu, length 30.0000 mm
+
+(`unconnected_items 1` here is the L island again; A and B are complete.)
+And `par.ses` (below), `grep -n '(via "' $S/par.ses` and `grep -n "(path"
+$S/par.ses`:
+
+    47:        (via "Via[0-1]_600:300_um" 59050 -69050
+    55:        (via "Via[0-1]_600:300_um" 340950 -69050
+    71:        (via "Via[0-1]_600:300_um" 129096 -75904
+    79:        (via "Via[0-1]_600:300_um" 270904 -75904
+    36:          (path F.Cu 2500
+    42:          (path F.Cu 2500
+    50:          (path F.Cu 2500
+    60:          (path F.Cu 2500
+    66:          (path F.Cu 2500
+    74:          (path F.Cu 2500
+
+Four vias, every wire on F.Cu. That these are left over from the fanout
+stage (`Fanout ... +5 extra vias`) is an inference from the log, not
+probed. Task 7 should expect `via_dangling` warnings on imported boards.
 
 **class_class.** On the brief's board A is unrouted, so no A-B distance
-exists there (`fr-routed`: A 0 segments, B 7). On `nk.dsn` Freerouting's
-own spacing is already large (`min A-B centreline distance: 5.206 mm on
-F.Cu` without the rule, `6.107 mm` with it), so a 3 mm rule shows nothing
-there. `probe_fr4.py` moves the pads (DSN text, no keepout) so the natural
-routes run 2.5 mm apart -- A (5,6)-(35,6), B (12,8.5)-(28,8.5):
+exists there. On `nk.dsn` Freerouting's own spacing is already large, so a
+3 mm rule cannot show anything there (one process per SES, since
+`new_board()` reseeds the KIIDs):
 
-    KIPY $S/probe_fr4.py
+    K="/c/Users/bernd/AppData/Local/Programs/KiCad/10.0/bin/python.exe"
+    for s in fr1 fr-cc nk1 nkcc; do "$K" "$S/probe_fr2.py" measure "$S/$s.ses"; done
+    import fr1.ses True
+      unconnected after import: 2
+      segments A 0 B 7
+      same-layer A x B pairs: 0
+      vias A/B: 2  min via-centre to other-net centreline: n/a
+      A/B segment ends inside the keepout box: 0
+    import fr-cc.ses True
+      unconnected after import: 2
+      segments A 0 B 9
+      same-layer A x B pairs: 0
+      vias A/B: 2  min via-centre to other-net centreline: n/a
+      A/B segment ends inside the keepout box: 0
+    import nk1.ses True
+      unconnected after import: 1
+      segments A 5 B 7
+      same-layer A x B pairs: 20
+      min A-B centreline distance: 5.206 mm on F.Cu
+      vias A/B: 4  min via-centre to other-net centreline: 3.084 mm
+      A/B segment ends inside the keepout box: 0
+    import nkcc.ses True
+      unconnected after import: 1
+      segments A 5 B 9
+      same-layer A x B pairs: 15
+      min A-B centreline distance: 6.107 mm on F.Cu
+      vias A/B: 4  min via-centre to other-net centreline: 4.549 mm
+      A/B segment ends inside the keepout box: 0
+
+`probe_fr4.py` therefore moves the pads (DSN text of `nk.dsn`, no keepout:
+`TP_A0 5000 -10000` -> `5000 -6000`, `TP_A1 35000 -10000` -> `35000 -6000`,
+`TP_B0 20000 -3000` -> `12000 -8500`, `TP_B1 20000 -17000` -> `28000 -8500`)
+so the natural routes run 2.5 mm apart -- A (5,6)-(35,6), B (12,8.5)-(28,8.5).
+It measures straight from the SES geometry:
+
+    "/c/Users/bernd/AppData/Local/Programs/KiCad/10.0/bin/python.exe" "$S/probe_fr4.py"
     RUN java.exe -jar freerouting.jar -de par.dsn -do par.ses --gui.enabled=false -da -mp 20 -mt 1
-       | INFO   ... final score: 999.98 (0 unrouted and 0 violations)
+    freerouting rc 0 ses written True
+       | DEBUG  Analytics are disabled
+       | INFO   [4F06EA\0F7DE5] Auto-routing stage completed: started with 2 unrouted nets, completed in 0.36 seconds, final score: 999.98 (0 unrouted and 0 violations), using 0.00 tota
+      segments: {'A': 3, 'B': 3} vias: 4
+        A F.Cu (5.905, 6.905) -> (34.095, 6.905)
+        A F.Cu (5.905, 6.905) -> (5.000, 6.000)
+        A F.Cu (34.095, 6.905) -> (35.000, 6.000)
+        B F.Cu (12.910, 7.590) -> (27.090, 7.590)
+        B F.Cu (12.910, 7.590) -> (12.000, 8.500)
+        B F.Cu (27.090, 7.590) -> (28.000, 8.500)
       par: min A-B track centreline 0.685 mm -> edge-to-edge 0.435 mm (9 same-layer pairs)
       par: min track-edge to other-net pad-edge 0.720 mm
     RUN java.exe -jar freerouting.jar -de parcc.dsn -do parcc.ses --gui.enabled=false -da -mp 20 -mt 1
-       | INFO   ... final score: 999.98 (0 unrouted and 0 violations)
+    freerouting rc 0 ses written True
+       | DEBUG  Analytics are disabled
+       | INFO   [3407F6\F77952] Auto-routing stage completed: started with 2 unrouted nets, completed in 0.32 seconds, final score: 999.98 (0 unrouted and 0 violations), using 0.00 tota
+      segments: {'A': 6, 'B': 1} vias: 2
+        A F.Cu (6.286, 5.573) -> (7.267, 4.592)
+        A F.Cu (7.267, 4.592) -> (32.319, 4.592)
+        A F.Cu (32.319, 4.592) -> (33.727, 6.000)
+        A F.Cu (6.286, 5.573) -> (5.427, 5.573)
+        A F.Cu (5.427, 5.573) -> (5.000, 6.000)
+        A F.Cu (33.727, 6.000) -> (35.000, 6.000)
+        B F.Cu (12.000, 8.500) -> (28.000, 8.500)
       parcc: min A-B track centreline 3.908 mm -> edge-to-edge 3.658 mm (6 same-layer pairs)
       parcc: min track-edge to other-net pad-edge 3.033 mm
+    exit=0
 
 With the rule A dips to y 4.592 around B's pads and track; without it A and
 B run 0.435 mm apart edge to edge. The rule
@@ -327,15 +703,25 @@ covers pads as well as tracks.
 
 1. `FR_ARGS` = `["--gui.enabled=false", "-da", "-mp", "20", "-mt", "1"]`,
    after `-jar freerouting.jar -de <in.dsn> -do <out.ses>`; no `-l`, no
-   `-inc` (it does nothing headless). Verify `Analytics are disabled` in the
-   run's log section each time.
+   `-inc` (it does nothing headless). After each run, check for
+   `Analytics are disabled`: it is a DEBUG line, written only to
+   `%LOCALAPPDATA%\freerouting\logs\freerouting.log`, never to the console;
+   that run's section is the text from the last `INFO   Freerouting v`
+   banner to the end of the file. Whether `-mp 20` suffices on the real
+   strip is unknown.
 2. No `lock_tracks()` after the import: locked tracks come back unchanged
    and still locked. Locking *before* the export is mandatory -- an
-   unlocked track that is not in the SES is deleted by the import.
-3. Deterministic: two `-mt 1` runs gave byte-identical SES files (also two
-   runs without `-mt` on this board).
+   unlocked track that is not in the SES is deleted by the import. Proven
+   for two straight locked tracks; locked vias and zones not tested.
+3. Byte-identical SES on two small probe boards (0.5 s runs), with `-mt 1`
+   (and, on `nk.dsn`, without it). Task 7 must re-run the real strip twice
+   and `cmp`.
 4. `class_class` is honoured: A-B edge-to-edge 0.435 mm without it, 3.658 mm
    (tracks) and 3.033 mm (track to pad) with a 3 mm rule.
+5. Keepouts: honoured in the one positive case (A switched to B.Cu under an
+   F.Cu-only keepout); on the brief's board the check was vacuous. Expect
+   Freerouting to leave connections unrouted where a keepout and a fixed
+   wire bound a corridor, and expect `via_dangling` warnings after import.
 
 ### Our own router, 2 layers (Task 6)
 
