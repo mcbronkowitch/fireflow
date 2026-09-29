@@ -114,6 +114,27 @@ def test_committed_files_match_the_generator():
               "hand-edited, or the generator changed without re-running it")
 
 
+def test_cut_file_is_exactly_the_holes():
+    """Formulor cuts pure-blue hairlines; anything else would be engraved or
+    ignored. One outline plus one shape per hole, nothing more."""
+    path = os.path.join(HERE, "FireflowHW-cut.svg")
+    if not os.path.exists(path):
+        FAILS.append("FireflowHW-cut.svg is missing -- run res/gen_hw_cut.py")
+        return
+    svg = open(path, encoding="utf-8").read()
+    check('width="304.800mm"' in svg and 'height="128.500mm"' in svg,
+          "cut file is not in mm at the nominal plate size")
+    strokes = set(re.findall(r'stroke="([^"]+)"', svg))
+    check(strokes == {cut.BLUE}, f"cut file uses strokes {strokes}, not only {cut.BLUE}")
+    check(len(re.findall(r'fill="(?!none")', svg)) == 0, "cut file has a filled shape")
+    shapes = re.findall(r"<(circle|rect)\b", svg)
+    holes = cut.holes()
+    check(len(shapes) == len(holes) + 1,
+          f"cut file has {len(shapes)} shapes, expected {len(holes)} holes + 1 outline")
+    for h in holes:
+        check(cut.shape(h, cut.BLUE, "0.01") in svg, f"{h['id']} is not cut")
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

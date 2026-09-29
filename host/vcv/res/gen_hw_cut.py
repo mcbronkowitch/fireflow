@@ -62,7 +62,35 @@ def holes_json():
     return json.dumps(doc, indent=1) + "\n"
 
 
-OUTPUTS = [("FireflowHW-holes.json", holes_json)]
+BLUE = "#0000ff"   # Formulor: RGB 0,0,255 hairlines are cut
+
+
+def shape(h, stroke, width):
+    """One hole as one SVG element: a circle, or a rectangle whose rounded
+    ends make the mounting slots stadium-shaped."""
+    if "d_mm" in h:
+        return (f'<circle cx="{hw.mm(h["x_mm"])}" cy="{hw.mm(h["y_mm"])}" '
+                f'r="{hw.mm(h["d_mm"] / 2)}" fill="none" stroke="{stroke}" '
+                f'stroke-width="{width}"/>')
+    rx = h["h_mm"] / 2 if h["kind"] == "mount" else 0.0
+    return (f'<rect x="{hw.mm(h["x_mm"] - h["w_mm"] / 2)}" '
+            f'y="{hw.mm(h["y_mm"] - h["h_mm"] / 2)}" width="{hw.mm(h["w_mm"])}" '
+            f'height="{hw.mm(h["h_mm"])}" rx="{hw.mm(rx)}" fill="none" '
+            f'stroke="{stroke}" stroke-width="{width}"/>')
+
+
+def cut_svg():
+    P = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{hw.mm(hw.W)}mm" '
+         f'height="{hw.mm(hw.Hh)}mm" viewBox="0 0 {hw.mm(hw.W)} {hw.mm(hw.Hh)}">',
+         f'<rect x="{hw.mm(TRIM)}" y="0.000" width="{hw.mm(PLATE_W)}" '
+         f'height="{hw.mm(hw.Hh)}" fill="none" stroke="{BLUE}" stroke-width="0.01"/>']
+    P += [shape(h, BLUE, "0.01") for h in holes()]
+    P.append("</svg>")
+    return "\n".join(P) + "\n"
+
+
+OUTPUTS = [("FireflowHW-holes.json", holes_json),
+           ("FireflowHW-cut.svg", cut_svg)]
 
 
 def write_all(here):
