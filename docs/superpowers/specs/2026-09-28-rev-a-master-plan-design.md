@@ -57,6 +57,7 @@ its own plan.
 | **P1** | Panel parts and drill file (mechanical track) | Panel-parts BOM; drill file (SVG/DXF) exported from `gen_hw_panel.py`; acrylic and one set of panel parts ordered; grip test; **freeze** | exact pot, jack, keycap/switch and LED types; hole diameters from datasheets; whether pot anti-rotation tabs get a hole or are broken off |
 | **P2** | Pin map and circuit blocks | Every module pin assigned; block diagram | 74HC4067 vs 74HC4051; shift-register chain length; MIDI in yes/no (costs a pin); Eurorack power header and reverse protection; which coupon findings carry over (below) |
 | **P3** | Schematic generator | Generated schematic, clean ERC, proven netlist, JLC parts only with LCSC numbers | basic vs. extended JLC parts |
+| **P4a** | Routing spike (added 2026-09-29) | A proven routing method before P4 starts: one representative Rev A region (e.g. a mux region — 3 muxes, ~24 pots, address lines, COM) routed two ways — the coupon's collision search in `build_pcb.py` extended into a simple router, and Freerouting via KiCad's Specctra export, with the rule-bearing nets (COM, audio, clock) hand-routed and locked. Time, DRC and rendered PNG compared; report in `docs/hardware/routing-spike.md` | which routing method P4 uses; input to 2 vs 4 layers (JLC price looked up, not assumed) |
 | **P4** | Layout generator | Placement from the frozen panel coordinates, routing, DRC, JLC BOM and CPL files | module and power-header position (depth); 2 vs 4 layers |
 | **P5** | Aluminium front panel for Rev A | Print-ready plate from the same generator, ordered with Rev A on 18 Dec | manufacturer; print vs. engraving |
 | **P6** | Firmware: panel scan part 2 and control mapping | Scan over the real pin map, every control on its parameter; prepared on the coupon where possible | none beyond P2's |
@@ -75,6 +76,7 @@ coupon on purpose — price and availability decide it in P2.
 ```
 P1 ──► freeze (6 Nov) ──► P4 ──► order (18 Dec) ──► P7
 P2 ──► P3 ──────────────► P4
+P4a (routing spike) ─────► P4
 P2 ──► P6 ─────────────────────────────────────────► P7
 freeze + P4 ──► P5 ──► order (18 Dec)
 ```
@@ -92,6 +94,7 @@ All dates Fridays, as in the hardware roadmap.
 | **Fri 9 Oct** | Panel parts chosen, drill file exported, **acrylic and one set of panel parts ordered** | P1 |
 | **Fri 16 Oct** | **Pin map done** — unblocks P3 and P6 | P2 |
 | ~Fri 23 Oct | Parts and plate in the house (assumption; P1 checks lead times) | P1 |
+| 12 – 30 Oct | **Routing spike**: method for P4 chosen by Fri 30 Oct, while the parts are on their way | P4a |
 | 23 Oct – 5 Nov | Grip test; **one** acrylic correction round budgeted (~20 €, a few days) | P1 |
 | **Fri 6 Nov** | **H1: panel freeze**; engine feature freeze from 9 Nov (roadmap) | P1 |
 | **Fri 13 Nov** | **Schematic done**: clean ERC, every part from JLC's catalogue and in stock | P3 |

@@ -111,6 +111,9 @@ points — but Rev A reads pots on both, so libDaisy is the authority here.
   its muxes sit next to their pots. Which pots go to which mux is P4's
   placement result; the firmware table is keyed on (sense pin, mux, channel)
   (shell/README.md: part 2 must key on the sense pin).
+  **Amended 2026-09-29:** P3 computes the assignment from the P1 hole list
+  and writes it to `panel-map.json`; P4 places each mux at its group's
+  centre (P3 spec §5).
 - **Module position:** the module sits near the middle of the board so the
   longest mux-COM run stays around 15 cm. COM trace capacitance adds to the
   settle node (~1.5 pF/cm, `docs/hardware/settle-budget.md`); this is an
