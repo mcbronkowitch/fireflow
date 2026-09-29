@@ -401,6 +401,18 @@ add_test(NAME reva_assign_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/hardware/reva/test_assign.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME reva_build_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/hardware/reva/test_build.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+# The Rev A schematic at the check tool's full level: every rule, the
+# netlist against the intent, ERC against hardware/reva/erc-waivers.txt.
+add_test(NAME reva_check_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/hardware/gen/check.py
+                 --project ${CMAKE_CURRENT_SOURCE_DIR}/hardware/reva/build.py
+                 --full --out ${CMAKE_BINARY_DIR}/reva-check
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
 # The Python guards need a runner or they rot unnoticed -- tools/test_*.py in
 # this repo is wired to nothing, and the VCV panel guard stood red for 23
