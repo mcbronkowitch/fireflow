@@ -56,3 +56,7 @@ desktop.ini
 
 # Playwright MCP scratch output (page snapshots, console logs) -- never tracked.
 /.playwright-mcp/
+
+# P3 check-tool output (hardware/gen/check.py, default --out)
+hardware/gen/fixtures/out/
+hardware/reva/out/

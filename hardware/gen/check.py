@@ -6,9 +6,16 @@ the load-bearing check: a schematic's connectivity is geometry -- stub
 directions, a symbol-space Y flip -- and geometry is exactly what a generator
 gets quietly wrong. KiCad's exported netlist is the independent read.
 """
+import argparse
+import filecmp
+import importlib.util
+import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
+import time
 
 _HW = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 if _HW not in sys.path:
@@ -16,6 +23,7 @@ if _HW not in sys.path:
 
 from gen import ksexp  # noqa: E402
 from gen import netlist as N  # noqa: E402
+from gen import sch_writer as W  # noqa: E402
 
 VENDORED_LIBS = {"Daisy-Boards"}
 
@@ -148,3 +156,471 @@ def export_netlist(project, sch_dir):
 def intended_nets(project):
     return {k: set(v) for k, v in
             N.nets_from(project.parts(), include_virtual=False).items()}
+
+
+# --- the three check levels (P3 spec §4) ------------------------------------
+
+VENDORED_DIR = os.path.join(_HW, "lib", "DaisyKiCad").replace("\\", "/")
+OUTPUT_TYPES = {"output", "tri_state", "power_out"}
+PANEL_KINDS = {"pot", "jack", "key", "led"}
+
+
+class Finding:
+    def __init__(self, rule, sheet, text):
+        self.rule, self.sheet, self.text = rule, sheet, text
+
+    def __str__(self):
+        return "FAIL %s [%s]: %s" % (self.sheet, self.rule, self.text)
+
+
+def _real_nets(project):
+    """{net: [(part, pin)]} without power flags and power symbols."""
+    nets = {}
+    for p in project.parts():
+        if N.is_virtual(p.ref):
+            continue
+        for pin, net in p.nets.items():
+            nets.setdefault(net, []).append((p, pin))
+    return nets
+
+
+def rule_single_pin(project):
+    sheet = project.sheet_of()
+    nets = _real_nets(project)
+    found = [Finding("single_pin", sheet[nodes[0][0].ref],
+                     "net %s has one pin (%s.%s)" % (net, nodes[0][0].ref, nodes[0][1]))
+             for net, nodes in sorted(nets.items()) if len(nodes) == 1]
+    return len(nets), found
+
+
+def rule_driver_conflict(project):
+    sheet = project.sheet_of()
+    examined, found = 0, []
+    for net, nodes in sorted(_real_nets(project).items()):
+        if net in project.power:
+            continue
+        drivers = [(p, pin) for p, pin in nodes
+                   if p.sym.pin(pin)["etype"] in OUTPUT_TYPES]
+        if not drivers:
+            continue
+        examined += 1
+        if len(drivers) > 1:
+            found.append(Finding("driver_conflict", sheet[drivers[0][0].ref],
+                                 "net %s has %d outputs: %s" % (
+                                     net, len(drivers),
+                                     ", ".join("%s.%s" % (p.ref, pin) for p, pin in drivers))))
+    return examined, found
+
+
+def rule_rail_domain(project):
+    """A3V3 feeds pots and muxes only, 3V3D the digital side (P2 decision 3)."""
+    rail_domain = {r: d for d, rails in project.domain_rails.items() for r in rails}
+    sheet = project.sheet_of()
+    examined, found = 0, []
+    for p in project.parts():
+        if not p.domain:
+            continue
+        touched = sorted({n for n in p.nets.values() if n in rail_domain})
+        if not touched:
+            continue
+        examined += 1
+        if p.domain not in project.domain_rails:
+            found.append(Finding("rail_domain", sheet[p.ref],
+                                 "%s has unknown domain %r" % (p.ref, p.domain)))
+            continue
+        wrong = [n for n in touched if rail_domain[n] != p.domain]
+        if wrong:
+            found.append(Finding("rail_domain", sheet[p.ref], "%s is %s but sits on %s"
+                                 % (p.ref, p.domain, ", ".join(wrong))))
+    return examined, found
+
+
+def rule_pins_accounted(project):
+    sheet = project.sheet_of()
+    strict = [p for p in project.parts() if p.strict]
+    found = []
+    for p in strict:
+        loose = [n for n in p.unconnected() if n not in p.nc]
+        if loose:
+            found.append(Finding("pins_accounted", sheet[p.ref],
+                                 "%s pins %s carry no net and are not marked no-connect"
+                                 % (p.ref, ", ".join(loose))))
+    return len(strict), found
+
+
+def rule_panel_ids(project):
+    holes = [h for h in (project.holes or []) if h["kind"] in PANEL_KINDS]
+    sheet = project.sheet_of()
+    by_id = {}
+    for p in project.parts():
+        if p.panel_id:
+            by_id.setdefault(p.panel_id, []).append(p.ref)
+    hole_ids = {h["id"] for h in holes}
+    found = []
+    for h in holes:
+        refs = by_id.get(h["id"], [])
+        if len(refs) != 1:
+            found.append(Finding("panel_ids", "-", "hole %s (%s) has %d parts%s"
+                                 % (h["id"], h["kind"], len(refs),
+                                    (": " + ", ".join(refs)) if refs else "")))
+    for pid, refs in sorted(by_id.items()):
+        if pid not in hole_ids:
+            found.append(Finding("panel_ids", sheet[refs[0]],
+                                 "%s carries PanelId %s, which is no panel hole"
+                                 % (", ".join(refs), pid)))
+    return len(holes), found
+
+
+def rule_sourced(project):
+    """Every real part has exactly one of an LCSC number (JLC fits it) or a
+    Source (bought elsewhere, hand-soldered) -- P3 spec §6."""
+    sheet = project.sheet_of()
+    parts = [p for p in project.parts() if not N.is_virtual(p.ref)]
+    found = [Finding("sourced", sheet[p.ref],
+                     "%s needs exactly one of LCSC or Source (LCSC=%r, Source=%r)"
+                     % (p.ref, p.lcsc, p.source))
+             for p in parts if bool(p.lcsc) == bool(p.source)]
+    return len(parts), found
+
+
+RULES = {"single_pin": rule_single_pin,
+         "driver_conflict": rule_driver_conflict,
+         "rail_domain": rule_rail_domain,
+         "pins_accounted": rule_pins_accounted,
+         "panel_ids": rule_panel_ids,
+         "sourced": rule_sourced}
+
+
+def fast(project):
+    """Level 1: the intent alone, no KiCad, no file written."""
+    findings = []
+    for name, rule in RULES.items():
+        examined, found = rule(project)
+        if examined == 0:
+            findings.append(Finding(name, "-", "examined nothing -- a rule with "
+                                    "no input cannot pass"))
+        findings += found
+    return findings
+
+
+# --- sabotage: every rule shows its RED on demand -----------------------------
+
+def _first(items, what):
+    if not items:
+        raise ValueError("this sabotage needs %s and the project has none" % what)
+    return items[0]
+
+
+def _sab_add(project, part):
+    project.sheets[0].parts.append(part)
+
+
+def _sab_single_pin(pr):
+    _sab_add(pr, N.Part("R_SAB1", "Device:R", "1k", "", lcsc="C-SABOTAGE")
+             .by_number(1, "SAB_ALONE").by_number(2, "GND"))
+
+
+def _sab_driver_conflict(pr):
+    driven = [n for n, nodes in sorted(_real_nets(pr).items())
+              if n not in pr.power
+              and any(p.sym.pin(pin)["etype"] in OUTPUT_TYPES for p, pin in nodes)]
+    _sab_add(pr, N.Part("U_SAB1", "74xx:74HC595", "74HC595", "", lcsc="C-SABOTAGE")
+             .by_name("QA", _first(driven, "a driven net")))
+
+
+def _sab_rail_domain(pr):
+    domains = sorted(pr.domain_rails)
+    if len(domains) < 2:
+        raise ValueError("rail_domain sabotage needs two domains")
+    rail = sorted(pr.domain_rails[domains[1]])[0]
+    _sab_add(pr, N.Part("R_SAB1", "Device:R", "1k", "", lcsc="C-SABOTAGE",
+                        domain=domains[0]).by_number(1, rail).by_number(2, "GND"))
+
+
+def _sab_pins_accounted(pr):
+    p = _first([p for p in pr.parts() if p.strict and p.nets], "a strict part")
+    del p.nets[sorted(p.nets, key=ksexp._pin_sort_key)[0]]
+
+
+def _sab_panel_ids(pr):
+    _first([p for p in pr.parts() if p.panel_id], "a panel part").panel_id = ""
+
+
+def _sab_sourced(pr):
+    p = _first([p for p in pr.parts() if not N.is_virtual(p.ref)], "a real part")
+    p.lcsc = p.source = ""
+
+
+SABOTAGE = {"single_pin": _sab_single_pin,
+            "driver_conflict": _sab_driver_conflict,
+            "rail_domain": _sab_rail_domain,
+            "pins_accounted": _sab_pins_accounted,
+            "panel_ids": _sab_panel_ids,
+            "sourced": _sab_sourced,
+            "erc": _sab_single_pin}          # a one-pin label: ERC must see it too
+LEVEL_SABOTAGE = {"overlap", "stability"}    # handled inside the levels
+
+
+def _empty(pr, rule):
+    if rule in ("single_pin", "driver_conflict", "sourced"):
+        for s in pr.sheets:
+            s.parts = []
+    elif rule == "rail_domain":
+        pr.domain_rails = {}
+    elif rule == "pins_accounted":
+        for p in pr.parts():
+            p.strict = False
+    elif rule == "panel_ids":
+        pr.holes = []
+
+
+def apply_sabotage(project, spec):
+    rule, _, mode = spec.partition(":")
+    if mode == "empty" and rule in RULES:
+        _empty(project, rule)
+    elif not mode and rule in SABOTAGE:
+        SABOTAGE[rule](project)
+    elif not mode and rule in LEVEL_SABOTAGE:
+        pass
+    else:
+        raise ValueError("unknown sabotage %r; known: %s, or RULE:empty"
+                         % (spec, ", ".join(sorted(set(SABOTAGE) | LEVEL_SABOTAGE))))
+
+
+# --- levels 2 and 3 -------------------------------------------------------------
+
+def _write_all(project, out_dir):
+    sch_dir = os.path.join(out_dir, "sch")
+    if os.path.isdir(sch_dir):
+        shutil.rmtree(sch_dir)     # a renamed sheet's old file must not linger
+    layouts = W.write_project(project, sch_dir)
+    write_lib_tables(project.parts(), sch_dir, VENDORED_DIR,
+                     extra_sym_libs={"power"} if project.power else ())
+    return sch_dir, layouts
+
+
+def _drawing(project, layouts, names, sabotage):
+    sheets = {s.name: s for s in project.sheets}
+    found = []
+    for name in names:
+        placed, height = layouts[name]
+        if sabotage == "overlap" and len(placed) > 1:
+            keys = list(placed)
+            placed = dict(placed)
+            placed[keys[1]] = placed[keys[0]]
+        for a, b in W.overlaps(sheets[name].parts, placed, project.power):
+            found.append(Finding("overlap", name, "%s <-> %s" % (a, b)))
+        if not W.fits(height, project.paper):
+            found.append(Finding("sheet_edge", name,
+                                 "content is %.0f mm tall; %s leaves %.0f above the "
+                                 "title block" % (height, project.paper,
+                                                  W.PAPER[project.paper][1] - W.TITLE_BLOCK_H)))
+    return found
+
+
+def _netlist(project, sch_dir, refs=None):
+    exported = {n: v for n, v in export_netlist(project, sch_dir).items()
+                if not n.startswith("unconnected-")}
+    intended = intended_nets(project)
+    if refs is not None:
+        def touches(nodes):
+            return any(r in refs for r, _ in nodes)
+        intended = {n: v for n, v in intended.items() if touches(v)}
+        exported = {n: v for n, v in exported.items() if touches(v)}
+    return [Finding("netlist", "-", bad) for bad in compare(intended, exported)]
+
+
+def _pdf_and_pngs(project, sch_dir, out_dir, names, overview):
+    import fitz   # PyMuPDF; imported here so the fast level needs nothing extra
+    pdf = os.path.join(out_dir, project.name + ".pdf")
+    rc, text = run([ksexp.KICAD_CLI, "sch", "export", "pdf", "-o", pdf,
+                    os.path.join(sch_dir, project.name + ".kicad_sch")],
+                   "kicad-cli sch export pdf", quiet=True)
+    if rc != 0:
+        raise RuntimeError("PDF export failed (rc=%d):\n%s" % (rc, text))
+    doc = fitz.open(pdf)
+    order = [s.name for s in project.sheets]
+    want_pages = 1 if project.flat else len(order) + 1
+    if doc.page_count != want_pages:
+        raise RuntimeError("%s has %d pages, expected %d" % (pdf, doc.page_count, want_pages))
+    pngs = []
+    if overview and not project.flat:
+        pngs.append(os.path.join(out_dir, project.name + "-overview.png"))
+        doc[0].get_pixmap(dpi=110).save(pngs[-1])
+    for name in names:
+        pngs.append(os.path.join(out_dir, name + ".png"))
+        doc[0 if project.flat else order.index(name) + 1].get_pixmap(dpi=110).save(pngs[-1])
+    doc.close()
+    return pngs
+
+
+def load_waivers(path):
+    """`type | text found in an item description | reason`, one per line."""
+    if path is None:
+        return []
+    out = []
+    with open(path, encoding="utf-8") as fh:
+        for i, line in enumerate(fh, 1):
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            fields = [f.strip() for f in line.split("|")]
+            if len(fields) != 3 or not all(fields):
+                raise ValueError("%s:%d: want 'type | item text | reason', got %r"
+                                 % (path, i, line))
+            out.append(tuple(fields))
+    return out
+
+
+def match_waivers(violations, waivers):
+    """violations: [(type, [item descriptions])]. Unwaived ones and waivers
+    that match nothing both come back as findings: a stale waiver is a hole
+    the next real violation would fall through."""
+    used, found = set(), []
+    for vtype, items in violations:
+        hit = next((k for k, (wt, text, _) in enumerate(waivers)
+                    if wt == vtype and any(text in d for d in items)), None)
+        if hit is None:
+            found.append(Finding("erc", "-", "%s: %s" % (vtype, "; ".join(items) or "(no items)")))
+        else:
+            used.add(hit)
+    for k, (wt, text, _) in enumerate(waivers):
+        if k not in used:
+            found.append(Finding("erc_waiver", "-", "waiver matches nothing: %s | %s"
+                                 % (wt, text)))
+    return found
+
+
+def _erc(project, sch_dir, out_dir):
+    """ERC through kicad-cli, JSON report. Waivers match on the violation type
+    and on text from an item description ("Symbol U1 Pin 9 ..."), never on
+    the top-level description, which KiCad localizes (German on this machine)."""
+    report = os.path.join(out_dir, "erc.json")
+    if os.path.exists(report):
+        os.remove(report)
+    rc, text = run([ksexp.KICAD_CLI, "sch", "erc", "--format", "json",
+                    "--severity-error", "--severity-warning"] + kicad_defines()
+                   + ["-o", report, os.path.join(sch_dir, project.name + ".kicad_sch")],
+                   "kicad-cli sch erc", quiet=True)
+    if not os.path.exists(report):
+        raise RuntimeError("ERC wrote no report (rc=%d):\n%s" % (rc, text))
+    with open(report, encoding="utf-8") as fh:
+        data = json.load(fh)
+    violations = [(v["type"], [i.get("description", "") for i in v.get("items", [])])
+                  for s in data["sheets"] for v in s["violations"]]
+    return match_waivers(violations, load_waivers(project.waivers)), len(violations)
+
+
+def _stability(factory, sabotage):
+    found = []
+    with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
+        W.write_project(factory(), a)
+        W.Uuids.random = sabotage == "stability"
+        try:
+            W.write_project(factory(), b)
+        finally:
+            W.Uuids.random = False
+        names = sorted(os.listdir(a))
+        _, mismatch, errors = filecmp.cmpfiles(a, b, names, shallow=False)
+        found += [Finding("stability", "-", "%s differs between two writes" % n)
+                  for n in mismatch + errors]
+    return found
+
+
+def sheet_level(project, name, out_dir, sabotage=None):
+    """Level 2: all sheets written (KiCad cannot export one sub-sheet alone),
+    one sheet checked and rendered."""
+    names = [s.name for s in project.sheets]
+    if name not in names:
+        raise ValueError("no sheet %r; sheets: %s" % (name, ", ".join(names)))
+    os.makedirs(out_dir, exist_ok=True)
+    findings = fast(project)
+    sch_dir, layouts = _write_all(project, out_dir)
+    findings += _drawing(project, layouts, [name], sabotage)
+    refs = {p.ref for s in project.sheets if s.name == name for p in s.parts}
+    findings += _netlist(project, sch_dir, refs)
+    for png in _pdf_and_pngs(project, sch_dir, out_dir, [name], overview=False):
+        print("look at: " + png)
+    return findings
+
+
+def full_level(project, factory, out_dir, sabotage=None):
+    """Level 3: everything, at the end of every task."""
+    os.makedirs(out_dir, exist_ok=True)
+    t = [time.monotonic()]
+
+    def lap():
+        t.append(time.monotonic())
+        return t[-1] - t[-2]
+
+    findings = fast(project)
+    sch_dir, layouts = _write_all(project, out_dir)
+    names = [s.name for s in project.sheets]
+    findings += _drawing(project, layouts, names, sabotage)
+    t_write = lap()
+    findings += _netlist(project, sch_dir)
+    t_net = lap()
+    erc_found, n = _erc(project, sch_dir, out_dir)
+    findings += erc_found
+    t_erc = lap()
+    pngs = _pdf_and_pngs(project, sch_dir, out_dir, names, overview=True)
+    t_pdf = lap()
+    findings += _stability(factory, sabotage)
+    t_stab = lap()
+    print("ERC: %d violation(s) reported, %d unwaived"
+          % (n, len([f for f in erc_found if f.rule == "erc"])))
+    print("timing: fast+write+drawing %.1f s, netlist %.1f s, ERC %.1f s, "
+          "PDF+PNG %.1f s, stability %.1f s" % (t_write, t_net, t_erc, t_pdf, t_stab))
+    for png in pngs:
+        print("look at: " + png)
+    return findings
+
+
+def load_factory(path):
+    spec = importlib.util.spec_from_file_location("gen_project_under_check",
+                                                  os.path.abspath(path))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.project
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="Check a generated schematic "
+                                 "(P3 spec §4).")
+    ap.add_argument("--project", required=True,
+                    help="a .py file defining project() -> gen.project.Project")
+    level = ap.add_mutually_exclusive_group(required=True)
+    level.add_argument("--fast", action="store_true", help="intent only, <1 s")
+    level.add_argument("--sheet", metavar="NAME", help="check and render one sheet")
+    level.add_argument("--full", action="store_true", help="everything, incl. ERC")
+    ap.add_argument("--sabotage", metavar="SPEC",
+                    help="break one thing on purpose: RULE, RULE:empty, erc, "
+                         "overlap or stability")
+    ap.add_argument("--out", help="output dir (default: <project dir>/out)")
+    args = ap.parse_args(argv)
+
+    factory = load_factory(args.project)
+    out = args.out or os.path.join(os.path.dirname(os.path.abspath(args.project)), "out")
+    t0 = time.monotonic()
+    project = factory()
+    if args.sabotage:
+        apply_sabotage(project, args.sabotage)
+    if args.fast:
+        label, findings = "fast", fast(project)
+    elif args.sheet:
+        label = "sheet " + args.sheet
+        findings = sheet_level(project, args.sheet, out, args.sabotage)
+    else:
+        label, findings = "full", full_level(project, factory, out, args.sabotage)
+    dt = time.monotonic() - t0
+    for f in findings:
+        print(f)
+    if findings:
+        print("FAIL %s: %d finding(s), %.1f s" % (label, len(findings), dt))
+        return 1
+    print("PASS %s: %d parts, %.1f s" % (label, len(project.parts()), dt))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
