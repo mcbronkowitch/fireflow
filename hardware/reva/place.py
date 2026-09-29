@@ -12,6 +12,7 @@ to hardware/reva/kicad/reva.kicad_pcb.
 """
 import argparse
 import copy
+import math
 import os
 import shutil
 import sys
@@ -56,6 +57,7 @@ class Placed:
         self.anchors = {}
         self.decouplers = {}
         self.shadow = None
+        self.blocked = []
         self.no_rotation = set()
         self.overrides_used = []
         self.known = {}
@@ -160,6 +162,130 @@ def place_panel(s, proj):
             fp.SetPosition(kipcb._pt(h["x_mm"] - hx, h["y_mm"] - hy))
 
 
+def _silk_box(fp):
+    layer = pcbnew.B_SilkS if fp.IsFlipped() else pcbnew.F_SilkS
+    boxes = [PL.box(g.GetBoundingBox()) for g in fp.GraphicalItems() if g.GetLayer() == layer]
+    return (min(b[0] for b in boxes), min(b[1] for b in boxes),
+            max(b[2] for b in boxes), max(b[3] for b in boxes))
+
+
+def _tht_clear_of_front(fp, bodies, pads):
+    """A back THT part's pins come through to the front: no pin in a front
+    body, PAD_CLEAR to every front pad."""
+    for _n, b in PL.pad_boxes(fp):
+        if any(PL.overlaps(b, o) for o in bodies):
+            return False
+        if any(PL.gap(b, o) < PAD_CLEAR for o in pads):
+            return False
+    return True
+
+
+def back_tht_refs(s):
+    return [r for r in ("U_SM", "J_PWR") if r in s.anchors]
+
+
+def _tht_blocked(s):
+    """Every through-hole pad on the board, grown by PAD_CLEAR: SMD parts on
+    the back must keep off the pin tails."""
+    out = []
+    for fp in s.board.GetFootprints():
+        for p in fp.Pads():
+            if p.GetAttribute() in (pcbnew.PAD_ATTRIB_PTH, pcbnew.PAD_ATTRIB_NPTH):
+                out.append(PL.grow(PL.box(p.GetBoundingBox()), PAD_CLEAR))
+    return out
+
+
+def place_module(s, proj):
+    """U_SM on the back, rotation 0 or 180, the spiral spot nearest the board
+    centre whose pins miss every front body and whose shadow (its silkscreen
+    box) stays EDGE_INSET inside the outline (spec §4.3; probed free spots
+    at (151.0, 64.2) rot 0 and (154.0, 64.2) rot 180)."""
+    part = {p.ref: p for p in proj.parts()}["U_SM"]
+    cx, cy = (X0 + X1) / 2.0, (Y0 + Y1) / 2.0
+    fp = kipcb.add_part(s.board, part, cx, cy, 0, side="B")
+    bodies, pads = _front_obstacles(s.board, s.front, None)
+    inner = PL.grow(outline_box(), -EDGE_INSET)
+    best = None
+    for rot in (0, 180):
+        for x, y in PL.spiral(cx, cy, 0.5, 60.0):
+            fp.SetOrientationDegrees(rot)
+            fp.SetPosition(kipcb._pt(x, y))
+            if PL.inside(_silk_box(fp), inner) and _tht_clear_of_front(fp, bodies, pads):
+                d = math.hypot(x - cx, y - cy)
+                if best is None or d < best[0]:
+                    best = (d, x, y, rot)
+                break
+    if best is None:
+        raise ValueError("no spot for U_SM within 60 mm of the centre")
+    _d, x, y, rot = best
+    fp.SetOrientationDegrees(rot)
+    fp.SetPosition(kipcb._pt(x, y))
+    s.parts["U_SM"] = part
+    s.shadow = _silk_box(fp)
+    s.anchors["U_SM"] = (x, y)
+
+
+def jpwr_key_vector(fp):
+    """Direction of the header's key: from pad 2 to pad 1, measured on the
+    placed footprint's real pad centres (so the mirror of a back-side part is
+    included, not reasoned about)."""
+    pb = dict(PL.pad_boxes(fp))
+    c1 = ((pb["1"][0] + pb["1"][2]) / 2.0, (pb["1"][1] + pb["1"][3]) / 2.0)
+    c2 = ((pb["2"][0] + pb["2"][2]) / 2.0, (pb["2"][1] + pb["2"][3]) / 2.0)
+    return c1[0] - c2[0], c1[1] - c2[1]
+
+
+def _jpwr_rotation(fp, target_y):
+    """The rotation whose key points at the nearer long edge of the board:
+    -y (top edge) when the target is above mid height, +y (bottom edge) when
+    below, and +y on an exact tie (spec §4.3: "Rotation: the key faces the
+    nearer long edge"; pin 1, -12 V, sits on the key side and its side is
+    recorded for P4-3's silkscreen). Probed 2026-09-29 on
+    Connector_IDC:IDC-Header_2x05_P2.54mm_Vertical at rot 0, front: pad 1 at
+    (0,0), pad 2 at (2.54,0), the F.Fab key notch on the odd-pin column's
+    outer side, so the key direction is the vector from pad 2 to pad 1."""
+    mid = (Y0 + Y1) / 2.0
+    want = -1.0 if target_y < mid - 1e-9 else 1.0
+    found_axis = False
+    for rot in (0, 90, 180, 270):
+        fp.SetOrientationDegrees(rot)
+        vx, vy = jpwr_key_vector(fp)
+        n = math.hypot(vx, vy)
+        if abs(vx) / n > math.sin(math.radians(1.0)):
+            continue                      # not within 1 degree of the y axis
+        found_axis = True
+        if vy * want > 0:
+            return rot
+    if not found_axis:
+        raise ValueError("J_PWR: no rotation gives a key vector within 1 degree of +-y")
+    raise ValueError("J_PWR: no rotation points the key at the %s edge"
+                     % ("top" if want < 0 else "bottom"))
+
+
+def place_power_header(s, proj, blocked):
+    """J_PWR on the back in the board half without OUT_L/OUT_R, at mid height;
+    key toward the nearer long edge (_jpwr_rotation); pins clear of the front,
+    courtyard >= USB_CLEAR_MM from the module shadow (spec §4.3)."""
+    part = {p.ref: p for p in proj.parts()}["J_PWR"]
+    by_id = _hole_index()
+    out_x = (by_id["OUT_L"]["x_mm"] + by_id["OUT_R"]["x_mm"]) / 2.0
+    mid_x = (X0 + X1) / 2.0
+    tx = (X0 + mid_x) / 2.0 if out_x > mid_x else (mid_x + X1) / 2.0
+    target = (tx, (Y0 + Y1) / 2.0)
+    fp = kipcb.add_part(s.board, part, target[0], target[1], 0, side="B")
+    rot = _jpwr_rotation(fp, target[1])
+    bodies, pads = _front_obstacles(s.board, s.front, None)
+
+    def ok(f):
+        return (_tht_clear_of_front(f, bodies, pads)
+                and PL.gap(PL.courtyard_box(f), s.shadow) >= USB_CLEAR_MM)
+
+    PL.first_fit(fp, target, blocked, PL.grow(outline_box(), -EDGE_INSET), 0.5, 60.0,
+                 rotations=(rot,), accept=ok)
+    s.parts["J_PWR"] = part
+    s.anchors["J_PWR"] = target
+
+
 def build():
     proj = RB.project()
     s = Placed()
@@ -169,6 +295,9 @@ def build():
     for layer, net in PLANES:
         kipcb.add_zone(s.board, layer, net, rect)
     place_panel(s, proj)
+    place_module(s, proj)
+    s.blocked = _tht_blocked(s) + [s.shadow]
+    place_power_header(s, proj, s.blocked)
     return s
 
 

@@ -135,10 +135,70 @@ def check_front(s, pcb_path, prefix):
                 found["pad %s/%s" % (kx, ky)] = "pads %s of %s inside %s's body" % (",".join(hits), kx, ky)
     for ref in sorted(s.no_rotation):
         found["rotation %s" % _key(s, ref)] = "no LED rotation keeps its legs clear"
+    for r in P.back_tht_refs(s):
+        fp = _fp(s.board, r)
+        for y in refs:
+            hits = [n for n, pb in PL.pad_boxes(fp) if PL.overlaps(pb, body[y])]
+            if hits:
+                found["pad %s/%s" % (r, _key(s, y))] = "pins %s of %s inside %s's body" % (
+                    ",".join(hits), r, _key(s, y))
     ok, details, nk = _judge(s, "front", found)
     details += ["reported, not gated: " + r for r in reported]
     return ok, "%d front parts, %d violations (%d known), %d pot pins under LEDs reported" % (
         len(refs), len(found), nk, len(reported)), details
+
+
+def check_module(s, pcb_path, prefix):
+    if s.shadow is None:
+        return False, "no module shadow recorded", []
+    bad = []
+    for fp in s.board.GetFootprints():
+        ref = fp.GetReference()
+        if ref == "U_SM" or not fp.IsFlipped():
+            continue
+        c = PL.courtyard_box(fp)
+        if c is not None and PL.overlaps(c, s.shadow):
+            bad.append("%s's courtyard enters the module shadow" % ref)
+    jp = _fp(s.board, "J_PWR")
+    if jp is None:
+        bad.append("J_PWR is not on the board")
+    else:
+        g = PL.gap(PL.courtyard_box(jp), s.shadow)
+        if g < P.USB_CLEAR_MM:
+            bad.append("J_PWR is %.1f mm from the module shadow (limit %.0f)" % (g, P.USB_CLEAR_MM))
+    return not bad, "shadow %s, J_PWR %.1f mm away (limit %.0f)" % (
+        tuple(round(v, 2) for v in s.shadow),
+        PL.gap(PL.courtyard_box(jp), s.shadow) if jp else -1, P.USB_CLEAR_MM), bad
+
+
+SD_HEIGHT_MM = 14.18      # LCSC C3177022
+GAP_MM = 10.0             # assumption until the grip test (spec §8)
+MODULE_MM, BOARD_MM = 15.0, 1.6
+PALETTE_MID, PALETTE_EDGE = 45.5, 37.4
+
+
+def report(s, pcb_path, prefix):
+    lines = ["SD socket %.2f mm tall against a %.1f mm panel gap: protrudes %.2f mm past "
+             "the panel's back face (assumed gap)" % (SD_HEIGHT_MM, GAP_MM, SD_HEIGHT_MM - GAP_MM),
+             "depth: module %.1f + board %.1f + gap %.1f = %.1f mm behind the panel, against "
+             "the Palette's %.1f (middle) / %.1f (outermost HP)" % (
+                 MODULE_MM, BOARD_MM, GAP_MM, MODULE_MM + BOARD_MM + GAP_MM, PALETTE_MID, PALETTE_EDGE)]
+    for ref in ("U_SM", "J_PWR"):
+        fp = _fp(s.board, ref)
+        if fp is not None:
+            lines.append("%s at (%.2f, %.2f) rot %.0f" % (
+                ref, pcbnew.ToMM(fp.GetPosition().x), pcbnew.ToMM(fp.GetPosition().y),
+                fp.GetOrientationDegrees()))
+    jp = _fp(s.board, "J_PWR")
+    if jp is not None:
+        pb = dict(PL.pad_boxes(jp))
+        x1, x10 = (pb["1"][0] + pb["1"][2]) / 2.0, (pb["10"][0] + pb["10"][2]) / 2.0
+        vx, vy = P.jpwr_key_vector(jp)
+        lines.append("J_PWR pin 1 (-12 V) at the %s end (pad 1 x %.2f, pad 10 x %.2f); "
+                     "key vector (%.2f, %.2f) faces the %s edge" % (
+                         "west" if x1 < x10 else "east", x1, x10, vx, vy,
+                         "top" if vy < 0 else "bottom"))
+    return True, "reported, never gates", lines
 
 
 def render(s, pcb_path, prefix):
@@ -152,7 +212,7 @@ def render(s, pcb_path, prefix):
 
 
 STEPS = [("anchors", check_anchors), ("edge", check_edge), ("front", check_front),
-         ("render", render)]
+         ("module", check_module), ("report", report), ("render", render)]
 
 
 def run(s, pcb_path, prefix):
@@ -206,14 +266,27 @@ def _sab_known_stale(s):
     s.known.setdefault("edge", set()).add("NOT_A_PART")
 
 
+def _sab_module(s):
+    """A back test point, or failing that J_PWR, moved into the shadow centre."""
+    cx, cy = (s.shadow[0] + s.shadow[2]) / 2.0, (s.shadow[1] + s.shadow[3]) / 2.0
+    tps = sorted(r for r in s.parts if r.startswith("TP"))
+    fp = _fp(s.board, tps[0] if tps else "J_PWR")
+    fp.SetPosition(kipcb._pt(cx, cy))
+
+
+def _sab_module_missing(s):
+    s.shadow = None
+
+
 SABOTAGES = {"anchors": _sab_anchors, "anchors_missing": _sab_anchors_missing,
              "edge": _sab_edge, "edge_missing": _sab_edge_missing,
              "front": _sab_front, "front_missing": _sab_front_missing,
-             "known_stale": _sab_known_stale}
+             "known_stale": _sab_known_stale,
+             "module": _sab_module, "module_missing": _sab_module_missing}
 # which step each sabotage must turn red (test_place.py reads this)
 TURNS_RED = {"anchors": "anchors", "anchors_missing": "anchors", "edge": "edge",
              "edge_missing": "edge", "front": "front", "front_missing": "front",
-             "known_stale": "edge"}
+             "known_stale": "edge", "module": "module", "module_missing": "module"}
 
 
 def sabotage(s, name):
