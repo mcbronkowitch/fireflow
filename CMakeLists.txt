@@ -382,6 +382,14 @@ add_test(
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
 )
 
+# Rev A P3 (docs/superpowers/specs/2026-09-29-rev-a-p3-schematic-design.md):
+# the generator tools shared under hardware/gen/. Plain scripts; the exit code
+# is the verdict. Guards that call kicad-cli fail -- never skip -- without it.
+add_test(NAME hw_gen_coupon_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/hardware/gen/test_coupon_netlist.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
 # The Python guards need a runner or they rot unnoticed -- tools/test_*.py in
 # this repo is wired to nothing, and the VCV panel guard stood red for 23
 # days behind exactly that gap. pytest is not installed here, so it runs as

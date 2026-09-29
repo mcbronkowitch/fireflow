@@ -10,11 +10,13 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import design as D
-import ksexp
-
-EXTRA_SYMBOL_DIRS = [os.path.normpath(os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "..", "lib", "DaisyKiCad"))]
+sys.path.insert(0, os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..")))
+import design as D                                        # noqa: E402
+from gen import ksexp                                     # noqa: E402,F401
+# Moved to hardware/gen/netlist.py (P3 spec §3.1). Re-exported because
+# build_pcb, check_layout and review reach them as N.nets_from, NL.load, ...
+from gen.netlist import Part, load, is_virtual, nets_from  # noqa: E402,F401
 
 FP_R = "Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder"
 FP_C = "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
@@ -24,55 +26,6 @@ FP_JP = "Jumper:SolderJumper-2_P1.3mm_Open_Pad1.0x1.5mm"
 FP_POT = "Potentiometer_THT:Potentiometer_Alpha_RD901F-40-00D_Single_Vertical"
 FP_SOIC16 = "Package_SO:SOIC-16_3.9x9.9mm_P1.27mm"
 FP_SOIC24 = "Package_SO:SOIC-24W_7.5x15.4mm_P1.27mm"
-
-
-class Part:
-    def __init__(self, ref, lib_id, value, footprint, note=""):
-        self.ref, self.lib_id = ref, lib_id
-        self.value, self.footprint = value, footprint
-        self.note = note
-        self.sym = load(lib_id)
-        self.nets = {}                     # pin number -> net name
-
-    def by_number(self, number, net):
-        number = str(number)
-        self.sym.pin(number)               # raises if absent
-        if number in self.nets:
-            raise ValueError("%s pin %s assigned twice" % (self.ref, number))
-        self.nets[number] = net
-        return self
-
-    def by_name(self, pin_name, net):
-        return self.by_number(self.sym.by_name(pin_name), net)
-
-    def unconnected(self):
-        return sorted(set(self.sym.pins) - set(self.nets), key=ksexp._pin_sort_key)
-
-
-_cache = {}
-
-
-def load(lib_id):
-    """Symbol lookup that also searches the vendored library directories."""
-    if lib_id in _cache:
-        return _cache[lib_id]
-    try:
-        sym = ksexp.load_symbol(lib_id)
-    except FileNotFoundError:
-        lib, _, name = lib_id.partition(":")
-        for extra in EXTRA_SYMBOL_DIRS:
-            path = os.path.join(extra, lib + ".kicad_sym")
-            if os.path.exists(path):
-                root = ksexp.parse_file(path)
-                table = {str(s[1]): s for s in ksexp.children(root, "symbol")}
-                if name not in table:
-                    raise KeyError("%s not in %s" % (name, path))
-                sym = ksexp.Symbol(lib, name, table[name], table)
-                break
-        else:
-            raise
-    _cache[lib_id] = sym
-    return sym
 
 
 def build():
@@ -355,26 +308,6 @@ def build():
         add("#FLG%04d" % (n + 1), "power:PWR_FLAG", "PWR_FLAG", "").by_number(1, net)
 
     return parts
-
-
-def is_virtual(ref):
-    """Power symbols and flags: real in the schematic, absent from the netlist.
-
-    KiCad does not emit a node for a PWR_FLAG pin, so comparing an exported
-    netlist against the intent has to leave them out or every rail reports a
-    missing node.
-    """
-    return ref.startswith("#")
-
-
-def nets_from(parts, include_virtual=True):
-    nets = {}
-    for p in parts:
-        if not include_virtual and is_virtual(p.ref):
-            continue
-        for pin, net in p.nets.items():
-            nets.setdefault(net, []).append((p.ref, pin))
-    return nets
 
 
 if __name__ == "__main__":

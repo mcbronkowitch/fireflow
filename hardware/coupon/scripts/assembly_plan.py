@@ -51,7 +51,9 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import ksexp
+sys.path.insert(0, os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..")))
+from gen import ksexp  # noqa: E402  (moved to hardware/gen, P3 spec §3.1)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PCB = os.path.normpath(os.path.join(HERE, "..", "coupon.kicad_pcb"))
