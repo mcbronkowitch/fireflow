@@ -22,9 +22,10 @@ from gen import pcb_proof as PP      # noqa: E402
 # router's short arrives here as a dangling track, not as shorting_items.
 # via_dangling is gated too: Freerouting was seen leaving dangling fanout
 # vias (Task 4 probe), and gating the class for both methods keeps the
-# comparison fair.
+# comparison fair. items_not_allowed is gated as well: copper inside a rule
+# area is how a router would drive through the strip's foreign-pad keepouts.
 GATED = ("shorting_items", "clearance", "hole_clearance", "hole_to_hole",
-         "tracks_crossing", "track_dangling", "via_dangling")
+         "tracks_crossing", "track_dangling", "via_dangling", "items_not_allowed")
 
 
 def _fp(board, ref):
@@ -200,15 +201,19 @@ def _sab_locked_missing(s):
 
 
 def _sab_ratsnest(s):
-    """Delete one routed segment that is on no locked, filled or supply net.
-    A GND or SM_3V3 segment deleted after the GND fill would be re-bridged
-    by the zone, and a filled net's likewise, so deleting one of those could
-    leave the ratsnest step green -- a vacuous RED proof."""
-    t = [t for t in s.board.GetTracks()
-         if t.Type() == pcbnew.PCB_TRACE_T
-         and t.GetNetname() not in ST.LOCKED_NETS
-         and t.GetNetname() not in s.fill_nets
-         and t.GetNetname() not in ST.SUPPLY_NETS][0]
+    """Delete the longest routed segment that is on no locked, filled or
+    supply net. A GND or SM_3V3 segment deleted after the GND fill would be
+    re-bridged by the zone, and a filled net's likewise, so deleting one of
+    those could leave the ratsnest step green -- a vacuous RED proof. The
+    longest, not the first: the first found was a 0.1 mm pad-centre stub
+    lying inside its pad on the own-router board (Task 6), and deleting it
+    disconnected nothing."""
+    cands = [t for t in s.board.GetTracks()
+             if t.Type() == pcbnew.PCB_TRACE_T
+             and t.GetNetname() not in ST.LOCKED_NETS
+             and t.GetNetname() not in s.fill_nets
+             and t.GetNetname() not in ST.SUPPLY_NETS]
+    t = max(cands, key=lambda t: t.GetLength())
     s.board.Delete(t)
 
 

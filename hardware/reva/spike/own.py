@@ -62,6 +62,18 @@ def route_strip(s):
                             _mm(t.GetEnd().x), _mm(t.GetEnd().y), _mm(t.GetWidth()) / 2.0))
     for _label, (l, t_, rr, b) in s.keepouts:
         r.add_obstacle(None, range(len(LAYER_NAMES)), ("rect", l, t_, rr, b))
+    # Footprint-owned rule areas (e.g. the PJ398SM's own F.Cu keepout): netless
+    # obstacles on each copper layer they cover. Without them a track ran
+    # through J13's (Task 6: items_not_allowed 1).
+    for fp in board.GetFootprints():
+        for z in fp.Zones():
+            if not (z.GetIsRuleArea() and z.GetDoNotAllowTracks()):
+                continue
+            layers = tuple(i for i, n in enumerate(LAYER_NAMES)
+                           if z.IsOnLayer(kipcb.LAYER[n]))
+            bb = z.GetBoundingBox()
+            r.add_obstacle(None, layers, ("rect", _mm(bb.GetLeft()), _mm(bb.GetTop()),
+                                          _mm(bb.GetRight()), _mm(bb.GetBottom())))
     widths = {}
     for net in sorted(terminals):
         if len(terminals[net]) < 2:
