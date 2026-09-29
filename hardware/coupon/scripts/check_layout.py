@@ -44,8 +44,11 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..")))
 import design as D
-import kipcb
+from gen import kipcb  # noqa: E402
+from gen import pcb_proof as PP  # noqa: E402
 import netlist as NL
 import placement as P
 import pcbnew
@@ -136,16 +139,7 @@ def _nearest_other_pad_mm(board, ref, net, origin):
 
 
 def _seg_point_dist(p, a, b):
-    ax, ay = a
-    bx, by = b
-    px, py = p
-    dx, dy = bx - ax, by - ay
-    if dx == 0 and dy == 0:
-        return math.hypot(px - ax, py - ay)
-    t = ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)
-    t = max(0.0, min(1.0, t))
-    cx, cy = ax + t * dx, ay + t * dy
-    return math.hypot(px - cx, py - cy)
+    return PP.seg_point_dist(p, a, b)
 
 
 def _seg_seg_dist(s1, s2):
@@ -154,10 +148,7 @@ def _seg_seg_dist(s1, s2):
     but different-net copper on this board never crosses (DRC's own
     clearance gate already forbids it), so it is exact for everything this
     checker is ever asked to measure."""
-    a, b = s1
-    c, d = s2
-    return min(_seg_point_dist(a, c, d), _seg_point_dist(b, c, d),
-               _seg_point_dist(c, a, b), _seg_point_dist(d, a, b))
+    return PP.seg_seg_dist(s1, s2)
 
 
 def _inside_shadow_interval(seg):
@@ -219,15 +210,7 @@ def _track_segments(board, net_pred):
     """`[(net, (x1,y1), (x2,y2))]` for every `PCB_TRACE_T` whose net passes
     `net_pred`. Vias and arcs excluded on purpose -- callers that need vias
     ask `board.GetTracks()` themselves and filter on `PCB_VIA_T`."""
-    out = []
-    for t in board.GetTracks():
-        if t.Type() != pcbnew.PCB_TRACE_T:
-            continue
-        net = t.GetNetname()
-        if not net_pred(net):
-            continue
-        out.append((net, _mm(t.GetStart()), _mm(t.GetEnd())))
-    return out
+    return [(net, a, b) for net, _layer, a, b in PP.track_segments(board, net_pred)]
 
 
 # --- rule 1: COM ------------------------------------------------------------

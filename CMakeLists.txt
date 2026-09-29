@@ -417,6 +417,12 @@ add_test(NAME hw_gen_bom_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/hardware/gen/test_bom.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+# Rev A P4a: the board-side proof tools shared by coupon and Rev A. The
+# script re-runs itself under KiCad's Python (it needs pcbnew).
+add_test(NAME hw_gen_pcb_proof_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/hardware/gen/test_pcb_proof.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
 # The Python guards need a runner or they rot unnoticed -- tools/test_*.py in
 # this repo is wired to nothing, and the VCV panel guard stood red for 23

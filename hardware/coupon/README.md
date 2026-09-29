@@ -94,7 +94,7 @@ identical committed source diffed at 26226 lines — `git diff --no-index`,
 default context, `| wc -l`; the exact count varies run to run since it
 depends on which random UUIDs each pair of builds draws, but it is
 reliably five figures).
-`kipcb.new_board()` seeds `pcbnew`'s UUID generator with a fixed constant
+`hardware/gen/kipcb.py`'s `new_board()` seeds `pcbnew`'s UUID generator with a fixed constant
 before creating anything, which makes that whole order reproduce identically
 — two from-scratch builds under the same seed produced a 0-diff
 `coupon.kicad_pcb`. Regenerating and committing the file is therefore safe

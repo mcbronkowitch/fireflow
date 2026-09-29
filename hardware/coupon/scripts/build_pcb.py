@@ -14,7 +14,8 @@ from gen import ksexp  # noqa: E402  (moved to hardware/gen, P3 spec §3.1)
 import netlist as N
 import placement as P
 import routing as R
-import kipcb
+from gen import kipcb  # noqa: E402  (moved to hardware/gen, P4a)
+from gen import pcb_proof as PP  # noqa: E402
 import pcbnew
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -294,19 +295,15 @@ def check_courtyards(pcb_path):
     a stale one would read the PREVIOUS run's verdict and print green for a
     `kicad-cli` that never produced anything. Return code cannot stand in for
     it: `--exit-code-violations` makes a nonzero rc the normal outcome here,
-    since the board is deliberately unrouted until Task 4.
+    since the board is deliberately unrouted until Task 4. The DRC run itself
+    is `gen.pcb_proof.drc()`.
     """
     os.makedirs(PROOF, exist_ok=True)
     rpt = os.path.join(PROOF, "drc-placement.rpt")
-    if os.path.exists(rpt):
-        os.remove(rpt)
-    r = subprocess.run([ksexp.KICAD_CLI, "pcb", "drc",
-                        "--exit-code-violations", "--severity-error",
-                        "--severity-warning", "-o", rpt, pcb_path],
-                       capture_output=True, text=True)
-    if not os.path.exists(rpt):
-        fail("kicad-cli pcb drc wrote no report (rc=%d)\n%s"
-             % (r.returncode, (r.stdout + r.stderr).strip()))
+    try:
+        PP.drc(pcb_path, rpt)
+    except RuntimeError as e:
+        fail(str(e))
     txt = open(rpt, encoding="utf-8", errors="replace").read()
     kinds = {}
     for kind in re.findall(r"^\[([a-z0-9_]+)\]", txt, re.M):
@@ -575,11 +572,7 @@ def count_drc_violations(rpt_path):
     re-parse that could silently drift from what `check_final_drc()` below
     actually enforces.
     """
-    txt = open(rpt_path, encoding="utf-8", errors="replace").read()
-    counts = {}
-    for kind in re.findall(r"^\[([a-z0-9_]+)\]", txt, re.M):
-        counts[kind] = counts.get(kind, 0) + 1
-    return counts
+    return PP.count_drc_violations(rpt_path)
 
 
 def check_final_drc(pcb_path):
@@ -596,17 +589,15 @@ def check_final_drc(pcb_path):
     all severity `warning`, in exactly two classes -- `silk_overlap` (94)
     and `silk_over_copper` (25) -- and nothing else. Both are named in
     `ACCEPTED_DRC_CLASSES` with their reason; anything else fails this step,
-    per Ruling J ("never silenced").
+    per Ruling J ("never silenced"). The DRC run itself is
+    `gen.pcb_proof.drc()`.
     """
     os.makedirs(PROOF, exist_ok=True)
     rpt = os.path.join(PROOF, "drc.rpt")
-    if os.path.exists(rpt):
-        os.remove(rpt)
-    subprocess.run([ksexp.KICAD_CLI, "pcb", "drc", "--exit-code-violations",
-                    "--severity-error", "--severity-warning",
-                    "-o", rpt, pcb_path], capture_output=True, text=True)
-    if not os.path.exists(rpt):
-        fail("kicad-cli pcb drc wrote no report")
+    try:
+        PP.drc(pcb_path, rpt)
+    except RuntimeError as e:
+        fail(str(e))
     counts = count_drc_violations(rpt)
     unexpected = {k: v for k, v in counts.items() if k not in ACCEPTED_DRC_CLASSES}
     if unexpected:

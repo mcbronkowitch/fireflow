@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""pcbnew wrapper for the coupon layout generator. No coupon knowledge here.
+"""pcbnew wrapper shared by the generated boards (coupon, Rev A). No board knowledge here.
 
 Runs ONLY under KiCad's own Python (KIPY below); the system python has no
 pcbnew module at all -- importing this file under it raises ImportError on
@@ -25,8 +25,10 @@ KICAD_ROOT = os.environ.get(
     "KICAD_ROOT", r"C:\Users\bernd\AppData\Local\Programs\KiCad\10.0")
 KIPY = os.path.join(KICAD_ROOT, "bin", "python.exe")
 FP_SHARE = os.path.join(KICAD_ROOT, "share", "kicad", "footprints")
-FP_VENDORED = os.path.normpath(os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "..", "lib", "DaisyKiCad"))
+FP_LIB = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "lib"))
+FP_VENDORED = os.path.join(FP_LIB, "DaisyKiCad")
+FP_THONK = os.path.join(FP_LIB, "Thonk")
 
 LAYER = {"F.Cu": pcbnew.F_Cu, "In1.Cu": pcbnew.In1_Cu,
          "In2.Cu": pcbnew.In2_Cu, "B.Cu": pcbnew.B_Cu}
@@ -130,11 +132,11 @@ def new_board(width_mm, height_mm, copper_layers):
 
 def footprint(lib_id):
     """Load `"LibName:FootprintName"` from KiCad's share footprints dir, or
-    the vendored `hardware/lib/DaisyKiCad/*.pretty` -- the same two-tier
-    lookup as `netlist.load()`'s symbol-library search, one directory type
-    down."""
+    the vendored `hardware/lib/DaisyKiCad` and `hardware/lib/Thonk`
+    `*.pretty` -- the same tiered lookup as `netlist.load()`'s
+    symbol-library search, one directory type down."""
     lib, _, name = lib_id.partition(":")
-    for base in (FP_SHARE, FP_VENDORED):
+    for base in (FP_SHARE, FP_VENDORED, FP_THONK):
         path = os.path.join(base, lib + ".pretty")
         if os.path.isdir(path):
             fp = pcbnew.FootprintLoad(path, name)
