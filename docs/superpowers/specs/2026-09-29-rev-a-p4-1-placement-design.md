@@ -242,13 +242,13 @@ J_PWR.
   | Part | Anchor |
   |---|---|
   | 74HC4051 (U_MUX0–9) | centroid of the wiper pads of its pots (P3: "at the centre of its group") |
-  | 74HC595 (U_SR1–5) | centroid of the pads it drives, followed through one 2-pin part (its LED resistors to its LEDs) |
+  | 74HC595 (U_SR1–5) | centroid of the pads it drives, followed through one 2-pin part (its LED resistors to its LEDs); a 595 whose outputs reach only test points (U_SR5): the centroid of all its signal nets (*amended 2026-09-29 during execution*) |
   | 74HC165 (U_IN1) | centroid of its key pads, through one 2-pin part where there is one |
   | 100 nF at an IC | that IC's VCC pad; accepted only within 2.0 mm (the coupon's `check_layout` rule 5) |
   | LED resistor | the LED pad on its net |
   | D_P12, D_N12, U_REG, the regulator's capacitors, C_LDO_T | J_PWR |
   | C_SENSE0–3 | the module pad of its SENSE net |
-  | C_SD1, C_SD2 | J_SD's VCC pad, 2.0 mm like decoupling |
+  | C_SD1, C_SD2 | J_SD's VCC pad, 2.0 mm like decoupling. *Amended:* C_SD2 (DNP) is placed near J_SD's VCC pad without the 2.0 mm limit; C_SD1 takes the only spot within it (2026-09-29). |
   | everything else (test points, pull-ups) | centroid of the placed pads on its non-supply nets |
 
 - **Search:** the spike's square spiral (`stripe._spiral`, `_place_smd`),
@@ -264,6 +264,10 @@ J_PWR.
   Step and radius are set per class (spike values: ICs 0.5/30,
   decoupling 0.1/3, LED resistors 0.25/10). A part that finds no spot fails
   the build by name.
+
+  *Amended 2026-09-29 during execution:* an IC is accepted only where its
+  100 nF still finds a spot within 2.0 mm of its VCC pad; the first run
+  needed five overrides without this.
 - **Overrides:** `OVERRIDES = {ref: (dx, dy, rot, reason)}`, empty at the
   start. The offset is relative to the part's anchor, so it survives the
   panel pass. An entry is added only after a render shows why, and its

@@ -189,20 +189,72 @@ def check_module(s, pcb_path, prefix):
         PL.gap(PL.courtyard_box(jp), shadow) if jp else -1, P.USB_CLEAR_MM), bad
 
 
+DECOUPLE_MAX_MM = 2.0     # the coupon's check_layout rule 5 (spec §5.1 item 5)
+SD_VCC = ("J_SD", "4")    # C_SD1 decouples J_SD's VDD pad (spec §5.1 item 5)
+
+
+def _pad(fp, number):
+    got = [p for p in fp.Pads() if str(p.GetNumber()) == str(number)]
+    return got[0] if got else None
+
+
+def _expected_decoupled(s):
+    """{part: VCC pad}, independent of the placer's pairing: every U_* on the
+    board except U_SM and U_REG whose symbol has a VCC pin, and J_SD pad 4."""
+    want, bad = {}, []
+    for fp in s.board.GetFootprints():
+        ref = fp.GetReference()
+        if not ref.startswith("U_") or ref in ("U_SM", "U_REG"):
+            continue
+        part = s.parts.get(ref)
+        if part is None:
+            bad.append("%s is on the board without a part record" % ref)
+            continue
+        try:
+            want[ref] = str(part.sym.by_name("VCC"))
+        except (KeyError, ValueError):
+            continue
+    if _fp(s.board, SD_VCC[0]) is not None:
+        want[SD_VCC[0]] = SD_VCC[1]
+    return want, bad
+
+
 def check_decoupling(s, pcb_path, prefix):
-    if not s.decouplers:
-        return False, "examined 0 decouplers", []
-    bad, worst = [], 0.0
+    want, bad = _expected_decoupled(s)
+    if not want:
+        return False, "examined 0 parts that need a decoupler", bad
+    have = {}
     for cref, (ic, num) in sorted(s.decouplers.items()):
-        c = [p for p in _fp(s.board, cref).Pads() if str(p.GetNumber()) == "1"][0]
-        m = [p for p in _fp(s.board, ic).Pads() if str(p.GetNumber()) == num][0]
-        d = math.hypot(pcbnew.ToMM(c.GetPosition().x - m.GetPosition().x),
-                       pcbnew.ToMM(c.GetPosition().y - m.GetPosition().y))
-        worst = max(worst, d)
-        if d > P.DECOUPLE_MAX_MM:
-            bad.append("%s is %.3f mm from %s pad %s" % (cref, d, ic, num))
-    return not bad, "%d decouplers, worst %.3f mm (limit %.1f)" % (
-        len(s.decouplers), worst, P.DECOUPLE_MAX_MM), bad
+        have.setdefault(ic, []).append((cref, num))
+    lines, worst, n = [], 0.0, 0
+    for ic in sorted(set(have) - set(want)):
+        bad.append("%s is recorded as decoupling %s, which needs no decoupler" % (
+            ", ".join(c for c, _n in have[ic]), ic))
+    for ic, vcc in sorted(want.items()):
+        if not have.get(ic):
+            bad.append("%s has no decoupler recorded (expected one at pad %s)" % (ic, vcc))
+            continue
+        m = _pad(_fp(s.board, ic), vcc)
+        for cref, num in have[ic]:
+            cfp = _fp(s.board, cref)
+            c = _pad(cfp, "1") if cfp is not None else None
+            if num != vcc or c is None or m is None:
+                bad.append("%s: recorded at %s pad %s, expected pad %s%s" % (
+                    cref, ic, num, vcc, "" if c is not None else "; the cap is not on the board"))
+                continue
+            if c.GetNetname() != m.GetNetname() or _pad(cfp, "2").GetNetname() != P.BL.GND:
+                bad.append("%s pad 1 is on %s, %s pad %s on %s (pad 2 on %s)" % (
+                    cref, c.GetNetname(), ic, vcc, m.GetNetname(), _pad(cfp, "2").GetNetname()))
+                continue
+            d = math.hypot(pcbnew.ToMM(c.GetPosition().x - m.GetPosition().x),
+                           pcbnew.ToMM(c.GetPosition().y - m.GetPosition().y))
+            n += 1
+            worst = max(worst, d)
+            lines.append("%s pad 1 is %.3f mm from %s pad %s" % (cref, d, ic, vcc))
+            if d > DECOUPLE_MAX_MM:
+                bad.append("%s is %.3f mm from %s pad %s" % (cref, d, ic, vcc))
+    return not bad, "%d parts need one, %d decouplers measured, worst %.3f mm (limit %.1f)" % (
+        len(want), n, worst, DECOUPLE_MAX_MM), bad + lines
 
 
 def _mst(pts):
@@ -222,6 +274,38 @@ SD_HEIGHT_MM = 14.18      # LCSC C3177022
 GAP_MM = 10.0             # assumption until the grip test (spec §8)
 MODULE_MM, BOARD_MM = 15.0, 1.6
 PALETTE_MID, PALETTE_EDGE = 45.5, 37.4
+
+
+PLANE_NETS = {net for _layer, net in P.PLANES}
+
+
+def _ratsnest_lines(s):
+    """Spec §5.2, P4-2's baseline: MST length over pad centres per net, for
+    every net except the two plane nets (GND, SM_3V3), which are not routed.
+    A net belongs to a block (a sheet) when all its pads' parts are on that
+    sheet, otherwise to "between blocks"."""
+    idx = P.pad_index(s.board)
+    per = {b: 0.0 for b in set(s.sheet_of.values())}
+    between, signal = 0.0, 0.0
+    for net in sorted(idx):
+        if net in PLANE_NETS:
+            continue
+        v = idx[net]
+        length = _mst([xy for _r, _p, xy in v])
+        if net not in P.SUPPLY:
+            signal += length
+        sheets = {s.sheet_of.get(r, "?") for r, _p, _xy in v}
+        if len(sheets) == 1:
+            b = sheets.pop()
+            per[b] = per.get(b, 0.0) + length
+        else:
+            between += length
+    total = sum(per.values()) + between
+    out = ["ratsnest (MST over pad centres, all nets but the planes %s): %.0f mm total, "
+           "%.0f mm of it on signal nets" % ("/".join(sorted(PLANE_NETS)), total, signal)]
+    out += ["ratsnest block %-12s %6.0f mm" % (b, per[b]) for b in sorted(per)]
+    out.append("ratsnest between blocks    %6.0f mm" % between)
+    return out
 
 
 def report(s, pcb_path, prefix):
@@ -245,10 +329,12 @@ def report(s, pcb_path, prefix):
                      "key vector (%.2f, %.2f) faces the %s edge" % (
                          "west" if x1 < x10 else "east", x1, x10, vx, vy,
                          "top" if vy < 0 else "bottom"))
-    idx = P.pad_index(s.board)
-    nets = {n: [xy for _r, _p, xy in v] for n, v in idx.items() if n not in P.SUPPLY}
-    total = sum(_mst(v) for v in nets.values())
-    lines.append("ratsnest (signal nets, MST over pad centres): %.0f mm total" % total)
+    sd2, sd = _fp(s.board, "C_SD2"), _fp(s.board, SD_VCC[0])
+    if sd2 is not None and sd is not None:
+        a, b = _pad(sd2, "1").GetPosition(), _pad(sd, SD_VCC[1]).GetPosition()
+        lines.append("C_SD2 (DNP, not gated) pad 1 is %.3f mm from %s pad %s" % (
+            math.hypot(pcbnew.ToMM(a.x - b.x), pcbnew.ToMM(a.y - b.y)), SD_VCC[0], SD_VCC[1]))
+    lines += _ratsnest_lines(s)
     for ref in sorted(r for r in s.anchors if r.startswith("U_")):
         fp = _fp(s.board, ref)
         ax, ay = s.anchors[ref]
@@ -275,14 +361,22 @@ STEPS = [("anchors", check_anchors), ("edge", check_edge), ("front", check_front
          ("report", report), ("render", render)]
 
 
+DETAIL_CAP = 40
+
+
 def run(s, pcb_path, prefix):
     s.known = {k: set(v) for k, v in KNOWN_PANEL.items()} if not s.known else s.known
     green = True
     for i, (name, fn) in enumerate(STEPS, 1):
         ok, line, details = fn(s, pcb_path, prefix)
         print("%s %d. %-10s %s" % ("   " if ok else "RED", i, name, line))
-        for d in details[:40]:
+        # A green step prints every detail (they are reports: known items,
+        # distances). A red one prints its first 40 and says how many it cut.
+        shown = details if ok else details[:DETAIL_CAP]
+        for d in shown:
             print("        " + d)
+        if len(details) > len(shown):
+            print("        ... %d more lines" % (len(details) - len(shown)))
         green = green and ok
     return green
 
@@ -349,8 +443,16 @@ def _sab_front_back_tht(s):
 
 
 def _sab_decoupling(s):
-    """The first decoupler moved 3 mm right, off its IC's VCC pad."""
-    _fp(s.board, sorted(s.decouplers)[0]).Move(kipcb._pt(3.0, 0.0))
+    """The first decoupler moved 10 mm further from its IC's VCC pad, along
+    the VCC-pad-to-pad-1 direction."""
+    cref = sorted(s.decouplers)[0]
+    ic, num = s.decouplers[cref]
+    c = _pad(_fp(s.board, cref), "1").GetPosition()
+    m = _pad(_fp(s.board, ic), num).GetPosition()
+    dx, dy = pcbnew.ToMM(c.x - m.x), pcbnew.ToMM(c.y - m.y)
+    d = math.hypot(dx, dy)
+    ux, uy = (dx / d, dy / d) if d > 0 else (1.0, 0.0)
+    _fp(s.board, cref).Move(kipcb._pt(10.0 * ux, 10.0 * uy))
 
 
 def _sab_decoupling_missing(s):

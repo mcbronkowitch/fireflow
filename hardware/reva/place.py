@@ -61,6 +61,7 @@ class Placed:
         self.no_rotation = set()
         self.overrides_used = []
         self.anchor_from = {}
+        self.sheet_of = {}
         self.known = {}
 
     def reload(self, path):
@@ -305,30 +306,17 @@ def place_power_header(s, proj, blocked):
 
 
 # Manual corrections (spec §4.4): ref -> (dx, dy, rot, reason), relative to
-# the part's anchor. Empty at the start; an entry names the render that
-# justified it. Each entry below keeps its IC's first-fit spot (or moves it
-# 1 mm) and turns it so VCC pad 16 faces open board: without it the build
-# stops at "no free place for C<n>" (2026-09-29, Task 5). The offsets hang
-# on anchors that follow earlier placements (a mux's pads feed U_SR1/U_SR2's
-# anchors), so a change above an entry moves its anchor.
-_R = "reva-placed-bottom.png, run without this entry: "
-OVERRIDES = {
-    "U_MUX7": (0.0, -9.5, 270, _R + "rot 90 puts VCC pad 16 0.4 mm from the module shadow "
-               "with U_SR2's courtyard 0.3 mm above; C11 finds no spot within 2.0 mm"),
-    "U_MUX9": (-10.0, 8.5, 0, _R + "VCC pad 16 sits 1.0 mm from RV46's pin (grown 0.2 mm) "
-               "with its own courtyard beside it; C13 finds no spot; 1 mm further -x it does"),
-    "U_SR1": (-13.5, -6.0, 180, _R + "rot 0 puts VCC pad 16 against the module shadow's top "
-              "edge and RV25's pin 3; C17 finds no spot within 2.0 mm"),
-    "U_SR2": (-3.5, -8.0, 270, _R + "rot 90 puts VCC pad 16 against the module shadow's left "
-              "edge; C18 has 0.0 mm of margin above it and finds no spot"),
-    "U_SR5": (17.5, -15.5, 180, _R + "rot 0 puts VCC pad 16 against the module shadow's top "
-              "edge beside U_SM's pins C5/C6; C21 finds no spot within 2.0 mm"),
-}
+# the part's anchor. Empty; an entry names the render that justified it.
+# (The first Task 5 run needed five, all for a decoupler with no room at its
+# IC's VCC pad; the IC search now leaves that room itself.)
+OVERRIDES = {}
 
 # Search step and radius per class (spec §4.4; spike values for ICs,
 # decoupling and LED resistors).
 STEP = {"ic": (0.5, 30.0), "power": (0.5, 40.0), "decouple": (0.1, 3.0),
         "led_r": (0.25, 10.0), "other": (0.5, 30.0)}
+ROTS = (0, 90, 180, 270)
+_ROUND_MM = 1e-5          # pcbnew rounds positions to 1 nm; the pure search keeps this margin
 
 
 def pad_index(board):
@@ -432,13 +420,15 @@ def _ic_anchor(s, part, idx, unplaced, net_refs):
     return _centroid(pts)
 
 
-def _place_one(s, part, anchor, cls, accept=None):
+def _place_one(s, part, anchor, cls, accept=None, fp=None):
     """First fit around `anchor`, or exactly at anchor + an OVERRIDES offset.
-    s.anchors keeps the anchor itself, so the report measures an override."""
-    fp = kipcb.add_part(s.board, part, anchor[0], anchor[1], 0, side="B")
+    s.anchors keeps the anchor itself, so the report measures an override.
+    `fp`: the part's footprint when it is already on the board."""
+    if fp is None:
+        fp = kipcb.add_part(s.board, part, anchor[0], anchor[1], 0, side="B")
     inner = PL.grow(outline_box(), -EDGE_INSET)
     step, rmax = STEP[cls]
-    rots = (0, 90, 180, 270)
+    rots = ROTS
     target = anchor
     if part.ref in OVERRIDES:
         dx, dy, rot, reason = OVERRIDES[part.ref]
@@ -459,9 +449,77 @@ def _pad1_within(v):
     return ok
 
 
+def cap_shape(fp):
+    """{rot: (courtyard box, pad-1 centre)}, both relative to the footprint's
+    position, measured on `fp` itself at each of ROTS. Leaves fp at rot 0,
+    where kipcb.add_part put it."""
+    x0, y0 = pcbnew.ToMM(fp.GetPosition().x), pcbnew.ToMM(fp.GetPosition().y)
+    out = {}
+    for rot in ROTS:
+        fp.SetOrientationDegrees(rot)
+        c = PL.courtyard_box(fp)
+        if c is None:
+            raise ValueError("%s has no courtyard to search with" % fp.GetReference())
+        p1 = [q for q in fp.Pads() if str(q.GetNumber()) == "1"][0].GetPosition()
+        out[rot] = ((c[0] - x0, c[1] - y0, c[2] - x0, c[3] - y0),
+                    (pcbnew.ToMM(p1.x) - x0, pcbnew.ToMM(p1.y) - y0))
+    fp.SetOrientationDegrees(ROTS[0])
+    return out
+
+
+def decoupler_spot(shape, v, blocked, inner):
+    """The decoupling search (spec §4.4), pure geometry: the first spiral
+    centre around the VCC pad `v` (STEP["decouple"]) and the first rotation
+    there whose courtyard lies inside `inner`, overlaps nothing in `blocked`
+    and puts pad 1 within DECOUPLE_MAX_MM of `v`. Returns (x, y, rot,
+    courtyard) or None and changes nothing. The one implementation: the
+    decoupler placement uses it, and the IC search dry-runs it."""
+    step, rmax = STEP["decouple"]
+    for x, y in PL.spiral(v[0], v[1], step, rmax):
+        for rot in ROTS:
+            (l, t, r, b), (px, py) = shape[rot]
+            cand = (x + l, y + t, x + r, y + b)
+            if not PL.inside(cand, inner) or any(PL.overlaps(cand, o) for o in blocked):
+                continue
+            if math.hypot(x + px - v[0], y + py - v[1]) <= DECOUPLE_MAX_MM - _ROUND_MM:
+                return x, y, rot, cand
+    return None
+
+
+def _leaves_room(s, shape, vcc, inner):
+    """IC accept (spec §4.4 amendment): the candidate spot leaves its 100 nF a
+    spot by decoupler_spot, with the IC's own courtyard added to a copy of
+    the blocked list. No footprint moves, nothing is appended."""
+    def ok(fp):
+        v = [(pcbnew.ToMM(q.GetPosition().x), pcbnew.ToMM(q.GetPosition().y))
+             for q in fp.Pads() if str(q.GetNumber()) == vcc][0]
+        return decoupler_spot(shape, v, s.blocked + [PL.courtyard_box(fp)], inner) is not None
+    return ok
+
+
+def _place_decoupler(s, part, fp, shape, v):
+    """A 100 nF at the VCC pad `v`: decoupler_spot, or its OVERRIDES entry."""
+    if part.ref in OVERRIDES:
+        return _place_one(s, part, v, "decouple", accept=_pad1_within(v), fp=fp)
+    spot = decoupler_spot(shape, v, s.blocked, PL.grow(outline_box(), -EDGE_INSET))
+    if spot is None:
+        raise ValueError("no free place for %s within %.1f mm of (%.2f, %.2f) with pad 1 "
+                         "within %.1f mm" % (part.ref, STEP["decouple"][1], v[0], v[1],
+                                            DECOUPLE_MAX_MM))
+    x, y, rot, box = spot
+    fp.SetOrientationDegrees(rot)
+    fp.SetPosition(kipcb._pt(x, y))
+    s.blocked.append(box)
+    s.parts[part.ref] = part
+    s.anchors[part.ref] = v
+    return fp
+
+
 def place_smd(s, proj):
-    """Spec §4.4 order: power block, ICs (most pins first), decouplers, J_SD's
-    caps, LED resistors, C_SENSE, everything else."""
+    """Spec §4.4 order: ICs (most pins first; U_REG, 3 pins, last, at J_PWR),
+    each accepted only where its 100 nF still fits; the decouplers; J_SD's
+    C_SD1/C_SD2 (2.0 mm like decoupling); then every 2-pin part: the power
+    block's at J_PWR, LED resistors, C_SENSE, everything else."""
     by_ref = {p.ref: p for p in proj.parts()}
     sheet_of = proj.sheet_of()
     net_refs = _net_refs(proj)
@@ -470,31 +528,45 @@ def place_smd(s, proj):
     jp = s.board.FindFootprintByReference("J_PWR")
     jp_c = PL.courtyard_box(jp)
     jp_centre = ((jp_c[0] + jp_c[2]) / 2.0, (jp_c[1] + jp_c[3]) / 2.0)
+    inner = PL.grow(outline_box(), -EDGE_INSET)
+    s.sheet_of = sheet_of
     s.decouplers = decouplers(proj)
+    cap_of = {ic: c for c, (ic, _n) in s.decouplers.items()}
+    caps = {}                 # cref -> (footprint, shape), added with its IC
 
-    power = [p for p in todo if sheet_of[p.ref] == "power"]
-    power.sort(key=lambda p: (p.ref != "U_REG", p.ref))
-    for p in power:
-        _place_one(s, p, jp_centre, "power")
-
-    left = [p for p in todo if p.ref not in s.parts]
-    ics = sorted([p for p in left if p.ref.startswith("U_")],
+    ics = sorted([p for p in todo if p.ref.startswith("U_")],
                  key=lambda p: (-len(p.sym.pins), p.ref))
     for p in ics:
+        if sheet_of[p.ref] == "power":
+            s.anchor_from[p.ref] = "J_PWR's courtyard centre"
+            _place_one(s, p, jp_centre, "power")
+            continue
         unplaced = [q for q in todo if q.ref not in s.parts]
         a = _ic_anchor(s, p, pad_index(s.board), unplaced, net_refs)
         if a is None:
             raise ValueError("%s: no anchor (no placed pad on its signal nets)" % p.ref)
-        _place_one(s, p, a, "ic")
+        accept = None
+        if p.ref in cap_of:
+            cref = cap_of[p.ref]
+            cfp = kipcb.add_part(s.board, by_ref[cref], a[0], a[1], 0, side="B")
+            caps[cref] = (cfp, cap_shape(cfp))
+            accept = _leaves_room(s, caps[cref][1], s.decouplers[cref][1], inner)
+        _place_one(s, p, a, "ic", accept=accept)
 
     for cref, (ic, vcc) in sorted(s.decouplers.items()):
-        v = _pad_xy(s.board, ic, vcc)
-        _place_one(s, by_ref[cref], v, "decouple", accept=_pad1_within(v))
+        cfp, shape = caps[cref]
+        _place_decoupler(s, by_ref[cref], cfp, shape, _pad_xy(s.board, ic, vcc))
 
     sd_vcc = _pad_xy(s.board, "J_SD", "4")
     s.decouplers["C_SD1"] = ("J_SD", "4")
-    _place_one(s, by_ref["C_SD1"], sd_vcc, "decouple", accept=_pad1_within(sd_vcc))
+    cfp = kipcb.add_part(s.board, by_ref["C_SD1"], sd_vcc[0], sd_vcc[1], 0, side="B")
+    _place_decoupler(s, by_ref["C_SD1"], cfp, cap_shape(cfp), sd_vcc)
+    # C_SD2 (DNP): plain first fit near J_SD's VCC pad, no 2.0 mm limit -- C_SD1 takes the only spot within it (spec §4.4, §5.1 item 5 gates C_SD1 only).
     _place_one(s, by_ref["C_SD2"], sd_vcc, "other")
+
+    for p in sorted((p for p in todo if p.ref not in s.parts and sheet_of[p.ref] == "power"),
+                    key=lambda p: p.ref):
+        _place_one(s, p, jp_centre, "power")
 
     idx = pad_index(s.board)
     for p in sorted((p for p in todo if p.ref not in s.parts and sheet_of[p.ref] == "leds"),
@@ -510,7 +582,7 @@ def place_smd(s, proj):
 
     for p in sorted((p for p in todo if p.ref not in s.parts), key=lambda p: p.ref):
         idx = pad_index(s.board)
-        pts = [xy for net in set(p.nets.values()) - SUPPLY
+        pts = [xy for net in sorted(set(p.nets.values()) - SUPPLY)
                for ref, _n, xy in idx.get(net, []) if ref != p.ref]
         a = _centroid(pts) or s.anchors["U_SM"]
         _place_one(s, p, a, "other")
