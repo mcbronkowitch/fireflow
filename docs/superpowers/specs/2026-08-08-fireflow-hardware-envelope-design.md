@@ -98,8 +98,11 @@ Fertigungstoleranz); Stützpunkte gegen Durchbiegung in Boardmitte.
 > (pots, jacks, keycaps, LEDs, SD slot) on its front, the Patch Submodule
 > plugged into its back; no board-to-board connector. The split above put
 > jacks and pots — both panel-mounted — on different boards, which does not
-> build. The support against bending over ~300 mm still applies: standoffs
-> to the panel in the middle of the board.
+> build. ~~The support against bending over ~300 mm still applies: standoffs
+> to the panel in the middle of the board.~~ *Corrected 2026-09-29 (Bastian):
+> no standoffs.* The 70 Alpha pots and 18 jacks, each nutted to the panel
+> across the whole 305 mm, hold the board — the usual Eurorack construction.
+> See `2026-09-29-rev-a-p1-panel-parts-design.md`.
 
 **Die zentrale Korrektur — es gibt nur 4 Mux-Sense-Pins.** Die acht
 CV-Eingänge des Patch SM (`CV_1..8`) sind hardwareseitig **bipolar** (±5 V)
