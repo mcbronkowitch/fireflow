@@ -60,6 +60,7 @@ class Placed:
         self.blocked = []
         self.no_rotation = set()
         self.overrides_used = []
+        self.anchor_from = {}
         self.known = {}
 
     def reload(self, path):
@@ -303,6 +304,218 @@ def place_power_header(s, proj, blocked):
     s.anchors["J_PWR"] = (x, y)           # the placed position, spec §4.4
 
 
+# Manual corrections (spec §4.4): ref -> (dx, dy, rot, reason), relative to
+# the part's anchor. Empty at the start; an entry names the render that
+# justified it. Each entry below keeps its IC's first-fit spot (or moves it
+# 1 mm) and turns it so VCC pad 16 faces open board: without it the build
+# stops at "no free place for C<n>" (2026-09-29, Task 5). The offsets hang
+# on anchors that follow earlier placements (a mux's pads feed U_SR1/U_SR2's
+# anchors), so a change above an entry moves its anchor.
+_R = "reva-placed-bottom.png, run without this entry: "
+OVERRIDES = {
+    "U_MUX7": (0.0, -9.5, 270, _R + "rot 90 puts VCC pad 16 0.4 mm from the module shadow "
+               "with U_SR2's courtyard 0.3 mm above; C11 finds no spot within 2.0 mm"),
+    "U_MUX9": (-10.0, 8.5, 0, _R + "VCC pad 16 sits 1.0 mm from RV46's pin (grown 0.2 mm) "
+               "with its own courtyard beside it; C13 finds no spot; 1 mm further -x it does"),
+    "U_SR1": (-13.5, -6.0, 180, _R + "rot 0 puts VCC pad 16 against the module shadow's top "
+              "edge and RV25's pin 3; C17 finds no spot within 2.0 mm"),
+    "U_SR2": (-3.5, -8.0, 270, _R + "rot 90 puts VCC pad 16 against the module shadow's left "
+              "edge; C18 has 0.0 mm of margin above it and finds no spot"),
+    "U_SR5": (17.5, -15.5, 180, _R + "rot 0 puts VCC pad 16 against the module shadow's top "
+              "edge beside U_SM's pins C5/C6; C21 finds no spot within 2.0 mm"),
+}
+
+# Search step and radius per class (spec §4.4; spike values for ICs,
+# decoupling and LED resistors).
+STEP = {"ic": (0.5, 30.0), "power": (0.5, 40.0), "decouple": (0.1, 3.0),
+        "led_r": (0.25, 10.0), "other": (0.5, 30.0)}
+
+
+def pad_index(board):
+    """{net: [(ref, pad number, (x, y))]} over every pad on the board."""
+    out = {}
+    for fp in board.GetFootprints():
+        for p in fp.Pads():
+            n = p.GetNetname()
+            if n:
+                out.setdefault(n, []).append(
+                    (fp.GetReference(), str(p.GetNumber()),
+                     (pcbnew.ToMM(p.GetPosition().x), pcbnew.ToMM(p.GetPosition().y))))
+    return out
+
+
+def _pad_xy(board, ref, number):
+    for p in board.FindFootprintByReference(ref).Pads():
+        if str(p.GetNumber()) == str(number):
+            return pcbnew.ToMM(p.GetPosition().x), pcbnew.ToMM(p.GetPosition().y)
+    raise KeyError("%s has no pad %s" % (ref, number))
+
+
+def _centroid(pts):
+    if not pts:
+        return None
+    return (sum(x for x, _ in pts) / len(pts), sum(y for _, y in pts) / len(pts))
+
+
+def decouplers(proj):
+    """{cap: (ic, VCC pad)}: in every sheet a 100n whose pin 1 is the rail
+    and pin 2 GND, directly after an IC whose VCC carries that rail
+    (blocks._decouple, called right after each mux and shift register)."""
+    out = {}
+    for sheet in proj.sheets:
+        prev = None
+        for p in sheet.parts:
+            if p.ref.startswith("U_") and p.ref not in ("U_SM", "U_REG"):
+                prev = p
+                continue
+            if (prev is not None and p.value == "100n" and p.nets.get("2") == BL.GND):
+                vcc = str(prev.sym.by_name("VCC"))
+                if prev.nets.get(vcc) == p.nets.get("1"):
+                    out[p.ref] = (prev.ref, vcc)
+            prev = None
+    return out
+
+
+def _net_refs(proj):
+    out = {}
+    for p in proj.parts():
+        for net in p.nets.values():
+            out.setdefault(net, set()).add(p.ref)
+    return out
+
+
+def _panel_side_nets(part, net_refs):
+    """Spec §4.4: the pads a 74HC595 drives, the 74HC165's key pads -- the
+    IC's signal nets that reach neither the module nor another IC (clock,
+    latch, data and chain nets all do)."""
+    out = set()
+    for net in set(part.nets.values()) - SUPPLY:
+        if not any(r.startswith("U_") for r in net_refs.get(net, set()) - {part.ref}):
+            out.add(net)
+    return out
+
+
+def _through_two_pin(part, nets, idx, unplaced):
+    """The placed pads on `nets`, and on the far net of each unplaced 2-pin
+    part hanging on one of them (a supply far side is not followed)."""
+    pts = []
+    for net in sorted(nets):
+        pts += [xy for ref, _n, xy in idx.get(net, []) if ref != part.ref]
+        for q in unplaced:
+            if len(q.nets) == 2 and net in q.nets.values():
+                other = [n for n in q.nets.values() if n != net][0]
+                if other not in SUPPLY:
+                    pts += [xy for ref, _n, xy in idx.get(other, []) if ref != part.ref]
+    return pts
+
+
+def _ic_anchor(s, part, idx, unplaced, net_refs):
+    """Spec §4.4. Mux: centroid of its pots' wiper pads (P3). 595 / 165: the
+    centroid of the placed pads on its panel-side nets, followed through one
+    unplaced 2-pin part. An IC whose panel-side nets reach nothing placed
+    (U_SR5: its outputs go to test points only) falls back to all its signal
+    nets; s.anchor_from records which rule gave the anchor."""
+    if part.ref.startswith("U_MUX"):
+        m = int(part.ref[len("U_MUX"):])
+        pm = RB.load_panel_map()
+        ids = {p["id"] for p in pm["pots"] if p["mux"] == m}
+        refs = [r for r, pid in s.ids.items() if pid in ids]
+        s.anchor_from[part.ref] = "wipers of its %d pots" % len(refs)
+        return _centroid([_pad_xy(s.board, r, "2") for r in refs])
+    pts = _through_two_pin(part, _panel_side_nets(part, net_refs), idx, unplaced)
+    if pts:
+        s.anchor_from[part.ref] = "%d panel-side pads" % len(pts)
+        return _centroid(pts)
+    pts = _through_two_pin(part, set(part.nets.values()) - SUPPLY, idx, unplaced)
+    s.anchor_from[part.ref] = ("%d pads on all its signal nets (its panel-side nets "
+                               "reach nothing placed)" % len(pts))
+    return _centroid(pts)
+
+
+def _place_one(s, part, anchor, cls, accept=None):
+    """First fit around `anchor`, or exactly at anchor + an OVERRIDES offset.
+    s.anchors keeps the anchor itself, so the report measures an override."""
+    fp = kipcb.add_part(s.board, part, anchor[0], anchor[1], 0, side="B")
+    inner = PL.grow(outline_box(), -EDGE_INSET)
+    step, rmax = STEP[cls]
+    rots = (0, 90, 180, 270)
+    target = anchor
+    if part.ref in OVERRIDES:
+        dx, dy, rot, reason = OVERRIDES[part.ref]
+        target = (anchor[0] + dx, anchor[1] + dy)
+        step, rmax, rots = 0.1, 0.0, (rot,)
+        s.overrides_used.append("%s %+.2f %+.2f rot %d: %s" % (part.ref, dx, dy, rot, reason))
+    PL.first_fit(fp, target, s.blocked, inner, step, rmax, rotations=rots, accept=accept)
+    s.parts[part.ref] = part
+    s.anchors[part.ref] = anchor
+    return fp
+
+
+def _pad1_within(v):
+    def ok(fp):
+        x, y = [(pcbnew.ToMM(q.GetPosition().x), pcbnew.ToMM(q.GetPosition().y))
+                for q in fp.Pads() if str(q.GetNumber()) == "1"][0]
+        return math.hypot(x - v[0], y - v[1]) <= DECOUPLE_MAX_MM
+    return ok
+
+
+def place_smd(s, proj):
+    """Spec §4.4 order: power block, ICs (most pins first), decouplers, J_SD's
+    caps, LED resistors, C_SENSE, everything else."""
+    by_ref = {p.ref: p for p in proj.parts()}
+    sheet_of = proj.sheet_of()
+    net_refs = _net_refs(proj)
+    todo = [p for p in proj.parts() if p.on_board and p.footprint
+            and p.ref not in s.parts]
+    jp = s.board.FindFootprintByReference("J_PWR")
+    jp_c = PL.courtyard_box(jp)
+    jp_centre = ((jp_c[0] + jp_c[2]) / 2.0, (jp_c[1] + jp_c[3]) / 2.0)
+    s.decouplers = decouplers(proj)
+
+    power = [p for p in todo if sheet_of[p.ref] == "power"]
+    power.sort(key=lambda p: (p.ref != "U_REG", p.ref))
+    for p in power:
+        _place_one(s, p, jp_centre, "power")
+
+    left = [p for p in todo if p.ref not in s.parts]
+    ics = sorted([p for p in left if p.ref.startswith("U_")],
+                 key=lambda p: (-len(p.sym.pins), p.ref))
+    for p in ics:
+        unplaced = [q for q in todo if q.ref not in s.parts]
+        a = _ic_anchor(s, p, pad_index(s.board), unplaced, net_refs)
+        if a is None:
+            raise ValueError("%s: no anchor (no placed pad on its signal nets)" % p.ref)
+        _place_one(s, p, a, "ic")
+
+    for cref, (ic, vcc) in sorted(s.decouplers.items()):
+        v = _pad_xy(s.board, ic, vcc)
+        _place_one(s, by_ref[cref], v, "decouple", accept=_pad1_within(v))
+
+    sd_vcc = _pad_xy(s.board, "J_SD", "4")
+    s.decouplers["C_SD1"] = ("J_SD", "4")
+    _place_one(s, by_ref["C_SD1"], sd_vcc, "decouple", accept=_pad1_within(sd_vcc))
+    _place_one(s, by_ref["C_SD2"], sd_vcc, "other")
+
+    idx = pad_index(s.board)
+    for p in sorted((p for p in todo if p.ref not in s.parts and sheet_of[p.ref] == "leds"),
+                    key=lambda p: p.ref):
+        led_net = p.nets["2"]           # pin 2 is the LED side (blocks.leds)
+        led = [xy for ref, _n, xy in idx.get(led_net, []) if ref.startswith("D")]
+        _place_one(s, p, led[0], "led_r")
+
+    for p in sorted((p for p in todo if p.ref.startswith("C_SENSE")), key=lambda p: p.ref):
+        net = p.nets["1"]               # pin 1 is the SENSE net (blocks.module)
+        sm = [xy for ref, _n, xy in pad_index(s.board).get(net, []) if ref == "U_SM"]
+        _place_one(s, p, sm[0], "other")
+
+    for p in sorted((p for p in todo if p.ref not in s.parts), key=lambda p: p.ref):
+        idx = pad_index(s.board)
+        pts = [xy for net in set(p.nets.values()) - SUPPLY
+               for ref, _n, xy in idx.get(net, []) if ref != p.ref]
+        a = _centroid(pts) or s.anchors["U_SM"]
+        _place_one(s, p, a, "other")
+
+
 def build():
     proj = RB.project()
     s = Placed()
@@ -315,6 +528,7 @@ def build():
     place_module(s, proj)
     s.blocked = _tht_blocked(s) + [s.shadow]
     place_power_header(s, proj, s.blocked)
+    place_smd(s, proj)
     return s
 
 

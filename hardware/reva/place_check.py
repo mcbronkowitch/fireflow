@@ -189,6 +189,35 @@ def check_module(s, pcb_path, prefix):
         PL.gap(PL.courtyard_box(jp), shadow) if jp else -1, P.USB_CLEAR_MM), bad
 
 
+def check_decoupling(s, pcb_path, prefix):
+    if not s.decouplers:
+        return False, "examined 0 decouplers", []
+    bad, worst = [], 0.0
+    for cref, (ic, num) in sorted(s.decouplers.items()):
+        c = [p for p in _fp(s.board, cref).Pads() if str(p.GetNumber()) == "1"][0]
+        m = [p for p in _fp(s.board, ic).Pads() if str(p.GetNumber()) == num][0]
+        d = math.hypot(pcbnew.ToMM(c.GetPosition().x - m.GetPosition().x),
+                       pcbnew.ToMM(c.GetPosition().y - m.GetPosition().y))
+        worst = max(worst, d)
+        if d > P.DECOUPLE_MAX_MM:
+            bad.append("%s is %.3f mm from %s pad %s" % (cref, d, ic, num))
+    return not bad, "%d decouplers, worst %.3f mm (limit %.1f)" % (
+        len(s.decouplers), worst, P.DECOUPLE_MAX_MM), bad
+
+
+def _mst(pts):
+    """Prim's minimum spanning tree length over pad centres."""
+    if len(pts) < 2:
+        return 0.0
+    done, rest, total = [pts[0]], list(pts[1:]), 0.0
+    while rest:
+        d, j = min((math.hypot(a[0] - b[0], a[1] - b[1]), j)
+                   for j, b in enumerate(rest) for a in done)
+        total += d
+        done.append(rest.pop(j))
+    return total
+
+
 SD_HEIGHT_MM = 14.18      # LCSC C3177022
 GAP_MM = 10.0             # assumption until the grip test (spec §8)
 MODULE_MM, BOARD_MM = 15.0, 1.6
@@ -216,6 +245,18 @@ def report(s, pcb_path, prefix):
                      "key vector (%.2f, %.2f) faces the %s edge" % (
                          "west" if x1 < x10 else "east", x1, x10, vx, vy,
                          "top" if vy < 0 else "bottom"))
+    idx = P.pad_index(s.board)
+    nets = {n: [xy for _r, _p, xy in v] for n, v in idx.items() if n not in P.SUPPLY}
+    total = sum(_mst(v) for v in nets.values())
+    lines.append("ratsnest (signal nets, MST over pad centres): %.0f mm total" % total)
+    for ref in sorted(r for r in s.anchors if r.startswith("U_")):
+        fp = _fp(s.board, ref)
+        ax, ay = s.anchors[ref]
+        how = s.anchor_from.get(ref)
+        lines.append("%s %.1f mm from its anchor%s" % (ref, math.hypot(
+            pcbnew.ToMM(fp.GetPosition().x) - ax, pcbnew.ToMM(fp.GetPosition().y) - ay),
+            " (%s)" % how if how else ""))
+    lines += ["override in force: " + o for o in s.overrides_used] or ["no overrides in force"]
     return True, "reported, never gates", lines
 
 
@@ -230,7 +271,8 @@ def render(s, pcb_path, prefix):
 
 
 STEPS = [("anchors", check_anchors), ("edge", check_edge), ("front", check_front),
-         ("module", check_module), ("report", report), ("render", render)]
+         ("module", check_module), ("decoupling", check_decoupling),
+         ("report", report), ("render", render)]
 
 
 def run(s, pcb_path, prefix):
@@ -306,17 +348,28 @@ def _sab_front_back_tht(s):
     um.Move(kipcb._pt(px - (pb[0] + pb[2]) / 2.0, py - (pb[1] + pb[3]) / 2.0))
 
 
+def _sab_decoupling(s):
+    """The first decoupler moved 3 mm right, off its IC's VCC pad."""
+    _fp(s.board, sorted(s.decouplers)[0]).Move(kipcb._pt(3.0, 0.0))
+
+
+def _sab_decoupling_missing(s):
+    s.decouplers.clear()
+
+
 SABOTAGES = {"anchors": _sab_anchors, "anchors_missing": _sab_anchors_missing,
              "edge": _sab_edge, "edge_missing": _sab_edge_missing,
              "front": _sab_front, "front_missing": _sab_front_missing,
              "known_stale": _sab_known_stale,
              "module": _sab_module, "module_missing": _sab_module_missing,
-             "front_back_tht": _sab_front_back_tht}
+             "front_back_tht": _sab_front_back_tht,
+             "decoupling": _sab_decoupling, "decoupling_missing": _sab_decoupling_missing}
 # which step each sabotage must turn red (test_place.py reads this)
 TURNS_RED = {"anchors": "anchors", "anchors_missing": "anchors", "edge": "edge",
              "edge_missing": "edge", "front": "front", "front_missing": "front",
              "known_stale": "edge", "module": "module", "module_missing": "module",
-             "front_back_tht": "front"}
+             "front_back_tht": "front", "decoupling": "decoupling",
+             "decoupling_missing": "decoupling"}
 
 
 def sabotage(s, name):
