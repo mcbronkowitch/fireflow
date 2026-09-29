@@ -15,6 +15,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
+import pcbnew          # noqa: E402
+import locked as LK   # noqa: E402
 import proof as PF    # noqa: E402
 import stripe as ST   # noqa: E402
 from gen import kipcb  # noqa: E402
@@ -27,6 +29,7 @@ def main():
     ap.add_argument("--method", choices=("none", "own", "freerouting"), required=True)
     ap.add_argument("--layers", type=int, choices=(2, 4), default=2)
     ap.add_argument("--sabotage", default="")
+    ap.add_argument("--where", default="")
     a = ap.parse_args()
     os.makedirs(OUT, exist_ok=True)
     prefix = os.path.join(OUT, "%s-%dL" % (a.method, a.layers))
@@ -35,6 +38,19 @@ def main():
     s = ST.build(a.layers)
     print("built the strip: %d parts, %d keepouts, %d ports in %.1f s"
           % (len(s.parts), len(s.keepouts), len(s.ports), time.time() - t0))
+    if a.where:
+        for fp in s.board.GetFootprints():
+            for pad in fp.Pads():
+                if pad.GetNetname() == a.where:
+                    layers = "/".join(n for n in ("F.Cu", "B.Cu")
+                                      if pad.IsOnLayer(kipcb.LAYER[n]))
+                    print("   %-8s %-3s (%.3f, %.3f) %s" % (
+                        fp.GetReference(), pad.GetNumber(),
+                        pcbnew.ToMM(pad.GetPosition().x),
+                        pcbnew.ToMM(pad.GetPosition().y), layers))
+        print("   port:", s.ports.get(a.where, "none"))
+        return 0
+    print("locked %d items on %s" % (LK.apply(s), ", ".join(ST.LOCKED_NETS)))
     for label, box in s.keepouts:
         print("   keepout %-10s x %.2f..%.2f y %.2f..%.2f" % (label, box[0], box[2], box[1], box[3]))
     routed = a.method != "none"

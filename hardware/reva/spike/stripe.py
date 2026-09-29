@@ -59,6 +59,8 @@ class Strip:
         self.vcc_pin = {}      # mux ref -> its VCC pad number
         self.led_nets = set()
         self.locked = []       # filled by locked.apply() (Task 3)
+        self.unrouted_before_fill = None   # set by a routing method (Tasks 6-7)
+        self.fill_nets = []                # nets filled after routing
 
 
 def _box(bb):

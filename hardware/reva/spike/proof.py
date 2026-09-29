@@ -12,6 +12,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import pcbnew                        # noqa: E402
+import locked as LK                  # noqa: E402
 import stripe as ST                  # noqa: E402
 from gen import kipcb                # noqa: E402
 from gen import pcb_proof as PP      # noqa: E402
@@ -76,6 +77,46 @@ def check_copper(s, pcb_path, prefix):
     return not bad, "gated: %s (not gated: %s)" % (gated, others), bad
 
 
+def check_locked(s, pcb_path, prefix):
+    if not s.locked:
+        return False, "examined 0 locked segments", []
+    now = LK.geometry(s.board)
+    bad = ["moved or added: %s" % (g,) for g in now if g not in s.locked]
+    bad += ["gone: %s" % (g,) for g in s.locked if g not in now]
+    unlocked = [t for t in s.board.GetTracks()
+                if t.GetNetname() in ST.LOCKED_NETS and not t.IsLocked()]
+    bad += ["%d unlocked items on locked nets" % len(unlocked)] if unlocked else []
+    nets = {g[0] for g in s.locked}
+    bad += ["no locked track on %s" % n for n in ST.LOCKED_NETS if n not in nets]
+    return not bad, "%d locked segments unchanged on %s" % (
+        len(s.locked), ", ".join(ST.LOCKED_NETS)), bad
+
+
+def check_ratsnest(s, pcb_path, prefix):
+    live = PP.live_unconnected(s.board)
+    from_drc = PP.count_drc_violations(prefix + "-drc.rpt").get("unconnected_items", 0)
+    before = s.unrouted_before_fill
+    bad = ["%-12s %s" % (n, ", ".join(sorted(v)))
+           for n, v in sorted(PP.unconnected_by_net(prefix + "-drc.rpt").items())]
+    if before is None:
+        bad.append("the routing method did not record its unrouted count")
+    elif before:
+        bad.append("%d connections unrouted before the fill" % before)
+    ok = live == 0 and from_drc == 0 and before == 0
+    return ok, "unconnected: %s before fill, %d live, %d kicad-cli" % (
+        before, live, from_drc), bad
+
+
+def check_audio(s, pcb_path, prefix):
+    audio = PP.track_segments(s.board, lambda n: n in (ST.OUT_L, ST.OUT_R))
+    leds = PP.track_segments(s.board, lambda n: n in s.led_nets)
+    if not audio or not leds:
+        return False, "examined %d audio and %d LED segments" % (len(audio), len(leds)), []
+    worst = min((PP.seg_seg_dist((a[2], a[3]), (b[2], b[3])), a[0], b[0])
+                for a in audio for b in leds)
+    return True, "nearest LED track to audio: %.2f mm (%s to %s; coupon rule 10.0, not gated)" % worst, []
+
+
 def render(s, pcb_path, prefix):
     lines = []
     for side, suffix in (("top", "-top.png"), ("bottom", "-bottom.png")):
@@ -88,7 +129,10 @@ def render(s, pcb_path, prefix):
 
 def _steps(routed):
     steps = [("nets", check_nets), ("anchors", check_anchors),
-             ("decoupling", check_decoupling), ("copper", check_copper)]
+             ("decoupling", check_decoupling), ("locked", check_locked),
+             ("copper", check_copper)]
+    if routed:
+        steps += [("ratsnest", check_ratsnest), ("audio", check_audio)]
     return steps + [("render", render)]
 
 
@@ -142,10 +186,39 @@ def _sab_copper(s):
                     [(x, pcbnew.ToMM(bb.GetTop()) - 1.0), (x, pcbnew.ToMM(bb.GetBottom()) + 1.0)])
 
 
+def _sab_locked(s):
+    t = [t for t in s.board.GetTracks()
+         if t.GetNetname() == ST.SENSE and t.Type() == pcbnew.PCB_TRACE_T][0]
+    t.SetEnd(kipcb._pt(pcbnew.ToMM(t.GetEnd().x) + 0.5, pcbnew.ToMM(t.GetEnd().y)))
+
+
+def _sab_locked_missing(s):
+    s.locked = []
+
+
+def _sab_ratsnest(s):
+    """Delete one routed segment that is on no locked, filled or supply net.
+    A GND or SM_3V3 segment deleted after the GND fill would be re-bridged
+    by the zone, and a filled net's likewise, so deleting one of those could
+    leave the ratsnest step green -- a vacuous RED proof."""
+    t = [t for t in s.board.GetTracks()
+         if t.Type() == pcbnew.PCB_TRACE_T
+         and t.GetNetname() not in ST.LOCKED_NETS
+         and t.GetNetname() not in s.fill_nets
+         and t.GetNetname() not in ST.SUPPLY_NETS][0]
+    s.board.Delete(t)
+
+
+def _sab_audio_missing(s):
+    s.led_nets = set()
+
+
 SABOTAGES = {"nets": _sab_nets, "nets_missing": _sab_nets_missing,
              "anchors": _sab_anchors, "anchors_missing": _sab_anchors_missing,
              "decoupling": _sab_decoupling, "decoupling_missing": _sab_decoupling_missing,
-             "copper": _sab_copper}
+             "copper": _sab_copper, "locked": _sab_locked,
+             "locked_missing": _sab_locked_missing, "ratsnest": _sab_ratsnest,
+             "audio_missing": _sab_audio_missing}
 
 
 def sabotage(s, name):
