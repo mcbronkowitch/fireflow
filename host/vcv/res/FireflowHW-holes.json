@@ -9,6 +9,9 @@
  "holes": [
   {
    "id": "RATE_A",
+   "ids": [
+    "RATE_A"
+   ],
    "kind": "pot",
    "x_mm": 61.0,
    "y_mm": 14.5,
@@ -16,6 +19,9 @@
   },
   {
    "id": "SHAPE_A",
+   "ids": [
+    "SHAPE_A"
+   ],
    "kind": "pot",
    "x_mm": 18.25,
    "y_mm": 34.0,
@@ -23,6 +29,9 @@
   },
   {
    "id": "DENSITY_A",
+   "ids": [
+    "DENSITY_A"
+   ],
    "kind": "pot",
    "x_mm": 40.75,
    "y_mm": 53.0,
@@ -30,6 +39,9 @@
   },
   {
    "id": "SMOOTH_A",
+   "ids": [
+    "SMOOTH_A"
+   ],
    "kind": "pot",
    "x_mm": 31.25,
    "y_mm": 34.0,
@@ -37,6 +49,9 @@
   },
   {
    "id": "RANGE_A",
+   "ids": [
+    "RANGE_A"
+   ],
    "kind": "pot",
    "x_mm": 44.25,
    "y_mm": 34.0,
@@ -44,6 +59,9 @@
   },
   {
    "id": "MELODY_A",
+   "ids": [
+    "MELODY_A"
+   ],
    "kind": "pot",
    "x_mm": 74.0,
    "y_mm": 14.5,
@@ -51,6 +69,9 @@
   },
   {
    "id": "MOD_A",
+   "ids": [
+    "MOD_A"
+   ],
    "kind": "pot",
    "x_mm": 21.75,
    "y_mm": 53.0,
@@ -58,6 +79,9 @@
   },
   {
    "id": "TUNE_A",
+   "ids": [
+    "TUNE_A"
+   ],
    "kind": "pot",
    "x_mm": 17.0,
    "y_mm": 74.4,
@@ -65,6 +89,10 @@
   },
   {
    "id": "ATTACK_A",
+   "ids": [
+    "ATTACK_A",
+    "STAGES_A"
+   ],
    "kind": "pot",
    "x_mm": 68.25,
    "y_mm": 34.0,
@@ -72,6 +100,9 @@
   },
   {
    "id": "DECAY_A",
+   "ids": [
+    "DECAY_A"
+   ],
    "kind": "pot",
    "x_mm": 81.25,
    "y_mm": 34.0,
@@ -79,6 +110,9 @@
   },
   {
    "id": "RES_A",
+   "ids": [
+    "RES_A"
+   ],
    "kind": "pot",
    "x_mm": 94.25,
    "y_mm": 34.0,
@@ -86,6 +120,9 @@
   },
   {
    "id": "SUB_A",
+   "ids": [
+    "SUB_A"
+   ],
    "kind": "pot",
    "x_mm": 107.25,
    "y_mm": 34.0,
@@ -93,6 +130,9 @@
   },
   {
    "id": "SOURCE_A",
+   "ids": [
+    "SOURCE_A"
+   ],
    "kind": "pot",
    "x_mm": 72.875,
    "y_mm": 50.22,
@@ -100,6 +140,9 @@
   },
   {
    "id": "FLUX_A",
+   "ids": [
+    "FLUX_A"
+   ],
    "kind": "pot",
    "x_mm": 67.0,
    "y_mm": 79.0,
@@ -107,6 +150,9 @@
   },
   {
    "id": "GRIT_A",
+   "ids": [
+    "GRIT_A"
+   ],
    "kind": "pot",
    "x_mm": 116.75,
    "y_mm": 97.0,
@@ -114,6 +160,9 @@
   },
   {
    "id": "COMP_A",
+   "ids": [
+    "COMP_A"
+   ],
    "kind": "pot",
    "x_mm": 106.5,
    "y_mm": 79.0,
@@ -121,6 +170,9 @@
   },
   {
    "id": "STEPS_A",
+   "ids": [
+    "STEPS_A"
+   ],
    "kind": "pot",
    "x_mm": 35.0,
    "y_mm": 14.5,
@@ -128,6 +180,9 @@
   },
   {
    "id": "ENGINE_A",
+   "ids": [
+    "ENGINE_A"
+   ],
    "kind": "pot",
    "x_mm": 16.25,
    "y_mm": 14.5,
@@ -135,6 +190,9 @@
   },
   {
    "id": "DETUNE_A",
+   "ids": [
+    "DETUNE_A"
+   ],
    "kind": "pot",
    "x_mm": 30.0,
    "y_mm": 74.4,
@@ -142,6 +200,9 @@
   },
   {
    "id": "SONG_A",
+   "ids": [
+    "SONG_A"
+   ],
    "kind": "pot",
    "x_mm": 48.0,
    "y_mm": 14.5,
@@ -149,6 +210,9 @@
   },
   {
    "id": "RATE_B",
+   "ids": [
+    "RATE_B"
+   ],
    "kind": "pot",
    "x_mm": 243.8,
    "y_mm": 14.5,
@@ -156,6 +220,9 @@
   },
   {
    "id": "SHAPE_B",
+   "ids": [
+    "SHAPE_B"
+   ],
    "kind": "pot",
    "x_mm": 286.55,
    "y_mm": 34.0,
@@ -163,6 +230,9 @@
   },
   {
    "id": "DENSITY_B",
+   "ids": [
+    "DENSITY_B"
+   ],
    "kind": "pot",
    "x_mm": 264.05,
    "y_mm": 53.0,
@@ -170,6 +240,9 @@
   },
   {
    "id": "SMOOTH_B",
+   "ids": [
+    "SMOOTH_B"
+   ],
    "kind": "pot",
    "x_mm": 273.55,
    "y_mm": 34.0,
@@ -177,6 +250,9 @@
   },
   {
    "id": "RANGE_B",
+   "ids": [
+    "RANGE_B"
+   ],
    "kind": "pot",
    "x_mm": 260.55,
    "y_mm": 34.0,
@@ -184,6 +260,9 @@
   },
   {
    "id": "MELODY_B",
+   "ids": [
+    "MELODY_B"
+   ],
    "kind": "pot",
    "x_mm": 230.8,
    "y_mm": 14.5,
@@ -191,6 +270,9 @@
   },
   {
    "id": "MOD_B",
+   "ids": [
+    "MOD_B"
+   ],
    "kind": "pot",
    "x_mm": 283.05,
    "y_mm": 53.0,
@@ -198,6 +280,9 @@
   },
   {
    "id": "TUNE_B",
+   "ids": [
+    "TUNE_B"
+   ],
    "kind": "pot",
    "x_mm": 287.8,
    "y_mm": 74.4,
@@ -205,6 +290,10 @@
   },
   {
    "id": "ATTACK_B",
+   "ids": [
+    "ATTACK_B",
+    "STAGES_B"
+   ],
    "kind": "pot",
    "x_mm": 236.55,
    "y_mm": 34.0,
@@ -212,6 +301,9 @@
   },
   {
    "id": "DECAY_B",
+   "ids": [
+    "DECAY_B"
+   ],
    "kind": "pot",
    "x_mm": 223.55,
    "y_mm": 34.0,
@@ -219,6 +311,9 @@
   },
   {
    "id": "RES_B",
+   "ids": [
+    "RES_B"
+   ],
    "kind": "pot",
    "x_mm": 210.55,
    "y_mm": 34.0,
@@ -226,6 +321,9 @@
   },
   {
    "id": "SUB_B",
+   "ids": [
+    "SUB_B"
+   ],
    "kind": "pot",
    "x_mm": 197.55,
    "y_mm": 34.0,
@@ -233,6 +331,9 @@
   },
   {
    "id": "SOURCE_B",
+   "ids": [
+    "SOURCE_B"
+   ],
    "kind": "pot",
    "x_mm": 231.925,
    "y_mm": 50.22,
@@ -240,6 +341,9 @@
   },
   {
    "id": "FLUX_B",
+   "ids": [
+    "FLUX_B"
+   ],
    "kind": "pot",
    "x_mm": 237.8,
    "y_mm": 79.0,
@@ -247,6 +351,9 @@
   },
   {
    "id": "GRIT_B",
+   "ids": [
+    "GRIT_B"
+   ],
    "kind": "pot",
    "x_mm": 188.05,
    "y_mm": 97.0,
@@ -254,6 +361,9 @@
   },
   {
    "id": "COMP_B",
+   "ids": [
+    "COMP_B"
+   ],
    "kind": "pot",
    "x_mm": 198.3,
    "y_mm": 79.0,
@@ -261,6 +371,9 @@
   },
   {
    "id": "STEPS_B",
+   "ids": [
+    "STEPS_B"
+   ],
    "kind": "pot",
    "x_mm": 269.8,
    "y_mm": 14.5,
@@ -268,6 +381,9 @@
   },
   {
    "id": "ENGINE_B",
+   "ids": [
+    "ENGINE_B"
+   ],
    "kind": "pot",
    "x_mm": 288.55,
    "y_mm": 14.5,
@@ -275,6 +391,9 @@
   },
   {
    "id": "DETUNE_B",
+   "ids": [
+    "DETUNE_B"
+   ],
    "kind": "pot",
    "x_mm": 274.8,
    "y_mm": 74.4,
@@ -282,6 +401,9 @@
   },
   {
    "id": "SONG_B",
+   "ids": [
+    "SONG_B"
+   ],
    "kind": "pot",
    "x_mm": 256.8,
    "y_mm": 14.5,
@@ -289,6 +411,9 @@
   },
   {
    "id": "MORPH",
+   "ids": [
+    "MORPH"
+   ],
    "kind": "pot",
    "x_mm": 152.4,
    "y_mm": 53.0,
@@ -296,6 +421,9 @@
   },
   {
    "id": "TEMPO",
+   "ids": [
+    "TEMPO"
+   ],
    "kind": "pot",
    "x_mm": 139.4,
    "y_mm": 34.0,
@@ -303,6 +431,9 @@
   },
   {
    "id": "COUPLE",
+   "ids": [
+    "COUPLE"
+   ],
    "kind": "pot",
    "x_mm": 152.4,
    "y_mm": 34.0,
@@ -310,6 +441,9 @@
   },
   {
    "id": "SCALE",
+   "ids": [
+    "SCALE"
+   ],
    "kind": "pot",
    "x_mm": 132.9,
    "y_mm": 14.5,
@@ -317,6 +451,9 @@
   },
   {
    "id": "DRIFT",
+   "ids": [
+    "DRIFT"
+   ],
    "kind": "pot",
    "x_mm": 145.9,
    "y_mm": 14.5,
@@ -324,6 +461,9 @@
   },
   {
    "id": "REV_SIZE",
+   "ids": [
+    "REV_SIZE"
+   ],
    "kind": "pot",
    "x_mm": 136.4,
    "y_mm": 74.4,
@@ -331,6 +471,9 @@
   },
   {
    "id": "REV_DECAY",
+   "ids": [
+    "REV_DECAY"
+   ],
    "kind": "pot",
    "x_mm": 152.4,
    "y_mm": 79.0,
@@ -338,6 +481,9 @@
   },
   {
    "id": "REV_TONE",
+   "ids": [
+    "REV_TONE"
+   ],
    "kind": "pot",
    "x_mm": 152.4,
    "y_mm": 97.0,
@@ -345,6 +491,9 @@
   },
   {
    "id": "REV_DIFF",
+   "ids": [
+    "REV_DIFF"
+   ],
    "kind": "pot",
    "x_mm": 168.4,
    "y_mm": 74.4,
@@ -352,6 +501,9 @@
   },
   {
    "id": "CHOKE",
+   "ids": [
+    "CHOKE"
+   ],
    "kind": "pot",
    "x_mm": 158.9,
    "y_mm": 14.5,
@@ -359,6 +511,9 @@
   },
   {
    "id": "FILT_A",
+   "ids": [
+    "FILT_A"
+   ],
    "kind": "pot",
    "x_mm": 88.875,
    "y_mm": 53.0,
@@ -366,6 +521,9 @@
   },
   {
    "id": "FILT_B",
+   "ids": [
+    "FILT_B"
+   ],
    "kind": "pot",
    "x_mm": 215.925,
    "y_mm": 53.0,
@@ -373,6 +531,9 @@
   },
   {
    "id": "TIDE",
+   "ids": [
+    "TIDE"
+   ],
    "kind": "pot",
    "x_mm": 136.4,
    "y_mm": 50.22,
@@ -380,6 +541,9 @@
   },
   {
    "id": "FLUXRATE_A",
+   "ids": [
+    "FLUXRATE_A"
+   ],
    "kind": "pot",
    "x_mm": 54.0,
    "y_mm": 89.86,
@@ -387,6 +551,9 @@
   },
   {
    "id": "FLUXRATE_B",
+   "ids": [
+    "FLUXRATE_B"
+   ],
    "kind": "pot",
    "x_mm": 250.8,
    "y_mm": 89.86,
@@ -394,6 +561,9 @@
   },
   {
    "id": "FLUXFB_A",
+   "ids": [
+    "FLUXFB_A"
+   ],
    "kind": "pot",
    "x_mm": 67.0,
    "y_mm": 97.0,
@@ -401,6 +571,9 @@
   },
   {
    "id": "FLUXFB_B",
+   "ids": [
+    "FLUXFB_B"
+   ],
    "kind": "pot",
    "x_mm": 237.8,
    "y_mm": 97.0,
@@ -408,6 +581,9 @@
   },
   {
    "id": "COLOR_A",
+   "ids": [
+    "COLOR_A"
+   ],
    "kind": "pot",
    "x_mm": 23.5,
    "y_mm": 95.0,
@@ -415,6 +591,9 @@
   },
   {
    "id": "COLOR_B",
+   "ids": [
+    "COLOR_B"
+   ],
    "kind": "pot",
    "x_mm": 281.3,
    "y_mm": 95.0,
@@ -422,6 +601,9 @@
   },
   {
    "id": "LINK_A",
+   "ids": [
+    "LINK_A"
+   ],
    "kind": "pot",
    "x_mm": 80.0,
    "y_mm": 89.86,
@@ -429,6 +611,9 @@
   },
   {
    "id": "LINK_B",
+   "ids": [
+    "LINK_B"
+   ],
    "kind": "pot",
    "x_mm": 224.8,
    "y_mm": 89.86,
@@ -436,6 +621,9 @@
   },
   {
    "id": "REC_A",
+   "ids": [
+    "REC_A"
+   ],
    "kind": "key",
    "x_mm": 101.0,
    "y_mm": 14.5,
@@ -443,6 +631,9 @@
   },
   {
    "id": "REC_B",
+   "ids": [
+    "REC_B"
+   ],
    "kind": "key",
    "x_mm": 203.8,
    "y_mm": 14.5,
@@ -450,6 +641,9 @@
   },
   {
    "id": "REV_MIX_A",
+   "ids": [
+    "REV_MIX_A"
+   ],
    "kind": "pot",
    "x_mm": 129.75,
    "y_mm": 97.0,
@@ -457,6 +651,9 @@
   },
   {
    "id": "REV_MIX_B",
+   "ids": [
+    "REV_MIX_B"
+   ],
    "kind": "pot",
    "x_mm": 175.05,
    "y_mm": 97.0,
@@ -464,6 +661,9 @@
   },
   {
    "id": "SHUFFLE",
+   "ids": [
+    "SHUFFLE"
+   ],
    "kind": "pot",
    "x_mm": 165.4,
    "y_mm": 34.0,
@@ -471,6 +671,9 @@
   },
   {
    "id": "PACE",
+   "ids": [
+    "PACE"
+   ],
    "kind": "pot",
    "x_mm": 168.4,
    "y_mm": 50.22,
@@ -478,6 +681,9 @@
   },
   {
    "id": "DEPTH_A",
+   "ids": [
+    "DEPTH_A"
+   ],
    "kind": "pot",
    "x_mm": 104.875,
    "y_mm": 50.22,
@@ -485,6 +691,9 @@
   },
   {
    "id": "DEPTH_B",
+   "ids": [
+    "DEPTH_B"
+   ],
    "kind": "pot",
    "x_mm": 199.925,
    "y_mm": 50.22,
@@ -492,6 +701,9 @@
   },
   {
    "id": "PULL",
+   "ids": [
+    "PULL"
+   ],
    "kind": "pot",
    "x_mm": 171.9,
    "y_mm": 14.5,
@@ -499,6 +711,9 @@
   },
   {
    "id": "PAN_A",
+   "ids": [
+    "PAN_A"
+   ],
    "kind": "pot",
    "x_mm": 103.75,
    "y_mm": 97.0,
@@ -506,6 +721,9 @@
   },
   {
    "id": "PAN_B",
+   "ids": [
+    "PAN_B"
+   ],
    "kind": "pot",
    "x_mm": 201.05,
    "y_mm": 97.0,
@@ -513,6 +731,9 @@
   },
   {
    "id": "MODBTN",
+   "ids": [
+    "MODBTN"
+   ],
    "kind": "key",
    "x_mm": 290.8,
    "y_mm": 114.0,
@@ -520,6 +741,9 @@
   },
   {
    "id": "IN_L",
+   "ids": [
+    "IN_L"
+   ],
    "kind": "jack",
    "x_mm": 33.0,
    "y_mm": 114.0,
@@ -527,6 +751,9 @@
   },
   {
    "id": "IN_R",
+   "ids": [
+    "IN_R"
+   ],
    "kind": "jack",
    "x_mm": 44.5,
    "y_mm": 114.0,
@@ -534,6 +761,9 @@
   },
   {
    "id": "CLOCK",
+   "ids": [
+    "CLOCK"
+   ],
    "kind": "jack",
    "x_mm": 136.0,
    "y_mm": 114.0,
@@ -541,6 +771,9 @@
   },
   {
    "id": "RESET",
+   "ids": [
+    "RESET"
+   ],
    "kind": "jack",
    "x_mm": 168.8,
    "y_mm": 114.0,
@@ -548,6 +781,9 @@
   },
   {
    "id": "MOD1_A",
+   "ids": [
+    "MOD1_A"
+   ],
    "kind": "jack",
    "x_mm": 79.0,
    "y_mm": 114.0,
@@ -555,6 +791,9 @@
   },
   {
    "id": "MOD2_A",
+   "ids": [
+    "MOD2_A"
+   ],
    "kind": "jack",
    "x_mm": 90.5,
    "y_mm": 114.0,
@@ -562,6 +801,9 @@
   },
   {
    "id": "MOD3_A",
+   "ids": [
+    "MOD3_A"
+   ],
    "kind": "jack",
    "x_mm": 102.0,
    "y_mm": 114.0,
@@ -569,6 +811,9 @@
   },
   {
    "id": "MOD4_A",
+   "ids": [
+    "MOD4_A"
+   ],
    "kind": "jack",
    "x_mm": 113.5,
    "y_mm": 114.0,
@@ -576,6 +821,9 @@
   },
   {
    "id": "MOD1_B",
+   "ids": [
+    "MOD1_B"
+   ],
    "kind": "jack",
    "x_mm": 225.8,
    "y_mm": 114.0,
@@ -583,6 +831,9 @@
   },
   {
    "id": "MOD2_B",
+   "ids": [
+    "MOD2_B"
+   ],
    "kind": "jack",
    "x_mm": 214.3,
    "y_mm": 114.0,
@@ -590,6 +841,9 @@
   },
   {
    "id": "MOD3_B",
+   "ids": [
+    "MOD3_B"
+   ],
    "kind": "jack",
    "x_mm": 202.8,
    "y_mm": 114.0,
@@ -597,6 +851,9 @@
   },
   {
    "id": "MOD4_B",
+   "ids": [
+    "MOD4_B"
+   ],
    "kind": "jack",
    "x_mm": 191.3,
    "y_mm": 114.0,
@@ -604,6 +861,9 @@
   },
   {
    "id": "OUT_L",
+   "ids": [
+    "OUT_L"
+   ],
    "kind": "jack",
    "x_mm": 260.3,
    "y_mm": 114.0,
@@ -611,6 +871,9 @@
   },
   {
    "id": "OUT_R",
+   "ids": [
+    "OUT_R"
+   ],
    "kind": "jack",
    "x_mm": 271.8,
    "y_mm": 114.0,
@@ -618,6 +881,9 @@
   },
   {
    "id": "PITCH_A",
+   "ids": [
+    "PITCH_A"
+   ],
    "kind": "jack",
    "x_mm": 56.0,
    "y_mm": 114.0,
@@ -625,6 +891,9 @@
   },
   {
    "id": "GATE_A",
+   "ids": [
+    "GATE_A"
+   ],
    "kind": "jack",
    "x_mm": 67.5,
    "y_mm": 114.0,
@@ -632,6 +901,9 @@
   },
   {
    "id": "PITCH_B",
+   "ids": [
+    "PITCH_B"
+   ],
    "kind": "jack",
    "x_mm": 248.8,
    "y_mm": 114.0,
@@ -639,6 +911,9 @@
   },
   {
    "id": "GATE_B",
+   "ids": [
+    "GATE_B"
+   ],
    "kind": "jack",
    "x_mm": 237.3,
    "y_mm": 114.0,
@@ -646,6 +921,9 @@
   },
   {
    "id": "GATE_A_L",
+   "ids": [
+    "GATE_A_L"
+   ],
    "kind": "led",
    "x_mm": 70.3,
    "y_mm": 41.208,
@@ -653,6 +931,9 @@
   },
   {
    "id": "GATE_B_L",
+   "ids": [
+    "GATE_B_L"
+   ],
    "kind": "led",
    "x_mm": 238.6,
    "y_mm": 41.208,
@@ -660,6 +941,9 @@
   },
   {
    "id": "REC_A_L",
+   "ids": [
+    "REC_A_L"
+   ],
    "kind": "led",
    "x_mm": 108.5,
    "y_mm": 14.5,
@@ -667,6 +951,9 @@
   },
   {
    "id": "REC_B_L",
+   "ids": [
+    "REC_B_L"
+   ],
    "kind": "led",
    "x_mm": 196.3,
    "y_mm": 14.5,
@@ -674,6 +961,9 @@
   },
   {
    "id": "SRC_A_L",
+   "ids": [
+    "SRC_A_L"
+   ],
    "kind": "led",
    "x_mm": 75.475,
    "y_mm": 57.428,
@@ -681,6 +971,9 @@
   },
   {
    "id": "SRC_B_L",
+   "ids": [
+    "SRC_B_L"
+   ],
    "kind": "led",
    "x_mm": 234.525,
    "y_mm": 57.428,
@@ -688,6 +981,9 @@
   },
   {
    "id": "FLT_A_L",
+   "ids": [
+    "FLT_A_L"
+   ],
    "kind": "led",
    "x_mm": 91.475,
    "y_mm": 61.808,
@@ -695,6 +991,9 @@
   },
   {
    "id": "FLT_B_L",
+   "ids": [
+    "FLT_B_L"
+   ],
    "kind": "led",
    "x_mm": 218.525,
    "y_mm": 61.808,
@@ -702,6 +1001,9 @@
   },
   {
    "id": "CLR_A_L",
+   "ids": [
+    "CLR_A_L"
+   ],
    "kind": "led",
    "x_mm": 26.1,
    "y_mm": 103.808,
@@ -709,6 +1011,9 @@
   },
   {
    "id": "CLR_B_L",
+   "ids": [
+    "CLR_B_L"
+   ],
    "kind": "led",
    "x_mm": 283.9,
    "y_mm": 103.808,
@@ -716,6 +1021,9 @@
   },
   {
    "id": "LVL_A_L",
+   "ids": [
+    "LVL_A_L"
+   ],
    "kind": "led",
    "x_mm": 108.55,
    "y_mm": 87.808,
@@ -723,6 +1031,9 @@
   },
   {
    "id": "LVL_B_L",
+   "ids": [
+    "LVL_B_L"
+   ],
    "kind": "led",
    "x_mm": 200.35,
    "y_mm": 87.808,
@@ -730,6 +1041,9 @@
   },
   {
    "id": "SONG_A_L",
+   "ids": [
+    "SONG_A_L"
+   ],
    "kind": "led",
    "x_mm": 50.6,
    "y_mm": 21.708,
@@ -737,6 +1051,9 @@
   },
   {
    "id": "SONG_B_L",
+   "ids": [
+    "SONG_B_L"
+   ],
    "kind": "led",
    "x_mm": 259.4,
    "y_mm": 21.708,
@@ -744,6 +1061,9 @@
   },
   {
    "id": "TEMPO_L",
+   "ids": [
+    "TEMPO_L"
+   ],
    "kind": "led",
    "x_mm": 142.0,
    "y_mm": 41.208,
@@ -751,6 +1071,9 @@
   },
   {
    "id": "SYNC_L",
+   "ids": [
+    "SYNC_L"
+   ],
    "kind": "led",
    "x_mm": 129.3,
    "y_mm": 114.0,
@@ -758,6 +1081,9 @@
   },
   {
    "id": "MODBTN_L",
+   "ids": [
+    "MODBTN_L"
+   ],
    "kind": "led",
    "x_mm": 284.1,
    "y_mm": 114.0,
@@ -765,6 +1091,9 @@
   },
   {
    "id": "SHIFTBTN_L",
+   "ids": [
+    "SHIFTBTN_L"
+   ],
    "kind": "led",
    "x_mm": 20.7,
    "y_mm": 114.0,
@@ -772,6 +1101,9 @@
   },
   {
    "id": "CEIL_L",
+   "ids": [
+    "CEIL_L"
+   ],
    "kind": "led",
    "x_mm": 278.5,
    "y_mm": 114.0,
@@ -779,6 +1111,9 @@
   },
   {
    "id": "SHIFTBTN",
+   "ids": [
+    "SHIFTBTN"
+   ],
    "kind": "key",
    "x_mm": 14.0,
    "y_mm": 114.0,
@@ -786,6 +1121,9 @@
   },
   {
    "id": "SD",
+   "ids": [
+    "SD"
+   ],
    "kind": "sd",
    "x_mm": 152.4,
    "y_mm": 114.0,
@@ -794,6 +1132,9 @@
   },
   {
    "id": "MOUNT1",
+   "ids": [
+    "MOUNT1"
+   ],
    "kind": "mount",
    "x_mm": 7.7,
    "y_mm": 3.0,
@@ -802,6 +1143,9 @@
   },
   {
    "id": "MOUNT2",
+   "ids": [
+    "MOUNT2"
+   ],
    "kind": "mount",
    "x_mm": 297.26,
    "y_mm": 3.0,
@@ -810,6 +1154,9 @@
   },
   {
    "id": "MOUNT3",
+   "ids": [
+    "MOUNT3"
+   ],
    "kind": "mount",
    "x_mm": 7.7,
    "y_mm": 125.5,
@@ -818,6 +1165,9 @@
   },
   {
    "id": "MOUNT4",
+   "ids": [
+    "MOUNT4"
+   ],
    "kind": "mount",
    "x_mm": 297.26,
    "y_mm": 125.5,

@@ -4,7 +4,8 @@
 
 Every coordinate comes from gen_hw_panel.py; this file adds hole sizes only
 through hw.HOLE_D and places nothing. P4 (the Rev A board) places its parts
-from FireflowHW-holes.json, so plate and board share one source.
+from FireflowHW-holes.json, so plate and board share one source. Controls
+that share a knob share one hole, listed together under "ids".
 
 Run from the repo root:  python host/vcv/res/gen_hw_cut.py
 """
@@ -33,24 +34,28 @@ def _r3(v):
 
 def holes():
     """One hole per distinct control position, then the SD slot and the four
-    mounting slots. ATTACK_x and STAGES_x share a knob, hence one hole."""
-    out, seen = [], set()
+    mounting slots. ATTACK_x and STAGES_x share a knob, hence one hole;
+    "ids" lists every control at that position."""
+    out, by_pos = [], {}
     for c in hw.ALL_HW:
         key = (_r3(c.x), _r3(c.y))
-        if key in seen:
+        if key in by_pos:
+            by_pos[key]["ids"].append(c.enum)
             continue
-        seen.add(key)
         cls = hw.hw_class(c.enum)
-        out.append({"id": c.enum, "kind": KIND[cls], "x_mm": _r3(c.x),
-                    "y_mm": _r3(c.y), "d_mm": hw.HOLE_D[cls]})
-    out.append({"id": "SD", "kind": "sd", "x_mm": _r3(hw.SD_X),
+        by_pos[key] = {"id": c.enum, "ids": [c.enum], "kind": KIND[cls],
+                       "x_mm": _r3(c.x), "y_mm": _r3(c.y),
+                       "d_mm": hw.HOLE_D[cls]}
+        out.append(by_pos[key])
+    out.append({"id": "SD", "ids": ["SD"], "kind": "sd", "x_mm": _r3(hw.SD_X),
                 "y_mm": _r3(hw.SD_Y), "w_mm": hw.SD_W, "h_mm": hw.SD_H})
     n = 0
     for y in MOUNT_Y:
         for x in MOUNT_X:
             n += 1
-            out.append({"id": f"MOUNT{n}", "kind": "mount", "x_mm": _r3(x),
-                        "y_mm": _r3(y), "w_mm": MOUNT_W, "h_mm": MOUNT_H})
+            out.append({"id": f"MOUNT{n}", "ids": [f"MOUNT{n}"],
+                        "kind": "mount", "x_mm": _r3(x), "y_mm": _r3(y),
+                        "w_mm": MOUNT_W, "h_mm": MOUNT_H})
     return out
 
 
@@ -81,10 +86,12 @@ def shape(h, stroke, width):
 
 def cut_svg():
     P = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{hw.mm(hw.W)}mm" '
-         f'height="{hw.mm(hw.Hh)}mm" viewBox="0 0 {hw.mm(hw.W)} {hw.mm(hw.Hh)}">',
-         f'<rect x="{hw.mm(TRIM)}" y="0.000" width="{hw.mm(PLATE_W)}" '
-         f'height="{hw.mm(hw.Hh)}" fill="none" stroke="{BLUE}" stroke-width="0.01"/>']
+         f'height="{hw.mm(hw.Hh)}mm" viewBox="0 0 {hw.mm(hw.W)} {hw.mm(hw.Hh)}">']
     P += [shape(h, BLUE, "0.01") for h in holes()]
+    # Outline last: a service that cuts in file order must not drop the plate
+    # out of the sheet before its holes are cut.
+    P.append(f'<rect x="{hw.mm(TRIM)}" y="0.000" width="{hw.mm(PLATE_W)}" '
+             f'height="{hw.mm(hw.Hh)}" fill="none" stroke="{BLUE}" stroke-width="0.01"/>')
     P.append("</svg>")
     return "\n".join(P) + "\n"
 

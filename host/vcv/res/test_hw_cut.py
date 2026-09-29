@@ -13,6 +13,8 @@ import gen_hw_cut as cut
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FAILS = []
+# Eurorack standard: slot centre 3.0 mm in, slot 3.2 mm high -> 1.4 mm left.
+MOUNT_EDGE_WEB = 1.4
 
 
 def check(cond, msg):
@@ -54,6 +56,41 @@ def web(a, b):
     return math.hypot(dx, dy)
 
 
+def _parsed_shapes(svg, stroke):
+    """Every circle and rect carrying `stroke`, read back from the SVG text
+    without going through cut.shape(), as (kind, cx, cy, a, b): circles as
+    r, r; rects as centre and half-sizes."""
+    num = r'(-?[\d.]+)'
+    out = []
+    for m in re.finditer(rf'<circle cx="{num}" cy="{num}" r="{num}"[^>]*'
+                         rf'stroke="{re.escape(stroke)}"', svg):
+        cx, cy, r = (float(v) for v in m.groups())
+        out.append(("circle", cx, cy, r, r))
+    for m in re.finditer(rf'<rect x="{num}" y="{num}" width="{num}" '
+                         rf'height="{num}"[^>]*stroke="{re.escape(stroke)}"', svg):
+        x, y, w, h = (float(v) for v in m.groups())
+        out.append(("rect", x + w / 2, y + h / 2, w / 2, h / 2))
+    return out
+
+
+def _check_holes_parsed(svg, stroke, where):
+    """Each committed hole must match exactly one parsed shape in centre and
+    size, to 0.001 mm."""
+    parsed = _parsed_shapes(svg, stroke)
+    for h in _committed_holes():
+        if "d_mm" in h:
+            kind, a, b = "circle", h["d_mm"] / 2, h["d_mm"] / 2
+        else:
+            kind, a, b = "rect", h["w_mm"] / 2, h["h_mm"] / 2
+        hit = [s for s in parsed
+               if s[0] == kind and abs(s[1] - h["x_mm"]) < 0.001
+               and abs(s[2] - h["y_mm"]) < 0.001
+               and abs(s[3] - a) < 0.001 and abs(s[4] - b) < 0.001]
+        check(len(hit) == 1,
+              f"{h['id']} matches {len(hit)} shapes in the {where} "
+              f"(want one {kind} at {h['x_mm']},{h['y_mm']} size {a},{b})")
+
+
 def test_every_control_has_one_hole_where_it_sits():
     holes = _committed_holes()
     for c in hw.ALL_HW:
@@ -64,6 +101,15 @@ def test_every_control_has_one_hole_where_it_sits():
             want = cut.KIND[hw.hw_class(c.enum)]
             check(at[0]["kind"] == want,
                   f"{c.enum}'s hole is a {at[0]['kind']}, not a {want}")
+
+
+def test_every_control_id_is_in_the_hole_list():
+    """Controls sharing a knob share one hole; P4 places the board from the
+    hole list, so every control enum must appear in exactly one hole's ids."""
+    holes = _committed_holes()
+    for c in hw.ALL_HW:
+        n = sum(1 for h in holes if c.enum in h.get("ids", []))
+        check(n == 1, f"{c.enum} is listed in {n} holes' ids, expected 1")
 
 
 def test_hole_counts():
@@ -95,6 +141,12 @@ def test_holes_stay_on_the_plate_and_off_the_rails():
         x0, y0, x1, y1 = _extent(h)
         check(x0 >= x_lo - 1e-6 and x1 <= x_hi + 1e-6,
               f"{h['id']} reaches within {hw.MIN_WEB} mm of a side edge")
+        # Top/bottom edge: the rail slots keep the Eurorack standard, every
+        # other hole keeps the normal web.
+        edge = MOUNT_EDGE_WEB if h["kind"] == "mount" else hw.MIN_WEB
+        check(y0 >= edge - 1e-6 and hw.Hh - y1 >= edge - 1e-6,
+              f"{h['id']} keeps {min(y0, hw.Hh - y1):.2f} mm to the top/bottom "
+              f"edge, under {edge}")
         if h["kind"] == "mount":
             continue
         check(y0 >= hw.KEEP_TOP - 1e-6 and y1 <= hw.KEEP_BOT + 1e-6,
@@ -133,6 +185,7 @@ def test_cut_file_is_exactly_the_holes():
           f"cut file has {len(shapes)} shapes, expected {len(holes)} holes + 1 outline")
     for h in holes:
         check(cut.shape(h, cut.BLUE, "0.01") in svg, f"{h['id']} is not cut")
+    _check_holes_parsed(svg, cut.BLUE, "cut file")
 
 
 def test_print_sheet_is_true_to_scale():
@@ -155,6 +208,10 @@ def test_print_sheet_is_true_to_scale():
     for h in cut.holes():
         check(cut.shape(h, cut.PRINT_INK, "0.25") in svg,
               f"{h['id']} is not outlined on the print sheet")
+    # Only the overlay carries the print ink strokes if the artwork uses it
+    # too, so parse the overlay alone.
+    _check_holes_parsed(svg.split('<g id="print-overlay">', 1)[-1],
+                        cut.PRINT_INK, "print overlay")
 
 
 def main():

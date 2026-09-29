@@ -224,8 +224,9 @@ CLASS_R = {"G": 8.5, "S": 6.0, "P": 4.0, "J": 4.0, "L": 1.5}
 HOLE_D = {"G": 7.0, "S": 7.0, "J": 6.0, "P": 6.2, "L": 3.1}
 # Least material between two hole edges -- acrylic cracks at thinner webs.
 MIN_WEB = 2.0
-# Satellite lamp distance from its key or jack: the larger anchor hole, the
-# web, the LED hole -- 3.1 + 2.0 + 1.55 = 6.65, rounded up to 6.7.
+# Satellite lamp distance from its key or jack: the larger anchor hole's
+# radius, the web, the LED hole's radius -- 3.1 + 2.0 + 1.55 = 6.65, rounded
+# up to 6.7.
 SAT_D = 6.7
 CLASS_LBL_DY = {cls: (0.0 if cls == "L" else r + CAPTION_GAP)
                 for cls, r in BODY_R.items()}
