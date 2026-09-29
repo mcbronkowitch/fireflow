@@ -27,7 +27,7 @@ def main():
     failures = []
     with tempfile.TemporaryDirectory() as tmp:
         written = build.write_all(tmp)
-        if len(written) < 14:
+        if len(written) < 17:
             failures.append("build.write_all wrote only %d files" % len(written))
         for rel in written:
             committed = os.path.join(HERE, rel)

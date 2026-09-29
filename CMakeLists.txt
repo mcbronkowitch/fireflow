@@ -413,6 +413,10 @@ add_test(NAME reva_check_guard
                  --project ${CMAKE_CURRENT_SOURCE_DIR}/hardware/reva/build.py
                  --full --out ${CMAKE_BINARY_DIR}/reva-check
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME hw_gen_bom_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/hardware/gen/test_bom.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
 # The Python guards need a runner or they rot unnoticed -- tools/test_*.py in
 # this repo is wired to nothing, and the VCV panel guard stood red for 23

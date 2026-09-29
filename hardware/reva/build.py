@@ -19,6 +19,9 @@ for p in (HW, HERE):
 
 import assign                      # noqa: E402
 import blocks                      # noqa: E402
+import parts                       # noqa: E402
+import review                      # noqa: E402
+from gen import bom as B           # noqa: E402
 from gen.project import Project    # noqa: E402
 
 PANEL_MAP = os.path.join(HERE, "panel-map.json")
@@ -74,7 +77,16 @@ def write_all(root=HERE):
     # leaves by-products (.kicad_prl, backups, caches) that are not ours.
     names = ([proj.name + ".kicad_sch"] + [n + ".kicad_sch" for n in sheets]
              + ["sym-lib-table", "fp-lib-table", proj.name + ".kicad_pro"])
-    return sorted("%s/%s" % (KICAD, n) for n in names)
+    written = ["%s/%s" % (KICAD, n) for n in names]
+    # The BOMs and the review sheet sit next to build.py, not under kicad/.
+    files = {"bom-jlc.csv": B.to_csv(B.jlc_rows(proj.parts()), B.JLC_FIELDS),
+             "bom-hand.csv": B.to_csv(B.hand_rows(proj.parts()), B.HAND_FIELDS),
+             "review.md": review.review_md(proj, load_panel_map(),
+                                           C.load_waivers(WAIVERS), parts.CATALOGUE)}
+    for name, text in files.items():
+        with open(os.path.join(root, name), "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(text)
+    return sorted(written + list(files))
 
 
 def main():
