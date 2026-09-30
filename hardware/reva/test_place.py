@@ -38,7 +38,8 @@ except ImportError:
 import io                    # noqa: E402
 import contextlib            # noqa: E402
 import assign                # noqa: E402
-import place as P            # noqa: E402
+import check_kit as CK       # noqa: E402
+import place as P           # noqa: E402
 import place_check as PC     # noqa: E402
 
 FAILS = []
@@ -91,23 +92,6 @@ def check(cond, what):
 CLASS_WORDS = {"body", "pad", "rotation"} | set(PC.GATED_DRC)
 
 
-def key_names(key):
-    """The part names a KNOWN_PANEL key stands for: when the first token is a
-    known check class word it is dropped; the rest splits on "/". A bare key
-    (the "edge" check's) is names only, so a stray space leaves the whole
-    string as one name, which no part has."""
-    head, _sp, tail = key.partition(" ")
-    rest = tail if head in CLASS_WORDS else key
-    return [n for n in rest.split("/") if n]
-
-
-def key_allowed(key, allowed):
-    names = set(key_names(key))
-    if not names or not names <= allowed:
-        return False
-    return all(names <= pair for pair in PAIRS if names & pair)
-
-
 def scratch(prefix):
     return tempfile.mkdtemp(prefix=prefix, dir=ROOT)
 
@@ -148,9 +132,9 @@ def check_key_names():
            "body SONG_A/GATE_A_L",    # names from two different pairs' worlds
            "body "]                   # no names at all
     for k in good:
-        check(key_allowed(k, allowed), "key_allowed accepts %r" % k)
+        check(CK.key_allowed(k, allowed, PAIRS, CLASS_WORDS), "key_allowed accepts %r" % k)
     for k in bad:
-        check(not key_allowed(k, allowed), "key_allowed refuses %r" % k)
+        check(not CK.key_allowed(k, allowed, PAIRS, CLASS_WORDS), "key_allowed refuses %r" % k)
 
 
 def check_parser():
@@ -203,7 +187,7 @@ def run():
     for chk, keys in sorted(PC.KNOWN_PANEL.items()):
         for k in sorted(keys):
             n_keys += 1
-            check(key_allowed(k, allowed),
+            check(CK.key_allowed(k, allowed, PAIRS, CLASS_WORDS),
                   "KNOWN_PANEL[%s] %r names only jack-row parts, SONG parts or an admitted pair" % (chk, k))
     check(n_keys > 0, "KNOWN_PANEL was examined (%d keys)" % n_keys)
 
@@ -239,7 +223,7 @@ def run():
         if name == "drc":
             # the finding must be parsed, not an empty "clearance " key
             cref = sorted(base.decouplers)[0]
-            hits = [k for k in new_keys(text) if cref in key_names(k)]
+            hits = [k for k in new_keys(text) if cref in CK.key_names(k, CLASS_WORDS)]
             check(bool(hits), "the drc sabotage's NEW finding names decoupler %s (NEW keys: %s)" % (
                 cref, new_keys(text)))
 
