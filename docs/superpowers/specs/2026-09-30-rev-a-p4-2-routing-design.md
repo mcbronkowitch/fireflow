@@ -267,6 +267,17 @@ for byte.
      panel pass.
 7. **Reported per net:** length (sum of segments) and via count, in
    `Result.stats[name]`.
+8. **Via-only keepouts** (added 2026-09-30 after Task 6's probes). An
+   obstacle may block vias only (the via class), leaving tracks free.
+   - Probed on Task 6's board: router vias 0.465 mm (SENSE_1, U_SM.A4) and
+     0.523 / 0.677 mm (M6_CH6, MUX_S1, D10.1) edge to edge from GND
+     through-hole pads starved their In1.Cu thermals. Three GND stitching vias
+     cut an SM_3V3 fragment off at RV41.3 on In2.Cu.
+   - Rev A: every through-hole pad of a plane net gets a via-only ring of
+     1.0 mm (thermal gap 0.5 + zone clearance 0.5), edge to edge. The stitch
+     search keeps the same distance (a `stitch_plane_pads` option, off by
+     default for the coupon). Measured: 1.0 mm clears both starved thermals.
+   - Off by default: the coupon and `hw_gen_route_guard` stay byte for byte.
 
 The router measures nothing it gates. Every rule is judged by `route_check.py`
 on the saved board.
@@ -302,6 +313,13 @@ on the saved board.
   CEIL_L/OUT_R and SHIFTBTN_L/IN_L, each only with its own partner. They must
   be gone after the panel pass like every other entry.
 - An unrouted connection between two non-panel pads is never listable.
+- An unconnected item on a plane net (GND, SM_3V3) is keyed by the pad that
+  is cut off from its plane, found through the board's own connectivity, not
+  by the partner kicad-cli pairs it with (Bastian, 2026-09-30). Task 6 found
+  the SONG lamps' legs overlapping their pots' pin 3 (D3 on RV3.3, D16 on
+  RV56.3, 0.43–0.63 mm), so SM_3V3 cannot reach them; kicad-cli paired
+  RV56.3 with RV59.3 (RANGE_B), its nearest SM_3V3 pad. The keys are
+  `unrouted SONG_A` and `unrouted SONG_B`.
 - A listed item that no longer fails is red.
 - `test_route.py` asserts the name rule.
 
@@ -364,8 +382,16 @@ A step that examined nothing is red.
    - The box comes from `gen/place.body_box`, which is geometry, not a
      threshold.
 8. **planes**
-   - After the fill, In1.Cu GND and In2.Cu SM_3V3 are each exactly one filled
-     island.
+   - After the fill, In1.Cu GND and In2.Cu SM_3V3 each have one main island,
+     and every other filled outline touches a pad of its own net. A free
+     island is red. *Amended by Bastian 2026-09-30:* the first rule, "exactly
+     one island", cannot hold on this board. Task 6 found four GND fragments
+     of 0.78–2.59 mm²: three between J_PWR's two pin rows (pads 0.84 mm
+     apart) and a dead-end spoke at U_SM.A4. All are tied to GND pads, and
+     none is caused by routing. The step reports every fragment with its
+     place and area. `starved_thermal` (§5.2) catches weak connections.
+   - Read the zone's layer through its layer set: `ZONE.GetLayerName()`
+     returns "F.Cu" for the In1/In2 plane zones (probed 2026-09-30).
    - Every SMD pad on GND or SM_3V3 has its stitching via: the number of vias
      on the two plane nets is at least the number of SMD pads on them. The
      DRC's `unconnected_items` covers connectivity; this count keeps a
