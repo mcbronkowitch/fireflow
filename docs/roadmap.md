@@ -4110,7 +4110,14 @@ grip test: the jack row (`JACK_Y` must drop to ≤ 112.77) and the SONG
 lamps (2.6 mm lower). GATE_A_L and LVL_B_L also wait: their legs meet
 SOURCE_A's and PAN_B's pins in every LED rotation. Spec
 `docs/superpowers/specs/2026-09-29-rev-a-p4-1-placement-design.md`;
-renders `docs/hardware/placement/`.
+renders `docs/hardware/placement/`. Hand-off: the committed
+`hardware/reva/kicad/reva.kicad_pro` is P3's and carries no board design
+rules. KiCad 10's defaults equal P4-1's today (probed for the 0.5 mm
+copper-to-edge clearance: a board with no project file gets the same DRC), but
+P4-2's net classes need an owner, either `build.py`'s project writer or a
+`.kicad_dru`. The placed footprints carry no schematic `(path …)`
+links, so "Update PCB from schematic" and parity checks will not match them
+(P4-3).
 
 **2026-09-29 — P4a routing spike done; decided:** P4 routes with our own
 router on 4 layers (+$25.60 per five boards), Bastian accepted the

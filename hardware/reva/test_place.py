@@ -12,7 +12,11 @@ exit code is the verdict. Re-runs itself under KiCad's Python.
    LED/pot pairs GATE_A_L/SOURCE_A and LVL_B_L/PAN_B, each pair only with its
    own partner, until the panel pass. Every name in every key is checked.
 6. The DRC report parser reads every recorded line shape, and the drc
-   sabotage's finding names the sabotaged decoupler (not an empty key)."""
+   sabotage's finding names the sabotaged decoupler (not an empty key).
+7. The thresholds (outline, edge clearance, USB distance, shadow size) are
+   place_check.py's own constants, and the sabotages module_usb, edge_outline
+   and drc_empty (a report with no unconnected_items) are each red for their
+   own stated reason."""
 import os
 import shutil
 import subprocess
@@ -81,11 +85,19 @@ def check(cond, what):
         FAILS.append(what)
 
 
+# The check classes a KNOWN_PANEL key may start with: the front check's
+# ("body", "pad", "rotation") and the DRC classes place_check gates. Any other
+# first token is not a class and stays part of the name.
+CLASS_WORDS = {"body", "pad", "rotation"} | set(PC.GATED_DRC)
+
+
 def key_names(key):
-    """The part names a KNOWN_PANEL key stands for: with a space, the first
-    token is the check's class ("body", "pad", "rotation", "clearance", ...)
-    and is dropped; the rest splits on "/"."""
-    rest = key.split(" ", 1)[1] if " " in key else key
+    """The part names a KNOWN_PANEL key stands for: when the first token is a
+    known check class word it is dropped; the rest splits on "/". A bare key
+    (the "edge" check's) is names only, so a stray space leaves the whole
+    string as one name, which no part has."""
+    head, _sp, tail = key.partition(" ")
+    rest = tail if head in CLASS_WORDS else key
     return [n for n in rest.split("/") if n]
 
 
@@ -121,6 +133,24 @@ def new_keys(text):
     """The keys of every [NEW] detail line ("<key>: <message> [NEW]")."""
     return [line.strip().split(": ", 1)[0] for line in text.splitlines()
             if line.rstrip().endswith("[NEW]")]
+
+
+def check_key_names():
+    """The name check is itself able to go red (a key it should refuse)."""
+    allowed = {"CLOCK", "IN_L", "SONG_A", "SONG_A_L", "GATE_A_L", "SOURCE_A"}
+    good = ["CLOCK", "body SONG_A/SONG_A_L", "pad SONG_A_L/SONG_A",
+            "copper_edge_clearance CLOCK", "shorting_items GATE_A_L/SOURCE_A"]
+    bad = ["NOT_A_PART CLOCK",        # bare edge key with a stray space: only the tail "CLOCK" used to be checked
+           "CLOCK stray",
+           "CLOCK NOT_A_PART",        # same, and the tail is not a part either
+           "widget CLOCK",            # an unknown first token is not a class word
+           "body CLOCK/NOT_A_PART",   # a class word, but one name is not admitted
+           "body SONG_A/GATE_A_L",    # names from two different pairs' worlds
+           "body "]                   # no names at all
+    for k in good:
+        check(key_allowed(k, allowed), "key_allowed accepts %r" % k)
+    for k in bad:
+        check(not key_allowed(k, allowed), "key_allowed refuses %r" % k)
 
 
 def check_parser():
@@ -177,6 +207,7 @@ def run():
                   "KNOWN_PANEL[%s] %r names only jack-row parts, SONG parts or an admitted pair" % (chk, k))
     check(n_keys > 0, "KNOWN_PANEL was examined (%d keys)" % n_keys)
 
+    check_key_names()
     check_parser()
     check_sabotage_coverage()
 
@@ -199,6 +230,12 @@ def run():
         red = red_steps(text)
         want = PC.TURNS_RED[name]
         check(want in red, "sabotage %s turns %s red (red: %s)" % (name, want, sorted(red)))
+        if name in PC.WHY:
+            # red for its own reason, not for a bystander: the phrase is on a
+            # RED step line or one of its details
+            red_lines = [ln for ln in text.splitlines() if PC.WHY[name] in ln]
+            check(bool(red_lines), "sabotage %s is red for its own reason (%r): %s" % (
+                name, PC.WHY[name], red_lines[0].strip() if red_lines else "no such line"))
         if name == "drc":
             # the finding must be parsed, not an empty "clearance " key
             cref = sorted(base.decouplers)[0]

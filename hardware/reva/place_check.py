@@ -3,6 +3,7 @@
 only if every gated step is. A step that examined nothing is red. Known
 panel violations (spec §5.3) print as known; an unlisted failure is red, and
 so is a listed one that no longer fails."""
+import json
 import math
 import os
 import re
@@ -13,6 +14,18 @@ import place as P
 from gen import kipcb
 from gen import pcb_proof as PP
 from gen import place as PL
+
+# The spec's thresholds live HERE, not in place.py: a check that read them from
+# the placer would move with the placer and pass whatever it did (found in the
+# final review: USB 30 / edge 0.3 in place.py left every step green). Changing
+# one of these is a spec change.
+OUTLINE_MM = (2.0, 9.25, 302.8, 119.25)   # spec §4.1: x 2.0-302.8, y 9.25-119.25
+EDGE_CLEAR_MM = 0.5                        # spec §4.1: copper-to-edge clearance
+USB_CLEAR_MM = 35.0                        # spec §4.3: J_PWR courtyard to the module shadow
+SHADOW_MM = (68.17, 40.18)                 # spec §4.3: the module shadow, w x h
+SHADOW_TOL_MM = 0.1                        # spec §4.3
+OUTLINE_TOL_MM = 1e-3
+_TEXT_CLASSES = ("PCB_TEXT", "PCB_TEXTBOX", "PCB_FIELD")   # not part of a shadow (spec §4.3)
 
 # Filled from the first full run of Task 3/4/6, restricted to the jack row, the
 # SONG clusters and, by the owner's decision (Bastian, 2026-09-29), the
@@ -29,10 +42,12 @@ KNOWN_PANEL = {
         "body SONG_B/SONG_B_L",
         "pad SONG_A_L/SONG_A",
         "pad SONG_B_L/SONG_B",
-        # LED legs overlap SOURCE_A's / PAN_B's pins in every LED rotation; no
-        # pot rotation fixes it without breaking the cap marker (T18, 20 deg
-        # steps) or the jack row after the panel pass; waits for the panel
-        # pass (Bastian, 2026-09-29).
+        # LED legs overlap SOURCE_A's / PAN_B's pins in every LED rotation.
+        # SOURCE_A: no SOURCE_A rotation leaves both GATE_A_L and SRC_A_L a
+        # legal rotation (rot 270 blocks GATE_A_L, the others block SRC_A_L).
+        # PAN_B: its rotations are the T18 cap marker's (rot 0/180, 20 deg
+        # steps) and, after the panel pass, the jack row's (rot 90). Waits for
+        # the panel pass (Bastian, 2026-09-29).
         "rotation GATE_A_L",
         "rotation LVL_B_L",
         "rotation SONG_A_L",
@@ -113,15 +128,38 @@ def _drawn_outline(board):
     return PL.grow(u, -half)
 
 
+def _drc_edge_setting(pcb_path):
+    """The copper-to-edge clearance the DRC will use, in mm, or None. Probed
+    2026-09-30 (kicad-cli 10.0.5): kicad-cli takes it from the .kicad_pro
+    beside the board (min_copper_edge_clearance) -- the .kicad_pcb text does
+    not carry it, and a pro saying 3.0 turned the jack-row's 18 edge blocks
+    into 36. A missing file or key means KiCad's default, which is not a
+    setting anyone chose."""
+    pro = os.path.splitext(pcb_path)[0] + ".kicad_pro"
+    try:
+        with open(pro, encoding="utf-8") as fh:
+            return float(json.load(fh)["board"]["design_settings"]["rules"]["min_copper_edge_clearance"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def check_edge(s, pcb_path, prefix):
-    want = P.outline_box()
+    want = OUTLINE_MM
     drawn = _drawn_outline(s.board)
     if drawn is None:
         return False, "the board has no outline (expected %s)" % (want,), []
-    if max(abs(a - b) for a, b in zip(drawn, want)) > 1e-3:
+    if max(abs(a - b) for a, b in zip(drawn, want)) > OUTLINE_TOL_MM:
         return False, "the drawn outline %s is not the spec outline %s" % (
             tuple(round(v, 3) for v in drawn), want), []
-    lim = PL.grow(want, -P.EDGE_CLEAR)
+    # The DRC's own edge rule must be the spec's 0.5 mm, in the file the DRC
+    # reads and in the board object the placer built it on.
+    pro_v = _drc_edge_setting(pcb_path)
+    mem_v = pcbnew.ToMM(s.board.GetDesignSettings().m_CopperEdgeClearance)
+    if pro_v is None or abs(pro_v - EDGE_CLEAR_MM) > 1e-6 or abs(mem_v - EDGE_CLEAR_MM) > 1e-6:
+        return False, ("the DRC's copper-to-edge clearance is %s in the .kicad_pro beside the "
+                       "board and %.3f mm on the board object; the spec says %.1f mm" % (
+                           "unset" if pro_v is None else "%.3f mm" % pro_v, mem_v, EDGE_CLEAR_MM)), []
+    lim = PL.grow(want, -EDGE_CLEAR_MM)
     found, n = {}, 0
     for fp in s.board.GetFootprints():
         for num, b in PL.pad_boxes(fp):
@@ -129,7 +167,7 @@ def check_edge(s, pcb_path, prefix):
             if not PL.inside(b, lim):
                 over = max(lim[0] - b[0], lim[1] - b[1], b[2] - lim[2], b[3] - lim[3])
                 k = _key(s, fp.GetReference())
-                found[k] = "pad %s %.2f mm past the %.1f mm edge clearance" % (num, over, P.EDGE_CLEAR)
+                found[k] = "pad %s %.2f mm past the %.1f mm edge clearance" % (num, over, EDGE_CLEAR_MM)
     if not n:
         return False, "examined 0 pads", []
     ok, details, nk = _judge(s, "edge", found)
@@ -175,16 +213,31 @@ def check_front(s, pcb_path, prefix):
         len(refs), len(found), nk, len(reported)), details
 
 
+def _measured_shadow(fp):
+    """The module's shadow as the check measures it: the box of the silkscreen
+    SHAPES on the part's own side, text excluded (spec §4.3). None if none."""
+    layer = pcbnew.B_SilkS if fp.IsFlipped() else pcbnew.F_SilkS
+    boxes = [PL.box(g.GetBoundingBox()) for g in fp.GraphicalItems()
+             if g.GetLayer() == layer and g.GetClass() not in _TEXT_CLASSES]
+    if not boxes:
+        return None
+    return (min(b[0] for b in boxes), min(b[1] for b in boxes),
+            max(b[2] for b in boxes), max(b[3] for b in boxes))
+
+
 def check_module(s, pcb_path, prefix):
     if s.shadow is None:
         return False, "no module shadow recorded", []
     um = _fp(s.board, "U_SM")
     if um is None:
         return False, "U_SM is not on the board", []
-    try:
-        shadow = P.module_shadow(um)          # measured from the board, not the placer's record
-    except ValueError as e:
-        return False, str(e), []
+    shadow = _measured_shadow(um)             # measured from the board, not the placer's record
+    if shadow is None:
+        return False, "U_SM has no silkscreen shapes on its own side for a shadow", []
+    w, h = shadow[2] - shadow[0], shadow[3] - shadow[1]
+    if abs(w - SHADOW_MM[0]) > SHADOW_TOL_MM or abs(h - SHADOW_MM[1]) > SHADOW_TOL_MM:
+        return False, "U_SM's shadow is %.2f x %.2f mm, spec §4.3 says %.2f x %.2f (+-%.1f)" % (
+            w, h, SHADOW_MM[0], SHADOW_MM[1], SHADOW_TOL_MM), []
     bad = []
     if max(abs(a - b) for a, b in zip(shadow, s.shadow)) > 1e-3:
         bad.append("U_SM's shadow %s differs from the recorded %s" % (
@@ -201,11 +254,11 @@ def check_module(s, pcb_path, prefix):
         bad.append("J_PWR is not on the board")
     else:
         g = PL.gap(PL.courtyard_box(jp), shadow)
-        if g < P.USB_CLEAR_MM:
-            bad.append("J_PWR is %.1f mm from the module shadow (limit %.0f)" % (g, P.USB_CLEAR_MM))
+        if g < USB_CLEAR_MM:
+            bad.append("J_PWR is %.1f mm from the module shadow (limit %.0f)" % (g, USB_CLEAR_MM))
     return not bad, "shadow %s, J_PWR %.1f mm away (limit %.0f)" % (
         tuple(round(v, 2) for v in shadow),
-        PL.gap(PL.courtyard_box(jp), shadow) if jp else -1, P.USB_CLEAR_MM), bad
+        PL.gap(PL.courtyard_box(jp), shadow) if jp else -1, USB_CLEAR_MM), bad
 
 
 DECOUPLE_MAX_MM = 2.0     # the coupon's check_layout rule 5 (spec §5.1 item 5)
@@ -429,7 +482,22 @@ def check_drc(s, pcb_path, prefix):
         items = PP.drc(pcb_path + (".missing" if getattr(s, "drc_broken", False) else ""), rpt)
     except RuntimeError as e:
         return False, "kicad-cli wrote no report: %s" % str(e)[:200], []
+    if getattr(s, "drc_empty", False):
+        # sabotage "drc_empty": the report kicad-cli wrote is replaced by one
+        # with no violation block, and everything below reads it as usual.
+        with open(rpt, "w", encoding="utf-8") as fh:
+            fh.write("** Drc report for x **\n** Found 0 DRC violations **\n")
     blocks = drc_blocks(open(rpt, encoding="utf-8", errors="replace").read())
+    # Non-vacuity anchor: the P4-1 board is unrouted, so its report always
+    # holds [unconnected_items] blocks (499 at the time of writing). A report
+    # with none is a report that was not read, and once KNOWN_PANEL["drc"] is
+    # empty (the freeze condition) nothing else would object to it. P4-2's
+    # routing removes these blocks: it must replace this anchor with another
+    # non-vacuity anchor (e.g. a routed-net count) rather than delete it.
+    n_unconn = sum(1 for cls, _r, _f in blocks if cls == "unconnected_items")
+    if not n_unconn:
+        return False, ("the DRC report holds no unconnected_items block; an unrouted board always "
+                       "has some, so this report was not read (%d blocks in all)" % len(blocks)), []
     found, front_crtyd = {}, []
     front = set(s.front)
     for cls, refs, first in blocks:
@@ -447,8 +515,9 @@ def check_drc(s, pcb_path, prefix):
     ok, details, nk = _judge(s, "drc", found)
     details += ["reported, not gated: " + f for f in sorted(set(front_crtyd))]
     others = ", ".join("%s %d" % kv for kv in sorted(items.items()) if kv[0] not in GATED_DRC) or "none"
-    return ok, "gated: %d items (%d known), %d front courtyard items reported; not gated: %s" % (
-        len(found), nk, len(front_crtyd), others), details
+    return ok, ("gated: %d items (%d known), %d front courtyard items reported; %d "
+                "unconnected_items anchor the report; not gated: %s" % (
+                    len(found), nk, len(front_crtyd), n_unconn, others)), details
 
 
 STEPS = [("anchors", check_anchors), ("edge", check_edge), ("front", check_front),
@@ -490,7 +559,7 @@ def _sab_edge(s):
         r.startswith("TP") for r in s.parts) else sorted(s.holes)[0]
     fp = _fp(s.board, ref)
     b = PL.pad_boxes(fp)[0][1]
-    fp.Move(kipcb._pt(P.X0 + 0.2 - b[0], 0.0))
+    fp.Move(kipcb._pt(OUTLINE_MM[0] + 0.2 - b[0], 0.0))
 
 
 def _sab_edge_missing(s):
@@ -568,6 +637,34 @@ def _sab_drc_missing(s):
     s.drc_broken = True
 
 
+def _sab_drc_empty(s):
+    """The DRC report replaced by one with no violation block, with
+    KNOWN_PANEL["drc"] emptied (the freeze condition): only the non-vacuity
+    anchor can object."""
+    s.known["drc"] = set()
+    s.drc_empty = True
+
+
+def _sab_module_usb(s):
+    """J_PWR moved 1 mm straight toward the module shadow: it sits about
+    0.5 mm from the 35 mm rule, so the rule fails and nothing else does."""
+    jp = _fp(s.board, "J_PWR")
+    c = PL.courtyard_box(jp)
+    sh = s.shadow
+    dx = max(sh[0] - c[2], c[0] - sh[2], 0.0) * (1.0 if sh[0] >= c[2] else -1.0)
+    dy = max(sh[1] - c[3], c[1] - sh[3], 0.0) * (1.0 if sh[1] >= c[3] else -1.0)
+    n = math.hypot(dx, dy)
+    jp.Move(kipcb._pt(dx / n, dy / n))
+
+
+def _sab_edge_outline(s):
+    """The right-hand Edge.Cuts segment shifted 1 mm outward: the drawn
+    outline no longer equals the spec outline."""
+    segs = [d for d in s.board.GetDrawings() if d.GetLayer() == pcbnew.Edge_Cuts]
+    seg = max(segs, key=lambda d: PL.box(d.GetBoundingBox())[2])
+    seg.Move(kipcb._pt(1.0, 0.0))
+
+
 SABOTAGES = {"anchors": _sab_anchors, "anchors_missing": _sab_anchors_missing,
              "edge": _sab_edge, "edge_missing": _sab_edge_missing,
              "front": _sab_front, "front_missing": _sab_front_missing,
@@ -575,13 +672,19 @@ SABOTAGES = {"anchors": _sab_anchors, "anchors_missing": _sab_anchors_missing,
              "module": _sab_module, "module_missing": _sab_module_missing,
              "front_back_tht": _sab_front_back_tht,
              "decoupling": _sab_decoupling, "decoupling_missing": _sab_decoupling_missing,
-             "drc": _sab_drc, "drc_missing": _sab_drc_missing}
+             "drc": _sab_drc, "drc_missing": _sab_drc_missing, "drc_empty": _sab_drc_empty,
+             "module_usb": _sab_module_usb, "edge_outline": _sab_edge_outline}
 # which step each sabotage must turn red (test_place.py reads this)
 TURNS_RED = {"anchors": "anchors", "anchors_missing": "anchors", "edge": "edge",
              "edge_missing": "edge", "front": "front", "front_missing": "front",
              "known_stale": "edge", "module": "module", "module_missing": "module",
              "front_back_tht": "front", "decoupling": "decoupling",
-             "decoupling_missing": "decoupling", "drc": "drc", "drc_missing": "drc"}
+             "decoupling_missing": "decoupling", "drc": "drc", "drc_missing": "drc",
+             "drc_empty": "drc", "module_usb": "module", "edge_outline": "edge"}
+# the phrase each sabotage's red line must carry, so that it is red for its own
+# reason and not for a bystander (test_place.py asserts it)
+WHY = {"drc_empty": "no unconnected_items block", "module_usb": "mm from the module shadow (limit 35)",
+       "edge_outline": "is not the spec outline"}
 
 
 def sabotage(s, name):
