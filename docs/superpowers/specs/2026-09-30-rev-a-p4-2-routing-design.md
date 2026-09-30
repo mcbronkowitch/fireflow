@@ -145,6 +145,17 @@ Probed on the committed P4-1 board (`hardware/reva/kicad/reva.kicad_pcb`,
   `failed ['LED16', 'LED16_A', 'OUT_R']` (the jack zones of §4.2.2 answer
   that). Bastian decided on 2026-09-30 to speed the marking up (same radii,
   default path byte for byte) before the first full run.
+- **Probed during execution (Task 6, 2026-09-30): the router does not
+  converge.** With every rule in place: 12 conflicts after 30 rounds,
+  784.5 s. Tuning via cost and the negotiation parameters gave 15–22
+  conflicts (four runs); ripping up every net each round gave 17. Switching
+  single rules off (conflicts only; the runs shared the CPU): no pair rule 9,
+  no via keepouts 15, one tier 7 (IN_L and IN_R then fail). No single rule
+  causes it. The conflicts sit in x 104–152, y 29–75, where the P4-1 placement
+  put 146 pads on 2208 mm² (0.066 per mm², against 0.028 over the whole
+  board): U_SR1–3, U_IN1, U_MUX7, part of U_MUX6, and the module's west pins,
+  under ten pots. Bastian decided on 2026-09-30 to spread the placement there
+  through P4-1's `OVERRIDES` (P4-1 spec §4.4), with the panel untouched.
 
 ## 4. Design
 
