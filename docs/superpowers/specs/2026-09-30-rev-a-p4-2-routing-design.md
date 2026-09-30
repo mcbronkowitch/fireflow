@@ -256,7 +256,11 @@ for byte.
      the router takes the usable grid cell nearest the pad centre whose centre
      lies inside that pad shape.
    - The stub then lies inside the pad's own copper, so it adds no edge or
-     clearance violation.
+     clearance violation. *Corrected 2026-09-30 after Task 6's run 2:*
+     kicad-cli checks the stub track on its own, so the 18 jack-tip stubs
+     gave 18 `copper_edge_clearance` items. A terminal cell found by this
+     fallback therefore gets no stub: the route ends at the cell, which lies
+     inside the pad's copper, and that is the connection.
    - Off by default: a terminal without a shape behaves exactly as today; the
      coupon and `hw_gen_route_guard` stay byte for byte.
    - This makes the 18 jack nets, the audio nets included, routable before the
@@ -278,6 +282,7 @@ on the saved board.
 | Copper to edge | 0.5 mm | P4-1, JLC |
 | Grid pitch | 0.2 mm | spike |
 | Via cost, rounds | 8.0, 30 | spike; the only knobs the implementer may tune without Bastian |
+| Negotiation: `pres0`, `pres_mult`, `hist_inc` | 0.5, 1.6, 1.0 | router defaults; tunable too since 2026-09-30 (Bastian, after Task 6's run 2: 25 conflicts after 30 rounds, 898 s), at most 4 measured runs |
 | Audio × aggressor | 10.0 mm, same layer | §2.1 |
 | L × R | 2.0 mm, same layer | §2.5 |
 | SENSE length | ≤ 1.3 × MST | §2.6 |
@@ -320,7 +325,9 @@ A step that examined nothing is red.
      `shorting_items`, `clearance`, `hole_clearance`, `hole_to_hole`,
      `copper_edge_clearance`, `items_not_allowed`), plus `tracks_crossing`,
      `track_dangling`, `via_dangling`, `track_width`, `annular_width`,
-     `drill_out_of_range`, `via_diameter`.
+     `drill_out_of_range`, `via_diameter`, and `starved_thermal` (added by
+     Bastian 2026-09-30: Task 6's run 2 had starved thermals at U_SM.A4 and
+     D10.1 on GND, and the fragments they leave break §5.8's one island).
    - **Non-vacuity:** the report must contain its three `Found N` lines and
      `End of Report`. The number of violation blocks parsed must equal the
      `Found N DRC violations` figure. The board must carry at least one track.
@@ -407,7 +414,8 @@ to P4-1's. `docs/hardware/grip-test.md` gets that sentence.
   - If 10 mm audio or 1.3 × SENSE cannot be met, the run fails naming the net
     and the rule.
   - That is a finding for Bastian, not a threshold to move.
-  - Via cost and round count are the only knobs the implementer may tune.
+  - Via cost, round count and the negotiation parameters (§4.3) are the only
+    knobs the implementer may tune.
 - **The pair rule is hard.** A victim net that cannot reach its pad because
   aggressor copper sits within 10 mm of it outside the zones shows up as a
   routing failure, not as a DRC item. That is intended.
