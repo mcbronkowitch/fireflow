@@ -538,6 +538,49 @@ def test_stats():
     check(ln > on_grid - 1e-9 and ln > 0, "stats: length %.6f counts the stubs (on-grid board %.6f)" % (ln, on_grid))
 
 
+def test_via_only_obstacle():
+    """A via-only obstacle keeps vias out of its reach and leaves tracks
+    alone. A's straight path on layer 0 is walled off (netless wall),
+    so it must change layer; a full-height via-only strip sits each side of
+    the wall, the left one over A's cheapest via spot. A's layer-1 track
+    crosses both. B runs straight on layer 1 through both strips: it keeps
+    0 vias and its straight length."""
+    wall = ("rect", 4.5, 0.0, 5.5, 6.0)
+    strips = (("rect", 3.0, 0.0, 4.0, 6.0), ("rect", 6.0, 0.0, 7.0, 6.0))
+
+    def board(via_only):
+        r = R.Router((0, 0, 12, 6), 0.2, 2, CLR, 0.3)
+        r.add_obstacle(None, (0,), wall)
+        if via_only:
+            for s in strips:
+                r.add_obstacle(None, (0, 1), s, via_only=True)
+        r.add_net("A", 0.125, [(1.0, 3.0, (0,)), (11.0, 3.0, (0,))])
+        r.add_net("B", 0.125, [(1.0, 1.0, (1,)), (11.0, 1.0, (1,))])
+        return r.run()
+
+    def rect_dist(p, rect):
+        _k, l, t, rr, b = rect
+        return math.hypot(max(l - p[0], 0.0, p[0] - rr), max(t - p[1], 0.0, p[1] - b))
+
+    free = board(False)
+    near = [v for v in free.routes["A"]["vias"] if any(rect_dist(v, s) - 0.3 < CLR for s in strips)]
+    check(not free.failed and near,
+          "via-only: without the strips A's vias land in their reach (%s)" % near)
+    res = board(True)
+    check(not res.failed and res.conflicts == 0, "via-only: routed (failed %s)" % res.failed)
+    vias = res.routes["A"]["vias"] if "A" in res.routes else []
+    check(len(vias) >= 1, "via-only: A changes layer (%d vias)" % len(vias))
+    gap = min((rect_dist(v, s) - 0.3 for v in vias for s in strips), default=-1.0)
+    check(gap >= CLR - 1e-6, "via-only: every via edge %.3f mm from the strips (need %.3f)" % (gap, CLR))
+    crosses = [s for s in strips
+               if any(l == 1 and seg_rect((a, b), s[1:]) == 0.0 for l, a, b in res.routes.get("A", {"segments": []})["segments"])]
+    check(len(crosses) == 2, "via-only: A's layer-1 track crosses both strips (%d)" % len(crosses))
+    b = res.routes.get("B")
+    check(b is not None and not b["vias"] and abs(length(res, "B") - 10.0) < 0.3,
+          "via-only: B runs straight through the strips with 0 vias (length %.2f)"
+          % (length(res, "B") if b else -1.0))
+
+
 if __name__ == "__main__":
     for t in (test_straight, test_detour, test_via, test_own_net_passable,
               test_crossing_two_layers, test_side_by_side, test_negotiation,
@@ -547,7 +590,7 @@ if __name__ == "__main__":
               test_pair_via, test_clip_outside, test_clip_routed,
               test_tiers, test_tier_order, test_stats,
               test_terminal_outside_grid, test_terminal_shape_is_inert_when_window_finds_a_cell,
-              test_tier_occupancy_consistent):
+              test_tier_occupancy_consistent, test_via_only_obstacle):
         t()
     print("FAILED: %d" % len(FAILS) if FAILS else "all route checks passed")
     sys.exit(1 if FAILS else 0)

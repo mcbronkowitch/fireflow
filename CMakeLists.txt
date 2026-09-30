@@ -429,6 +429,12 @@ add_test(NAME hw_gen_route_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/hardware/gen/test_route.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+# Rev A P4-2: the stitch search's optional keep-off from plane-net through-hole
+# pads; re-runs itself under KiCad's Python.
+add_test(NAME hw_gen_stitch_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/hardware/gen/test_stitch.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 # Rev A P4-1: shared placement geometry (boxes, hole point, first-fit search);
 # re-runs itself under KiCad's Python.
 add_test(NAME hw_gen_place_guard

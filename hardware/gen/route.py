@@ -41,6 +41,11 @@ half-width + 2s, s for the via class), vias as discs on every layer. Copper
 inside a `pair_exempt` rect marks nothing, and no cell inside one is ever
 marked.
 
+Via-only obstacles (`add_obstacle(..., via_only=True)`): rasterised into the
+via class alone, with the via radius + clearance + s reach, so vias keep their
+copper edge at least `clearance` off the shape while tracks pass over it.
+They take no part in pair marking.
+
 Priority tiers: `add_net(..., tier=t)`. Nets route in ascending tier, then by
 span, so a lower tier claims its cells first. In the pressure term a net of
 tier t counts claims by nets of tier <= t in full and claims by higher tiers
@@ -286,6 +291,7 @@ class Router:
         self._xs = [round(self.x0 + ix * self.pitch, 6) for ix in range(self.nx)]
         self._ys = [round(self.y0 + iy * self.pitch, 6) for iy in range(self.ny)]
         self._obstacles = []
+        self._vobstacles = []      # via-only obstacles: (net, layers, shape)
         self._nets = []
         self._tshapes = []         # per net: per terminal, the pad's shape or None
         self._discs = {}
@@ -298,7 +304,14 @@ class Router:
         self._cur_tier = 0
 
     # --- input -------------------------------------------------------------
-    def add_obstacle(self, net, layers, shape, group=None):
+    def add_obstacle(self, net, layers, shape, group=None, via_only=False):
+        """`via_only` obstacles keep vias off (a via's copper edge at least
+        `clearance` from the shape) but not tracks: they are rasterised into
+        the via class only, and take no part in pair marking (so `group` is
+        ignored for them). `net` None blocks every net's vias."""
+        if via_only:
+            self._vobstacles.append((net, tuple(layers), shape))
+            return
         self._obstacles.append((net, tuple(layers), shape))
         self._ogroups.append(group)
 
@@ -856,7 +869,7 @@ class Router:
         assert all(hw <= self.via_radius for _n, hw, _t in self._nets), \
             "via_radius must be >= every track half-width (see _via_step)"
         ids ={name: k + 1 for k, (name, _hw, _t) in enumerate(self._nets)}
-        for net, _l, _s in self._obstacles:
+        for net, _l, _s in self._obstacles + self._vobstacles:
             if net is not None and net not in ids:
                 ids[net] = len(ids) + 1
         hws = sorted({hw for _n, hw, _t in self._nets})
@@ -879,6 +892,10 @@ class Router:
             nid = BLOCKED if net is None else ids[net]
             for c, hw in enumerate(self._classes):
                 self._rasterise(self._static[c], nid, layers, shape, hw + self.clearance + self.s)
+        for net, layers, shape in self._vobstacles:      # the via class only
+            nid = BLOCKED if net is None else ids[net]
+            self._rasterise(self._static[self._via_c], nid, layers, shape,
+                            self.via_radius + self.clearance + self.s)
         self._net_group = [self._groups.get(name) for name, _hw, _t in self._nets]
         self._pair_src = {}            # source group -> [(target group, mm)]
         for ga, gb, mm in self._pairs:

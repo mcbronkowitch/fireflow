@@ -57,22 +57,46 @@ def _clear_of_pads(x, y, net, obstacles, margin):
     return True
 
 
+def _tht_keepoffs(board, plane_nets, keepoff_mm):
+    """Boxes for `tht_keepoff_mm`: the bounding box of every through-hole pad
+    on a plane net, grown by the via radius plus the keep-off -- the same
+    Minkowski-sum trick as PAD_KEEPOUT_MM, so a via POINT outside the grown
+    box has its copper at least `keepoff_mm` from the pad's copper."""
+    m = VIA_RADIUS_MM + keepoff_mm
+    boxes = []
+    for fp in board.GetFootprints():
+        for pad in fp.Pads():
+            if pad.GetNetname() in plane_nets and pad.GetAttribute() == pcbnew.PAD_ATTRIB_PTH:
+                bb = pad.GetBoundingBox()
+                boxes.append((pcbnew.ToMM(bb.GetLeft()) - m, pcbnew.ToMM(bb.GetTop()) - m,
+                              pcbnew.ToMM(bb.GetRight()) + m, pcbnew.ToMM(bb.GetBottom()) + m))
+    return boxes
+
+
+def _clear_of_keepoffs(x, y, keepoffs):
+    return not any(l <= x <= r and t <= y <= b for l, t, r, b in keepoffs)
+
+
 def _clear_of_vias(x, y, placed):
     return all(((x - vx) ** 2 + (y - vy) ** 2) ** 0.5 >= VIA_VIA_MIN_MM
                for vx, vy in placed)
 
 
-def _candidate_clear(px, py, vx, vy, net, obstacles, placed, segments=()):
+def _candidate_clear(px, py, vx, vy, net, obstacles, placed, segments=(), keepoffs=()):
     """A candidate via is clear if the via point, and the midpoint of the
     straight pad->via track, both clear every different-net pad by their
     respective keepouts, and the via clears every via already placed this
     pass (any net -- hole-to-hole is a drilling constraint, not a net one).
+    `keepoffs` (see `_tht_keepoffs`) are boxes the via point, never the
+    track, must stay out of -- whatever the via's net.
     One midpoint sample is a coarse stand-in for the whole <=3 mm segment;
     the real arbiter is `check_stitch_hygiene()`'s kicad-cli gate, which
     this search only exists to satisfy on the first try."""
     if not _clear_of_vias(vx, vy, placed):
         return False
     if not _clear_of_pads(vx, vy, net, obstacles, PAD_KEEPOUT_MM):
+        return False
+    if not _clear_of_keepoffs(vx, vy, keepoffs):
         return False
     mx, my = (px + vx) / 2.0, (py + vy) / 2.0
     for snet, a, b, hw in segments:
@@ -85,7 +109,8 @@ def _candidate_clear(px, py, vx, vy, net, obstacles, placed, segments=()):
     return _clear_of_pads(mx, my, net, obstacles, TRACK_KEEPOUT_MM)
 
 
-def _find_via_offset(px, py, fx, fy, half_w, half_h, net, obstacles, placed, segments=()):
+def _find_via_offset(px, py, fx, fy, half_w, half_h, net, obstacles, placed, segments=(),
+                     keepoffs=()):
     """Search for a clear via position, starting from the courtyard-
     normalized outward direction (see `stitch_plane_pads()`) and widening
     from there: that direction first, then the perpendicular one, then both
@@ -104,7 +129,7 @@ def _find_via_offset(px, py, fx, fy, half_w, half_h, net, obstacles, placed, seg
     for ux, uy in (primary, secondary, (-primary[0], -primary[1]), (-secondary[0], -secondary[1])):
         for d in STANDOFFS_MM:
             vx, vy = px + ux * d, py + uy * d
-            if _candidate_clear(px, py, vx, vy, net, obstacles, placed, segments):
+            if _candidate_clear(px, py, vx, vy, net, obstacles, placed, segments, keepoffs):
                 return vx, vy
     return None
 
@@ -112,7 +137,8 @@ def _find_via_offset(px, py, fx, fy, half_w, half_h, net, obstacles, placed, seg
 NETLESS = "<no net>"   # stands in for "" when netless pads block (netless_blocks=True)
 
 
-def stitch_plane_pads(board, plane_nets, segments=(), netless_blocks=False):
+def stitch_plane_pads(board, plane_nets, segments=(), netless_blocks=False,
+                      tht_keepoff_mm=None):
     """One via + 0.5 mm F.Cu track per SMD pad on a plane net, generated
     mechanically from the board's own pads rather than as hand data (brief
     step 2: `pad.GetNetname()` in the four plane nets and
@@ -177,11 +203,20 @@ def stitch_plane_pads(board, plane_nets, segments=(), netless_blocks=False):
     PTH pad is still copper with a hole, though: on the P4a strip a pot's
     mounting tab (pad "", no net) took two GND stitching vias, which DRC
     reported as shorting_items and hole_clearance (Task 8, run 1).
+
+    `tht_keepoff_mm` (default None: off, the coupon's behaviour exactly)
+    makes every through-hole pad on a plane net an obstacle for the VIA, of
+    any net including the via's own, with the via's copper kept that far
+    (edge to edge) from the pad's copper. A via beside such a pad cuts into
+    the pad's thermal spokes on the inner planes (Rev A P4-2: starved
+    thermals); the pad's hole already joins every layer, so nothing is lost.
+    Only the via is kept off; the F.Cu track may still pass.
     """
     boxes = kipcb.courtyard_boxes(board)
     obstacles = _pad_obstacles(board)
     if netless_blocks:
         obstacles = [(onet or NETLESS, box) for onet, box in obstacles]
+    keepoffs = () if tht_keepoff_mm is None else _tht_keepoffs(board, plane_nets, tht_keepoff_mm)
     placed_vias = []
     stitched = {net: 0 for net in plane_nets}
     unresolved = []
@@ -197,7 +232,7 @@ def stitch_plane_pads(board, plane_nets, segments=(), netless_blocks=False):
             px = pcbnew.ToMM(pad.GetPosition().x)
             py = pcbnew.ToMM(pad.GetPosition().y)
             found = _find_via_offset(px, py, fx, fy, half_w, half_h, net, obstacles,
-                                     placed_vias, segments)
+                                     placed_vias, segments, keepoffs)
             if found is None:
                 dx, dy = px - fx, py - fy
                 if abs(dx) / half_w >= abs(dy) / half_h:
