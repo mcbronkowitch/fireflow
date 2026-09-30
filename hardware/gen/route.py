@@ -320,52 +320,133 @@ class Router:
 
     # --- A* ----------------------------------------------------------------------
     def _astar(self, sources, targets, target_xy, nid, c, pres):
+        # Speed: this loop is nearly the router's whole run time, so `_idx`,
+        # `_split`, `_cost`, `_via_step` and the octile heuristic are inlined
+        # below. They stay as the reference implementations, and the inlined
+        # code must stay equivalent to them expression for expression: the
+        # same blocking tests, the same floats in the same order of
+        # operations, the same neighbour order (_DIRS, then the via steps in
+        # ascending layer) and the same heap entries (f, g, n, i) with the
+        # same counter -- so every route stays byte-identical. The static test
+        # `st and st != nid` is `_cost`'s, since FREE == 0 and nid >= 1.
+        #
+        # One exact prune: with pres >= 0 and hist >= 0 every factor of the
+        # cell cost is >= 1.0 (occ >= le >= 0 always), so w * cost >= w and
+        # gi + w * cost >= gi + w, because float rounding is monotone; likewise
+        # a via step costs >= via_cost when via_cost >= 0. Where that lower
+        # bound already fails `ng < g[j]`, the full step would fail it too, so
+        # the neighbour is skipped before its cost is computed. It never pushes,
+        # pops or skips anything the unpruned search would not.
         tix, tiy = target_xy
         targets = set(targets)
+        nx, ny, plane, nlayers = self.nx, self.ny, self.plane, self.layers
+        hk = SQRT2 - 2.0                          # the heuristic's diagonal term
+        hist = self._hist
+        v = self._via_c
+        st_c, st_v = self._static[c], self._static[v]
+        occ_c, occ_v = self._occ[c], self._occ[v]
+        tiered = self._occ_le is not None
+        if tiered:
+            le_c = self._occ_le[self._cur_tier][c]
+            le_v = self._occ_le[self._cur_tier][v]
+        paired = self._cur_pair is not None
+        if paired:
+            pa_c, pb_c = self._cur_pair[0][c], self._cur_pair[1][c]
+            pa_v, pb_v = self._cur_pair[0][v], self._cur_pair[1][v]
+        via_cost, vias = self.via_cost, nlayers > 1
+        prune = self._hist_nonneg and pres >= 0.0
+        vprune = prune and via_cost >= 0.0
+        layer_range = range(nlayers)
+        dirs = [(dx, dy, w, dx + dy * nx) for dx, dy, w in _DIRS]   # d: j - i in the plane
+        heappush, heappop = heapq.heappush, heapq.heappop
 
-        def h(i):
-            _l, ix, iy = self._split(i)
-            dx, dy = abs(ix - tix), abs(iy - tiy)
-            return (dx + dy) + (SQRT2 - 2.0) * min(dx, dy)
-
-        g, prev, heap, n = {}, {}, [], 0
-        for i in sorted(sources):
-            g[i], prev[i] = 0.0, None
-            heap.append((h(i), 0.0, n, i))
-            n += 1
-        heapq.heapify(heap)
-        while heap:
-            _f, gi, _n, i = heapq.heappop(heap)
-            if gi > g[i]:
-                continue
-            if i in targets:
-                path = []
-                while i is not None:
-                    path.append(i)
-                    i = prev[i]
-                return path[::-1]
-            layer, ix, iy = self._split(i)
-            steps = []
-            for dx, dy, w in _DIRS:
-                jx, jy = ix + dx, iy + dy
-                if 0 <= jx < self.nx and 0 <= jy < self.ny:
-                    j = self._idx(layer, jx, jy)
-                    cost = self._cost(c, j, nid, pres)
-                    if cost is not None:
-                        steps.append((j, w * cost))
-            if self.layers > 1:
-                vc = self._via_step(ix, iy, nid, pres)
-                if vc is not None:
-                    for other in range(self.layers):
-                        if other != layer:
-                            steps.append((self._idx(other, ix, iy), vc))
-            for j, w in steps:
-                ng = gi + w
-                if ng < g.get(j, _INF):
-                    g[j], prev[j] = ng, i
-                    heapq.heappush(heap, (ng + h(j), ng, n, j))
-                    n += 1
-        return None
+        # g lives in self._g, a per-cell array that is +inf outside a search
+        # (the old dict's `g.get(j, inf)`); every cell given a g is in `prev`,
+        # so the finally clause below puts exactly those back to +inf.
+        g, prev, heap, n = self._g, {}, [], 0
+        try:
+            for i in sorted(sources):
+                g[i], prev[i] = 0.0, None
+                iy, ix = divmod(i % plane, nx)
+                ex, ey = abs(ix - tix), abs(iy - tiy)
+                heap.append(((ex + ey) + hk * min(ex, ey), 0.0, n, i))
+                n += 1
+            heapq.heapify(heap)
+            while heap:
+                _f, gi, _n, i = heappop(heap)
+                if gi > g[i]:
+                    continue
+                if i in targets:
+                    path = []
+                    while i is not None:
+                        path.append(i)
+                        i = prev[i]
+                    return path[::-1]
+                layer, rem = divmod(i, plane)
+                iy, ix = divmod(rem, nx)
+                for dx, dy, w, d in dirs:
+                    jx, jy = ix + dx, iy + dy
+                    if 0 <= jx < nx and 0 <= jy < ny:
+                        j = i + d
+                        gj = g[j]
+                        if prune and gi + w >= gj:
+                            continue              # gi + w * cost >= gj: no relaxation
+                        st = st_c[j]
+                        if st and st != nid:      # BLOCKED or foreign: _cost's test
+                            continue
+                        if paired and (pa_c[j] or pb_c[j]):
+                            continue
+                        if tiered:
+                            le = le_c[j]
+                            cost = (1.0 + hist[j]) * (1.0 + pres * (le + 0.25 * (occ_c[j] - le)))
+                        else:
+                            cost = (1.0 + hist[j]) * (1.0 + pres * occ_c[j])
+                        ng = gi + w * cost
+                        if ng < gj:
+                            g[j], prev[j] = ng, i
+                            ex = jx - tix if jx >= tix else tix - jx
+                            ey = jy - tiy if jy >= tiy else tiy - jy
+                            heappush(heap, (ng + ((ex + ey) + hk * (ex if ex <= ey else ey)), ng, n, j))
+                            n += 1
+                if vias and vprune:
+                    lb = gi + via_cost            # gi + vc >= lb
+                    need = False
+                    for other in layer_range:
+                        if other != layer and lb < g[other * plane + rem]:
+                            need = True
+                            break
+                else:
+                    need = vias
+                if need:
+                    claims = 0
+                    for l2 in layer_range:
+                        k = l2 * plane + rem
+                        st = st_v[k]
+                        if st and st != nid:
+                            break
+                        if paired and (pa_v[k] or pb_v[k]):
+                            break
+                        if tiered:
+                            le = le_v[k]
+                            claims += le + 0.25 * (occ_v[k] - le)
+                        else:
+                            claims += occ_v[k]
+                    else:
+                        ng = gi + via_cost * (1.0 + pres * claims)
+                        ex = ix - tix if ix >= tix else tix - ix
+                        ey = iy - tiy if iy >= tiy else tiy - iy
+                        hj = (ex + ey) + hk * (ex if ex <= ey else ey)
+                        for other in layer_range:
+                            if other != layer:
+                                j = other * plane + rem
+                                if ng < g[j]:
+                                    g[j], prev[j] = ng, i
+                                    heappush(heap, (ng + hj, ng, n, j))
+                                    n += 1
+            return None
+        finally:
+            for i in prev:
+                g[i] = _INF
 
     # --- one net ---------------------------------------------------------------
     def _usable(self, c, i, nid):
@@ -615,6 +696,8 @@ class Router:
         self._occ_le = ([[array("i", [0]) * cells for _ in self._classes] for _ in range(self._ntiers)]
                         if self._ntiers > 1 else None)
         self._hist = array("d", [0.0]) * cells
+        self._hist_nonneg = hist_inc >= 0.0    # licenses _astar's exact prune
+        self._g = array("d", [_INF]) * cells   # _astar's g, +inf between searches
         for net, layers, shape in self._obstacles:
             nid = BLOCKED if net is None else ids[net]
             for c, hw in enumerate(self._classes):
