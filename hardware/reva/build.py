@@ -21,7 +21,8 @@ import assign                      # noqa: E402
 import blocks                      # noqa: E402
 import parts                       # noqa: E402
 import review                      # noqa: E402
-from gen import bom as B           # noqa: E402
+import rules                       # noqa: E402
+from gen import bom as B          # noqa: E402
 from gen.project import Project    # noqa: E402
 
 PANEL_MAP = os.path.join(HERE, "panel-map.json")
@@ -74,7 +75,7 @@ def write_all(root=HERE):
             os.remove(os.path.join(kdir, name))
     sheets = W.write_project(proj, kdir)         # {sheet name: (placed, height)}
     C.write_lib_tables(proj.parts(), kdir, LIB_URIS, extra_sym_libs={"power"})
-    C.write_project_file(kdir, proj.name)
+    C.write_project_file(kdir, proj.name, extra=rules.project_rules())
     # What was written, not a directory listing: opening the project in KiCad
     # leaves by-products (.kicad_prl, backups, caches) that are not ours.
     names = ([proj.name + ".kicad_sch"] + [n + ".kicad_sch" for n in sheets]

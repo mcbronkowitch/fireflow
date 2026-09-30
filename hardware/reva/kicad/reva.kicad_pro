@@ -1,1 +1,1 @@
-{"meta": {"filename": "reva.kicad_pro", "version": 3}}
+{"board": {"design_settings": {"rules": {"min_clearance": 0.2, "min_copper_edge_clearance": 0.5, "min_through_hole_diameter": 0.3, "min_track_width": 0.25, "min_via_diameter": 0.6}}}, "meta": {"filename": "reva.kicad_pro", "version": 3}}

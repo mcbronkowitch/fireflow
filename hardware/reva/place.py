@@ -27,20 +27,21 @@ import pcbnew          # noqa: E402
 import assign          # noqa: E402
 import blocks as BL    # noqa: E402
 import build as RB     # noqa: E402
-from gen import kipcb  # noqa: E402
+import rules as RU     # noqa: E402
+from gen import kipcb # noqa: E402
 from gen import place as PL  # noqa: E402
 
 OUT = os.path.join(HERE, "out")
 COMMITTED = os.path.join(HERE, "kicad", "reva.kicad_pcb")
 DOCS = os.path.normpath(os.path.join(HW, "..", "docs", "hardware", "placement"))
 X0, Y0, X1, Y1 = 2.0, 9.25, 302.8, 119.25   # spec §2.1 / §4.1
-EDGE_CLEAR = 0.5          # copper to edge (assumption, spec §8)
+EDGE_CLEAR = RU.EDGE_CLEAR   # copper to edge (assumption, spec §8)
 EDGE_INSET = 1.0          # SMD courtyards stay this far inside the outline
-PAD_CLEAR = 0.2           # the coupon's board minimum
+PAD_CLEAR = RU.CLEARANCE  # the coupon's board minimum
 DECOUPLE_MAX_MM = 2.0     # the coupon's check_layout rule 5
 USB_CLEAR_MM = 35.0       # spec §4.3 amendment
 LAYERS = 4
-PLANES = (("In1.Cu", BL.GND), ("In2.Cu", BL.SM3V3))
+PLANES = (("In1.Cu", RU.PLANE_NETS[0]), ("In2.Cu", RU.PLANE_NETS[1]))
 SUPPLY = {BL.GND, BL.SM3V3, BL.D3V3, BL.P12, BL.N12, BL.P12_IN, BL.N12_IN}
 POT_ROT, POT_TOP_ROT = 270, 90
 FIXED_ROT = {"jack": 0, "key": 0, "sd": 0}

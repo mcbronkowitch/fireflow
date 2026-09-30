@@ -58,6 +58,23 @@ def lib_table_failures(kdir):
     return failures
 
 
+def rules_file_failures(kdir):
+    """The committed reva.kicad_pro carries the board rules from rules.py
+    (P4-2 spec §4.1): the values below are this guard's own, not re-read from
+    rules.py."""
+    import json
+    path = os.path.join(kdir, "reva.kicad_pro")
+    try:
+        pro = json.load(open(path, encoding="utf-8"))
+        r = pro["board"]["design_settings"]["rules"]
+    except (OSError, ValueError, KeyError) as exc:
+        return ["reva.kicad_pro carries no board rules: %s" % exc]
+    want = {"min_track_width": 0.25, "min_via_diameter": 0.6, "min_through_hole_diameter": 0.3,
+            "min_clearance": 0.2, "min_copper_edge_clearance": 0.5}
+    return ["reva.kicad_pro rule %s is %r, not %r" % (k, r.get(k), v)
+            for k, v in sorted(want.items()) if r.get(k) != v]
+
+
 def main():
     failures = []
     # What git tracks: the kicad/ tree and the three top-level outputs.
@@ -95,6 +112,7 @@ def main():
         failures += ["%s is committed but no longer generated" % e
                      for e in sorted(tracked - set(written) - {PLACED_BOARD})]
     failures += lib_table_failures(os.path.join(HERE, build.KICAD))
+    failures += rules_file_failures(os.path.join(HERE, build.KICAD))
     if failures:
         for f in failures:
             print("FAIL " + f)
