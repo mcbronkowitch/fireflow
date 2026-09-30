@@ -34,4 +34,5 @@ washers, or rest it in the rails unscrewed.
 
 Every fix goes into `host/vcv/res/gen_hw_panel.py`, never into a generated
 file. The freeze tag `panel-freeze-2026-11-06` goes on the generator commit
-that passes this list.
+that passes this list. The freeze also needs `KNOWN_PANEL` in
+`hardware/reva/place_check.py` to be empty (P4-1 spec §5.3).

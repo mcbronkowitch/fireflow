@@ -441,6 +441,13 @@ add_test(NAME reva_sd_footprint_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/hardware/reva/test_sd_footprint.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+# Rev A P4-1: two builds byte-identical, the committed board equals a fresh
+# one, every check green, every sabotage turns its step red; re-runs itself
+# under KiCad's Python.
+add_test(NAME reva_place_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/hardware/reva/test_place.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
 # The Python guards need a runner or they rot unnoticed -- tools/test_*.py in
 # this repo is wired to nothing, and the VCV panel guard stood red for 23

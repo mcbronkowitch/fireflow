@@ -5,6 +5,7 @@ panel violations (spec §5.3) print as known; an unlisted failure is red, and
 so is a listed one that no longer fails."""
 import math
 import os
+import re
 
 import pcbnew
 
@@ -16,7 +17,7 @@ from gen import place as PL
 # Filled from the first full run of Task 3/4/6, restricted to the jack row, the
 # SONG clusters and, by the owner's decision (Bastian, 2026-09-29), the
 # GATE_A_L/SOURCE_A and LVL_B_L/PAN_B pairs (spec §5.3); test_place.py
-# (Task 6) asserts exactly that set.
+# asserts exactly that set, name by name.
 KNOWN_PANEL = {
     "edge": {
         "CLOCK", "GATE_A", "GATE_B", "IN_L", "IN_R", "MOD1_A", "MOD1_B", "MOD2_A",
@@ -37,7 +38,25 @@ KNOWN_PANEL = {
         "rotation SONG_A_L",
         "rotation SONG_B_L",
     },
-    "drc": set(),
+    "drc": {
+        # the jack row: pad T past the 0.5 mm edge clearance, as in "edge"
+        "copper_edge_clearance CLOCK", "copper_edge_clearance GATE_A",
+        "copper_edge_clearance GATE_B", "copper_edge_clearance IN_L",
+        "copper_edge_clearance IN_R", "copper_edge_clearance MOD1_A",
+        "copper_edge_clearance MOD1_B", "copper_edge_clearance MOD2_A",
+        "copper_edge_clearance MOD2_B", "copper_edge_clearance MOD3_A",
+        "copper_edge_clearance MOD3_B", "copper_edge_clearance MOD4_A",
+        "copper_edge_clearance MOD4_B", "copper_edge_clearance OUT_L",
+        "copper_edge_clearance OUT_R", "copper_edge_clearance PITCH_A",
+        "copper_edge_clearance PITCH_B", "copper_edge_clearance RESET",
+        # the SONG lamps sit on their pot's pins (same overlap as "front")
+        "shorting_items SONG_A/SONG_A_L", "shorting_items SONG_B/SONG_B_L",
+        # GATE_A_L/SOURCE_A and LVL_B_L/PAN_B: LED legs on the pot's pins in
+        # every LED rotation (see "front" above); the pairs wait for the
+        # panel pass by the owner's decision (Bastian, 2026-09-29)
+        "clearance GATE_A_L/SOURCE_A", "shorting_items GATE_A_L/SOURCE_A",
+        "shorting_items LVL_B_L/PAN_B",
+    },
 }
 
 
@@ -356,9 +375,72 @@ def render(s, pcb_path, prefix):
         os.path.basename(prefix), os.path.basename(prefix)), lines
 
 
+# kicad-cli 10.0.5 report shapes, probed 2026-09-30 on the placed board (item
+# lines follow a header line; the messages are localised, the item lines are
+# not):
+#   [courtyards_overlap]: Courtyards overlap
+#       Rule: ...; error
+#       @(237.3300 mm, 41.2080 mm): Footprint D15
+#       @(234.4250 mm, 42.7200 mm): Footprint RV54
+#   [copper_edge_clearance]: ... (... Freiraum 0,5000 mm; tatsaechlich 0,0000 mm)
+#       @(302.8000 mm, 119.2500 mm): Segment on Edge.Cuts        <- names no ref
+#       @(214.3000 mm, 118.9200 mm): PTH pad T [MOD2_B] of J13
+#   [clearance]: Freiraum-Verstoss ( Freiraum 0,2000 mm; tatsaechlich 0,1973 mm)
+#       @(72.8750 mm, 42.7200 mm): PTH pad 2 [M1_CH3] of RV10
+#       @(71.5700 mm, 41.2080 mm): PTH pad 2 [LED3_A] of D4
+# (shorting_items and pth_inside_courtyard use the same "... pad N [NET] of REF" /
+# "Footprint REF" item lines.) A ref is the word after "of" or "Footprint" at the
+# end of the line; "Segment of J13 on F.Silkscreen" (silk classes, not gated)
+# does not match.
+GATED_DRC = ("courtyards_overlap", "pth_inside_courtyard", "shorting_items", "clearance",
+             "hole_clearance", "hole_to_hole", "copper_edge_clearance", "items_not_allowed")
+FRONT_REPORTED = ("courtyards_overlap", "pth_inside_courtyard")
+_REF_RE = re.compile(r"(?:\bof|Footprint) ([A-Za-z_]+[0-9]*[A-Za-z_0-9]*)\s*$", re.M)
+_CLASS_RE = re.compile(r"^\[([a-z0-9_]+)\]")
+
+
+def drc_items(rpt_path):
+    """[(class, [refs])] per violation block of a kicad-cli report."""
+    txt = open(rpt_path, encoding="utf-8", errors="replace").read()
+    out = []
+    for block in re.split(r"(?=^\[)", txt, flags=re.M):
+        m = _CLASS_RE.match(block)
+        if m:
+            out.append((m.group(1), sorted(set(_REF_RE.findall(block)))))
+    return out
+
+
+def check_drc(s, pcb_path, prefix):
+    rpt = prefix + "-drc.rpt"
+    try:
+        items = PP.drc(pcb_path + (".missing" if getattr(s, "drc_broken", False) else ""), rpt)
+    except RuntimeError as e:
+        return False, "kicad-cli wrote no report: %s" % str(e)[:200], []
+    blocks = drc_items(rpt)
+    found, front_crtyd = {}, []
+    front = set(s.front)
+    for cls, refs in blocks:
+        if cls not in GATED_DRC:
+            continue
+        if cls in FRONT_REPORTED and refs and set(refs) <= front:
+            # Front-side courtyards overlap by design on this panel (the P4a
+            # strip already had 6 LED/pot/jack overlaps unrouted); the physical
+            # question is the front check's body test (spec §5.1 item 6
+            # amendment).
+            front_crtyd.append("%s %s" % (cls, "/".join(sorted(_key(s, r) for r in refs))))
+            continue
+        key = "%s %s" % (cls, "/".join(sorted(_key(s, r) for r in refs)))
+        found[key] = "kicad-cli"
+    ok, details, nk = _judge(s, "drc", found)
+    details += ["reported, not gated: " + f for f in sorted(set(front_crtyd))]
+    others = ", ".join("%s %d" % kv for kv in sorted(items.items()) if kv[0] not in GATED_DRC) or "none"
+    return ok, "gated: %d items (%d known), %d front courtyard items reported; not gated: %s" % (
+        len(found), nk, len(front_crtyd), others), details
+
+
 STEPS = [("anchors", check_anchors), ("edge", check_edge), ("front", check_front),
          ("module", check_module), ("decoupling", check_decoupling),
-         ("report", report), ("render", render)]
+         ("drc", check_drc), ("report", report), ("render", render)]
 
 
 DETAIL_CAP = 40
@@ -459,19 +541,34 @@ def _sab_decoupling_missing(s):
     s.decouplers.clear()
 
 
+def _sab_drc(s):
+    """A GND track 0.1 mm beside a decoupler's rail pad: a near miss, not a
+    touch (a touch is renamed to the pad's net on save, probed 2026-09-29)."""
+    fp = _fp(s.board, sorted(s.decouplers)[0])
+    bb = [p for p in fp.Pads() if str(p.GetNumber()) == "1"][0].GetBoundingBox()
+    x = pcbnew.ToMM(bb.GetRight()) + 0.1 + 0.125
+    kipcb.add_track(s.board, "B.Cu", 0.25, "GND",
+                    [(x, pcbnew.ToMM(bb.GetTop()) - 1.0), (x, pcbnew.ToMM(bb.GetBottom()) + 1.0)])
+
+
+def _sab_drc_missing(s):
+    s.drc_broken = True
+
+
 SABOTAGES = {"anchors": _sab_anchors, "anchors_missing": _sab_anchors_missing,
              "edge": _sab_edge, "edge_missing": _sab_edge_missing,
              "front": _sab_front, "front_missing": _sab_front_missing,
              "known_stale": _sab_known_stale,
              "module": _sab_module, "module_missing": _sab_module_missing,
              "front_back_tht": _sab_front_back_tht,
-             "decoupling": _sab_decoupling, "decoupling_missing": _sab_decoupling_missing}
+             "decoupling": _sab_decoupling, "decoupling_missing": _sab_decoupling_missing,
+             "drc": _sab_drc, "drc_missing": _sab_drc_missing}
 # which step each sabotage must turn red (test_place.py reads this)
 TURNS_RED = {"anchors": "anchors", "anchors_missing": "anchors", "edge": "edge",
              "edge_missing": "edge", "front": "front", "front_missing": "front",
              "known_stale": "edge", "module": "module", "module_missing": "module",
              "front_back_tht": "front", "decoupling": "decoupling",
-             "decoupling_missing": "decoupling"}
+             "decoupling_missing": "decoupling", "drc": "drc", "drc_missing": "drc"}
 
 
 def sabotage(s, name):
