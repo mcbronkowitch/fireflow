@@ -41,6 +41,13 @@ half-width + 2s, s for the via class), vias as discs on every layer. Copper
 inside a `pair_exempt` rect marks nothing, and no cell inside one is ever
 marked.
 
+Priority tiers: `add_net(..., tier=t)`. Nets route in ascending tier, then by
+span. A net of tier t prices a cell claimed by nets of tier <= t at full
+pressure and one claimed only by higher tiers at a quarter of it, so lower
+tiers keep the short way and higher tiers give way. With one tier in use the
+cost is the plain formula above. `Result.stats` holds length and via count
+per routed net.
+
 Deterministic: fixed net order, fixed neighbour order, a counter as the heap
 tie-break, no randomness anywhere.
 
@@ -60,6 +67,12 @@ Known limits (P4a review)
   copper, and `Result.conflicts` counts NETS in conflict, not cells. Adapters
   must fail on `conflicts > 0`.
 - The tree test checks endpoint contact, not connectivity.
+- A static pair shape whose bbox centre lies inside an exemption rect marks
+  nothing, even where it extends outside (fine for pads; a long locked seg
+  would lose its mark).
+- A pair mark is hard, never a conflict: a net that fails because a partner
+  routed earlier is blocked goes to `failed` and is not retried, so pair
+  failures depend on route order (tiers mitigate).
 """
 import heapq
 import math
@@ -148,6 +161,7 @@ class Result:
         self.failed = []
         self.conflicts = 0
         self.iterations = 0
+        self.stats = {}
 
 
 class Router:
@@ -167,16 +181,19 @@ class Router:
         self._pairs = []           # (group_a, group_b, mm)
         self._exempt = []          # (left, top, right, bottom)
         self._cur_pair = None
+        self._tiers = {}           # net -> priority tier
+        self._cur_tier = 0
 
     # --- input -------------------------------------------------------------
     def add_obstacle(self, net, layers, shape, group=None):
         self._obstacles.append((net, tuple(layers), shape))
         self._ogroups.append(group)
 
-    def add_net(self, name, half_width, terminals, group=None):
+    def add_net(self, name, half_width, terminals, group=None, tier=0):
         self._nets.append((name, half_width, [(x, y, tuple(ls)) for x, y, ls in terminals]))
         if group is not None:
             self._groups[name] = group
+        self._tiers[name] = int(tier)
 
     def pair_clearance(self, group_a, group_b, mm):
         self._pairs.append((group_a, group_b, float(mm)))
@@ -271,7 +288,11 @@ class Router:
             return None
         if self._cur_pair is not None and self._pair_blocked(c, i):
             return None
-        return (1.0 + self._hist[i]) * (1.0 + pres * self._occ[c][i])
+        if self._occ_t is None:
+            return (1.0 + self._hist[i]) * (1.0 + pres * self._occ[c][i])
+        t = self._cur_tier
+        le = sum(self._occ_t[u][c][i] for u in range(t + 1))
+        return (1.0 + self._hist[i]) * (1.0 + pres * (le + 0.25 * (self._occ[c][i] - le)))
 
     def _via_step(self, ix, iy, nid, pres):
         v = self._via_c
@@ -283,7 +304,11 @@ class Router:
                 return None
             if self._cur_pair is not None and self._pair_blocked(v, i):
                 return None
-            claims += self._occ[v][i]
+            if self._occ_t is None:
+                claims += self._occ[v][i]
+            else:
+                le = sum(self._occ_t[u][v][i] for u in range(self._cur_tier + 1))
+                claims += le + 0.25 * (self._occ[v][i] - le)
         return self.via_cost * (1.0 + pres * claims)
 
     # --- A* ----------------------------------------------------------------------
@@ -367,6 +392,7 @@ class Router:
         nid, c = k + 1, self._class_of[k]
         g = self._net_group[k] if self._pairs else None
         self._cur_pair = ((self._pstat[g], self._pocc[g]) if g in getattr(self, "_pstat", {}) else None)
+        self._cur_tier = self._tier_of[k]
         tcells = [self._terminal_cells(x, y, ls, nid, c) for x, y, ls in terms]
         if any(not tc for tc in tcells):
             return False, []
@@ -421,6 +447,11 @@ class Router:
             occ = self._occ[c2]
             for i in m:
                 occ[i] += 1
+        if self._occ_t is not None:
+            for c2, m in enumerate(marks):
+                occ = self._occ_t[self._tier_of[k]][c2]
+                for i in m:
+                    occ[i] += 1
         self._marks[k], self._paths[k] = marks, paths
         g = self._net_group[k] if self._pairs else None
         pm = []
@@ -454,6 +485,11 @@ class Router:
             occ = self._occ[c2]
             for i in m:
                 occ[i] -= 1
+        if self._occ_t is not None:
+            for c2, m in enumerate(self._marks[k]):
+                occ = self._occ_t[self._tier_of[k]][c2]
+                for i in m:
+                    occ[i] -= 1
         self._marks[k], self._paths[k] = None, []
 
     def _conflict_cells(self, k):
@@ -539,6 +575,11 @@ class Router:
         cells = self.layers * self.plane
         self._static = [array("i", [FREE]) * cells for _ in self._classes]
         self._occ = [array("i", [0]) * cells for _ in self._classes]
+        tier_ids = sorted({self._tiers.get(name, 0) for name, _hw, _t in self._nets}) or [0]
+        self._tier_of = [tier_ids.index(self._tiers.get(name, 0)) for name, _hw, _t in self._nets]
+        self._ntiers = len(tier_ids)
+        self._occ_t = ([[array("i", [0]) * cells for _ in self._classes] for _ in range(self._ntiers)]
+                       if self._ntiers > 1 else None)
         self._hist = array("d", [0.0]) * cells
         for net, layers, shape in self._obstacles:
             nid = BLOCKED if net is None else ids[net]
@@ -570,7 +611,7 @@ class Router:
             xs, ys = [t[0] for t in ts], [t[1] for t in ts]
             return (max(xs) - min(xs) + max(ys) - min(ys), self._nets[k][0])
 
-        order = sorted(range(n), key=span)
+        order = sorted(range(n), key=lambda k: (self._tier_of[k], span(k)))
         res, failed, pres, todo = Result(), set(), pres0, list(order)
         for it in range(1, max_iters + 1):
             res.iterations = it
@@ -597,5 +638,11 @@ class Router:
         res.failed = sorted(self._nets[k][0] for k in failed)
         for k in order:
             if k not in failed:
-                res.routes[self._nets[k][0]] = self._geometry(k)
+                name = self._nets[k][0]
+                geo = self._geometry(k)
+                res.routes[name] = geo
+                res.stats[name] = {
+                    "length_mm": round(sum(math.hypot(q[0] - p[0], q[1] - p[1])
+                                           for _l, p, q in geo["segments"]), 6),
+                    "vias": len(geo["vias"])}
         return res

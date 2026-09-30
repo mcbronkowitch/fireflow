@@ -296,12 +296,149 @@ def test_pair_other_layer():
           "other layer: B routed on layer 1 only, no via (%s)" % res.failed)
 
 
+def _via_pair_board(rule):
+    """Two layers, a netless wall on layer 0 across B's straight path, so B has
+    to change layer left of it. A victim pad on layer 0 sits 3.35 mm above the
+    via's cheapest spot, a second one on layer 1 3.35 mm below it: a track at
+    y 5 stays legal on both layers (>= 3.265 mm), a via (0.6 mm radius) does
+    not."""
+    r = R.Router((0, 0, 20, 10), 0.2, 2, CLR, 0.6)
+    r.add_obstacle(None, (0,), ("rect", 9.0, 0.0, 11.0, 10.0))
+    r.add_obstacle("V1", (0,), ("rect", 7.8, 8.35, 8.2, 8.75), group="victim")
+    r.add_obstacle("V2", (1,), ("rect", 7.8, 1.25, 8.2, 1.65), group="victim")
+    r.add_net("B", 0.125, [(1.0, 5.0, (0,)), (19.0, 5.0, (0,))], group="aggr")
+    if rule is not None:
+        r.pair_clearance("victim", "aggr", rule)
+    return r.run()
+
+
+_VIA_PADS = ((7.8, 8.35, 8.2, 8.75), (7.8, 1.25, 8.2, 1.65))
+
+
+def _via_edge(via, pad):
+    """Edge-to-edge distance from a via disc (radius 0.6) to a pad rect."""
+    x, y = via
+    l, t, r, b = pad
+    return math.hypot(max(l - x, 0, x - r), max(t - y, 0, y - b)) - 0.6
+
+
+def test_pair_via():
+    """A via is a disc on every layer, so it must keep the pair distance from
+    victim copper on both layers -- also where the track leading to it would
+    be legal."""
+    free = _via_pair_board(None)
+    fv = free.routes.get("B", {"vias": []})["vias"]
+    check(not free.failed and len(fv) >= 2 and min(_via_edge(v, p) for v in fv for p in _VIA_PADS) < 3.0,
+          "pair via: without a rule a via sits closer than 3 mm to a pad (%s)" % (fv,))
+    res = _via_pair_board(3.0)
+    vias = res.routes.get("B", {"vias": []})["vias"]
+    check(not res.failed and res.conflicts == 0 and len(vias) >= 1,
+          "pair via: B routed with %d vias (%s)" % (len(vias), res.failed))
+    worst = min((_via_edge(v, p) for v in vias for p in _VIA_PADS), default=0.0)
+    check(worst >= 3.0 - 1e-6, "pair via: every via edge >= 3.0 mm from both pads (%.3f)" % worst)
+
+def test_clip_outside():
+    def same(got, want):
+        return len(got) == len(want) and all(
+            abs(g[i][j] - w[i][j]) < 1e-9 for g, w in zip(got, want) for i in (0, 1) for j in (0, 1))
+    a, b = (0.0, 0.0), (10.0, 0.0)
+    check(same(R._clip_outside(a, b, [(4.0, -1.0, 6.0, 1.0)]),
+               [((0.0, 0.0), (4.0, 0.0)), ((6.0, 0.0), (10.0, 0.0))]),
+          "clip: one rect splits the segment in two")
+    check(same(R._clip_outside(a, b, [(4.0, -1.0, 6.0, 1.0), (5.0, -1.0, 8.0, 1.0)]),
+               [((0.0, 0.0), (4.0, 0.0)), ((8.0, 0.0), (10.0, 0.0))]),
+          "clip: overlapping rects merge")
+    check(R._clip_outside((5.0, 0.0), (5.5, 0.0), [(4.0, -1.0, 6.0, 1.0)]) == [],
+          "clip: a segment fully inside gives nothing")
+    check(same(R._clip_outside(a, b, []), [(a, b)]), "clip: no rects gives the whole segment")
+
+
+def test_clip_routed():
+    """Victim A runs (1,6)-(13,6) and ends inside the exemption rect (10..14,
+    5..7). Copper inside marks nothing, so B, routed after A (longer span),
+    may run straight up x 14.6 -- 1.6 mm from A's end, outside the rect --
+    while cells beside A's part outside the rect stay marked."""
+    rect = (10.0, 5.0, 14.0, 7.0)
+    r = R.Router((0, 0, 30, 20), 0.2, 1, CLR, 0.3)
+    r.add_net("A", 0.125, [(1.0, 6.0, (0,)), (13.0, 6.0, (0,))], group="victim")
+    r.add_net("B", 0.125, [(14.6, 0.5, (0,)), (14.6, 13.0, (0,))], group="aggr")
+    r.pair_clearance("victim", "aggr", 3.0)
+    r.pair_exempt(rect)
+    res = r.run()
+    check(not res.failed and res.conflicts == 0, "clip routed: both routed (%s)" % res.failed)
+    check("B" in res.routes and length(res, "B") < 13.1,
+          "clip routed: B straight past A's end, length %.2f (< 13.1)"
+          % (length(res, "B") if "B" in res.routes else -1))
+    occ = r._pocc["aggr"][0]
+    check(occ[r._idx(0, int(round(14.6 / 0.2)), int(round(6.0 / 0.2)))] == 0,
+          "clip routed: no mark beside the copper inside the rect")
+    check(occ[r._idx(0, int(round(5.0 / 0.2)), int(round(9.2 / 0.2)))] > 0,
+          "clip routed: cells beside the copper outside the rect are marked")
+
+
+_GAPS = ((0.6, 1.8), (9.4, 10.6), (18.2, 19.4))     # south, middle, north
+
+
+def _gap_board(tier_a, tier_b):
+    """A wall with three gaps, each wide enough for one track. A (y 9) sits
+    below B (y 11); both want the middle gap (y 10). Whoever loses it goes
+    round through the gap on its own side -- A south, B north -- so either net
+    can win without the two having to cross."""
+    r = R.Router((0, 0, 10, 20), 0.2, 1, CLR, 0.3)
+    edges = [0.0]
+    for lo, hi in _GAPS:
+        edges += [lo, hi]
+    edges.append(20.0)
+    for k in range(0, len(edges), 2):
+        r.add_obstacle(None, (0,), ("rect", 4.5, edges[k], 5.5, edges[k + 1]))
+    r.add_net("A", 0.125, [(1.0, 9.0, (0,)), (9.0, 9.0, (0,))], tier=tier_a)
+    r.add_net("B", 0.125, [(1.0, 11.0, (0,)), (9.0, 11.0, (0,))], tier=tier_b)
+    return r.run()
+
+
+def _gaps_used(res, net):
+    """Indices into _GAPS of the gaps `net` runs through."""
+    segs = res.routes.get(net, {"segments": []})["segments"]
+    return [k for k, (lo, hi) in enumerate(_GAPS)
+            if any(min(p[0], q[0]) < 5.5 and max(p[0], q[0]) > 4.5
+                   and lo <= min(p[1], q[1]) and max(p[1], q[1]) <= hi for _l, p, q in segs)]
+
+
+def test_tiers():
+    """The lower tier keeps the short way: with A at tier 0 it takes the middle
+    gap and B goes north, with B at tier 0 the roles swap."""
+    a_first = _gap_board(0, 1)
+    b_first = _gap_board(1, 0)
+    check(not a_first.failed and not b_first.failed and a_first.conflicts == 0 and b_first.conflicts == 0,
+          "tiers: both boards routed without conflicts")
+    check(_gaps_used(a_first, "A") == [1] and _gaps_used(a_first, "B") == [2],
+          "tiers: A (tier 0) takes the middle gap, B the north one (A %s, B %s)"
+          % (_gaps_used(a_first, "A"), _gaps_used(a_first, "B")))
+    check(_gaps_used(b_first, "B") == [1] and _gaps_used(b_first, "A") == [0],
+          "tiers: B (tier 0) takes the middle gap, A the south one (A %s, B %s)"
+          % (_gaps_used(b_first, "A"), _gaps_used(b_first, "B")))
+
+
+def test_stats():
+    r = R.Router((0, 0, 10, 10), 0.2, 2, CLR, 0.3)
+    r.add_obstacle(None, (0,), ("rect", 4.0, 0.0, 6.0, 10.0))
+    r.add_net("V", 0.125, [(1.0, 5.0, (0,)), (9.0, 5.0, (0,))])
+    res = r.run()
+    st = res.stats.get("V", {})
+    segs = res.routes.get("V", {"segments": [], "vias": []})
+    want = sum(math.hypot(q[0] - p[0], q[1] - p[1]) for _l, p, q in segs["segments"])
+    check(abs(st.get("length_mm", -1) - want) < 1e-5 and st.get("vias") == len(segs["vias"]) == 2,
+          "stats: length %.3f (want %.3f), vias %s" % (st.get("length_mm", -1), want, st.get("vias")))
+
+
 if __name__ == "__main__":
     for t in (test_straight, test_detour, test_via, test_own_net_passable,
               test_crossing_two_layers, test_side_by_side, test_negotiation,
               test_failed_net_leaves_no_copper, test_tree, test_deterministic,
               test_defaults_unchanged, test_pair_binding, test_pair_keeps_apart,
-              test_pair_exempt, test_pair_static_pad, test_pair_other_layer):
+              test_pair_exempt, test_pair_static_pad, test_pair_other_layer,
+              test_pair_via, test_clip_outside, test_clip_routed,
+              test_tiers, test_stats):
         t()
     print("FAILED: %d" % len(FAILS) if FAILS else "all route checks passed")
     sys.exit(1 if FAILS else 0)
