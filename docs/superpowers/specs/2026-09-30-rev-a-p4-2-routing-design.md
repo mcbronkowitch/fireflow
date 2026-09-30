@@ -105,6 +105,39 @@ Probed on the committed P4-1 board (`hardware/reva/kicad/reva.kicad_pcb`,
   `reva.kicad_pro` (P3's `build.py`) holds only `meta`.
 - **Spike timing:** the P4a strip (97.1 × 116.1 mm, 47 nets) routed on 4 layers
   in 6.2 s at pitch 0.2 mm. The full board is about 3× the area with 189 nets.
+- **Probed during execution (Task 1, 2026-09-30): full-board runtime.** The
+  unmodified router on the whole placed board, alone on an idle machine:
+  `nets 187 failed 18 [CLOCK, GATE_A, GATE_B, IN_L, IN_R, MOD1_A..MOD4_A,
+  MOD1_B..MOD4_B, OUT_L, OUT_R, PITCH_A, PITCH_B, RESET] conflicts 2
+  iterations 30 vias 425 length 8683.1 mm seconds 426.7`.
+  - With `max_iters=1`: 20.2 s and 119 conflicts. The negotiation never
+    converges, so all 30 rounds run.
+  - A first measurement (464.9 s) overlapped other work on the machine and was
+    discarded.
+  - 187 nets, not 189: the two plane nets (GND, SM_3V3) are not routed.
+- **Probed during execution (Task 1, 2026-09-30): J_SD terminals at pitch
+  0.2.** Terminal cells per pad: SD_D2 (1) 2, SD_D3 (2) 2, SD_CMD (3) 2,
+  SD_CK (5) 2, SD_D0 (7) 2, SD_D1 (8) 2. Minimum 2, none has 0, so §4.2.5's
+  finer stub is not needed.
+- **Probed during execution (Task 1, 2026-09-30): jack tip pads lie outside
+  the grid.** All 18 failed nets are jack nets.
+  - Each jack's tip pad T sits at y 118.92 (pad box y 117.86..119.98).
+  - The router grid ends at y 118.5 (outline 119.25 − edge 0.5 − supply
+    half-width 0.25).
+  - `_terminal_cells` searches only ±2 cells (0.4 mm) around the rounded pad
+    centre, so no terminal cell exists and all four audio nets are unrouted.
+  - Answer: §4.2.6.
+- **Probed during execution (Task 1, 2026-09-30): which `.kicad_pro` keys
+  kicad-cli honours.** On the P4-1 board plus one 0.2 mm track on 3V3D:
+  - A pro with `board.design_settings.rules` (plus `meta`) gives the same
+    per-class DRC counts as the pro SaveBoard writes; `track_width` 1 with it,
+    0 without.
+  - Adding `net_settings` changes no count. The minimal key set is
+    `board.design_settings.rules`: `min_track_width` 0.25,
+    `min_via_diameter` 0.6, `min_through_hole_diameter` 0.3,
+    `min_clearance` 0.2, `min_copper_edge_clearance` 0.5.
+  - `clearance` (8) and `copper_edge_clearance` (18) counts were the same
+    without the rules; only the counts were compared.
 
 ## 4. Design
 
@@ -194,7 +227,19 @@ for byte.
 5. **A finer terminal stub** only if the J_SD probe (plan Task 1) shows that
    a J_SD pin is unreachable at pitch 0.2. Otherwise the pitch stays 0.2 mm
    everywhere.
-6. **Reported per net:** length (sum of segments) and via count, in
+6. **A pad-bounded terminal fallback.** Decided by Bastian 2026-09-30 after
+   the Task 1 probe (jack tip pads lie outside the grid, §3).
+   - A terminal may carry its pad's copper shape.
+   - Only when the ±2-cell window around the pad centre finds no usable cell,
+     the router takes the usable grid cell nearest the pad centre whose centre
+     lies inside that pad shape.
+   - The stub then lies inside the pad's own copper, so it adds no edge or
+     clearance violation.
+   - Off by default: a terminal without a shape behaves exactly as today; the
+     coupon and `hw_gen_route_guard` stay byte for byte.
+   - This makes the 18 jack nets, the audio nets included, routable before the
+     panel pass.
+7. **Reported per net:** length (sum of segments) and via count, in
    `Result.stats[name]`.
 
 The router measures nothing it gates. Every rule is judged by `route_check.py`
@@ -322,7 +367,10 @@ to P4-1's. `docs/hardware/grip-test.md` gets that sentence.
 ## 7. Risks, and what the plan does about them
 
 - **Runtime.** The first plan task measures a full-board run.
-  - Above 5 minutes wall time it is a finding for Bastian.
+  - Above 10 minutes wall time it is a finding for Bastian (raised from 5 by
+    Bastian on 2026-09-30 after the Task 1 probe, 426.7 s). The limit is
+    re-measured after the router additions, and the guard's ctest timeout
+    grows with it.
   - Coarsening the grid is not the implementer's call.
 - **J_SD at 1.10 mm pitch.** It is probed first (§4.2.5).
 - **Unroutable rules.**
