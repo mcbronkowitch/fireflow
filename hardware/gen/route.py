@@ -83,12 +83,19 @@ Known limits (P4a review)
 import heapq
 import math
 from array import array
+from bisect import bisect_left, bisect_right
 
 FREE, BLOCKED = 0, -1
 SQRT2 = math.sqrt(2.0)
 _DIRS = ((1, 0, 1.0), (-1, 0, 1.0), (0, 1, 1.0), (0, -1, 1.0),
          (1, 1, SQRT2), (1, -1, SQRT2), (-1, 1, SQRT2), (-1, -1, SQRT2))
 _INF = float("inf")
+# Pair marking's safety band (mm): a row's cells closer than radius - _BAND
+# (analytically) are marked unexamined, cells farther than radius + _BAND are
+# skipped, and every cell between gets the exact per-cell test. Any float
+# error in the analytic spans is ~1e-12 mm, far inside the band.
+_BAND = 1e-6
+_PLUS1, _MINUS1 = (1).__add__, (-1).__add__      # pair-occupancy span updates
 
 
 def _seg_point(px, py, ax, ay, bx, by):
@@ -161,6 +168,99 @@ def _inside_any(x, y, rects):
     return any(l <= x <= r and t <= y <= b for l, t, r, b in rects)
 
 
+def _capsule_span(ax, ay, bx, by):
+    """For segment a-b, a function span(y, rr) giving the open
+    x-interval of row y within rr of the segment (rr = radius + a small
+    band either way), or None where the row misses; None instead of a
+    function where a direction component is tiny but not zero (dividing by
+    it would amplify rounding), so the caller tests every cell.
+
+    The capsule is the union of the discs at both ends and the strip of
+    points projecting onto the segment; it is convex, so its row slice is
+    the hull of the pieces' slices."""
+    dx, dy = bx - ax, by - ay
+    ln = math.hypot(dx, dy)
+    ux, uy = (dx / ln, dy / ln) if ln > 0 else (0.0, 0.0)
+    if (ux != 0.0 and abs(ux) < 1e-6) or (uy != 0.0 and abs(uy) < 1e-6):
+        return None
+
+    def span(y, rr):
+        if rr <= 0.0:
+            return None
+        lo, hi = _INF, -_INF
+        for cx, cy in ((ax, ay), (bx, by)):
+            d = y - cy
+            if -rr < d < rr:
+                h = math.sqrt((rr - d) * (rr + d))
+                lo, hi = min(lo, cx - h), max(hi, cx + h)
+        if ln > 0:
+            e = y - ay
+            if ux != 0.0:                   # 0 <= (x-ax)ux + e uy <= ln
+                p0, p1 = (-e * uy) / ux, (ln - e * uy) / ux
+                a0, a1 = (p0, p1) if p0 <= p1 else (p1, p0)
+                ok = True
+            else:
+                a0, a1, ok = -_INF, _INF, 0.0 <= e * uy <= ln
+            if ok:
+                if uy != 0.0:               # |(x-ax)uy - e ux| < rr
+                    q0, q1 = (e * ux - rr) / uy, (e * ux + rr) / uy
+                    if q0 > q1:
+                        q0, q1 = q1, q0
+                    a0, a1 = max(a0, q0), min(a1, q1)
+                else:
+                    ok = -rr < e * ux < rr
+            if ok and a0 < a1:
+                lo, hi = min(lo, ax + a0), max(hi, ax + a1)
+        return (lo, hi) if lo < hi else None
+    return span
+
+
+def _shape_span(shape):
+    """`_capsule_span` for an obstacle shape: the cells with
+    `_shape_dist < rr` (so none for rr <= 0)."""
+    kind = shape[0]
+    if kind == "rect":
+        _k, l, t, r, b = shape
+
+        def span(y, rr):
+            d = t - y if t - y > 0.0 else (y - b if y - b > 0.0 else 0.0)
+            if rr <= 0.0 or d >= rr:
+                return None
+            h = math.sqrt((rr - d) * (rr + d))
+            return (l - h, r + h)
+        return span
+    if kind == "circle":
+        _k, cx, cy, rad = shape
+        disc = _capsule_span(cx, cy, cx, cy)
+        return lambda y, rr: disc(y, rr + rad) if rr > 0.0 else None
+    if kind == "seg":
+        _k, x1, y1, x2, y2, hw = shape
+        cap = _capsule_span(x1, y1, x2, y2)
+        if cap is None:
+            return None
+        return lambda y, rr: cap(y, rr + hw) if rr > 0.0 else None
+    raise ValueError("unknown shape %r" % (kind,))
+
+
+def _merge_rows(rows):
+    """{row base index: [[ix_lo, ix_hi], ...]} -> sorted disjoint cell index
+    spans [(start, end)]."""
+    out = []
+    for base in sorted(rows):
+        cur = None
+        for lo, hi in sorted(rows[base]):
+            if cur is not None and lo <= cur[1]:
+                if hi > cur[1]:
+                    cur[1] = hi
+                continue
+            if cur is not None:
+                out.append((base + cur[0], base + cur[1]))
+            cur = [lo, hi]
+        if cur is not None:
+            out.append((base + cur[0], base + cur[1]))
+    return out
+
+
 class Result:
     def __init__(self):
         self.routes = {}
@@ -179,6 +279,10 @@ class Router:
         self.ny = int(math.floor((y1 - self.y0) / pitch + 1e-9)) + 1
         self.plane = self.nx * self.ny
         self.s = pitch * SQRT2 / 2.0
+        # the cell-centre coordinates `_xy` gives, per column and per row;
+        # non-decreasing, so bisect finds the cells between two x values
+        self._xs = [round(self.x0 + ix * self.pitch, 6) for ix in range(self.nx)]
+        self._ys = [round(self.y0 + iy * self.pitch, 6) for iy in range(self.ny)]
         self._obstacles = []
         self._nets = []
         self._tshapes = []         # per net: per terminal, the pad's shape or None
@@ -249,41 +353,95 @@ class Router:
                     elif cur == FREE:
                         arr[i] = nid
 
-    def _capsule_cells(self, out, layers, a, b, radius):
-        """Add to `out` every cell index (on each layer) whose centre lies
-        within `radius` of segment a-b and outside every exemption rect."""
-        shape = ("seg", a[0], a[1], b[0], b[1], 0.0)
+    def _mark_rows(self, rows, layers, shape, radius, span):
+        """Add to `rows` ({row base index: [[ix_lo, ix_hi], ...]}, one row per
+        layer) every cell of the shape's bbox grown by `radius` whose centre
+        has `_shape_dist < radius` and lies outside every exemption rect.
+
+        That is the per-cell test over the bbox, enumerated row by row: the
+        analytic `span` bounds each row's run, the cells within _BAND of its
+        ends get the exact test, the rest are marked or skipped unexamined;
+        the rects are cut out per row as exact index ranges (the same `<=`
+        comparisons as `_inside_any`, found by bisect in the sorted `_xs`).
+        With `span` None every bbox cell gets the exact test."""
         l, t, r, btm = _shape_box(shape)
         ix0 = max(0, int(math.floor((l - radius - self.x0) / self.pitch)))
         ix1 = min(self.nx - 1, int(math.ceil((r + radius - self.x0) / self.pitch)))
         iy0 = max(0, int(math.floor((t - radius - self.y0) / self.pitch)))
         iy1 = min(self.ny - 1, int(math.ceil((btm + radius - self.y0) / self.pitch)))
+        xs, ys, nx, plane, exempt = self._xs, self._ys, self.nx, self.plane, self._exempt
+        end = ix1 + 1
         for iy in range(iy0, iy1 + 1):
-            for ix in range(ix0, ix1 + 1):
-                x, y = self._xy(ix, iy)
-                if _shape_dist(x, y, shape) >= radius or _inside_any(x, y, self._exempt):
+            y = ys[iy]
+            if span is None:
+                lo, hi, a, b = ix0, end, ix0, ix0
+            else:
+                o = span(y, radius + _BAND)
+                if o is None:
                     continue
+                lo = bisect_left(xs, o[0], ix0, end)
+                hi = bisect_right(xs, o[1], lo, end)
+                if lo >= hi:
+                    continue
+                inner = span(y, radius - _BAND)
+                if inner is None:
+                    a = b = lo
+                else:
+                    a = bisect_right(xs, inner[0], lo, hi)
+                    b = bisect_left(xs, inner[1], a, hi)
+            run = []
+            for ix in range(lo, a):
+                if _shape_dist(xs[ix], y, shape) < radius:
+                    if run and run[-1][1] == ix:
+                        run[-1][1] = ix + 1
+                    else:
+                        run.append([ix, ix + 1])
+            if a < b:
+                if run and run[-1][1] == a:
+                    run[-1][1] = b
+                else:
+                    run.append([a, b])
+            for ix in range(b, hi):             # b >= a: bisected from a
+                if _shape_dist(xs[ix], y, shape) < radius:
+                    if run and run[-1][1] == ix:
+                        run[-1][1] = ix + 1
+                    else:
+                        run.append([ix, ix + 1])
+            for el, et, er, eb in exempt:
+                if run and et <= y <= eb:
+                    p, q = bisect_left(xs, el), bisect_right(xs, er)
+                    if p < q:
+                        cut = []
+                        for s0, s1 in run:
+                            if s1 <= p or s0 >= q:
+                                cut.append([s0, s1])
+                                continue
+                            if s0 < p:
+                                cut.append([s0, p])
+                            if s1 > q:
+                                cut.append([q, s1])
+                        run = cut
+            if run:
                 for layer in layers:
-                    out.add(self._idx(layer, ix, iy))
+                    rows.setdefault(layer * plane + iy * nx, []).extend(run)
 
-    def _shape_cells(self, out, layers, shape, radius):
+    def _capsule_cells(self, rows, layers, a, b, radius):
+        """Add to `rows` (see `_mark_rows`) every cell (on each layer) whose
+        centre lies within `radius` of segment a-b and outside every
+        exemption rect."""
+        self._mark_rows(rows, layers, ("seg", a[0], a[1], b[0], b[1], 0.0), radius,
+                        _capsule_span(a[0], a[1], b[0], b[1]))
+
+    def _shape_cells(self, layers, shape, radius):
         """Static obstacles: skipped entirely if their centre lies inside an
         exemption rect; otherwise every cell within `radius` of the shape,
-        outside the rects."""
+        outside the rects. Returns the cells as index spans [(start, end)]."""
         l, t, r, btm = _shape_box(shape)
         if _inside_any((l + r) / 2.0, (t + btm) / 2.0, self._exempt):
-            return
-        ix0 = max(0, int(math.floor((l - radius - self.x0) / self.pitch)))
-        ix1 = min(self.nx - 1, int(math.ceil((r + radius - self.x0) / self.pitch)))
-        iy0 = max(0, int(math.floor((t - radius - self.y0) / self.pitch)))
-        iy1 = min(self.ny - 1, int(math.ceil((btm + radius - self.y0) / self.pitch)))
-        for iy in range(iy0, iy1 + 1):
-            for ix in range(ix0, ix1 + 1):
-                x, y = self._xy(ix, iy)
-                if _shape_dist(x, y, shape) >= radius or _inside_any(x, y, self._exempt):
-                    continue
-                for layer in layers:
-                    out.add(self._idx(layer, ix, iy))
+            return []
+        rows = {}
+        self._mark_rows(rows, layers, shape, radius, _shape_span(shape))
+        return _merge_rows(rows)
 
     def _pair_blocked(self, c, i):
         pb = self._cur_pair
@@ -568,31 +726,41 @@ class Router:
         self._marks[k], self._paths[k] = marks, paths
         g = self._net_group[k] if self._pairs else None
         pm = []
-        for tgt, mm in self._pair_src.get(g, ()) if g is not None else ():
-            for c2, hw2 in enumerate(self._classes):
-                extra = self.s if c2 == self._via_c else 2 * self.s
-                cells = set()
-                for layer, a, b in self._runs(paths):
-                    for p, q in _clip_outside(a, b, self._exempt):
-                        self._capsule_cells(cells, (layer,), p, q, hw + mm + hw2 + extra)
-                for ix, iy in self._vias_of(paths):
-                    x, y = self._xy(ix, iy)
-                    if not _inside_any(x, y, self._exempt):
-                        self._capsule_cells(cells, range(self.layers), (x, y), (x, y),
-                                            self.via_radius + mm + hw2 + self.s)
-                occ = self._pocc[tgt][c2]
-                for i in cells:
-                    occ[i] += 1
-                pm.append((tgt, c2, cells))
+        srcs = self._pair_src.get(g, ()) if g is not None else ()
+        if srcs:
+            # A class's cell set depends on the distance only, never on the
+            # target: built once per (mm, class), shared by every target at
+            # that distance (and by _rip through _pmarks).
+            clipped = [(layer, p, q) for layer, a, b in self._runs(paths)
+                       for p, q in _clip_outside(a, b, self._exempt)]
+            vias = [xy for xy in (self._xy(ix, iy) for ix, iy in self._vias_of(paths))
+                    if not _inside_any(xy[0], xy[1], self._exempt)]
+            built = {}
+            for tgt, mm in srcs:
+                for c2, hw2 in enumerate(self._classes):
+                    spans = built.get((mm, c2))
+                    if spans is None:
+                        extra = self.s if c2 == self._via_c else 2 * self.s
+                        rows = {}
+                        for layer, p, q in clipped:
+                            self._capsule_cells(rows, (layer,), p, q, hw + mm + hw2 + extra)
+                        for x, y in vias:
+                            self._capsule_cells(rows, range(self.layers), (x, y), (x, y),
+                                                self.via_radius + mm + hw2 + self.s)
+                        spans = built[(mm, c2)] = _merge_rows(rows)
+                    occ = self._pocc[tgt][c2]
+                    for s0, s1 in spans:
+                        occ[s0:s1] = array("H", map(_PLUS1, occ[s0:s1]))
+                    pm.append((tgt, c2, spans))
         self._pmarks[k] = pm
 
     def _rip(self, k):
         if self._marks[k] is None:
             return
-        for tgt, c2, cells in self._pmarks[k] or ():
+        for tgt, c2, spans in self._pmarks[k] or ():
             occ = self._pocc[tgt][c2]
-            for i in cells:
-                occ[i] -= 1
+            for s0, s1 in spans:
+                occ[s0:s1] = array("H", map(_MINUS1, occ[s0:s1]))
         self._pmarks[k] = None
         for c2, m in enumerate(self._marks[k]):
             occ = self._occ[c2]
@@ -712,13 +880,15 @@ class Router:
         self._pocc = {g: [array("H", [0]) * cells for _ in self._classes] for g in targets}
         for (net, layers, shape), og in zip(self._obstacles, self._ogroups):
             g = og if og is not None else self._groups.get(net)
+            built = {}                 # per (mm, class), as in _commit
             for tgt, mm in self._pair_src.get(g, ()):
                 for c, hw in enumerate(self._classes):
-                    marked = set()
-                    self._shape_cells(marked, layers, shape, hw + mm + self.s)
+                    spans = built.get((mm, c))
+                    if spans is None:
+                        spans = built[(mm, c)] = self._shape_cells(layers, shape, hw + mm + self.s)
                     arr = self._pstat[tgt][c]
-                    for i in marked:
-                        arr[i] = 1
+                    for s0, s1 in spans:
+                        arr[s0:s1] = array("b", [1]) * (s1 - s0)
         n = len(self._nets)
         self._marks, self._paths, self._tcells = [None] * n, [[] for _ in range(n)], [[] for _ in range(n)]
         self._pmarks = [None] * n
