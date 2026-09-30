@@ -419,16 +419,70 @@ def test_tiers():
           % (_gaps_used(b_first, "A"), _gaps_used(b_first, "B")))
 
 
+_ORDER_GAPS = ((0.6, 1.8), (4.4, 5.6), (8.2, 9.4))     # south, middle, north
+
+
+def _order_board(tier_x, tier_y):
+    """Round 1 decides this board: both nets want the middle gap, the loser
+    has a free gap on its own side. X (y 3.8, span 8) is longer than Y (y 6.2,
+    span 6), so by span alone Y routes first and wins the middle gap."""
+    r = R.Router((0, 0, 10, 12), 0.2, 1, CLR, 0.3)
+    edges = [0.0]
+    for lo, hi in _ORDER_GAPS:
+        edges += [lo, hi]
+    edges.append(12.0)
+    for k in range(0, len(edges), 2):
+        r.add_obstacle(None, (0,), ("rect", 4.5, edges[k], 5.5, edges[k + 1]))
+    r.add_net("X", 0.125, [(1.0, 3.8, (0,)), (9.0, 3.8, (0,))], tier=tier_x)
+    r.add_net("Y", 0.125, [(2.0, 6.2, (0,)), (8.0, 6.2, (0,))], tier=tier_y)
+    return r.run()
+
+
+def _order_gaps(res, net):
+    segs = res.routes.get(net, {"segments": []})["segments"]
+    return [k for k, (lo, hi) in enumerate(_ORDER_GAPS)
+            if any(min(p[0], q[0]) < 5.5 and max(p[0], q[0]) > 4.5
+                   and lo <= min(p[1], q[1]) and max(p[1], q[1]) <= hi for _l, p, q in segs)]
+
+
+def test_tier_order():
+    """Nets route in ascending tier before span: the longer X at tier 0 routes
+    before the shorter Y at tier 1 and keeps the middle gap. (A geometric
+    guard rather than a call-order recorder: a sort on span alone hands the
+    middle gap to Y, as the tier-less control shows.)"""
+    control = _order_board(0, 0)
+    check(not control.failed and _order_gaps(control, "Y") == [1] and _order_gaps(control, "X") == [0],
+          "tier order: without tiers the shorter Y wins the middle gap (X %s, Y %s)"
+          % (_order_gaps(control, "X"), _order_gaps(control, "Y")))
+    x_first = _order_board(0, 1)
+    check(not x_first.failed and x_first.conflicts == 0
+          and _order_gaps(x_first, "X") == [1] and _order_gaps(x_first, "Y") == [2],
+          "tier order: X (tier 0, longer) routes first and takes the middle gap (X %s, Y %s)"
+          % (_order_gaps(x_first, "X"), _order_gaps(x_first, "Y")))
+
+
 def test_stats():
-    r = R.Router((0, 0, 10, 10), 0.2, 2, CLR, 0.3)
-    r.add_obstacle(None, (0,), ("rect", 4.0, 0.0, 6.0, 10.0))
-    r.add_net("V", 0.125, [(1.0, 5.0, (0,)), (9.0, 5.0, (0,))])
-    res = r.run()
+    """Terminals off the grid, so every net carries stubs: the length must
+    count them, and be rounded to 1e-6."""
+    def board(a, b):
+        r = R.Router((0, 0, 10, 10), 0.2, 2, CLR, 0.3)
+        r.add_obstacle(None, (0,), ("rect", 4.0, 0.0, 6.0, 10.0))
+        r.add_net("V", 0.125, [(a[0], a[1], (0,)), (b[0], b[1], (0,))])
+        return r.run()
+    res = board((1.07, 5.03), (8.91, 4.95))
     st = res.stats.get("V", {})
     segs = res.routes.get("V", {"segments": [], "vias": []})
     want = sum(math.hypot(q[0] - p[0], q[1] - p[1]) for _l, p, q in segs["segments"])
-    check(abs(st.get("length_mm", -1) - want) < 1e-5 and st.get("vias") == len(segs["vias"]) == 2,
-          "stats: length %.3f (want %.3f), vias %s" % (st.get("length_mm", -1), want, st.get("vias")))
+    on_grid = board((1.0, 5.0), (9.0, 5.0)).stats.get("V", {}).get("length_mm", -1)
+    ln = st.get("length_mm", -1)
+    check(abs(ln - want) < 1e-6 and st.get("vias") == len(segs["vias"]) == 2,
+          "stats: length %.6f (want %.6f), vias %s" % (ln, want, st.get("vias")))
+    check(abs(ln - round(ln, 6)) == 0.0, "stats: length %r is rounded to 1e-6" % ln)
+    check(any(math.hypot(q[0] - p[0], q[1] - p[1]) < 0.7 and ((p[0], p[1]) in ((1.07, 5.03), (8.91, 4.95))
+                                                             or (q[0], q[1]) in ((1.07, 5.03), (8.91, 4.95)))
+               for _l, p, q in segs["segments"]),
+          "stats: the off-grid terminal stubs are among the segments")
+    check(ln > on_grid - 1e-9 and ln > 0, "stats: length %.6f counts the stubs (on-grid board %.6f)" % (ln, on_grid))
 
 
 if __name__ == "__main__":
@@ -438,7 +492,7 @@ if __name__ == "__main__":
               test_defaults_unchanged, test_pair_binding, test_pair_keeps_apart,
               test_pair_exempt, test_pair_static_pad, test_pair_other_layer,
               test_pair_via, test_clip_outside, test_clip_routed,
-              test_tiers, test_stats):
+              test_tiers, test_tier_order, test_stats):
         t()
     print("FAILED: %d" % len(FAILS) if FAILS else "all route checks passed")
     sys.exit(1 if FAILS else 0)

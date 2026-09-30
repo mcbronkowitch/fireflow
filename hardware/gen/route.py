@@ -42,11 +42,11 @@ inside a `pair_exempt` rect marks nothing, and no cell inside one is ever
 marked.
 
 Priority tiers: `add_net(..., tier=t)`. Nets route in ascending tier, then by
-span. A net of tier t prices a cell claimed by nets of tier <= t at full
-pressure and one claimed only by higher tiers at a quarter of it, so lower
-tiers keep the short way and higher tiers give way. With one tier in use the
-cost is the plain formula above. `Result.stats` holds length and via count
-per routed net.
+span, so a lower tier claims its cells first. In the pressure term a net of
+tier t counts claims by nets of tier <= t in full and claims by higher tiers
+at a quarter. History is not tier-weighted (see Known limits). With one tier
+in use the cost is the plain formula above. `Result.stats` holds length and
+via count per routed net.
 
 Deterministic: fixed net order, fixed neighbour order, a counter as the heap
 tie-break, no randomness anywhere.
@@ -73,6 +73,8 @@ Known limits (P4a review)
 - A pair mark is hard, never a conflict: a net that fails because a partner
   routed earlier is blocked goes to `failed` and is not retried, so pair
   failures depend on route order (tiers mitigate).
+- History is shared across tiers; with a cheap alternative a lower-tier net
+  may still yield, and both nets may detour.
 """
 import heapq
 import math
@@ -288,10 +290,9 @@ class Router:
             return None
         if self._cur_pair is not None and self._pair_blocked(c, i):
             return None
-        if self._occ_t is None:
+        if self._occ_le is None:
             return (1.0 + self._hist[i]) * (1.0 + pres * self._occ[c][i])
-        t = self._cur_tier
-        le = sum(self._occ_t[u][c][i] for u in range(t + 1))
+        le = self._occ_le[self._cur_tier][c][i]
         return (1.0 + self._hist[i]) * (1.0 + pres * (le + 0.25 * (self._occ[c][i] - le)))
 
     def _via_step(self, ix, iy, nid, pres):
@@ -304,10 +305,10 @@ class Router:
                 return None
             if self._cur_pair is not None and self._pair_blocked(v, i):
                 return None
-            if self._occ_t is None:
+            if self._occ_le is None:
                 claims += self._occ[v][i]
             else:
-                le = sum(self._occ_t[u][v][i] for u in range(self._cur_tier + 1))
+                le = self._occ_le[self._cur_tier][v][i]
                 claims += le + 0.25 * (self._occ[v][i] - le)
         return self.via_cost * (1.0 + pres * claims)
 
@@ -447,11 +448,12 @@ class Router:
             occ = self._occ[c2]
             for i in m:
                 occ[i] += 1
-        if self._occ_t is not None:
-            for c2, m in enumerate(marks):
-                occ = self._occ_t[self._tier_of[k]][c2]
-                for i in m:
-                    occ[i] += 1
+        if self._occ_le is not None:
+            for t in range(self._tier_of[k], self._ntiers):
+                for c2, m in enumerate(marks):
+                    occ = self._occ_le[t][c2]
+                    for i in m:
+                        occ[i] += 1
         self._marks[k], self._paths[k] = marks, paths
         g = self._net_group[k] if self._pairs else None
         pm = []
@@ -485,11 +487,12 @@ class Router:
             occ = self._occ[c2]
             for i in m:
                 occ[i] -= 1
-        if self._occ_t is not None:
-            for c2, m in enumerate(self._marks[k]):
-                occ = self._occ_t[self._tier_of[k]][c2]
-                for i in m:
-                    occ[i] -= 1
+        if self._occ_le is not None:
+            for t in range(self._tier_of[k], self._ntiers):
+                for c2, m in enumerate(self._marks[k]):
+                    occ = self._occ_le[t][c2]
+                    for i in m:
+                        occ[i] -= 1
         self._marks[k], self._paths[k] = None, []
 
     def _conflict_cells(self, k):
@@ -578,8 +581,9 @@ class Router:
         tier_ids = sorted({self._tiers.get(name, 0) for name, _hw, _t in self._nets}) or [0]
         self._tier_of = [tier_ids.index(self._tiers.get(name, 0)) for name, _hw, _t in self._nets]
         self._ntiers = len(tier_ids)
-        self._occ_t = ([[array("i", [0]) * cells for _ in self._classes] for _ in range(self._ntiers)]
-                       if self._ntiers > 1 else None)
+        # _occ_le[t][c][i]: claims on cell i by nets of tier <= t (one tier: unused)
+        self._occ_le = ([[array("i", [0]) * cells for _ in self._classes] for _ in range(self._ntiers)]
+                        if self._ntiers > 1 else None)
         self._hist = array("d", [0.0]) * cells
         for net, layers, shape in self._obstacles:
             nid = BLOCKED if net is None else ids[net]
