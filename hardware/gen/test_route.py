@@ -239,15 +239,14 @@ def test_terminal_outside_grid():
     res = _outside_board(True)
     check(not res.failed and res.conflicts == 0,
           "outside grid: with the shape J routes (failed %s, conflicts %d)" % (res.failed, res.conflicts))
-    stubs = [(a, b) for _l, a, b in res.routes.get("J", {"segments": []})["segments"]
+    segs = res.routes.get("J", {"segments": []})["segments"]
+    stubs = [(a, b) for _l, a, b in segs
              if (abs(a[0] - 5.0) < 1e-6 and abs(a[1] - 10.6) < 1e-6)
              or (abs(b[0] - 5.0) < 1e-6 and abs(b[1] - 10.6) < 1e-6)]
-    check(len(stubs) == 1, "outside grid: one stub leaves the pad centre (%d)" % len(stubs))
-    if stubs:
-        a, b = stubs[0]
-        far = b if abs(a[0] - 5.0) < 1e-6 and abs(a[1] - 10.6) < 1e-6 else a
-        check(4.4 <= far[0] <= 5.6 and 9.4 <= far[1] <= 11.8 and far[1] <= 10.0 + 1e-9,
-              "outside grid: stub ends at %s, inside the pad and on the grid" % (far,))
+    check(not stubs, "outside grid: no stub leaves the pad centre for a fallback cell (%d)" % len(stubs))
+    ends = [p for _l, a, b in segs for p in (a, b)
+            if 4.4 <= p[0] <= 5.6 and 9.4 <= p[1] <= 10.0 + 1e-9]
+    check(bool(ends), "outside grid: a segment ends on a grid cell inside the pad rect (%s)" % (ends[:2],))
 
 
 def test_tier_occupancy_consistent():

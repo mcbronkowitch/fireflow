@@ -57,9 +57,11 @@ Known limits (P4a review)
   cell up to about 0.57 mm away (the +-2-cell fallback in `_terminal_cells`).
   The stub is never entered into occupancy, so it has no clearance guarantee.
   A terminal given its pad shape (a fourth tuple element) whose window finds
-  no usable cell falls back to the nearest usable cell inside the shape, so
-  the stub may then reach to the pad's far side; it stays inside the pad's own
-  copper (a convex shape holding both ends).
+  no usable cell falls back to the nearest usable cell inside the shape. That
+  cell lies in the pad's own copper, so the route ending there is already the
+  connection and no stub is emitted for it: kicad-cli checks a stub track on
+  its own (copper_edge_clearance on the jack pads), and the track end need not
+  be at the pad centre to connect.
 - Two foreign halos overlapping mark a cell BLOCKED (`_rasterise`), so
   tight-pitch pads can become unreachable. The SOIC-16 at 1.27 mm worked; the
   SD socket and the module are untested.
@@ -617,10 +619,12 @@ class Router:
         """The nearest cell with a usable centre, per layer of the pad. Where
         the +-2-cell window finds none and the pad's `shape` is given, the
         cells whose centre lies inside the shape are searched instead (a pad
-        that sits partly or wholly off the grid)."""
+        that sits partly or wholly off the grid). Returns (cells, fallback):
+        `fallback` is the set of those cells that came from the shape search,
+        which `_geometry` joins to the pad by no stub."""
         cx = int(round((x - self.x0) / self.pitch))
         cy = int(round((y - self.y0) / self.pitch))
-        out = []
+        out, fallback = [], set()
         for layer in layers:
             best = None
             for dy in range(-2, 3):
@@ -635,7 +639,8 @@ class Router:
                     key = (math.hypot(px - x, py - y), i)
                     if best is None or key < best:
                         best = key
-            if best is None and shape is not None:
+            from_shape = best is None and shape is not None
+            if from_shape:
                 l, t, r, b = _shape_box(shape)
                 ix0 = max(0, int(math.floor((l - self.x0) / self.pitch)))
                 ix1 = min(self.nx - 1, int(math.ceil((r - self.x0) / self.pitch)))
@@ -654,7 +659,9 @@ class Router:
                             best = key
             if best is not None:
                 out.append(best[1])
-        return out
+                if from_shape:
+                    fallback.add(best[1])
+        return out, fallback
 
     def _route_net(self, k, pres):
         name, hw, terms = self._nets[k]
@@ -662,8 +669,9 @@ class Router:
         g = self._net_group[k] if self._pairs else None
         self._cur_pair = ((self._pstat[g], self._pocc[g]) if g in getattr(self, "_pstat", {}) else None)
         self._cur_tier = self._tier_of[k]
-        tcells = [self._terminal_cells(x, y, ls, nid, c, sh)
-                  for (x, y, ls), sh in zip(terms, self._tshapes[k])]
+        found = [self._terminal_cells(x, y, ls, nid, c, sh)
+                 for (x, y, ls), sh in zip(terms, self._tshapes[k])]
+        tcells = [cells for cells, _fb in found]
         if any(not tc for tc in tcells):
             return False, []
         tree, done, paths = set(tcells[0]), [0], []
@@ -682,6 +690,7 @@ class Router:
             done.append(j)
             todo.remove(j)
         self._tcells[k] = tcells
+        self._tfallback[k] = [fb for _cells, fb in found]
         return True, paths
 
     def _vias_of(self, paths):
@@ -819,9 +828,9 @@ class Router:
         segments, used = self._runs(self._paths[k]), set()
         for path in self._paths[k]:
             used.update(path)
-        for (x, y, _ls), cells in zip(terms, self._tcells[k]):
+        for (x, y, _ls), cells, fb in zip(terms, self._tcells[k], self._tfallback[k]):
             for i in cells:
-                if i in used:
+                if i in used and i not in fb:     # a fallback cell lies in the pad: no stub
                     layer, ix, iy = self._split(i)
                     cx, cy = self._xy(ix, iy)
                     if math.hypot(cx - x, cy - y) > 1e-6:
@@ -891,6 +900,7 @@ class Router:
                         arr[s0:s1] = array("b", [1]) * (s1 - s0)
         n = len(self._nets)
         self._marks, self._paths, self._tcells = [None] * n, [[] for _ in range(n)], [[] for _ in range(n)]
+        self._tfallback = [[] for _ in range(n)]
         self._pmarks = [None] * n
 
         def span(k):
