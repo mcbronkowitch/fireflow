@@ -138,6 +138,13 @@ Probed on the committed P4-1 board (`hardware/reva/kicad/reva.kicad_pcb`,
     `min_clearance` 0.2, `min_copper_edge_clearance` 0.5.
   - `clearance` (8) and `copper_edge_clearance` (18) counts were the same
     without the rules; only the counts were compared.
+- **Probed during execution (Task 6, 2026-09-30): pair-rule cost.** With pad
+  shapes, the A* sped up (500.9 s for 30 rounds without pair rules), pair
+  rules, module zones and tiers, one profiled round took 487.0 s: 419 s
+  marking pair clearances around routed copper, 17 s path search.
+  `failed ['LED16', 'LED16_A', 'OUT_R']` (the jack zones of §4.2.2 answer
+  that). Bastian decided on 2026-09-30 to speed the marking up (same radii,
+  default path byte for byte) before the first full run.
 
 ## 4. Design
 
@@ -209,6 +216,21 @@ for byte.
      two west rows.
    - The 2.54 mm is the controller's choice, approved by Bastian: it lets the
      audio pins and SR_CLK leave the header at all.
+   - **Jack zones** (decided by Bastian 2026-09-30 after the Task 6 probe).
+     Placement already breaks the 10 mm rule pad to pad at two jacks
+     (edge to edge, pad bounding boxes):
+     - J18.T (OUT_R): R34.1 (LED16) 5.02 mm, D17.2 (LED16_A, panel id
+       CEIL_L) 6.35 mm, R34.2 6.39 mm. The pair marks then cover the whole
+       tip pad, so OUT_R, LED16 and LED16_A cannot route at all.
+     - J1.T (IN_L): D1.2 (LED0_A, panel id SHIFTBTN_L) 9.53 mm.
+     - J17.T, J2.T and J2.TN have no aggressor pad within 10 mm.
+   - For every victim pad outside U_SM with an aggressor pad closer than
+     10.0 mm (edge to edge), one more exemption rectangle: the bounding box of
+     that victim pad and those aggressor pads, grown by 2.54 mm. It is derived
+     from the geometry, so it disappears once the panel pass moves the parts.
+     Outside it the 10 mm rule is unchanged.
+   - Each jack zone is a known panel item (§4.4), keyed by the panel ids of
+     the victim's jack and the panel LED involved.
 3. **Priority tiers.**
    - `add_net(..., tier=0)`. Nets route in ascending tier, then by the
      existing span order.
@@ -260,6 +282,7 @@ on the saved board.
 | L × R | 2.0 mm, same layer | §2.5 |
 | SENSE length | ≤ 1.3 × MST | §2.6 |
 | Module exemption | pad-group box + 2.54 mm | §4.2.2 |
+| Jack zone | victim pad + aggressor pads within 10 mm, box + 2.54 mm | §4.2.2 |
 
 ### 4.4 Known list
 
@@ -270,6 +293,9 @@ on the saved board.
 - The name rule is P4-1's strict one: every name must be one of the 18 jacks,
   the SONG clusters, or GATE_A_L/SOURCE_A and LVL_B_L/PAN_B, each pair only
   with its own partner.
+- Two more pairs, for the jack zones of §4.2.2 only (Bastian, 2026-09-30):
+  CEIL_L/OUT_R and SHIFTBTN_L/IN_L, each only with its own partner. They must
+  be gone after the panel pass like every other entry.
 - An unrouted connection between two non-panel pads is never listable.
 - A listed item that no longer fails is red.
 - `test_route.py` asserts the name rule.
@@ -314,6 +340,10 @@ A step that examined nothing is red.
      exist on the board, so a renamed net cannot empty the rule.
    - The step prints the worst distance per victim and what it was measured
      against.
+   - The check computes the module zones and the jack zones (§4.2.2) itself.
+     Each jack zone it finds is a `found` item judged against `KNOWN_PANEL`,
+     so a zone that disappears in the panel pass leaves a stale entry, which
+     is red.
 5. **lr**
    - `OUT_L`↔`OUT_R` and `IN_L`↔`IN_R`, same layer, outside the zones: at
      least 2.0 mm.
