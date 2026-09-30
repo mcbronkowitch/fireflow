@@ -6,8 +6,8 @@
 Builds the placed, unrouted board from P3's project (build.project()), the P1
 hole list and panel-map.json, saves <out>/reva-placed.kicad_pcb (default
 hardware/reva/out/), renders it and runs place_check. Exit 0 only when every
-gated check is green (known panel violations listed, spec §5.3). --write also
-copies the .kicad_pcb -- never the .kicad_pro SaveBoard writes beside it --
+gated check is green (known panel violations listed, spec §5.3). --write also,
+only when the run is GREEN, copies the .kicad_pcb -- never the .kicad_pro SaveBoard writes beside it --
 to hardware/reva/kicad/reva.kicad_pcb.
 """
 import argparse
@@ -637,7 +637,9 @@ def main(argv=None):
     save(s, pcb)
     print("wrote", os.path.relpath(pcb))
     green = PC.run(s, pcb, prefix)
-    if a.write and not a.sabotage:
+    if a.write and not a.sabotage and not green:
+        print("not copied: the run is RED")
+    if a.write and not a.sabotage and green:
         shutil.copyfile(pcb, COMMITTED)
         print("copied to", os.path.relpath(COMMITTED))
         os.makedirs(DOCS, exist_ok=True)

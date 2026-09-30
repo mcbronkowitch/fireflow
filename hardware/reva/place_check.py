@@ -388,26 +388,39 @@ def render(s, pcb_path, prefix):
 #   [clearance]: Freiraum-Verstoss ( Freiraum 0,2000 mm; tatsaechlich 0,1973 mm)
 #       @(72.8750 mm, 42.7200 mm): PTH pad 2 [M1_CH3] of RV10
 #       @(71.5700 mm, 41.2080 mm): PTH pad 2 [LED3_A] of D4
+#   SMD pads carry the layer (silk classes report the same way):
+#       @(105.1014 mm, 69.6471 mm): Pad 1 [SM_3V3] of C11 on B.Cu
+#       @(209.8000 mm, 109.5000 mm): Segment of J13 on F.Silkscreen
+#   Tracks and vias name no part:
+#       @(...): Track [GND] on B.Cu
 # (shorting_items and pth_inside_courtyard use the same "... pad N [NET] of REF" /
-# "Footprint REF" item lines.) A ref is the word after "of" or "Footprint" at the
-# end of the line; "Segment of J13 on F.Silkscreen" (silk classes, not gated)
-# does not match.
+# "Footprint REF" item lines.) A ref is the word after "of" or "Footprint", with
+# an optional " on <layer>" after it, at the end of the line.
 GATED_DRC = ("courtyards_overlap", "pth_inside_courtyard", "shorting_items", "clearance",
              "hole_clearance", "hole_to_hole", "copper_edge_clearance", "items_not_allowed")
 FRONT_REPORTED = ("courtyards_overlap", "pth_inside_courtyard")
-_REF_RE = re.compile(r"(?:\bof|Footprint) ([A-Za-z_]+[0-9]*[A-Za-z_0-9]*)\s*$", re.M)
+_REF_RE = re.compile(
+    r"(?:\bof|Footprint) ([A-Za-z_]+[0-9]*[A-Za-z_0-9]*)(?: on \S+)?\s*$", re.M)
 _CLASS_RE = re.compile(r"^\[([a-z0-9_]+)\]")
+_ITEM_RE = re.compile(r"^\s*(@\(.*)$", re.M)
+
+
+def drc_blocks(txt):
+    """[(class, [refs], first item line)] per violation block of report text."""
+    out = []
+    for block in re.split(r"(?=^\[)", txt, flags=re.M):
+        m = _CLASS_RE.match(block)
+        if m:
+            first = _ITEM_RE.search(block)
+            out.append((m.group(1), sorted(set(_REF_RE.findall(block))),
+                        first.group(1).strip() if first else "no item line"))
+    return out
 
 
 def drc_items(rpt_path):
     """[(class, [refs])] per violation block of a kicad-cli report."""
     txt = open(rpt_path, encoding="utf-8", errors="replace").read()
-    out = []
-    for block in re.split(r"(?=^\[)", txt, flags=re.M):
-        m = _CLASS_RE.match(block)
-        if m:
-            out.append((m.group(1), sorted(set(_REF_RE.findall(block)))))
-    return out
+    return [(c, r) for c, r, _first in drc_blocks(txt)]
 
 
 def check_drc(s, pcb_path, prefix):
@@ -416,10 +429,10 @@ def check_drc(s, pcb_path, prefix):
         items = PP.drc(pcb_path + (".missing" if getattr(s, "drc_broken", False) else ""), rpt)
     except RuntimeError as e:
         return False, "kicad-cli wrote no report: %s" % str(e)[:200], []
-    blocks = drc_items(rpt)
+    blocks = drc_blocks(open(rpt, encoding="utf-8", errors="replace").read())
     found, front_crtyd = {}, []
     front = set(s.front)
-    for cls, refs in blocks:
+    for cls, refs, first in blocks:
         if cls not in GATED_DRC:
             continue
         if cls in FRONT_REPORTED and refs and set(refs) <= front:
@@ -430,7 +443,7 @@ def check_drc(s, pcb_path, prefix):
             front_crtyd.append("%s %s" % (cls, "/".join(sorted(_key(s, r) for r in refs))))
             continue
         key = "%s %s" % (cls, "/".join(sorted(_key(s, r) for r in refs)))
-        found[key] = "kicad-cli"
+        found.setdefault(key, "kicad-cli, first item %s" % first)
     ok, details, nk = _judge(s, "drc", found)
     details += ["reported, not gated: " + f for f in sorted(set(front_crtyd))]
     others = ", ".join("%s %d" % kv for kv in sorted(items.items()) if kv[0] not in GATED_DRC) or "none"
