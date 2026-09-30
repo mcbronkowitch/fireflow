@@ -69,11 +69,14 @@ Probed on the committed P4-1 board (`hardware/reva/kicad/reva.kicad_pcb`,
 - **At the module the rule cannot hold:** SR_CLK (U_SM.B8) sits 2.54–5.68 mm
   from the audio pins B1–B4. That is the module's pinout.
 - **The module's pad field is two groups, not one box.**
-  - The east header is 2 × 10 pads at x 177.63 / 180.17, y 46.17–82.33. It
-    carries B1–B10 and C1–C10, among them all four audio pins and SR_CLK and
-    SR_DATA.
-  - The west group is 2 × 5 pads at x 118.82–128.98, in rows y 48.98 and
-    79.52 (the A and D pins).
+  - The east header is 2 × 10 pads at x 177.63 / 180.17, at 2.54 mm pitch in
+    two halves: y 46.17–56.33 and y 72.17–82.33, with a 15.84 mm gap. It
+    carries B1–B10 and C1–C10. The lower half holds all four audio pins
+    (x 180.17, y 74.71–82.33) and SR_CLK (B8, x 177.63, y 79.79).
+  - The west pads are two rows of 5 at x 118.82–128.98, at y 48.98 and 79.52
+    (the A and D pins).
+  - Clustered at one pin pitch (2.54 mm), that is four groups. All 40 pads are
+    THT (1.88 mm round).
   - One box around all 40 pads would be 61 × 36 mm and would exempt most of
     the module's footprint.
 - **SENSE nets:**
@@ -169,8 +172,8 @@ for byte.
      that group's pad centres, grown by 2.54 mm on every side (one pin pitch).
      Groups are clusters of U_SM pads whose centres lie within 2.54 mm of a
      neighbour's.
-   - This yields three rectangles today: the east header and the west group's
-     two rows.
+   - This yields four rectangles today: the east header's two halves and the
+     two west rows.
    - The 2.54 mm is the controller's choice, approved by Bastian: it lets the
      audio pins and SR_CLK leave the header at all.
 3. **Priority tiers.**
