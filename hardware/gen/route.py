@@ -56,6 +56,10 @@ Known limits (P4a review)
 - Off-grid terminal stubs: `_geometry` emits a stub from the pad centre to a
   cell up to about 0.57 mm away (the +-2-cell fallback in `_terminal_cells`).
   The stub is never entered into occupancy, so it has no clearance guarantee.
+  A terminal given its pad shape (a fourth tuple element) whose window finds
+  no usable cell falls back to the nearest usable cell inside the shape, so
+  the stub may then reach to the pad's far side; it stays inside the pad's own
+  copper (a convex shape holding both ends).
 - Two foreign halos overlapping mark a cell BLOCKED (`_rasterise`), so
   tight-pitch pads can become unreachable. The SOIC-16 at 1.27 mm worked; the
   SD socket and the module are untested.
@@ -177,6 +181,7 @@ class Router:
         self.s = pitch * SQRT2 / 2.0
         self._obstacles = []
         self._nets = []
+        self._tshapes = []         # per net: per terminal, the pad's shape or None
         self._discs = {}
         self._groups = {}          # net -> group
         self._ogroups = []         # per obstacle: explicit group or None
@@ -192,7 +197,8 @@ class Router:
         self._ogroups.append(group)
 
     def add_net(self, name, half_width, terminals, group=None, tier=0):
-        self._nets.append((name, half_width, [(x, y, tuple(ls)) for x, y, ls in terminals]))
+        self._nets.append((name, half_width, [(t[0], t[1], tuple(t[2])) for t in terminals]))
+        self._tshapes.append([t[3] if len(t) > 3 else None for t in terminals])
         if group is not None:
             self._groups[name] = group
         self._tiers[name] = int(tier)
@@ -362,8 +368,17 @@ class Router:
         return None
 
     # --- one net ---------------------------------------------------------------
-    def _terminal_cells(self, x, y, layers, nid, c):
-        """The nearest cell with a usable centre, per layer of the pad."""
+    def _usable(self, c, i, nid):
+        st = self._static[c][i]
+        if st == BLOCKED or (st != FREE and st != nid):
+            return False
+        return not (self._cur_pair is not None and self._pair_blocked(c, i))
+
+    def _terminal_cells(self, x, y, layers, nid, c, shape=None):
+        """The nearest cell with a usable centre, per layer of the pad. Where
+        the +-2-cell window finds none and the pad's `shape` is given, the
+        cells whose centre lies inside the shape are searched instead (a pad
+        that sits partly or wholly off the grid)."""
         cx = int(round((x - self.x0) / self.pitch))
         cy = int(round((y - self.y0) / self.pitch))
         out = []
@@ -375,15 +390,29 @@ class Router:
                     if not (0 <= ix < self.nx and 0 <= iy < self.ny):
                         continue
                     i = self._idx(layer, ix, iy)
-                    st = self._static[c][i]
-                    if st == BLOCKED or (st != FREE and st != nid):
-                        continue
-                    if self._cur_pair is not None and self._pair_blocked(c, i):
+                    if not self._usable(c, i, nid):
                         continue
                     px, py = self._xy(ix, iy)
                     key = (math.hypot(px - x, py - y), i)
                     if best is None or key < best:
                         best = key
+            if best is None and shape is not None:
+                l, t, r, b = _shape_box(shape)
+                ix0 = max(0, int(math.floor((l - self.x0) / self.pitch)))
+                ix1 = min(self.nx - 1, int(math.ceil((r - self.x0) / self.pitch)))
+                iy0 = max(0, int(math.floor((t - self.y0) / self.pitch)))
+                iy1 = min(self.ny - 1, int(math.ceil((b - self.y0) / self.pitch)))
+                for iy in range(iy0, iy1 + 1):
+                    for ix in range(ix0, ix1 + 1):
+                        px, py = self._xy(ix, iy)
+                        if _shape_dist(px, py, shape) != 0.0:
+                            continue
+                        i = self._idx(layer, ix, iy)
+                        if not self._usable(c, i, nid):
+                            continue
+                        key = (math.hypot(px - x, py - y), i)
+                        if best is None or key < best:
+                            best = key
             if best is not None:
                 out.append(best[1])
         return out
@@ -394,7 +423,8 @@ class Router:
         g = self._net_group[k] if self._pairs else None
         self._cur_pair = ((self._pstat[g], self._pocc[g]) if g in getattr(self, "_pstat", {}) else None)
         self._cur_tier = self._tier_of[k]
-        tcells = [self._terminal_cells(x, y, ls, nid, c) for x, y, ls in terms]
+        tcells = [self._terminal_cells(x, y, ls, nid, c, sh)
+                  for (x, y, ls), sh in zip(terms, self._tshapes[k])]
         if any(not tc for tc in tcells):
             return False, []
         tree, done, paths = set(tcells[0]), [0], []

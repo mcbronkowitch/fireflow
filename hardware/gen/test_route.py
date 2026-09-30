@@ -188,17 +188,20 @@ def _digest(routes):
     return hashlib.sha256(repr(sorted(routes.items())).encode()).hexdigest()
 
 
-def _pin_scenario():
+def _pin_scenario(shapes=False):
     """A board that exercises negotiation, vias and a three-terminal tree at
     once; its output is pinned so that every later change to the router must
-    leave the default path byte-identical."""
+    leave the default path byte-identical. With `shapes`, every terminal
+    also carries a 0.6 mm square around its centre."""
+    def T(x, y, ls):
+        return (x, y, ls, ("rect", x - 0.3, y - 0.3, x + 0.3, y + 0.3)) if shapes else (x, y, ls)
     r = R.Router((0, 0, 12, 10), 0.2, 2, CLR, 0.3)
     for rect in ((5.0, 0.0, 6.0, 2.0), (5.0, 3.2, 6.0, 6.6), (5.0, 7.8, 6.0, 10.0)):
         r.add_obstacle(None, (0,), ("rect",) + rect)
     r.add_obstacle("P", (0, 1), ("circle", 8.0, 5.0, 0.4))
-    r.add_net("A", 0.125, [(1.0, 2.0, (0,)), (11.0, 2.0, (0,))])
-    r.add_net("B", 0.125, [(1.0, 3.4, (0,)), (11.0, 3.4, (0,))])
-    r.add_net("C", 0.25, [(6.0, 1.0, (0, 1)), (6.0, 9.0, (0, 1)), (1.0, 9.0, (1,))])
+    r.add_net("A", 0.125, [T(1.0, 2.0, (0,)), T(11.0, 2.0, (0,))])
+    r.add_net("B", 0.125, [T(1.0, 3.4, (0,)), T(11.0, 3.4, (0,))])
+    r.add_net("C", 0.25, [T(6.0, 1.0, (0, 1)), T(6.0, 9.0, (0, 1)), T(1.0, 9.0, (1,))])
     return r.run()
 
 
@@ -210,6 +213,57 @@ def test_defaults_unchanged():
     d = _digest(res.routes)
     print("    pin digest", d)
     check(d == PINNED, "defaults: routes byte-identical to the pinned router output")
+
+
+def test_terminal_shape_is_inert_when_window_finds_a_cell():
+    """The pin scenario with a shape on every terminal: each window finds a
+    cell, so the shape fallback never runs and the output is the pinned one."""
+    d = _digest(_pin_scenario(shapes=True).routes)
+    check(d == PINNED, "terminal shape: inert while the +-2 window finds a cell")
+
+
+def _outside_board(with_shape):
+    """Grid y 0..10, pad J centred at y 10.6: its whole +-2-cell window lies
+    off the grid, as the jack tip pads do on Rev A."""
+    pad = ("rect", 4.4, 9.4, 5.6, 11.8)
+    r = R.Router((0, 0, 10, 10), 0.2, 1, CLR, 0.3)
+    r.add_obstacle("J", (0,), pad)
+    end = (5.0, 10.6, (0,), pad) if with_shape else (5.0, 10.6, (0,))
+    r.add_net("J", 0.125, [(1.0, 5.0, (0,)), end])
+    return r.run()
+
+
+def test_terminal_outside_grid():
+    bare = _outside_board(False)
+    check(bare.failed == ["J"], "outside grid: without a shape J fails (%s)" % bare.failed)
+    res = _outside_board(True)
+    check(not res.failed and res.conflicts == 0,
+          "outside grid: with the shape J routes (failed %s, conflicts %d)" % (res.failed, res.conflicts))
+    stubs = [(a, b) for _l, a, b in res.routes.get("J", {"segments": []})["segments"]
+             if (abs(a[0] - 5.0) < 1e-6 and abs(a[1] - 10.6) < 1e-6)
+             or (abs(b[0] - 5.0) < 1e-6 and abs(b[1] - 10.6) < 1e-6)]
+    check(len(stubs) == 1, "outside grid: one stub leaves the pad centre (%d)" % len(stubs))
+    if stubs:
+        a, b = stubs[0]
+        far = b if abs(a[0] - 5.0) < 1e-6 and abs(a[1] - 10.6) < 1e-6 else a
+        check(4.4 <= far[0] <= 5.6 and 9.4 <= far[1] <= 11.8 and far[1] <= 10.0 + 1e-9,
+              "outside grid: stub ends at %s, inside the pad and on the grid" % (far,))
+
+
+def test_tier_occupancy_consistent():
+    """After rip-up rounds the top cumulative tier array equals the total
+    claims, class by class: `_rip` must undo every `_occ_le` increment."""
+    r = R.Router((0, 0, 10, 10), 0.2, 1, CLR, 0.3)
+    for rect in ((4.5, 0.0, 5.5, 2.0), (4.5, 3.2, 5.5, 6.6), (4.5, 7.8, 5.5, 10.0)):
+        r.add_obstacle(None, (0,), ("rect",) + rect)
+    r.add_net("A", 0.125, [(1.0, 2.0, (0,)), (9.0, 2.0, (0,))], tier=0)
+    r.add_net("B", 0.125, [(1.0, 3.4, (0,)), (9.0, 3.4, (0,))], tier=1)
+    res = r.run()
+    check(res.iterations >= 2 and not res.failed,
+          "tier occupancy: went through rip-up (%d iterations, failed %s)" % (res.iterations, res.failed))
+    check(all(r._occ_le[-1][c][i] == r._occ[c][i]
+              for c in range(len(r._occ)) for i in range(len(r._occ[c]))),
+          "tier occupancy: top cumulative tier equals the total claims")
 
 
 def _min_same_layer(res, n1, n2):
@@ -492,7 +546,9 @@ if __name__ == "__main__":
               test_defaults_unchanged, test_pair_binding, test_pair_keeps_apart,
               test_pair_exempt, test_pair_static_pad, test_pair_other_layer,
               test_pair_via, test_clip_outside, test_clip_routed,
-              test_tiers, test_tier_order, test_stats):
+              test_tiers, test_tier_order, test_stats,
+              test_terminal_outside_grid, test_terminal_shape_is_inert_when_window_finds_a_cell,
+              test_tier_occupancy_consistent):
         t()
     print("FAILED: %d" % len(FAILS) if FAILS else "all route checks passed")
     sys.exit(1 if FAILS else 0)
