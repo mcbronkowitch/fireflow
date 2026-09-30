@@ -181,10 +181,127 @@ def test_deterministic():
     check(once() == once(), "deterministic: two runs identical")
 
 
+import hashlib
+
+
+def _digest(routes):
+    return hashlib.sha256(repr(sorted(routes.items())).encode()).hexdigest()
+
+
+def _pin_scenario():
+    """A board that exercises negotiation, vias and a three-terminal tree at
+    once; its output is pinned so that every later change to the router must
+    leave the default path byte-identical."""
+    r = R.Router((0, 0, 12, 10), 0.2, 2, CLR, 0.3)
+    for rect in ((5.0, 0.0, 6.0, 2.0), (5.0, 3.2, 6.0, 6.6), (5.0, 7.8, 6.0, 10.0)):
+        r.add_obstacle(None, (0,), ("rect",) + rect)
+    r.add_obstacle("P", (0, 1), ("circle", 8.0, 5.0, 0.4))
+    r.add_net("A", 0.125, [(1.0, 2.0, (0,)), (11.0, 2.0, (0,))])
+    r.add_net("B", 0.125, [(1.0, 3.4, (0,)), (11.0, 3.4, (0,))])
+    r.add_net("C", 0.25, [(6.0, 1.0, (0, 1)), (6.0, 9.0, (0, 1)), (1.0, 9.0, (1,))])
+    return r.run()
+
+
+PINNED = "059a48d04d53b94c0f6fd7d9c0f0869ff1b1581a53dc654999ec266a3e35a64d"
+
+
+def test_defaults_unchanged():
+    res = _pin_scenario()
+    d = _digest(res.routes)
+    print("    pin digest", d)
+    check(d == PINNED, "defaults: routes byte-identical to the pinned router output")
+
+
+def _min_same_layer(res, n1, n2):
+    """Edge-free centre-line distance between two nets' same-layer segments."""
+    ds = [seg_seg((a1, b1), (a2, b2))
+          for l1, a1, b1 in res.routes.get(n1, {"segments": []})["segments"]
+          for l2, a2, b2 in res.routes.get(n2, {"segments": []})["segments"] if l1 == l2]
+    return min(ds) if ds else None
+
+
+def _pair_board(rule=None, exempt=None):
+    """A straight at y 6; B from (1, 12) to (29, 12) with a netless block at
+    x 10-20, y 11-18. Under the block is shorter for B but passes ~4.3 mm
+    from A's centre line; over it is far."""
+    r = R.Router((0, 0, 30, 20), 0.2, 1, CLR, 0.3)
+    r.add_obstacle(None, (0,), ("rect", 10.0, 11.0, 20.0, 18.0))
+    r.add_net("A", 0.125, [(1.0, 6.0, (0,)), (29.0, 6.0, (0,))], group="victim")
+    r.add_net("B", 0.125, [(1.0, 12.0, (0,)), (29.0, 12.0, (0,))], group="aggr")
+    if rule is not None:
+        r.pair_clearance("victim", "aggr", rule)
+    if exempt is not None:
+        r.pair_exempt(exempt)
+    return r.run()
+
+
+def test_pair_binding():
+    """Without the rule B passes under the block, closer than 5 mm edge to
+    edge: the test board really tests something."""
+    res = _pair_board()
+    d = _min_same_layer(res, "A", "B")
+    check(not res.failed and d is not None and d - 0.25 < 5.0,
+          "pair binding: without a rule A-B edge %.3f mm (< 5.0)" % ((d or 0) - 0.25))
+
+
+def test_pair_keeps_apart():
+    res = _pair_board(rule=5.0)
+    d = _min_same_layer(res, "A", "B")
+    check(not res.failed and res.conflicts == 0, "pair: both routed (%s)" % res.failed)
+    check(d is not None and d - 0.25 >= 5.0 - 1e-6,
+          "pair: A-B edge %.3f mm (need 5.0)" % ((d or 0) - 0.25))
+
+
+def test_pair_exempt():
+    """An exemption rect over the passage under the block lifts the rule
+    there: B goes under again, and every B point closer than 5 mm to A lies
+    inside the rect."""
+    rect = (9.0, 5.0, 21.0, 12.0)
+    res = _pair_board(rule=5.0, exempt=rect)
+    check(not res.failed, "exempt: B routed (%s)" % res.failed)
+    close = []
+    for _l, p, q in res.routes.get("B", {"segments": []})["segments"]:
+        for t in (i / 20.0 for i in range(21)):
+            x, y = p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1])
+            if abs(y - 6.0) - 0.25 < 5.0 - 1e-6:
+                close.append((x, y))
+    check(close, "exempt: B passes closer than 5 mm somewhere (%d points)" % len(close))
+    check(all(rect[0] <= x <= rect[2] and rect[1] <= y <= rect[3] for x, y in close),
+          "exempt: every close B point lies inside the exemption rect")
+
+
+def test_pair_static_pad():
+    """A static pad of the victim group, 1 mm off B's straight line, pushes B
+    away to at least the rule distance."""
+    r = R.Router((0, 0, 30, 20), 0.2, 1, CLR, 0.3)
+    r.add_obstacle("V", (0,), ("rect", 14.5, 8.5, 15.5, 9.5), group="victim")
+    r.add_net("B", 0.125, [(1.0, 10.5, (0,)), (29.0, 10.5, (0,))], group="aggr")
+    r.pair_clearance("victim", "aggr", 3.0)
+    res = r.run()
+    worst = min((seg_rect((p, q), (14.5, 8.5, 15.5, 9.5))
+                 for _l, p, q in res.routes.get("B", {"segments": []})["segments"]), default=None)
+    check(not res.failed and worst is not None and worst - 0.125 >= 3.0 - 1e-6,
+          "static pad: B edge %.3f mm from the victim pad (need 3.0)" % ((worst or 0) - 0.125))
+
+
+def test_pair_other_layer():
+    """The rule is per layer: B crosses A on the other layer without a via."""
+    r = R.Router((0, 0, 20, 20), 0.2, 2, CLR, 0.3)
+    r.add_net("A", 0.125, [(1.0, 10.0, (0,)), (19.0, 10.0, (0,))], group="victim")
+    r.add_net("B", 0.125, [(10.0, 1.0, (1,)), (10.0, 19.0, (1,))], group="aggr")
+    r.pair_clearance("victim", "aggr", 5.0)
+    res = r.run()
+    b = res.routes.get("B", {"segments": [], "vias": []})
+    check(not res.failed and not b["vias"] and all(l == 1 for l, _p, _q in b["segments"]),
+          "other layer: B routed on layer 1 only, no via (%s)" % res.failed)
+
+
 if __name__ == "__main__":
     for t in (test_straight, test_detour, test_via, test_own_net_passable,
               test_crossing_two_layers, test_side_by_side, test_negotiation,
-              test_failed_net_leaves_no_copper, test_tree, test_deterministic):
+              test_failed_net_leaves_no_copper, test_tree, test_deterministic,
+              test_defaults_unchanged, test_pair_binding, test_pair_keeps_apart,
+              test_pair_exempt, test_pair_static_pad, test_pair_other_layer):
         t()
     print("FAILED: %d" % len(FAILS) if FAILS else "all route checks passed")
     sys.exit(1 if FAILS else 0)

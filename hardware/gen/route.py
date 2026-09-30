@@ -32,6 +32,15 @@ nets already claim costs (1 + history) * (1 + pressure * claims). Pressure
 grows each round and history accumulates where conflicts stay, until no net
 overlaps another or the round limit is reached.
 
+Pair clearances (P4-2 spec §4.2): nets and obstacles may carry a group;
+`pair_clearance(A, B, mm)` keeps copper of A at least `mm` from copper of B
+on the same layer. It is hard: a cell within reach of a paired group's copper
+is forbidden like foreign static copper, never priced. Routed copper marks
+its straight runs as capsules (radius own half-width + mm + target
+half-width + 2s, s for the via class), vias as discs on every layer. Copper
+inside a `pair_exempt` rect marks nothing, and no cell inside one is ever
+marked.
+
 Deterministic: fixed net order, fixed neighbour order, a counter as the heap
 tie-break, no randomness anywhere.
 
@@ -96,6 +105,43 @@ def _shape_box(shape):
     return (min(x1, x2) - hw, min(y1, y2) - hw, max(x1, x2) + hw, max(y1, y2) + hw)
 
 
+def _clip_outside(a, b, rects):
+    """The parts of segment a-b outside every rect, as [(p, q)]."""
+    spans = []
+    (ax, ay), (bx, by) = a, b
+    dx, dy = bx - ax, by - ay
+    for l, t, r, btm in rects:
+        t0, t1 = 0.0, 1.0
+        ok = True
+        for p, q in ((-dx, ax - l), (dx, r - ax), (-dy, ay - t), (dy, btm - ay)):
+            if p == 0:
+                if q < 0:
+                    ok = False
+                    break
+                continue
+            u = q / p
+            if p < 0:
+                t0 = max(t0, u)
+            else:
+                t1 = min(t1, u)
+        if ok and t0 < t1:
+            spans.append((t0, t1))
+    spans.sort()
+    out, cur = [], 0.0
+    for s0, s1 in spans:
+        if s0 > cur:
+            out.append((cur, s0))
+        cur = max(cur, s1)
+    if cur < 1.0:
+        out.append((cur, 1.0))
+    return [((ax + u0 * dx, ay + u0 * dy), (ax + u1 * dx, ay + u1 * dy))
+            for u0, u1 in out if u1 - u0 > 1e-9]
+
+
+def _inside_any(x, y, rects):
+    return any(l <= x <= r and t <= y <= b for l, t, r, b in rects)
+
+
 class Result:
     def __init__(self):
         self.routes = {}
@@ -116,13 +162,27 @@ class Router:
         self._obstacles = []
         self._nets = []
         self._discs = {}
+        self._groups = {}          # net -> group
+        self._ogroups = []         # per obstacle: explicit group or None
+        self._pairs = []           # (group_a, group_b, mm)
+        self._exempt = []          # (left, top, right, bottom)
+        self._cur_pair = None
 
     # --- input -------------------------------------------------------------
-    def add_obstacle(self, net, layers, shape):
+    def add_obstacle(self, net, layers, shape, group=None):
         self._obstacles.append((net, tuple(layers), shape))
+        self._ogroups.append(group)
 
-    def add_net(self, name, half_width, terminals):
+    def add_net(self, name, half_width, terminals, group=None):
         self._nets.append((name, half_width, [(x, y, tuple(ls)) for x, y, ls in terminals]))
+        if group is not None:
+            self._groups[name] = group
+
+    def pair_clearance(self, group_a, group_b, mm):
+        self._pairs.append((group_a, group_b, float(mm)))
+
+    def pair_exempt(self, rect):
+        self._exempt.append(tuple(float(v) for v in rect))
 
     # --- grid ----------------------------------------------------------------
     def _idx(self, layer, ix, iy):
@@ -164,10 +224,52 @@ class Router:
                     elif cur == FREE:
                         arr[i] = nid
 
+    def _capsule_cells(self, out, layers, a, b, radius):
+        """Add to `out` every cell index (on each layer) whose centre lies
+        within `radius` of segment a-b and outside every exemption rect."""
+        shape = ("seg", a[0], a[1], b[0], b[1], 0.0)
+        l, t, r, btm = _shape_box(shape)
+        ix0 = max(0, int(math.floor((l - radius - self.x0) / self.pitch)))
+        ix1 = min(self.nx - 1, int(math.ceil((r + radius - self.x0) / self.pitch)))
+        iy0 = max(0, int(math.floor((t - radius - self.y0) / self.pitch)))
+        iy1 = min(self.ny - 1, int(math.ceil((btm + radius - self.y0) / self.pitch)))
+        for iy in range(iy0, iy1 + 1):
+            for ix in range(ix0, ix1 + 1):
+                x, y = self._xy(ix, iy)
+                if _shape_dist(x, y, shape) >= radius or _inside_any(x, y, self._exempt):
+                    continue
+                for layer in layers:
+                    out.add(self._idx(layer, ix, iy))
+
+    def _shape_cells(self, out, layers, shape, radius):
+        """Static obstacles: skipped entirely if their centre lies inside an
+        exemption rect; otherwise every cell within `radius` of the shape,
+        outside the rects."""
+        l, t, r, btm = _shape_box(shape)
+        if _inside_any((l + r) / 2.0, (t + btm) / 2.0, self._exempt):
+            return
+        ix0 = max(0, int(math.floor((l - radius - self.x0) / self.pitch)))
+        ix1 = min(self.nx - 1, int(math.ceil((r + radius - self.x0) / self.pitch)))
+        iy0 = max(0, int(math.floor((t - radius - self.y0) / self.pitch)))
+        iy1 = min(self.ny - 1, int(math.ceil((btm + radius - self.y0) / self.pitch)))
+        for iy in range(iy0, iy1 + 1):
+            for ix in range(ix0, ix1 + 1):
+                x, y = self._xy(ix, iy)
+                if _shape_dist(x, y, shape) >= radius or _inside_any(x, y, self._exempt):
+                    continue
+                for layer in layers:
+                    out.add(self._idx(layer, ix, iy))
+
+    def _pair_blocked(self, c, i):
+        pb = self._cur_pair
+        return pb is not None and (pb[0][c][i] or pb[1][c][i])
+
     # --- costs -----------------------------------------------------------------
     def _cost(self, c, i, nid, pres):
         st = self._static[c][i]
         if st == BLOCKED or (st != FREE and st != nid):
+            return None
+        if self._cur_pair is not None and self._pair_blocked(c, i):
             return None
         return (1.0 + self._hist[i]) * (1.0 + pres * self._occ[c][i])
 
@@ -178,6 +280,8 @@ class Router:
             i = self._idx(layer, ix, iy)
             st = self._static[v][i]
             if st == BLOCKED or (st != FREE and st != nid):
+                return None
+            if self._cur_pair is not None and self._pair_blocked(v, i):
                 return None
             claims += self._occ[v][i]
         return self.via_cost * (1.0 + pres * claims)
@@ -248,6 +352,8 @@ class Router:
                     st = self._static[c][i]
                     if st == BLOCKED or (st != FREE and st != nid):
                         continue
+                    if self._cur_pair is not None and self._pair_blocked(c, i):
+                        continue
                     px, py = self._xy(ix, iy)
                     key = (math.hypot(px - x, py - y), i)
                     if best is None or key < best:
@@ -259,6 +365,8 @@ class Router:
     def _route_net(self, k, pres):
         name, hw, terms = self._nets[k]
         nid, c = k + 1, self._class_of[k]
+        g = self._net_group[k] if self._pairs else None
+        self._cur_pair = ((self._pstat[g], self._pocc[g]) if g in getattr(self, "_pstat", {}) else None)
         tcells = [self._terminal_cells(x, y, ls, nid, c) for x, y, ls in terms]
         if any(not tc for tc in tcells):
             return False, []
@@ -314,10 +422,34 @@ class Router:
             for i in m:
                 occ[i] += 1
         self._marks[k], self._paths[k] = marks, paths
+        g = self._net_group[k] if self._pairs else None
+        pm = []
+        for tgt, mm in self._pair_src.get(g, ()) if g is not None else ():
+            for c2, hw2 in enumerate(self._classes):
+                extra = self.s if c2 == self._via_c else 2 * self.s
+                cells = set()
+                for layer, a, b in self._runs(paths):
+                    for p, q in _clip_outside(a, b, self._exempt):
+                        self._capsule_cells(cells, (layer,), p, q, hw + mm + hw2 + extra)
+                for ix, iy in self._vias_of(paths):
+                    x, y = self._xy(ix, iy)
+                    if not _inside_any(x, y, self._exempt):
+                        self._capsule_cells(cells, range(self.layers), (x, y), (x, y),
+                                            self.via_radius + mm + hw2 + self.s)
+                occ = self._pocc[tgt][c2]
+                for i in cells:
+                    occ[i] += 1
+                pm.append((tgt, c2, cells))
+        self._pmarks[k] = pm
 
     def _rip(self, k):
         if self._marks[k] is None:
             return
+        for tgt, c2, cells in self._pmarks[k] or ():
+            occ = self._pocc[tgt][c2]
+            for i in cells:
+                occ[i] -= 1
+        self._pmarks[k] = None
         for c2, m in enumerate(self._marks[k]):
             occ = self._occ[c2]
             for i in m:
@@ -342,11 +474,10 @@ class Router:
         return out
 
     # --- output ------------------------------------------------------------------
-    def _geometry(self, k):
-        _name, _hw, terms = self._nets[k]
-        segments, used = [], set()
-        for path in self._paths[k]:
-            used.update(path)
+    def _runs(self, paths):
+        """The straight runs of `paths` as [(layer, (x, y), (x, y))]."""
+        segments = []
+        for path in paths:
             run = [path[0]]
             for a, b in zip(path, path[1:]):
                 la, ax, ay = self._split(a)
@@ -363,6 +494,13 @@ class Router:
                         run = [run[-1]]
                 run.append(b)
             segments += self._run_segments(run)
+        return segments
+
+    def _geometry(self, k):
+        _name, _hw, terms = self._nets[k]
+        segments, used = self._runs(self._paths[k]), set()
+        for path in self._paths[k]:
+            used.update(path)
         for (x, y, _ls), cells in zip(terms, self._tcells[k]):
             for i in cells:
                 if i in used:
@@ -406,8 +544,26 @@ class Router:
             nid = BLOCKED if net is None else ids[net]
             for c, hw in enumerate(self._classes):
                 self._rasterise(self._static[c], nid, layers, shape, hw + self.clearance + self.s)
+        self._net_group = [self._groups.get(name) for name, _hw, _t in self._nets]
+        self._pair_src = {}            # source group -> [(target group, mm)]
+        for ga, gb, mm in self._pairs:
+            self._pair_src.setdefault(ga, []).append((gb, mm))
+            self._pair_src.setdefault(gb, []).append((ga, mm))
+        targets = sorted({g for lst in self._pair_src.values() for g, _mm in lst})
+        self._pstat = {g: [array("b", [0]) * cells for _ in self._classes] for g in targets}
+        self._pocc = {g: [array("H", [0]) * cells for _ in self._classes] for g in targets}
+        for (net, layers, shape), og in zip(self._obstacles, self._ogroups):
+            g = og if og is not None else self._groups.get(net)
+            for tgt, mm in self._pair_src.get(g, ()):
+                for c, hw in enumerate(self._classes):
+                    marked = set()
+                    self._shape_cells(marked, layers, shape, hw + mm + self.s)
+                    arr = self._pstat[tgt][c]
+                    for i in marked:
+                        arr[i] = 1
         n = len(self._nets)
         self._marks, self._paths, self._tcells = [None] * n, [[] for _ in range(n)], [[] for _ in range(n)]
+        self._pmarks = [None] * n
 
         def span(k):
             ts = self._nets[k][2]
