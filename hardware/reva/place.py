@@ -315,23 +315,31 @@ def place_power_header(s, proj, blocked):
 # spiral packed them against the module's north and west edges, where the
 # router never converged (146 pads on 2208 mm2 at x 104-152, y 29-75).
 OVERRIDES = {
-    "U_SR3": (-19.23, -12.28, 0,
+    "U_SR3": (-32.03, 19.42, 90,
               "reva-routed-bottom.png 2026-09-30: U_SR3 in the dense field west of U_SM "
-              "(LED4-8, SR_CHAIN in conflict); moved west toward its LEDs D4, D5, D6"),
+              "(LED4-8, SR_CHAIN in conflict); moved west toward its LEDs D4, D5, D6. "
+              "Task 6b (2026-10-01, stitch probe): at (96.8, 41.3) its GND pin 8 lay under "
+              "RV22's body (5.70 mm stitch stub) and C19.2 could not be stitched; moved "
+              "south-west to (84, 73), between D5/D6 and D8, with every plane-net pad of "
+              "U_SR3 and C19 clear of the pot bodies (of nine such spots screened, the one "
+              "with 0 conflicts, every SENSE net under 1.3 x MST and no dangling track)"),
     "U_SR2": (-15.16, -7.75, 0,
               "reva-routed-bottom.png 2026-09-30: U_SR2 against U_SM's west edge "
               "(LED0-2, MUX_EN6_SR, SENSE_2 in conflict); moved west toward LED0-2 and U_MUX7"),
-    "U_IN1": (41.35, -4.80, 90,
+    "U_IN1": (41.35, 3.20, 90,
               "reva-routed-bottom.png 2026-09-30: U_IN1 in the field north of U_SM "
-              "(KEY_*, MUX_EN8 knot); moved east of U_SM toward KEY_REC_B / KEY_MODBTN"),
+              "(KEY_*, MUX_EN8 knot); moved east of U_SM toward KEY_REC_B / KEY_MODBTN. "
+              "Task 6b (2026-10-01, stitch probe): 8 mm south, so its decoupler C22's GND "
+              "pad leaves RV40's body (it had a 3.36 mm stitch stub)"),
     "U_SR1": (-13.50, -7.50, 0,
               "reva-routed-bottom.png 2026-09-30 (Task 6a run 1): MUX_S1_SR/S2_SR and MUX_EN8 "
               "knotted east of U_SR1 at x 134-141, y 30-40; rot 0 turns pins 1-8 (MUX_S1/S2_SR, "
               "MUX_EN0-4_SR) west, 1.5 mm north so C17 keeps room; also keeps U_SR1 out of "
               "U_IN1's old place, where C17 found no room"),
-    "U_SR5": (68.31, 9.47, 0,
+    "U_SR5": (70.85, 3.55, 0,
               "reva-routed-bottom.png 2026-09-30: U_SR5 north of U_SM (SR_SPARE* in conflict); "
-              "its outputs are test points only, moved east toward U_SR4 (SR_CHAIN4)"),
+              "its outputs are test points only, moved east toward U_SR4 (SR_CHAIN4). Kept at "
+              "(230, 65): its anchor follows U_SR3 and U_IN1, so the offset is re-derived"),
     "R1": (-22.27, -8.07, 90,
            "reva-routed-bottom.png 2026-09-30 (Task 6a run 1): mux-select resistor in the knot "
            "east of U_SR1; moved into the pocket west of U_SR1, below R2 / R3"),
