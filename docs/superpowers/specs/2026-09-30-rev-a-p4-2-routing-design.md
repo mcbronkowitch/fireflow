@@ -380,6 +380,10 @@ A step that examined nothing is red.
 3. **rules_file**
    - kicad-cli runs on the committed pair (`kicad/reva.kicad_pcb` beside
      `kicad/reva.kicad_pro`) and on `out/`. The gated counts must be equal.
+   - Until Task 8 commits the routed board, the step runs on `out/`'s board
+     beside the committed `.kicad_pro`. The committed board is still the
+     placed one, with no tracks. The guard's §6.2 (committed board equals a
+     fresh run) makes the two readings the same afterwards.
    - The pro's min track, via, clearance and edge values are read and must
      equal the check's own constants.
 4. **audio**
@@ -396,6 +400,21 @@ A step that examined nothing is red.
      Each jack zone it finds is a `found` item judged against `KNOWN_PANEL`,
      so a zone that disappears in the panel pass leaves a stale entry, which
      is red.
+   - **Across a zone edge** (Bastian, 2026-10-01, after the Task 7 review).
+     Take a victim–aggressor pair on the same layer where exactly one item
+     lies inside an exemption zone. If that inside item is routed copper (a
+     track or a via), the pair must be at least **3.0 mm** apart. If it is a
+     pad, the pair is exempt. Pairs with both items inside a zone stay
+     exempt.
+     - Why: the check, like the router, used to drop all zone copper. An
+       IN_L track then lay 0.706 mm from an SR_DATA via just inside the east
+       module zone (Task 7's first board), and audio was green.
+     - Why 3.0 mm: inside the zones the module pins themselves sit at a
+       2.54 mm pitch.
+     - On the current board the closest pairs are IN_R 5.56 mm from an
+       SR_CLK track, IN_L 6.60 mm from an SR_DATA via, and OUT_R 7.53 mm
+       from a LED16 via.
+     - The router is unchanged. This bound is the check's alone.
 5. **lr**
    - `OUT_L`↔`OUT_R` and `IN_L`↔`IN_R`, same layer, outside the zones: at
      least 2.0 mm.
