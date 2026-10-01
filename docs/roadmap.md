@@ -4116,8 +4116,13 @@ the board rules. To converge, the placement was spread twice through P4-1's
 `OVERRIDES` (the dense field west of the module, then the plane-net pads
 clear of the pot bodies); the panel is untouched. Known panel items wait
 for the panel pass as in P4-1, now with the jack zones at J1 (IN_L,
-SHIFTBTN_L) and J18 (OUT_R, CEIL_L), where placement puts LED pads within
-10 mm of an audio jack. Spec
+SHIFTBTN_L) and J18 (OUT_R, CEIL_L), where placement puts LED-net pads
+within 10 mm of an audio jack. Two SM_3V3 pins (RV3.3, RV56.3) stay
+unconnected until the panel pass, because the SONG lamp legs overlap them
+(known items `unrouted SONG_A` / `unrouted SONG_B`). Open: U_REG (AMS1117-3.3
+from +12 V, feeding 3V3D for the shift registers and LEDs) drops 8.7 V
+linearly; its dissipation and junction temperature have not been computed —
+queued for after P4-2 (Bastian, 2026-10-01). Spec
 `docs/superpowers/specs/2026-09-30-rev-a-p4-2-routing-design.md`;
 renders `docs/hardware/routing/`.
 

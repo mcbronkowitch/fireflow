@@ -956,7 +956,8 @@ def _sab_drc(s):
     2026-10-01 board that is C12: C10's loops ran into an M6_CH1 via (right)
     and an M6_CH5 track (left), and kicad-cli's report on crossing copper
     varies from run to run (Task 8: once the clearance item was not keyed
-    by C10 at all). The clearance item is the only new one."""
+    by C10 at all). The clearance item is the only new one. The chosen cap's
+    ref goes on `s.sab_ref`; `why()` puts it into WHY["drc"]."""
     from gen import kipcb
     for fp in _decouplers(s.board):
         side = fp.GetLayerName()
@@ -975,6 +976,7 @@ def _sab_drc(s):
             segs = [("GND", "track", (a, b), 0.125) for a, b in zip(pts, pts[1:])]
             if all(_dist(sg, it) >= SAB_DRC_KEEP_MM for sg in segs for it in others):
                 kipcb.add_track(s.board, side, 0.25, "GND", pts)
+                s.sab_ref = fp.GetReference()
                 return
     raise SystemExit("drc sabotage: no 100 nF with a clear loop beside its rail pad")
 
@@ -1227,7 +1229,7 @@ TURNS_RED = {"routed": "routed", "routed_missing": "routed", "routed_song": "rou
              "planes": "planes", "planes_missing": "planes", "planes_stitch": "planes"}
 WHY = {"routed": "unrouted on SENSE_2", "routed_missing": "incomplete",
        "routed_song": "SONG_A: 2 blocks under one key",
-       "drc": "clearance C12: kicad-cli", "drc_missing": "wrote no report",
+       "drc": "clearance {ref}: kicad-cli", "drc_missing": "wrote no report",
        "drc_cut": "was not read",
        "rules_file": "min_clearance is 0.15", "rules_file_missing": "carries no rules",
        "audio": "audio clearance below 10.0 mm",
@@ -1238,6 +1240,13 @@ WHY = {"routed": "unrouted on SENSE_2", "routed_missing": "incomplete",
        "pot_keepout": "F.Cu copper under a pot body", "pot_keepout_missing": "no pot examined",
        "planes": "free island", "planes_missing": "no plane examined",
        "planes_stitch": "stitching:"}
+
+
+def why(s, name):
+    """WHY[name] for the sabotaged state `s`: `{ref}` is the part the drc
+    sabotage chose (`s.sab_ref`). A sabotage that never set it leaves `{ref}`
+    in the phrase, which no report line carries, so the guard goes red."""
+    return WHY[name].replace("{ref}", getattr(s, "sab_ref", "{ref}"))
 
 
 def sabotage(s, name):

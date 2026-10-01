@@ -151,7 +151,7 @@ def admissible(chk, key, jacks):
         return False
     if not CK.key_allowed(key, jacks | SONG | set().union(*PAIRS), PAIRS, words):
         return False
-    if chk == "routed" and len(CK.key_names(key, words)) < 2:
+    if chk == "routed" and len(set(CK.key_names(key, words))) < 2:
         return key in CUT_OFF_KEYS
     return True
 
@@ -400,9 +400,10 @@ def run_sabotage(base, name):
     text = run_text(s, pcb, prefix)
     want = RC.TURNS_RED[name]
     check(want in red_steps(text), "sabotage %s turns %s red (red: %s)" % (name, want, sorted(red_steps(text))))
-    hits = on_red_step(text, want, RC.WHY[name])
+    phrase = RC.why(s, name)
+    hits = on_red_step(text, want, phrase)
     check(bool(hits), "sabotage %s is red for its own reason on %s's own lines (%r): %s" % (
-        name, want, RC.WHY[name], hits[0] if hits else "no such line"))
+        name, want, phrase, hits[0] if hits else "no such line"))
     for step, phrase, suffix in EXTRA.get(name, []):
         hits = on_red_step(text, step, phrase, suffix)
         check(bool(hits), "sabotage %s also shows %r%s on a RED %s: %s" % (

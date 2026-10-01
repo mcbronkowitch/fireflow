@@ -309,7 +309,8 @@ def place_power_header(s, proj, blocked):
 # Manual corrections (spec §4.4): ref -> (dx, dy, rot, reason), relative to
 # the part's anchor. An entry names the render that justified it.
 # (The first Task 5 run needed five, all for a decoupler with no room at its
-# IC's VCC pad; the IC search now leaves that room itself.)
+# IC's VCC pad; the IC search now leaves that room itself, but only against
+# the parts placed before it, so a later IC can still take it: U_SR1 below.)
 # P4-2 Task 6a (2026-09-30): the shift registers' and U_IN1's anchors are
 # centroids of board-wide loads and fall inside the module shadow, so the
 # spiral packed them against the module's north and west edges, where the

@@ -197,7 +197,7 @@ Probed on the committed P4-1 board (`hardware/reva/kicad/reva.kicad_pcb`,
 - **New `hardware/reva/rules.py`:** every board rule in one place. That covers
   track widths per class, via, clearance, copper-to-edge, the pair rules, the
   aggressor and victim sets, the SENSE factor and the exemption margin.
-  `place.py`, `route.py`, `route_check.py` and P3's `build.py` read from it.
+  `place.py`, `route.py` and P3's `build.py` read from it.
   - The checks keep their own thresholds per the P4-1 constraint.
   - `route_check.py` does **not** import its limits from `rules.py` or
     `route.py`: it owns them, as `place_check.py` does.
@@ -398,10 +398,10 @@ A step that examined nothing is red.
 3. **rules_file**
    - kicad-cli runs on the committed pair (`kicad/reva.kicad_pcb` beside
      `kicad/reva.kicad_pro`) and on `out/`. The gated counts must be equal.
-   - Until Task 8 commits the routed board, the step runs on `out/`'s board
-     beside the committed `.kicad_pro`. The committed board is still the
-     placed one, with no tracks. The guard's §6.2 (committed board equals a
-     fresh run) makes the two readings the same afterwards.
+   - The routed board is committed, and the two readings are the same
+     board. The step runs on `out/`'s board beside the committed
+     `.kicad_pro`, and the guard's §6.2 (committed board equals a fresh run)
+     makes that the committed pair.
    - The pro's min track, via, clearance and edge values are read and must
      equal the check's own constants.
 4. **audio**
@@ -429,9 +429,11 @@ A step that examined nothing is red.
        module zone (Task 7's first board), and audio was green.
      - Why 3.0 mm: inside the zones the module pins themselves sit at a
        2.54 mm pitch.
-     - On the current board the closest pairs are IN_R 5.56 mm from an
-       SR_CLK track, IN_L 6.60 mm from an SR_DATA via, and OUT_R 7.53 mm
-       from a LED16 via.
+     - On the committed board the closest pairs are IN_R 5.562 mm from an
+       SR_CLK track (the aggressor inside the zone), IN_L 5.904 mm (an IN_L
+       track inside the zone at U_SM.B4 against an SR_DATA via outside),
+       OUT_R 7.528 mm from a LED16 via in the J18 zone, and OUT_L 8.222 mm
+       from an SR_CLK track.
      - The router is unchanged. This bound is the check's alone.
 5. **lr**
    - `OUT_L`↔`OUT_R` and `IN_L`↔`IN_R`, same layer, outside the zones: at

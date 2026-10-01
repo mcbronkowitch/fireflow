@@ -72,7 +72,7 @@ Known limits (P4a review)
   SD socket and the module are untested.
 - The A* heuristic aims at `tcells[j][0]` only. With multi-layer targets it is
   not admissible, so paths may be suboptimal.
-- `_via_step` checks only the via class, which is safe only while
+- `_astar`'s via step checks only the via class, which is safe only while
   `via_radius >= half_width` (asserted in `run()`).
 - When the round limit is hit, `run()` still returns routes with overlapping
   copper, and `Result.conflicts` counts NETS in conflict, not cells. Adapters
@@ -462,46 +462,18 @@ class Router:
         pb = self._cur_pair
         return pb is not None and (pb[0][c][i] or pb[1][c][i])
 
-    # --- costs -----------------------------------------------------------------
-    def _cost(self, c, i, nid, pres):
-        st = self._static[c][i]
-        if st == BLOCKED or (st != FREE and st != nid):
-            return None
-        if self._cur_pair is not None and self._pair_blocked(c, i):
-            return None
-        if self._occ_le is None:
-            return (1.0 + self._hist[i]) * (1.0 + pres * self._occ[c][i])
-        le = self._occ_le[self._cur_tier][c][i]
-        return (1.0 + self._hist[i]) * (1.0 + pres * (le + 0.25 * (self._occ[c][i] - le)))
-
-    def _via_step(self, ix, iy, nid, pres):
-        v = self._via_c
-        claims = 0
-        for layer in range(self.layers):
-            i = self._idx(layer, ix, iy)
-            st = self._static[v][i]
-            if st == BLOCKED or (st != FREE and st != nid):
-                return None
-            if self._cur_pair is not None and self._pair_blocked(v, i):
-                return None
-            if self._occ_le is None:
-                claims += self._occ[v][i]
-            else:
-                le = self._occ_le[self._cur_tier][v][i]
-                claims += le + 0.25 * (self._occ[v][i] - le)
-        return self.via_cost * (1.0 + pres * claims)
-
     # --- A* ----------------------------------------------------------------------
     def _astar(self, sources, targets, target_xy, nid, c, pres):
-        # Speed: this loop is nearly the router's whole run time, so `_idx`,
-        # `_split`, `_cost`, `_via_step` and the octile heuristic are inlined
-        # below. They stay as the reference implementations, and the inlined
-        # code must stay equivalent to them expression for expression: the
-        # same blocking tests, the same floats in the same order of
-        # operations, the same neighbour order (_DIRS, then the via steps in
-        # ascending layer) and the same heap entries (f, g, n, i) with the
-        # same counter -- so every route stays byte-identical. The static test
-        # `st and st != nid` is `_cost`'s, since FREE == 0 and nid >= 1.
+        # Speed: this loop is nearly the router's whole run time, so the cell
+        # cost, the via step and the octile heuristic are written inline, and
+        # `_idx` and `_split` are unrolled. This loop is the only
+        # implementation, and its order is load-bearing: the same blocking
+        # tests, the same floats in the same order of operations, the same
+        # neighbour order (_DIRS, then the via steps in ascending layer) and
+        # the same heap entries (f, g, n, i) with the same counter keep every
+        # route byte-identical (hw_gen_route_guard's PINNED hash gates it).
+        # The static test `st and st != nid` covers BLOCKED and foreign cells,
+        # since FREE == 0 and nid >= 1.
         #
         # One exact prune: with pres >= 0 and hist >= 0 every factor of the
         # cell cost is >= 1.0 (occ >= le >= 0 always), so w * cost >= w and
@@ -867,7 +839,7 @@ class Router:
         counts NETS in conflict, not cells. Adapters must treat
         `conflicts > 0` (and a non-empty `failed`) as failure."""
         assert all(hw <= self.via_radius for _n, hw, _t in self._nets), \
-            "via_radius must be >= every track half-width (see _via_step)"
+            "via_radius must be >= every track half-width (see _astar's via step)"
         ids ={name: k + 1 for k, (name, _hw, _t) in enumerate(self._nets)}
         for net, _l, _s in self._obstacles + self._vobstacles:
             if net is not None and net not in ids:
