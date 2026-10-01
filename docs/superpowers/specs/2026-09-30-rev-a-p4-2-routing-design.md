@@ -323,6 +323,10 @@ for byte.
      obstacles. The fix therefore re-routes the board. SENSE_1 (1.3185 × MST
      in Task 7's run, limit 1.3) is measured again after it. If it is still
      over, via cost is probed (§4.3; Bastian, 2026-10-01).
+10. **U_REG's heat copper** (Bastian, 2026-10-01; no `gen/route.py` change).
+    `hardware/reva/route.py` reserves a 3V3D area on B.Cu at U_REG's tab
+    (`REG_COPPER`, a 3V3D-owned `add_obstacle` on B.Cu only) and fills it as
+    a 3V3D zone after routing; see `docs/hardware/power-budget.md`.
 
 The router measures nothing it gates. Every rule is judged by `route_check.py`
 on the saved board.
@@ -429,11 +433,13 @@ A step that examined nothing is red.
        module zone (Task 7's first board), and audio was green.
      - Why 3.0 mm: inside the zones the module pins themselves sit at a
        2.54 mm pitch.
-     - On the committed board the closest pairs are IN_R 5.562 mm from an
+     - On the committed board (re-routed 2026-10-01 with U_REG's copper
+       area, `route.py --write`) the closest pairs are IN_R 5.562 mm from an
        SR_CLK track (the aggressor inside the zone), IN_L 5.904 mm (an IN_L
        track inside the zone at U_SM.B4 against an SR_DATA via outside),
-       OUT_R 7.528 mm from a LED16 via in the J18 zone, and OUT_L 8.222 mm
-       from an SR_CLK track.
+       OUT_R 7.182 mm from an SR_DATA via @(175.75, 76.80) (on the board
+       before, 7.528 mm from a LED16 via in the J18 zone), and OUT_L
+       8.222 mm from an SR_CLK track.
      - The router is unchanged. This bound is the check's alone.
 5. **lr**
    - `OUT_L`↔`OUT_R` and `IN_L`↔`IN_R`, same layer, outside the zones: at
@@ -463,12 +469,20 @@ A step that examined nothing is red.
      DRC's `unconnected_items` covers connectivity; this count keeps a
      missing stitch pass from hiding behind pads that reach the plane some
      other way.
-9. **report**, never gated
+9. **reg_copper** (*amendment, Bastian 2026-10-01*; report and render
+   moved to 10 and 11)
+   - The filled 3V3D copper on B.Cu whose outline overlaps U_REG's tab pad
+     (an intersection with area) is at least 200 mm².
+   - Sabotages: `reg_copper` (the fill cut to the tab grown by 3 mm) and
+     `reg_copper_missing`.
+   - On the committed board it reads 227.7 mm². See
+     `docs/hardware/power-budget.md`.
+10. **report**, never gated
    - Totals: track length and vias, per class.
    - Per victim, the nearest aggressor and where.
    - Per SENSE net, length and capacitance estimate.
    - Router runtime and rounds.
-10. **render**: front and back into `hardware/reva/out/`.
+11. **render**: front and back into `hardware/reva/out/`.
 
 **Freeze condition:** `KNOWN_PANEL` in `route_check.py` is empty, in addition
 to P4-1's. `docs/hardware/grip-test.md` gets that sentence.

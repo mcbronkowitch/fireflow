@@ -4103,11 +4103,12 @@ spare channel to AGND and one to the rail (spec §8).
 
 **2026-10-01 — P4-2 routing: Rev A is routed.**
 `KIPY hardware/reva/route.py` routes all 187 nets of the placed board (GND
-and SM_3V3 are planes) on 4 layers with our own router in 211 s (580 router
-vias plus 101 plane stitching vias, 11727 mm of routed track): audio
+and SM_3V3 are planes) on 4 layers with our own router in 222.8 s and 24
+rounds (580 router vias plus 101 plane stitching vias, 11803.5 mm of routed
+track; numbers of the re-route with U_REG's copper area below): audio
 ≥ 10 mm from every LED, shift-register and SD line on its layer (worst
-10.15 mm); routed copper inside the module/jack exemption zones ≥ 3.0 mm
-from audio copper outside them (worst 5.56 mm); L/R ≥ 2 mm (worst
+10.143 mm, IN_R against an SD_D1 via); routed copper inside the
+module/jack exemption zones ≥ 3.0 mm from audio copper outside them (worst 5.56 mm); L/R ≥ 2 mm (worst
 2.26 mm), each SENSE net ≤ 1.3 × its spanning tree (worst 1.13), no F.Cu
 under a pot body, GND and SM_3V3 each one main island; every other fill
 fragment touches a pad of its net. `reva_route_guard` rebuilds it byte for
@@ -4119,10 +4120,10 @@ for the panel pass as in P4-1, now with the jack zones at J1 (IN_L,
 SHIFTBTN_L) and J18 (OUT_R, CEIL_L), where placement puts LED-net pads
 within 10 mm of an audio jack. Two SM_3V3 pins (RV3.3, RV56.3) stay
 unconnected until the panel pass, because the SONG lamp legs overlap them
-(known items `unrouted SONG_A` / `unrouted SONG_B`). Open: U_REG (AMS1117-3.3
-from +12 V, feeding 3V3D for the shift registers and LEDs) drops 8.7 V
-linearly; its dissipation and junction temperature have not been computed —
-queued for after P4-2 (Bastian, 2026-10-01). Spec
+(known items `unrouted SONG_A` / `unrouted SONG_B`). U_REG's heat (2026-10-01):
+238.7 mm² of 3V3D B.Cu copper on its tab (a 227.7 mm² zone, gated ≥ 200 mm² by
+`reg_copper`, plus 3V3D tracks) takes the worst case at Ta 50 °C from 104.5 °C to
+83.2 °C junction (estimate, limit 125 °C) — `docs/hardware/power-budget.md`. Spec
 `docs/superpowers/specs/2026-09-30-rev-a-p4-2-routing-design.md`;
 renders `docs/hardware/routing/`.
 
