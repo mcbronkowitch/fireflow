@@ -4119,10 +4119,10 @@ for the panel pass as in P4-1, now with the jack zones at J1 (IN_L,
 SHIFTBTN_L) and J18 (OUT_R, CEIL_L), where placement puts LED-net pads
 within 10 mm of an audio jack. Two SM_3V3 pins (RV3.3, RV56.3) stay
 unconnected until the panel pass, because the SONG lamp legs overlap them
-(known items `unrouted SONG_A` / `unrouted SONG_B`). Open: U_REG (AMS1117-3.3
-from +12 V, feeding 3V3D for the shift registers and LEDs) drops 8.7 V
-linearly; its dissipation and junction temperature have not been computed —
-queued for after P4-2 (Bastian, 2026-10-01). Spec
+(known items `unrouted SONG_A` / `unrouted SONG_B`). U_REG's heat (2026-10-01):
+a 227.7 mm² 3V3D B.Cu area at its tab, gated ≥ 200 mm² by `reg_copper`, takes the
+worst case at Ta 50 °C from 104.5 °C to 83.1 °C junction (estimate, limit 125 °C)
+— `docs/hardware/power-budget.md`. Spec
 `docs/superpowers/specs/2026-09-30-rev-a-p4-2-routing-design.md`;
 renders `docs/hardware/routing/`.
 

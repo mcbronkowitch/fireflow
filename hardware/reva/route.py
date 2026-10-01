@@ -13,8 +13,10 @@ the plane nets. Every terminal carries its pad's copper shape, so a pad that
 lies partly off the grid (the jack row's tip pads, spec §4.2.6) is still
 reached. Victims and aggressors carry pair groups, U_SM's pad groups and the
 jack zones (a victim pad with aggressor pads already within 10 mm) are
-exemption zones, SENSE and audio route in earlier tiers. The rules are
-judged by route_check.py on the saved board, never here."""
+exemption zones, SENSE and audio route in earlier tiers. U_REG's heat
+copper (REG_COPPER) is a 3V3D-owned B.Cu obstacle and, after routing, a
+3V3D zone. The rules are judged by route_check.py on the saved board, never
+here."""
 import argparse
 import copy
 import os
@@ -41,6 +43,37 @@ COMMITTED = os.path.join(HERE, "kicad", "reva.kicad_pcb")   # route.py owns it (
 DOCS = os.path.normpath(os.path.join(HW, "..", "docs", "hardware", "routing"))
 LAYER_NAMES = ("F.Cu", "B.Cu")
 AGGR = "aggressor"
+
+# U_REG's heat copper (Bastian, 2026-10-01; docs/hardware/power-budget.md):
+# a 3V3D area on B.Cu at the regulator's tab, (l, t, r, b) mm in board
+# coordinates. The router keeps every other net's copper (and every via but
+# 3V3D's) off it; after routing it becomes a 3V3D zone, solid to the tab.
+# Probed 2026-10-01 on the placed (stitched) and the routed board: no pad
+# or via but U_REG's tab inside (J_PWR's B-side courtyard overlaps the south
+# end from y 58.98, its pads start at y 61.86); nearest other copper RV10's
+# netless lug 0.615 mm, U_REG.1/.3 0.730 mm, J_PWR.10 0.860 mm, C4 1.045 mm,
+# the nearest stitching via (SM_3V3, C8) 1.201 mm. F.Cu above it is free of
+# pot bodies (RV10's starts at x 68.08, RV9's ends at y 38.90), so other nets
+# cross it there. The pin column (x <= 59.47) stays outside, so +12V still
+# reaches U_REG.3 from the west.
+REG_NET = "3V3D"
+REG_COPPER = ((51.9, 39.0, 66.1, 50.8),     # north of U_REG, west to x 51.9
+              (60.2, 50.8, 66.1, 61.0))     # the tab's column, past its south end
+
+
+def reg_outline():
+    """REG_COPPER's union as one outline, [(x, y)] mm."""
+    u = pcbnew.SHAPE_POLY_SET()
+    for l, t, r, b in REG_COPPER:
+        one = pcbnew.SHAPE_POLY_SET()
+        one.NewOutline()
+        for x, y in ((l, t), (r, t), (r, b), (l, b)):
+            one.Append(pcbnew.FromMM(x), pcbnew.FromMM(y))
+        u.BooleanAdd(one)
+    u.Simplify()
+    assert u.OutlineCount() == 1 and u.HoleCount(0) == 0, "REG_COPPER must be one simply connected area"
+    ch = u.COutline(0)
+    return [(_mm(ch.CPoint(i).x), _mm(ch.CPoint(i).y)) for i in range(ch.PointCount())]
 
 
 def _mm(v):
@@ -229,6 +262,11 @@ def _router_input(s, placed):
     for ref in pot_refs(placed):
         l, t, rr, btm = PL.body_box(b.FindFootprintByReference(ref))
         r.add_obstacle(None, (LAYER_NAMES.index("F.Cu"),), ("rect", l, t, rr, btm))
+    # U_REG's heat copper: owned by REG_NET on B.Cu, so REG_NET may enter and
+    # every other net keeps its B.Cu copper and its vias off (a via needs
+    # every layer free; probed 2026-10-01 on a 10 x 4 mm grid).
+    for rect in REG_COPPER:
+        r.add_obstacle(REG_NET, (LAYER_NAMES.index("B.Cu"),), ("rect",) + tuple(rect))
     for net in sorted(terms):
         if len(terms[net]) < 2:
             continue
@@ -263,6 +301,11 @@ def build():
             kipcb.add_track(s.board, LAYER_NAMES[layer], s.widths[net], net, [a, bb])
         for xy in geo["vias"]:
             kipcb.add_via(s.board, xy, net)
+    # The heat copper as a zone: solid to the tab (no thermal spokes), the
+    # board's clearance (the planes keep KiCad's default 0.5 mm).
+    z = kipcb.add_zone(s.board, "B.Cu", REG_NET, reg_outline())
+    z.SetPadConnection(pcbnew.ZONE_CONNECTION_FULL)
+    z.SetLocalClearance(pcbnew.FromMM(RU.CLEARANCE))
     kipcb.fill_zones(s.board)
     return s
 

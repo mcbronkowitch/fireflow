@@ -757,6 +757,73 @@ def _plane_via_report(board, nets, vias):
     return out
 
 
+# U_REG's heat copper (Bastian, 2026-10-01; docs/hardware/power-budget.md).
+# The check's own values; not imported from route.py.
+REG_REF = "U_REG"           # the AMS1117-3.3, +12V -> 3V3D, on B.Cu
+REG_NET = "3V3D"
+REG_MIN_MM2 = 200.0         # filled 3V3D B.Cu copper connected to the tab
+REG_EMPTY = "reg_copper measured nothing:"
+REG_SAB_MM = 3.0            # the reg_copper sabotage keeps the fill within this of the tab
+
+
+def _reg_tab(board, ref):
+    """U_REG's tab: its largest REG_NET pad on B.Cu (the SOT-223 tab is
+    pad 2 at 2.0 x 3.8 mm beside pin 2 at 2.0 x 1.5 mm). None if absent."""
+    fp = board.FindFootprintByReference(ref) if ref else None
+    pads = [p for p in fp.Pads() if p.GetNetname() == REG_NET and p.IsOnLayer(pcbnew.B_Cu)] if fp else []
+    if not pads:
+        return None
+    return max(pads, key=lambda p: p.GetEffectivePolygon(pcbnew.B_Cu, pcbnew.ERROR_INSIDE).Area())
+
+
+def _outlines(fill):
+    """Each outline of a filled SHAPE_POLY_SET, with its holes, on its own."""
+    out = []
+    for i in range(fill.OutlineCount()):
+        one = pcbnew.SHAPE_POLY_SET()
+        one.AddOutline(fill.COutline(i))
+        for j in range(fill.HoleCount(i)):
+            one.AddHole(fill.CHole(i, j))
+        out.append(one)
+    return out
+
+
+def check_reg_copper(s, pcb_path, prefix):
+    """The filled REG_NET copper on B.Cu whose outline overlaps U_REG's tab
+    pad (intersection with area) is at least REG_MIN_MM2. The zone's layer
+    is read through IsOnLayer and the fill through GetFilledPolysList(B_Cu):
+    ZONE.GetLayerName() answers "F.Cu" for a B.Cu zone (probed 2026-10-01)."""
+    ref = "" if getattr(s, "reg_missing", False) else REG_REF
+    board = _saved_board(s, pcb_path)
+    tab = _reg_tab(board, ref)
+    if tab is None:
+        return False, "%s no %s pad of %s on B.Cu" % (REG_EMPTY, REG_NET, REG_REF), []
+    lid = pcbnew.B_Cu
+    zs = [z for z in board.Zones() if not z.GetIsRuleArea() and z.GetNetname() == REG_NET and z.IsOnLayer(lid)]
+    area, n_out, n_touch, details = 0.0, 0, 0, []
+    for z in zs:
+        conn = "solid" if z.GetPadConnection() == pcbnew.ZONE_CONNECTION_FULL else "thermal spokes"
+        details.append("%s zone on B.Cu: pad connection %s, clearance %.2f mm"
+                       % (REG_NET, conn, _mm(z.GetLocalClearance())))
+        for one in _outlines(z.GetFilledPolysList(lid)):
+            n_out += 1
+            a = _mm(_mm(one.Area()))
+            if _pad_touches(tab, lid, one):
+                n_touch += 1
+                area += a
+            else:
+                details.append("%s B.Cu outline of %.2f mm2 not touching the tab" % (REG_NET, a))
+    tab_mm2 = _mm(_mm(tab.GetEffectivePolygon(lid, pcbnew.ERROR_INSIDE).Area()))
+    line = ("%s.%s [%s] tab %.2f mm2: %.1f mm2 of filled %s B.Cu copper on it (min %.1f), %d zone(s), "
+            "%d of %d outline(s) touch it" % (REG_REF, tab.GetNumber(), REG_NET, tab_mm2, area, REG_NET,
+                                              REG_MIN_MM2, len(zs), n_touch, n_out))
+    bad = []
+    if area < REG_MIN_MM2:
+        bad.append("U_REG copper below %.1f mm2: %.1f mm2 (%d %s zone(s) on B.Cu)"
+                   % (REG_MIN_MM2, area, len(zs), REG_NET))
+    return not bad, line, bad + details
+
+
 def check_rules_file(s, pcb_path, prefix):
     """The committed project file carries the rules (read and compared with
     RULES), and kicad-cli judges the routed board the same under it as under
@@ -869,7 +936,8 @@ def render(s, pcb_path, prefix):
 
 STEPS = [("routed", check_routed), ("drc", check_drc), ("rules_file", check_rules_file),
          ("audio", check_audio), ("lr", check_lr), ("sense", check_sense),
-         ("pot_keepout", check_pot_keepout), ("planes", check_planes), ("report", report),
+         ("pot_keepout", check_pot_keepout), ("planes", check_planes), ("reg_copper", check_reg_copper),
+         ("report", report),
          ("render", render)]
 
 
@@ -995,18 +1063,33 @@ def _longest(board, net):
     return t, (_mm(t.GetStart().x), _mm(t.GetStart().y)), (_mm(t.GetEnd().x), _mm(t.GetEnd().y))
 
 
-def _beside(s, net, along, offset):
-    """A `net` track laid `offset` mm beside `along`'s longest track, on its layer."""
+def _beside(s, net, along, offsets):
+    """A `net` track laid beside `along`'s longest track, on its layer, at
+    the first of `offsets` (mm, signed) where it keeps SAB_DRC_KEEP_MM from
+    all copper of other nets on the layer. A track laid onto foreign copper
+    takes that net on save (2026-10-01: after U_REG's copper area moved the
+    routing, LED0 at +3 mm beside OUT_L landed on a MOD4_A track and was
+    saved as MOD4_A, so audio stayed green)."""
     from gen import kipcb
     t, (x1, y1), (x2, y2) = _longest(s.board, along)
+    layer = t.GetLayerName()
+    others = _foreign(s.board, layer, net, set())
     L = math.hypot(x2 - x1, y2 - y1)
-    nx, ny = -(y2 - y1) / L * offset, (x2 - x1) / L * offset
-    kipcb.add_track(s.board, t.GetLayerName(), 0.25, net, [(x1 + nx, y1 + ny), (x2 + nx, y2 + ny)])
+    for off in offsets:
+        nx, ny = -(y2 - y1) / L * off, (x2 - x1) / L * off
+        pts = [(x1 + nx, y1 + ny), (x2 + nx, y2 + ny)]
+        seg = (net, "track", tuple(pts), 0.125)
+        if all(_dist(seg, it) >= SAB_DRC_KEEP_MM for it in others):
+            kipcb.add_track(s.board, layer, 0.25, net, pts)
+            s.beside = (net, along, off)
+            return
+    raise SystemExit("sabotage: no clear place for %s beside %s at %s mm" % (net, along, offsets))
 
 
 def _sab_audio(s):
-    """An LED0 track laid 3 mm beside OUT_L's longest track, on its layer."""
-    _beside(s, "LED0", "OUT_L", 3.0)
+    """An LED0 track laid 2-5 mm beside OUT_L's longest track, on its layer
+    (the first clear offset, `_beside`)."""
+    _beside(s, "LED0", "OUT_L", (3.0, -3.0, 4.0, -4.0, 2.0, -2.0, 5.0, -5.0))
 
 
 def _sab_audio_missing(s):
@@ -1095,8 +1178,9 @@ def _sab_audio_zone(s):
 
 
 def _sab_lr(s):
-    """An OUT_R track laid 1 mm beside OUT_L's longest track, on its layer."""
-    _beside(s, "OUT_R", "OUT_L", 1.0)
+    """An OUT_R track laid 1-1.5 mm beside OUT_L's longest track, on its
+    layer (the first clear offset, `_beside`)."""
+    _beside(s, "OUT_R", "OUT_L", (1.0, -1.0, 1.5, -1.5))
 
 
 def _sab_lr_missing(s):
@@ -1195,6 +1279,31 @@ def _sab_planes_stitch(s):
         s.board.Delete(t)
 
 
+def _sab_reg_copper(s):
+    """Every 3V3D B.Cu fill cut down to U_REG's tab box grown by REG_SAB_MM:
+    still on the tab, far below REG_MIN_MM2. The fill is edited, not
+    refilled (as the planes sabotage)."""
+    lid = pcbnew.B_Cu
+    tab = _reg_tab(s.board, REG_REF)
+    zs = [z for z in s.board.Zones() if not z.GetIsRuleArea() and z.GetNetname() == REG_NET and z.IsOnLayer(lid)]
+    if tab is None or not zs:
+        raise SystemExit("reg_copper sabotage: no %s tab or no %s zone on B.Cu" % (REG_REF, REG_NET))
+    l, t, r, b = PL.grow(_pad_box(tab), REG_SAB_MM)
+    box = pcbnew.SHAPE_POLY_SET()
+    box.NewOutline()
+    for x, y in ((l, t), (r, t), (r, b), (l, b)):
+        box.Append(pcbnew.FromMM(x), pcbnew.FromMM(y))
+    for z in zs:
+        fill = pcbnew.SHAPE_POLY_SET(z.GetFilledPolysList(lid))
+        fill.BooleanIntersection(box)
+        fill.Fracture()
+        z.SetFilledPolysList(lid, fill)
+
+
+def _sab_reg_copper_missing(s):
+    s.reg_missing = True
+
+
 def _sab_rules_file(s):
     """rules_file reads a project file whose clearance says 0.15, handed in
     as bytes (no temporary file is left behind)."""
@@ -1218,7 +1327,8 @@ SABOTAGES = {"routed": _sab_routed, "routed_missing": _sab_routed_missing,
              "sense": _sab_sense, "sense_missing": _sab_sense_missing,
              "pot_keepout": _sab_pot_keepout, "pot_keepout_missing": _sab_pot_keepout_missing,
              "planes": _sab_planes, "planes_missing": _sab_planes_missing,
-             "planes_stitch": _sab_planes_stitch}
+             "planes_stitch": _sab_planes_stitch,
+             "reg_copper": _sab_reg_copper, "reg_copper_missing": _sab_reg_copper_missing}
 TURNS_RED = {"routed": "routed", "routed_missing": "routed", "routed_song": "routed",
              "drc": "drc", "drc_missing": "drc", "drc_cut": "drc",
              "rules_file": "rules_file", "rules_file_missing": "rules_file",
@@ -1226,7 +1336,8 @@ TURNS_RED = {"routed": "routed", "routed_missing": "routed", "routed_song": "rou
              "lr": "lr", "lr_missing": "lr",
              "sense": "sense", "sense_missing": "sense",
              "pot_keepout": "pot_keepout", "pot_keepout_missing": "pot_keepout",
-             "planes": "planes", "planes_missing": "planes", "planes_stitch": "planes"}
+             "planes": "planes", "planes_missing": "planes", "planes_stitch": "planes",
+             "reg_copper": "reg_copper", "reg_copper_missing": "reg_copper"}
 WHY = {"routed": "unrouted on SENSE_2", "routed_missing": "incomplete",
        "routed_song": "SONG_A: 2 blocks under one key",
        "drc": "clearance {ref}: kicad-cli", "drc_missing": "wrote no report",
@@ -1239,7 +1350,8 @@ WHY = {"routed": "unrouted on SENSE_2", "routed_missing": "incomplete",
        "sense": "SENSE length over 1.3 x MST", "sense_missing": "SENSE measured nothing: no SENSE net examined",
        "pot_keepout": "F.Cu copper under a pot body", "pot_keepout_missing": "no pot examined",
        "planes": "free island", "planes_missing": "no plane examined",
-       "planes_stitch": "stitching:"}
+       "planes_stitch": "stitching:",
+       "reg_copper": "U_REG copper below 200.0 mm2", "reg_copper_missing": REG_EMPTY}
 
 
 def why(s, name):
