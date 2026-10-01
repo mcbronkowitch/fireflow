@@ -37,7 +37,7 @@ from gen import route as GR  # noqa: E402  (not `route`: this module is route.py
 from gen import stitch      # noqa: E402
 
 OUT = P.OUT
-COMMITTED = P.COMMITTED
+COMMITTED = os.path.join(HERE, "kicad", "reva.kicad_pcb")   # route.py owns it (spec §4.1)
 DOCS = os.path.normpath(os.path.join(HW, "..", "docs", "hardware", "routing"))
 LAYER_NAMES = ("F.Cu", "B.Cu")
 AGGR = "aggressor"

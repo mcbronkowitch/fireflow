@@ -4101,6 +4101,26 @@ the coupon has nothing else open.
 LEDs on the 595 — waits for the control PCB's pin map, which should give one
 spare channel to AGND and one to the rail (spec §8).
 
+**2026-10-01 — P4-2 routing: Rev A is routed.**
+`KIPY hardware/reva/route.py` routes all 187 nets of the placed board (GND
+and SM_3V3 are planes) on 4 layers with our own router in 211 s (580 router
+vias plus 101 plane stitching vias, 11727 mm of routed track): audio
+≥ 10 mm from every LED, shift-register and SD line on its layer (worst
+10.15 mm); routed copper inside the module/jack exemption zones ≥ 3.0 mm
+from audio copper outside them (worst 5.56 mm); L/R ≥ 2 mm (worst
+2.26 mm), each SENSE net ≤ 1.3 × its spanning tree (worst 1.13), no F.Cu
+under a pot body, GND and SM_3V3 each one main island; every other fill
+fragment touches a pad of its net. `reva_route_guard` rebuilds it byte for
+byte and proves every check red. The committed `reva.kicad_pro` now carries
+the board rules. To converge, the placement was spread twice through P4-1's
+`OVERRIDES` (the dense field west of the module, then the plane-net pads
+clear of the pot bodies); the panel is untouched. Known panel items wait
+for the panel pass as in P4-1, now with the jack zones at J1 (IN_L,
+SHIFTBTN_L) and J18 (OUT_R, CEIL_L), where placement puts LED pads within
+10 mm of an audio jack. Spec
+`docs/superpowers/specs/2026-09-30-rev-a-p4-2-routing-design.md`;
+renders `docs/hardware/routing/`.
+
 **2026-09-30 — P4-1 placement: Rev A is placed.**
 `KIPY hardware/reva/place.py` places all 213 parts on a 300.8 × 110 mm,
 4-layer board from P3's netlist and P1's hole list, and
@@ -4111,12 +4131,8 @@ lamps (2.6 mm lower). GATE_A_L and LVL_B_L also wait: their legs meet
 SOURCE_A's and PAN_B's pins in every LED rotation. Spec
 `docs/superpowers/specs/2026-09-29-rev-a-p4-1-placement-design.md`;
 renders `docs/hardware/placement/`. Hand-off: the committed
-`hardware/reva/kicad/reva.kicad_pro` is P3's and carries no board design
-rules. KiCad 10's default copper-to-edge clearance equals P4-1's 0.5 mm, but
-its other minima do not (probed: track 0.2, via 0.5, clearance 0.0 against
-P4-1's 0.25 / 0.6 / 0.2), so a DRC of the committed board checks weaker
-minima. The board rules and P4-2's net classes need an owner, either
-`build.py`'s project writer or a `.kicad_dru`. The placed footprints carry no schematic `(path …)`
+`hardware/reva/kicad/reva.kicad_pro` carried no board design rules (closed
+in P4-2). The placed footprints carry no schematic `(path …)`
 links, so "Update PCB from schematic" and parity checks will not match them
 (P4-3).
 

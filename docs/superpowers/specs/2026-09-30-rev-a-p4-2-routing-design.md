@@ -156,6 +156,24 @@ Probed on the committed P4-1 board (`hardware/reva/kicad/reva.kicad_pcb`,
   board): U_SR1–3, U_IN1, U_MUX7, part of U_MUX6, and the module's west pins,
   under ten pots. Bastian decided on 2026-09-30 to spread the placement there
   through P4-1's `OVERRIDES` (P4-1 spec §4.4), with the panel untouched.
+- **Measured during execution (Tasks 6a and 6b, 2026-10-01):**
+  - Placement was spread through `OVERRIDES` twice. Task 6a thinned the dense
+    field (x 104–152, y 29–75) from 146 to 100 pads; the router's conflicts
+    after 30 rounds went from 12 to 0. Task 6b, after §4.2.9, moved the
+    plane-net pads clear of the pot bodies: U_SR3 to (84, 73) rotated 90°,
+    U_IN1 8 mm south. The escape stubs under pot bodies (U_SR3.8 GND
+    5.70 mm under RV22, C22.2 GND 3.36 mm under RV40) are gone, and C19.2,
+    boxed in before, is stitched.
+  - `place.py` reserves a decoupler's room only against the parts placed
+    before its IC. With only U_IN1 moved, the run stopped with "no free place
+    for C17"; U_SR1 is pinned by an override to work around it.
+  - The offsets of U_SR5, R1–R3 and R12 ride on anchors that follow U_SR1 and
+    U_IN1. Re-derive them whenever those two move.
+  - U_REG moved 22.5 mm in Task 6b and now sits 17.4 mm from J_PWR. No check
+    gates that distance.
+  - The router leaves T-junctions: a branch can end on the middle of a host
+    segment. kicad-cli flagged two of them as `track_dangling` once (Task 6b,
+    run 2), and none of the 46 on the final board. `track_dangling` is gated.
 
 ## 4. Design
 

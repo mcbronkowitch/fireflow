@@ -3,20 +3,23 @@
 exit code is the verdict. Re-runs itself under KiCad's Python.
 
 1. Two builds in separate processes are byte-identical.
-2. The committed hardware/reva/kicad/reva.kicad_pcb equals a fresh build.
-3. The fresh build is green (known panel violations listed).
-4. An unsabotaged reload is green in every step, and every sabotage turns its
+2. The fresh build is green (known panel violations listed).
+3. An unsabotaged reload is green in every step, and every sabotage turns its
    named step red. Every gated step has a sabotage and a `_missing` one.
-5. KNOWN_PANEL names only jack-row parts (the 18 jacks, hole y 114.0), the
+4. KNOWN_PANEL names only jack-row parts (the 18 jacks, hole y 114.0), the
    SONG clusters and, by the owner's decision (Bastian, 2026-09-29), the two
    LED/pot pairs GATE_A_L/SOURCE_A and LVL_B_L/PAN_B, each pair only with its
    own partner, until the panel pass. Every name in every key is checked.
-6. The DRC report parser reads every recorded line shape, and the drc
+5. The DRC report parser reads every recorded line shape, and the drc
    sabotage's finding names the sabotaged decoupler (not an empty key).
-7. The thresholds (outline, edge clearance, USB distance, shadow size) are
+6. The thresholds (outline, edge clearance, USB distance, shadow size) are
    place_check.py's own constants, and the sabotages module_usb, edge_outline
    and drc_empty (a report with no unconnected_items) are each red for their
-   own stated reason."""
+   own stated reason.
+
+The committed hardware/reva/kicad/reva.kicad_pcb is the routed board since
+P4-2; reva_route_guard (test_route.py) compares it with a fresh route.py run,
+so this guard no longer does."""
 import os
 import shutil
 import subprocess
@@ -174,8 +177,8 @@ def run():
         print(out1[-3000:])
     same = os.path.exists(pcb1) and os.path.exists(pcb2) and open(pcb1, "rb").read() == open(pcb2, "rb").read()
     check(same, "two builds in separate processes are byte-identical")
-    check(os.path.exists(P.COMMITTED) and open(P.COMMITTED, "rb").read() == open(pcb1, "rb").read(),
-          "committed %s equals a fresh build (rerun place.py --write)" % os.path.relpath(P.COMMITTED))
+    # No committed-board comparison here: the committed board is routed since
+    # P4-2 and guarded by reva_route_guard (test_route.py).
 
     # The jack row: the 18 jacks, hole y 114.0. SD, the two keys and the four
     # lamps on that row are not jacks and are not admitted.

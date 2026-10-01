@@ -915,31 +915,68 @@ def _sab_routed_song(s):
         s.board.Delete(t)
 
 
-def _decoupler(board):
-    """The first 100 nF by reference (C10 on the 2026-09-30 board, U_MUX6's;
-    C1 is the 10 uF bulk cap)."""
+def _decouplers(board):
+    """The 100 nF caps by reference (C10 first on the 2026-09-30 board,
+    U_MUX6's; C1 is the 10 uF bulk cap)."""
     return sorted((f for f in board.GetFootprints()
                    if f.GetReference().startswith("C") and f.GetValue() == "100n"),
-                  key=lambda f: f.GetReference())[0]
+                  key=lambda f: f.GetReference())
+
+
+SAB_DRC_KEEP_MM = 0.25     # the drc sabotage's loop keeps clearance + 0.05 mm from foreign copper
+
+
+def _foreign(board, layer, net, skip):
+    """copper()-shaped items of every net but `net` on `layer` (tracks on
+    it, every via, pads on it), minus the pads in `skip` ((ref, pad number)
+    pairs: pcbnew hands out a new proxy per call, so identity cannot tell)."""
+    lid = LAYERS[layer]
+    out = []
+    for t in board.GetTracks():
+        if t.GetNetname() == net:
+            continue
+        a, b = (_mm(t.GetStart().x), _mm(t.GetStart().y)), (_mm(t.GetEnd().x), _mm(t.GetEnd().y))
+        if t.Type() == pcbnew.PCB_VIA_T:
+            out.append((t.GetNetname(), "via", (a, a), _mm(t.GetWidth(pcbnew.F_Cu)) / 2.0))
+        elif t.GetLayerName() == layer:
+            out.append((t.GetNetname(), "track", (a, b), _mm(t.GetWidth()) / 2.0))
+    for f in board.GetFootprints():
+        for p in f.Pads():
+            if p.GetNetname() != net and p.IsOnLayer(lid) and (f.GetReference(), str(p.GetNumber())) not in skip:
+                out.append((p.GetNetname(), "pad", _pad_box(p), 0.0))
+    return out
 
 
 def _sab_drc(s):
     """A GND track 0.1 mm beside a decoupler's rail pad (P4-1's near miss).
-    It leaves the decoupler's own GND pad and returns into it over the same
-    path (C10 on B.Cu: GND pad above the rail pad), so neither end dangles
-    and it is no island: the clearance item is the only new one."""
+    It leaves the decoupler's own GND pad and returns into it over a small
+    loop, so neither end dangles and it is no island. The loop goes right of
+    the rail pad, else left, at the first 100 nF whose loop keeps
+    SAB_DRC_KEEP_MM from all foreign copper but that rail pad. On the
+    2026-10-01 board that is C12: C10's loops ran into an M6_CH1 via (right)
+    and an M6_CH5 track (left), and kicad-cli's report on crossing copper
+    varies from run to run (Task 8: once the clearance item was not keyed
+    by C10 at all). The clearance item is the only new one."""
     from gen import kipcb
-    fp = _decoupler(s.board)
-    side = fp.GetLayerName()
-    rail = [p for p in fp.Pads() if str(p.GetNumber()) == "1"][0]
-    gnd = [p for p in fp.Pads() if p.GetNetname() == "GND"][0]
-    bb = rail.GetBoundingBox()
-    gx, gy = pcbnew.ToMM(gnd.GetPosition().x), pcbnew.ToMM(gnd.GetPosition().y)
-    x = pcbnew.ToMM(bb.GetRight()) + 0.1 + 0.125
-    far = (pcbnew.ToMM(bb.GetBottom()) + 0.3 if gy < pcbnew.ToMM(rail.GetPosition().y)
-           else pcbnew.ToMM(bb.GetTop()) - 0.3)
-    kipcb.add_track(s.board, side, 0.25, "GND",
-                    [(gx, gy), (x, gy), (x, far), (x + 0.5, far), (x + 0.5, gy), (x, gy)])
+    for fp in _decouplers(s.board):
+        side = fp.GetLayerName()
+        rail = [p for p in fp.Pads() if str(p.GetNumber()) == "1"][0]
+        gnd = [p for p in fp.Pads() if p.GetNetname() == "GND"][0]
+        bb = rail.GetBoundingBox()
+        gx, gy = pcbnew.ToMM(gnd.GetPosition().x), pcbnew.ToMM(gnd.GetPosition().y)
+        if abs(gy - pcbnew.ToMM(rail.GetPosition().y)) < 0.5:
+            continue            # the loop runs along y: the GND pad must sit above or below the rail pad
+        far = (pcbnew.ToMM(bb.GetBottom()) + 0.3 if gy < pcbnew.ToMM(rail.GetPosition().y)
+               else pcbnew.ToMM(bb.GetTop()) - 0.3)
+        others = _foreign(s.board, side, "GND", {(fp.GetReference(), "1")})
+        for sgn in (1, -1):
+            x = (pcbnew.ToMM(bb.GetRight()) if sgn > 0 else pcbnew.ToMM(bb.GetLeft())) + sgn * (0.1 + 0.125)
+            pts = [(gx, gy), (x, gy), (x, far), (x + sgn * 0.5, far), (x + sgn * 0.5, gy), (x, gy)]
+            segs = [("GND", "track", (a, b), 0.125) for a, b in zip(pts, pts[1:])]
+            if all(_dist(sg, it) >= SAB_DRC_KEEP_MM for sg in segs for it in others):
+                kipcb.add_track(s.board, side, 0.25, "GND", pts)
+                return
+    raise SystemExit("drc sabotage: no 100 nF with a clear loop beside its rail pad")
 
 
 def _sab_drc_missing(s):
@@ -1190,7 +1227,7 @@ TURNS_RED = {"routed": "routed", "routed_missing": "routed", "routed_song": "rou
              "planes": "planes", "planes_missing": "planes", "planes_stitch": "planes"}
 WHY = {"routed": "unrouted on SENSE_2", "routed_missing": "incomplete",
        "routed_song": "SONG_A: 2 blocks under one key",
-       "drc": "clearance C10: kicad-cli", "drc_missing": "wrote no report",
+       "drc": "clearance C12: kicad-cli", "drc_missing": "wrote no report",
        "drc_cut": "was not read",
        "rules_file": "min_clearance is 0.15", "rules_file_missing": "carries no rules",
        "audio": "audio clearance below 10.0 mm",

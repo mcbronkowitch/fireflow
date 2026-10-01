@@ -459,6 +459,13 @@ add_test(NAME reva_check_kit_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/hardware/reva/test_check_kit.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+# Rev A P4-2: the routed board -- two runs byte-identical, committed board
+# fresh, every check green at baseline and red under its own sabotage.
+add_test(NAME reva_route_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/hardware/reva/test_route.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+set_tests_properties(reva_route_guard PROPERTIES TIMEOUT 3600)
 
 # The Python guards need a runner or they rot unnoticed -- tools/test_*.py in
 # this repo is wired to nothing, and the VCV panel guard stood red for 23

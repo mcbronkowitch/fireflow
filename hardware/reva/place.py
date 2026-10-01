@@ -7,8 +7,9 @@ Builds the placed, unrouted board from P3's project (build.project()), the P1
 hole list and panel-map.json, saves <out>/reva-placed.kicad_pcb (default
 hardware/reva/out/), renders it and runs place_check. Exit 0 only when every
 gated check is green (known panel violations listed, spec §5.3). --write also,
-only when the run is GREEN, copies the .kicad_pcb -- never the .kicad_pro SaveBoard writes beside it --
-to hardware/reva/kicad/reva.kicad_pcb.
+only when the run is GREEN, copies the renders to docs/hardware/placement/.
+The committed hardware/reva/kicad/reva.kicad_pcb is the routed board since
+P4-2: route.py owns it (P4-2 spec §4.1), place.py never writes it.
 """
 import argparse
 import copy
@@ -32,7 +33,6 @@ from gen import kipcb # noqa: E402
 from gen import place as PL  # noqa: E402
 
 OUT = os.path.join(HERE, "out")
-COMMITTED = os.path.join(HERE, "kicad", "reva.kicad_pcb")
 DOCS = os.path.normpath(os.path.join(HW, "..", "docs", "hardware", "placement"))
 X0, Y0, X1, Y1 = 2.0, 9.25, 302.8, 119.25   # spec §2.1 / §4.1
 EDGE_CLEAR = RU.EDGE_CLEAR   # copper to edge (assumption, spec §8)
@@ -683,8 +683,6 @@ def main(argv=None):
     if a.write and not a.sabotage and not green:
         print("not copied: the run is RED")
     if a.write and not a.sabotage and green:
-        shutil.copyfile(pcb, COMMITTED)
-        print("copied to", os.path.relpath(COMMITTED))
         os.makedirs(DOCS, exist_ok=True)
         for side in ("top", "bottom"):
             png = "%s-%s.png" % (prefix, side)
