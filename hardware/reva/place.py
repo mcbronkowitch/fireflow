@@ -307,10 +307,44 @@ def place_power_header(s, proj, blocked):
 
 
 # Manual corrections (spec §4.4): ref -> (dx, dy, rot, reason), relative to
-# the part's anchor. Empty; an entry names the render that justified it.
+# the part's anchor. An entry names the render that justified it.
 # (The first Task 5 run needed five, all for a decoupler with no room at its
 # IC's VCC pad; the IC search now leaves that room itself.)
-OVERRIDES = {}
+# P4-2 Task 6a (2026-09-30): the shift registers' and U_IN1's anchors are
+# centroids of board-wide loads and fall inside the module shadow, so the
+# spiral packed them against the module's north and west edges, where the
+# router never converged (146 pads on 2208 mm2 at x 104-152, y 29-75).
+OVERRIDES = {
+    "U_SR3": (-19.23, -12.28, 0,
+              "reva-routed-bottom.png 2026-09-30: U_SR3 in the dense field west of U_SM "
+              "(LED4-8, SR_CHAIN in conflict); moved west toward its LEDs D4, D5, D6"),
+    "U_SR2": (-15.16, -7.75, 0,
+              "reva-routed-bottom.png 2026-09-30: U_SR2 against U_SM's west edge "
+              "(LED0-2, MUX_EN6_SR, SENSE_2 in conflict); moved west toward LED0-2 and U_MUX7"),
+    "U_IN1": (41.35, -4.80, 90,
+              "reva-routed-bottom.png 2026-09-30: U_IN1 in the field north of U_SM "
+              "(KEY_*, MUX_EN8 knot); moved east of U_SM toward KEY_REC_B / KEY_MODBTN"),
+    "U_SR1": (-13.50, -7.50, 0,
+              "reva-routed-bottom.png 2026-09-30 (Task 6a run 1): MUX_S1_SR/S2_SR and MUX_EN8 "
+              "knotted east of U_SR1 at x 134-141, y 30-40; rot 0 turns pins 1-8 (MUX_S1/S2_SR, "
+              "MUX_EN0-4_SR) west, 1.5 mm north so C17 keeps room; also keeps U_SR1 out of "
+              "U_IN1's old place, where C17 found no room"),
+    "U_SR5": (68.31, 9.47, 0,
+              "reva-routed-bottom.png 2026-09-30: U_SR5 north of U_SM (SR_SPARE* in conflict); "
+              "its outputs are test points only, moved east toward U_SR4 (SR_CHAIN4)"),
+    "R1": (-22.27, -8.07, 90,
+           "reva-routed-bottom.png 2026-09-30 (Task 6a run 1): mux-select resistor in the knot "
+           "east of U_SR1; moved into the pocket west of U_SR1, below R2 / R3"),
+    "R2": (-21.13, -11.26, 90,
+           "reva-routed-bottom.png 2026-09-30 (Task 6a run 1): MUX_S1_SR in conflict in the knot "
+           "east of U_SR1; moved into the pocket west of U_SR1, beside pin 1"),
+    "R3": (-18.74, -10.91, 90,
+           "reva-routed-bottom.png 2026-09-30 (Task 6a run 1): MUX_S2_SR in conflict in the knot "
+           "east of U_SR1; moved into the pocket west of U_SR1, beside pin 2"),
+    "R12": (35.11, -8.74, 0,
+            "reva-routed-bottom.png 2026-09-30 (Task 6a run 1): MUX_EN8 the worst net of the knot "
+            "east of U_SR1; moved out of that corridor next to U_MUX8, the mux it enables"),
+}
 
 # Search step and radius per class (spec §4.4; spike values for ICs,
 # decoupling and LED resistors).
