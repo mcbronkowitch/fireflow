@@ -13,6 +13,8 @@ EDGE_CLEAR = 0.5
 PITCH = 0.2
 VIA_COST = 8.0
 MAX_ITERS = 30
+PRES0, PRES_MULT, HIST_INC = 0.5, 1.6, 1.0   # router negotiation (spec §4.3), tunable
+PLANE_THT_VIA_KEEPOFF = 1.0   # via copper to plane-net THT pad copper: thermal gap 0.5 + zone clearance 0.5 (spec §4.2.8)
 
 VICTIMS = ("OUT_L", "OUT_R", "IN_L", "IN_R")
 AGGRESSORS = tuple(["LED%d" % n for n in range(19)] + ["LED%d_A" % n for n in range(19)]
