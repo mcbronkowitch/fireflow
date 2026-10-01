@@ -24,24 +24,30 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 COMMITTED = os.path.join(HERE, "kicad", "reva.kicad_pcb")
 
 REG_REF, NET = "U_REG", "3V3D"
-V_OUT = 3.3                 # [datasheet] AMS1117-3.3 nominal output (LCSC C6186 listing)
+V_OUT = 3.3                 # [datasheet] AMS1117-3.3 nominal output (Slkor)
 V_IN = {"typ": 12.0, "worst": 12.6}     # [assumed] +12 V bus, nominal / upper tolerance; D_P12's drop ignored
-# [datasheet] typ 5 mA: LCSC C6186 listing (Slkor's AMS1117 text says 3 mA
-# typ); worst 10 mA: Slkor AMS1117 max, specified at Vin = Vout + 1.25 V only,
-# so its use at 12 V is [assumed]
+# typ 5 mA: [listing] LCSC C6186 (Slkor's AMS1117 text says 3 mA typ);
+# worst 10 mA: [datasheet] Slkor AMS1117 max at Vin = Vout + 1.25 V, in a
+# table headed "Vin <= 7 V, Tj = 25 C unless otherwise specified", so its use
+# at 12 V is [assumed]
 IQ_MA = {"typ": 5.0, "worst": 10.0}
 IQ_ALT_MA = 15.0            # [datasheet] TI LM1117I-3.3 max over -40..125 C, Vin <= 15 V: the sensitivity case
-THETA_DS = 150.0            # [datasheet] Slkor AMS1117 SOT-223 θJA, copper area not stated
+THETA_DS = 150.0            # [datasheet] Slkor AMS1117 SOT-223 θJA (absolute maximum table), copper area not stated
+PD_MAX_W = 0.600            # [datasheet] Slkor AMS1117 maximum power dissipation, SOT-223
+THETA_JEDEC = 61.6          # [datasheet] TI LM1117 §7.4 Thermal Information, RθJA DCY (SOT-223): an optimistic bound
 LED_VF = {"typ": 2.0, "worst": 1.8}     # [assumed] the panel LEDs' colour and Vf are not chosen yet
 LED_ON = {"typ": 0.5, "worst": 1.0}     # [assumed] fraction of LEDs lit (firmware duty is not written yet)
 VF_SWEEP = (1.8, 2.0, 3.0)  # [assumed] Vf values to show the colour's effect (red-ish ... blue/white-ish)
 KEYS_DOWN = {"typ": 0, "worst": None}   # [assumed] None: every key pressed at once
 HC_ICC_MA = {"typ": 0.0, "worst": 0.08}  # [assumed] 74HC static supply current per package, order of magnitude
 TA_C = (40.0, 50.0)         # [assumed] air inside the case
-TJ_LIMIT_C = 125.0          # [datasheet] AMS1117 operating junction range -40..+125 C (Slkor; LCSC C6186 listing)
-# [datasheet] TI LM1117 (SNOS412Q, Jan 2023) Table 9-2: SOT-223 RθJA in still
-# air against 1 oz top-side copper area, the tab soldered to that copper.
-# A proxy: TI's test board, not this board, and TI's die, not AMS's.
+TJ_LIMIT_C = 125.0          # [datasheet] Slkor AMS1117 operating junction range -40..125 C ([listing] LCSC agrees)
+# [datasheet] TI LM1117 (SNOS412Q, Jan 2023) Table 9-2: SOT-223 RθJA against
+# top-side copper area, "tab of device attached to topside copper" (TI's
+# top side is the component side: B.Cu for U_REG here). 1 oz and still air
+# are from Figure 9-11, which plots the same data ("RθJA vs 1-oz Copper Area
+# for SOT-223", legend "TA = 25°C, Still Air"). A proxy: TI's test board,
+# not this board, and TI's die, not AMS's.
 TI_TABLE = ((0.0123, 136.0), (0.066, 123.0), (0.3, 84.0), (0.53, 75.0), (0.76, 69.0), (1.0, 66.0))
 MM2_PER_IN2 = 645.16
 NEAR_MM = 10.0              # the "within 10 mm of the tab" figure, reported beside the total
@@ -175,7 +181,8 @@ def main(argv=None):
         i_key = keys * V_OUT / r_key * 1e3
         i_hc = len(inv["hc"]) * HC_ICC_MA[case]
         i_load = i_led + i_key + i_hc
-        p = (V_IN[case] - V_OUT) * i_load / 1e3 + V_IN[case] * IQ_MA[case] / 1e3
+        # rounded to what is printed, so every Tj below recomputes by hand
+        p = round((V_IN[case] - V_OUT) * i_load / 1e3 + V_IN[case] * IQ_MA[case] / 1e3, 3)
         loads[case] = p
         print("%-5s LEDs %d of %d lit at Vf %.1f V: %.2f mA; keys down %d x %.2f mA: %.2f mA; 74HC %d x %.2f mA: "
               "%.2f mA; I_load %.2f mA" % (case, n_on, len(inv["leds"]), LED_VF[case],
@@ -187,20 +194,23 @@ def main(argv=None):
                                                        100.0 * V_IN[case] * IQ_MA[case] / 1e3 / p))
     for vf in VF_SWEEP:
         print("one LED at Vf %.1f V through %s: %.2f mA" % (vf, rvals[0], (V_OUT - vf) / r_led * 1e3))
-    p_alt = loads["worst"] + V_IN["worst"] * (IQ_ALT_MA - IQ_MA["worst"]) / 1e3
+    p_alt = round(loads["worst"] + V_IN["worst"] * (IQ_ALT_MA - IQ_MA["worst"]) / 1e3, 3)
     print("worst with Iq %.0f mA: P = %.3f W" % (IQ_ALT_MA, p_alt))
-    for ta in TA_C:
-        tw = ta + THETA_DS * loads["worst"]
-        print("datasheet θJA %.0f C/W (copper unstated), Ta %.0f C: Tj typ %.1f C, worst %.1f C (margin %.1f K)"
-              % (THETA_DS, ta, ta + THETA_DS * loads["typ"], tw, TJ_LIMIT_C - tw))
+    print("Slkor SOT-223 maximum power dissipation %.3f W: worst %.3f W, with Iq %.0f mA %.3f W"
+          % (PD_MAX_W, loads["worst"], IQ_ALT_MA, p_alt))
+    for th_ds, what in ((THETA_DS, "Slkor θJA, copper unstated"), (THETA_JEDEC, "TI §7.4 RθJA, optimistic bound")):
+        for ta in TA_C:
+            tw = ta + th_ds * loads["worst"]
+            print("datasheet θJA %.1f C/W (%s), Ta %.0f C: Tj typ %.1f C, worst %.1f C (margin %.1f K)"
+                  % (th_ds, what, ta, ta + th_ds * loads["typ"], tw, TJ_LIMIT_C - tw))
     boards = [("after", b)]
     if a.before:
         boards.insert(0, ("before", pcbnew.LoadBoard(a.before)))
     for label, bb in boards:
         total, near, tab = tab_copper(bb)
-        th = theta(total)
+        th = round(theta(total), 1)     # rounded to what is printed
         print("%-6s %s B.Cu copper touching the tab: %.1f mm2 (%.3f in2; %.1f mm2 within %.0f mm of the tab "
-              "centre; the tab pad alone %.2f mm2) -> RthJA %.0f C/W (TI Table 9-2, interpolated)"
+              "centre; the tab pad alone %.2f mm2) -> RthJA %.1f C/W (TI Table 9-2, interpolated)"
               % (label, NET, total, total / MM2_PER_IN2, near, NEAR_MM, tab, th))
         for ta in TA_C:
             for case in ("typ", "worst"):

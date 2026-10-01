@@ -883,7 +883,7 @@ def check_rules_file(s, pcb_path, prefix):
 
 
 def report(s, pcb_path, prefix):
-    """Never gated (spec §5.9)."""
+    """Never gated (spec §5.10)."""
     board = _saved_board(s, pcb_path)
     by_w, width_of, vias = {}, {}, {}
     for t in board.GetTracks():
