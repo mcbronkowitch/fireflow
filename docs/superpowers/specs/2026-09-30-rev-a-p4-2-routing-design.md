@@ -289,6 +289,22 @@ for byte.
      search keeps the same distance (a `stitch_plane_pads` option, off by
      default for the coupon). Measured: 1.0 mm clears both starved thermals.
    - Off by default: the coupon and `hw_gen_route_guard` stay byte for byte.
+9. **Stitch vias keep off the pot bodies** (Bastian, 2026-10-01, after
+   Task 7's first run). `pot_keepout` (§5.7) found 15 stitching vias (11 GND,
+   4 SM_3V3) with copper 0.05–3.34 mm inside a pot's body box. No router via
+   and no F.Cu track was under a body. 11 of those SMD pads sit under a pot
+   body themselves.
+   - `stitch_plane_pads` takes boxes that via copper must stay out of. For
+     a pad under a body, the via goes outside the box and a stitch track on
+     the pad's own layer leads to it. The rule is unchanged.
+   - A stub longer than the old 3.0 mm standoffs is checked along its whole
+     length, not only at its midpoint.
+   - Off by default: the coupon and `hw_gen_stitch_guard` stay byte for
+     byte.
+   - The stitch runs before the router, so its vias and tracks are router
+     obstacles. The fix therefore re-routes the board. SENSE_1 (1.3185 × MST
+     in Task 7's run, limit 1.3) is measured again after it. If it is still
+     over, via cost is probed (§4.3; Bastian, 2026-10-01).
 
 The router measures nothing it gates. Every rule is judged by `route_check.py`
 on the saved board.
