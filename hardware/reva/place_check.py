@@ -6,10 +6,10 @@ so is a listed one that no longer fails."""
 import json
 import math
 import os
-import re
 
 import pcbnew
 
+import check_kit as CK
 import place as P
 from gen import kipcb
 from gen import pcb_proof as PP
@@ -85,16 +85,7 @@ def _key(s, ref):
 
 def _judge(s, check, found):
     """found: {key: message}. Returns (ok, details, n_known)."""
-    known = s.known.get(check, set())
-    details = []
-    for k in sorted(found):
-        tag = "known, waits for the panel pass" if k in known else "NEW"
-        details.append("%s: %s [%s]" % (k, found[k], tag))
-    stale = sorted(known - set(found))
-    details += ["%s: listed as known but no longer fails -- remove it from KNOWN_PANEL" % k
-                for k in stale]
-    unknown = [k for k in found if k not in known]
-    return not unknown and not stale, details, len(set(found) & known)
+    return CK.judge(s.known.get(check, set()), found)
 
 
 def check_anchors(s, pcb_path, prefix):
@@ -329,17 +320,7 @@ def check_decoupling(s, pcb_path, prefix):
         len(want), n, worst, DECOUPLE_MAX_MM), bad + lines
 
 
-def _mst(pts):
-    """Prim's minimum spanning tree length over pad centres."""
-    if len(pts) < 2:
-        return 0.0
-    done, rest, total = [pts[0]], list(pts[1:]), 0.0
-    while rest:
-        d, j = min((math.hypot(a[0] - b[0], a[1] - b[1]), j)
-                   for j, b in enumerate(rest) for a in done)
-        total += d
-        done.append(rest.pop(j))
-    return total
+_mst = CK.mst
 
 
 SD_HEIGHT_MM = 14.18      # LCSC C3177022
@@ -428,52 +409,12 @@ def render(s, pcb_path, prefix):
         os.path.basename(prefix), os.path.basename(prefix)), lines
 
 
-# kicad-cli 10.0.5 report shapes, probed 2026-09-30 on the placed board (item
-# lines follow a header line; the messages are localised, the item lines are
-# not):
-#   [courtyards_overlap]: Courtyards overlap
-#       Rule: ...; error
-#       @(237.3300 mm, 41.2080 mm): Footprint D15
-#       @(234.4250 mm, 42.7200 mm): Footprint RV54
-#   [copper_edge_clearance]: ... (... Freiraum 0,5000 mm; tatsaechlich 0,0000 mm)
-#       @(302.8000 mm, 119.2500 mm): Segment on Edge.Cuts        <- names no ref
-#       @(214.3000 mm, 118.9200 mm): PTH pad T [MOD2_B] of J13
-#   [clearance]: Freiraum-Verstoss ( Freiraum 0,2000 mm; tatsaechlich 0,1973 mm)
-#       @(72.8750 mm, 42.7200 mm): PTH pad 2 [M1_CH3] of RV10
-#       @(71.5700 mm, 41.2080 mm): PTH pad 2 [LED3_A] of D4
-#   SMD pads carry the layer (silk classes report the same way):
-#       @(105.1014 mm, 69.6471 mm): Pad 1 [SM_3V3] of C11 on B.Cu
-#       @(209.8000 mm, 109.5000 mm): Segment of J13 on F.Silkscreen
-#   Tracks and vias name no part:
-#       @(...): Track [GND] on B.Cu
-# (shorting_items and pth_inside_courtyard use the same "... pad N [NET] of REF" /
-# "Footprint REF" item lines.) A ref is the word after "of" or "Footprint", with
-# an optional " on <layer>" after it, at the end of the line.
-GATED_DRC = ("courtyards_overlap", "pth_inside_courtyard", "shorting_items", "clearance",
+# The kicad-cli 10.0.5 report shapes and the parser live in check_kit.py.
+GATED_DRC =("courtyards_overlap", "pth_inside_courtyard", "shorting_items", "clearance",
              "hole_clearance", "hole_to_hole", "copper_edge_clearance", "items_not_allowed")
 FRONT_REPORTED = ("courtyards_overlap", "pth_inside_courtyard")
-_REF_RE = re.compile(
-    r"(?:\bof|Footprint) ([A-Za-z_]+[0-9]*[A-Za-z_0-9]*)(?: on \S+)?\s*$", re.M)
-_CLASS_RE = re.compile(r"^\[([a-z0-9_]+)\]")
-_ITEM_RE = re.compile(r"^\s*(@\(.*)$", re.M)
-
-
-def drc_blocks(txt):
-    """[(class, [refs], first item line)] per violation block of report text."""
-    out = []
-    for block in re.split(r"(?=^\[)", txt, flags=re.M):
-        m = _CLASS_RE.match(block)
-        if m:
-            first = _ITEM_RE.search(block)
-            out.append((m.group(1), sorted(set(_REF_RE.findall(block))),
-                        first.group(1).strip() if first else "no item line"))
-    return out
-
-
-def drc_items(rpt_path):
-    """[(class, [refs])] per violation block of a kicad-cli report."""
-    txt = open(rpt_path, encoding="utf-8", errors="replace").read()
-    return [(c, r) for c, r, _first in drc_blocks(txt)]
+drc_blocks = CK.drc_blocks
+drc_items = CK.drc_items
 
 
 def check_drc(s, pcb_path, prefix):
@@ -525,24 +466,9 @@ STEPS = [("anchors", check_anchors), ("edge", check_edge), ("front", check_front
          ("drc", check_drc), ("report", report), ("render", render)]
 
 
-DETAIL_CAP = 40
-
-
 def run(s, pcb_path, prefix):
     s.known = {k: set(v) for k, v in KNOWN_PANEL.items()} if not s.known else s.known
-    green = True
-    for i, (name, fn) in enumerate(STEPS, 1):
-        ok, line, details = fn(s, pcb_path, prefix)
-        print("%s %d. %-10s %s" % ("   " if ok else "RED", i, name, line))
-        # A green step prints every detail (they are reports: known items,
-        # distances). A red one prints its first 40 and says how many it cut.
-        shown = details if ok else details[:DETAIL_CAP]
-        for d in shown:
-            print("        " + d)
-        if len(details) > len(shown):
-            print("        ... %d more lines" % (len(details) - len(shown)))
-        green = green and ok
-    return green
+    return CK.run_steps(STEPS, s, pcb_path, prefix)
 
 
 def _sab_anchors(s):

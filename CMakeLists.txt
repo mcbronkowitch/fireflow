@@ -429,6 +429,12 @@ add_test(NAME hw_gen_route_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/hardware/gen/test_route.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+# Rev A P4-2: the stitch search's optional keep-off from plane-net through-hole
+# pads; re-runs itself under KiCad's Python.
+add_test(NAME hw_gen_stitch_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/hardware/gen/test_stitch.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 # Rev A P4-1: shared placement geometry (boxes, hole point, first-fit search);
 # re-runs itself under KiCad's Python.
 add_test(NAME hw_gen_place_guard
@@ -448,6 +454,18 @@ add_test(NAME reva_place_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/hardware/reva/test_place.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+# Rev A P4-2: the shared check machinery (DRC parser, judge, step runner).
+add_test(NAME reva_check_kit_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/hardware/reva/test_check_kit.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+# Rev A P4-2: the routed board -- two runs byte-identical, committed board
+# fresh, every check green at baseline and red under its own sabotage.
+add_test(NAME reva_route_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/hardware/reva/test_route.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+set_tests_properties(reva_route_guard PROPERTIES TIMEOUT 3600)
 
 # The Python guards need a runner or they rot unnoticed -- tools/test_*.py in
 # this repo is wired to nothing, and the VCV panel guard stood red for 23

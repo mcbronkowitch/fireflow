@@ -7,8 +7,9 @@ Builds the placed, unrouted board from P3's project (build.project()), the P1
 hole list and panel-map.json, saves <out>/reva-placed.kicad_pcb (default
 hardware/reva/out/), renders it and runs place_check. Exit 0 only when every
 gated check is green (known panel violations listed, spec §5.3). --write also,
-only when the run is GREEN, copies the .kicad_pcb -- never the .kicad_pro SaveBoard writes beside it --
-to hardware/reva/kicad/reva.kicad_pcb.
+only when the run is GREEN, copies the renders to docs/hardware/placement/.
+The committed hardware/reva/kicad/reva.kicad_pcb is the routed board since
+P4-2: route.py owns it (P4-2 spec §4.1), place.py never writes it.
 """
 import argparse
 import copy
@@ -27,20 +28,20 @@ import pcbnew          # noqa: E402
 import assign          # noqa: E402
 import blocks as BL    # noqa: E402
 import build as RB     # noqa: E402
-from gen import kipcb  # noqa: E402
+import rules as RU     # noqa: E402
+from gen import kipcb # noqa: E402
 from gen import place as PL  # noqa: E402
 
 OUT = os.path.join(HERE, "out")
-COMMITTED = os.path.join(HERE, "kicad", "reva.kicad_pcb")
 DOCS = os.path.normpath(os.path.join(HW, "..", "docs", "hardware", "placement"))
 X0, Y0, X1, Y1 = 2.0, 9.25, 302.8, 119.25   # spec §2.1 / §4.1
-EDGE_CLEAR = 0.5          # copper to edge (assumption, spec §8)
+EDGE_CLEAR = RU.EDGE_CLEAR   # copper to edge (assumption, spec §8)
 EDGE_INSET = 1.0          # SMD courtyards stay this far inside the outline
-PAD_CLEAR = 0.2           # the coupon's board minimum
+PAD_CLEAR = RU.CLEARANCE  # the coupon's board minimum
 DECOUPLE_MAX_MM = 2.0     # the coupon's check_layout rule 5
 USB_CLEAR_MM = 35.0       # spec §4.3 amendment
 LAYERS = 4
-PLANES = (("In1.Cu", BL.GND), ("In2.Cu", BL.SM3V3))
+PLANES = (("In1.Cu", RU.PLANE_NETS[0]), ("In2.Cu", RU.PLANE_NETS[1]))
 SUPPLY = {BL.GND, BL.SM3V3, BL.D3V3, BL.P12, BL.N12, BL.P12_IN, BL.N12_IN}
 POT_ROT, POT_TOP_ROT = 270, 90
 FIXED_ROT = {"jack": 0, "key": 0, "sd": 0}
@@ -306,10 +307,53 @@ def place_power_header(s, proj, blocked):
 
 
 # Manual corrections (spec §4.4): ref -> (dx, dy, rot, reason), relative to
-# the part's anchor. Empty; an entry names the render that justified it.
+# the part's anchor. An entry names the render that justified it.
 # (The first Task 5 run needed five, all for a decoupler with no room at its
-# IC's VCC pad; the IC search now leaves that room itself.)
-OVERRIDES = {}
+# IC's VCC pad; the IC search now leaves that room itself, but only against
+# the parts placed before it, so a later IC can still take it: U_SR1 below.)
+# P4-2 Task 6a (2026-09-30): the shift registers' and U_IN1's anchors are
+# centroids of board-wide loads and fall inside the module shadow, so the
+# spiral packed them against the module's north and west edges, where the
+# router never converged (146 pads on 2208 mm2 at x 104-152, y 29-75).
+OVERRIDES = {
+    "U_SR3": (-32.03, 19.42, 90,
+              "reva-routed-bottom.png 2026-09-30: U_SR3 in the dense field west of U_SM "
+              "(LED4-8, SR_CHAIN in conflict); moved west toward its LEDs D4, D5, D6. "
+              "Task 6b (2026-10-01, stitch probe): at (96.8, 41.3) its GND pin 8 lay under "
+              "RV22's body (5.70 mm stitch stub) and C19.2 could not be stitched; moved "
+              "south-west to (84, 73), between D5/D6 and D8, with every plane-net pad of "
+              "U_SR3 and C19 clear of the pot bodies (of nine such spots screened, the one "
+              "with 0 conflicts, every SENSE net under 1.3 x MST and no dangling track)"),
+    "U_SR2": (-15.16, -7.75, 0,
+              "reva-routed-bottom.png 2026-09-30: U_SR2 against U_SM's west edge "
+              "(LED0-2, MUX_EN6_SR, SENSE_2 in conflict); moved west toward LED0-2 and U_MUX7"),
+    "U_IN1": (41.35, 3.20, 90,
+              "reva-routed-bottom.png 2026-09-30: U_IN1 in the field north of U_SM "
+              "(KEY_*, MUX_EN8 knot); moved east of U_SM toward KEY_REC_B / KEY_MODBTN. "
+              "Task 6b (2026-10-01, stitch probe): 8 mm south, so its decoupler C22's GND "
+              "pad leaves RV40's body (it had a 3.36 mm stitch stub)"),
+    "U_SR1": (-13.50, -7.50, 0,
+              "reva-routed-bottom.png 2026-09-30 (Task 6a run 1): MUX_S1_SR/S2_SR and MUX_EN8 "
+              "knotted east of U_SR1 at x 134-141, y 30-40; rot 0 turns pins 1-8 (MUX_S1/S2_SR, "
+              "MUX_EN0-4_SR) west, 1.5 mm north so C17 keeps room; also keeps U_SR1 out of "
+              "U_IN1's old place, where C17 found no room"),
+    "U_SR5": (70.85, 3.55, 0,
+              "reva-routed-bottom.png 2026-09-30: U_SR5 north of U_SM (SR_SPARE* in conflict); "
+              "its outputs are test points only, moved east toward U_SR4 (SR_CHAIN4). Kept at "
+              "(230, 65): its anchor follows U_SR3 and U_IN1, so the offset is re-derived"),
+    "R1": (-22.27, -8.07, 90,
+           "reva-routed-bottom.png 2026-09-30 (Task 6a run 1): mux-select resistor in the knot "
+           "east of U_SR1; moved into the pocket west of U_SR1, below R2 / R3"),
+    "R2": (-21.13, -11.26, 90,
+           "reva-routed-bottom.png 2026-09-30 (Task 6a run 1): MUX_S1_SR in conflict in the knot "
+           "east of U_SR1; moved into the pocket west of U_SR1, beside pin 1"),
+    "R3": (-18.74, -10.91, 90,
+           "reva-routed-bottom.png 2026-09-30 (Task 6a run 1): MUX_S2_SR in conflict in the knot "
+           "east of U_SR1; moved into the pocket west of U_SR1, beside pin 2"),
+    "R12": (35.11, -8.74, 0,
+            "reva-routed-bottom.png 2026-09-30 (Task 6a run 1): MUX_EN8 the worst net of the knot "
+            "east of U_SR1; moved out of that corridor next to U_MUX8, the mux it enables"),
+}
 
 # Search step and radius per class (spec §4.4; spike values for ICs,
 # decoupling and LED resistors).
@@ -640,8 +684,6 @@ def main(argv=None):
     if a.write and not a.sabotage and not green:
         print("not copied: the run is RED")
     if a.write and not a.sabotage and green:
-        shutil.copyfile(pcb, COMMITTED)
-        print("copied to", os.path.relpath(COMMITTED))
         os.makedirs(DOCS, exist_ok=True)
         for side in ("top", "bottom"):
             png = "%s-%s.png" % (prefix, side)

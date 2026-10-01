@@ -117,18 +117,23 @@ def write_lib_tables(parts, dest_dir, lib_dirs, extra_sym_libs=()):
     return sym_libs, fp_libs
 
 
-def write_project_file(dest_dir, name):
+def write_project_file(dest_dir, name, extra=None):
     """Write a minimal <name>.kicad_pro next to the root schematic.
 
     kicad-cli only loads the project-local sym-lib-table / fp-lib-table when a
     project file sits next to the root schematic; without one, vendored
     libraries (Daisy-Boards, Thonk) are reported as missing from "the current
     configuration" while KiCad's own resolve through the global tables.
+
+    `extra` (P4-2) is merged into the top-level object, e.g. the board rules
+    a generated board is judged by. None writes exactly the former bytes.
     """
     path = os.path.join(dest_dir, name + ".kicad_pro")
+    body = {"meta": {"filename": name + ".kicad_pro", "version": 3}}
+    if extra:
+        body.update(extra)
     with open(path, "w", encoding="utf-8", newline="\n") as fh:
-        fh.write(json.dumps({"meta": {"filename": name + ".kicad_pro", "version": 3}})
-                 + "\n")
+        fh.write(json.dumps(body, sort_keys=bool(extra)) + "\n")
     return path
 
 
