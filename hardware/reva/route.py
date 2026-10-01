@@ -4,7 +4,8 @@
     KIPY hardware/reva/route.py [--write] [--sabotage NAME] [--out DIR]
 
 Placement is P4-1's `place.build()`, in memory. SMD pads on the plane nets
-are stitched first (their vias are obstacles to the router). Every pad is an
+are stitched first (their vias are obstacles to the router; spec §4.2.9
+keeps them off the pot bodies). Every pad is an
 obstacle owned by its net; netless pads (pot tabs, unused contacts) block
 every net; footprint rule areas block their layers; each pot's body box
 blocks F.Cu (spec §2.7). Every net with two or more pads is routed except
@@ -246,8 +247,12 @@ def build():
                          clearance_mm=RU.CLEARANCE, via_mm=RU.VIA_D, drill_mm=RU.VIA_DRILL)
     s.zones = module_zones(s.board, RU.EXEMPT_MARGIN_MM)
     s.jack_zones = jack_zones(s.board, RU.AUDIO_MM, RU.EXEMPT_MARGIN_MM)
+    # Spec §4.2.9: stitching vias keep their copper off the pot bodies, the
+    # same boxes the router's F.Cu pot obstacle uses (`_router_input`).
+    pots = [PL.body_box(s.board.FindFootprintByReference(ref)) for ref in pot_refs(placed)]
     s.stitched, s.unresolved = stitch.stitch_plane_pads(s.board, set(RU.PLANE_NETS), netless_blocks=True,
-                                                        tht_keepoff_mm=RU.PLANE_THT_VIA_KEEPOFF)
+                                                        tht_keepoff_mm=RU.PLANE_THT_VIA_KEEPOFF,
+                                                        via_keepouts=pots)
     r = _router_input(s, placed)
     t0 = time.time()
     s.result = r.run(max_iters=RU.MAX_ITERS, pres0=RU.PRES0, pres_mult=RU.PRES_MULT,
