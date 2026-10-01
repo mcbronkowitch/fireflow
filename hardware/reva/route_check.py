@@ -248,6 +248,7 @@ def check_drc(s, pcb_path, prefix):
 # The check's own values (spec §2, §4.2.2, §4.3); not imported from rules.py
 # or route.py. Changing one of these is a spec change.
 AUDIO_MM = 10.0            # spec §2.1: victim to aggressor copper, same layer
+EDGE_MM = 3.0              # spec §5.4: across a zone edge, inside routed copper to the item outside
 LR_MM = 2.0                # spec §2.5: L to R copper, same layer
 SENSE_FACTOR = 1.3         # spec §2.6: SENSE copper <= 1.3 x MST of its pads
 ZONE_PITCH_MM = 2.54       # spec §4.2.2: U_SM pads within one pin pitch form a group
@@ -266,6 +267,11 @@ PLANES = (("In1.Cu", pcbnew.In1_Cu, "GND"), ("In2.Cu", pcbnew.In2_Cu, "SM_3V3"))
 PLANE_VIA_KEEPOFF_MM = 1.0  # spec §4.2.8; reported only, never gated (controller ruling C11.1)
 PIECE_MM = 0.5
 LAYERS = {"F.Cu": pcbnew.F_Cu, "B.Cu": pcbnew.B_Cu}
+# A step that measured nothing says so under its own prefix, never under
+# the prefix of a measured violation (the _missing sabotages match these).
+AUDIO_EMPTY = "audio measured nothing:"
+LR_EMPTY = "L/R measured nothing:"
+SENSE_EMPTY = "SENSE measured nothing:"
 
 
 def _mm(v):
@@ -328,14 +334,16 @@ def _inside(x, y, rects):
     return any(l <= x <= r and t <= y <= b for l, t, r, b in rects)
 
 
-def copper(board, nets, rects):
+def copper(board, nets, rects, inside=None):
     """{layer: [(net, kind, geom, half)]} for every copper item of `nets`
     outside `rects`: tracks as pieces <= PIECE_MM (a piece is kept if its
     midpoint is outside), vias as points on both outer layers (a through via
     spans them all; never judged by its GetLayerName), pads as their bounding
     boxes on each outer layer they are on (dropped if the centre is inside).
     geom is ((x1, y1), (x2, y2)) for pieces and vias (x2 = x1), (l, t, r, b)
-    for pads."""
+    for pads. With `inside` (a dict of the same shape) the routed items the
+    same test puts inside a rect -- track pieces and vias, never pads -- are
+    collected there (spec §5.4, across a zone edge)."""
     out = {ln: [] for ln in LAYERS}
     want = set(nets)
     for t in board.GetTracks():
@@ -344,9 +352,11 @@ def copper(board, nets, rects):
             continue
         if t.Type() == pcbnew.PCB_VIA_T:
             x, y = _mm(t.GetPosition().x), _mm(t.GetPosition().y)
-            if not _inside(x, y, rects):
-                for ln in out:
-                    out[ln].append((n, "via", ((x, y), (x, y)), _mm(t.GetWidth(pcbnew.F_Cu)) / 2.0))
+            dest = out if not _inside(x, y, rects) else inside
+            if dest is not None:
+                for ln in LAYERS:
+                    dest.setdefault(ln, []).append(
+                        (n, "via", ((x, y), (x, y)), _mm(t.GetWidth(pcbnew.F_Cu)) / 2.0))
             continue
         ln = t.GetLayerName()
         if ln not in out:
@@ -356,8 +366,9 @@ def copper(board, nets, rects):
         for i in range(k):
             a = (x1 + (x2 - x1) * i / k, y1 + (y2 - y1) * i / k)
             b = (x1 + (x2 - x1) * (i + 1) / k, y1 + (y2 - y1) * (i + 1) / k)
-            if not _inside((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0, rects):
-                out[ln].append((n, "track", (a, b), _mm(t.GetWidth()) / 2.0))
+            dest = out if not _inside((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0, rects) else inside
+            if dest is not None:
+                dest.setdefault(ln, []).append((n, "track", (a, b), _mm(t.GetWidth()) / 2.0))
     for fp in board.GetFootprints():
         for pad in fp.Pads():
             n = pad.GetNetname()
@@ -481,16 +492,27 @@ def _audio(s, pcb_path):
     return got
 
 
+def _worst(pairs, reach):
+    """The closest of min_distance over [(items_a, items_b)], per layer."""
+    worst = (float("inf"), None, None)
+    for a, b in pairs:
+        d = min_distance(a, b, reach)
+        if d[0] < worst[0]:
+            worst = d
+    return worst
+
+
 def _measure_audio(s, pcb_path):
     board = _saved_board(s, pcb_path)
     nets = _board_nets(board)
-    victims = [] if getattr(s, "audio_missing", False) else list(VICTIMS)
+    victims = list(VICTIMS)
     missing = [n for n in victims + list(AGGRESSORS) if n not in nets]
-    if not victims or missing:
-        return (False, "victims or aggressors absent from the board: %s" % (missing or "no victims"), [], [])
+    if missing:
+        return (False, "%s victims or aggressors absent from the board: %s" % (AUDIO_EMPTY, missing), [], [])
     mz, jz, rects = _all_zones(s, board)
-    # Spec §5.4: each jack zone is a found item, judged against KNOWN_PANEL.
-    found = {}
+    # Spec §5.4: each jack zone is a found item, judged against KNOWN_PANEL;
+    # two zones under one key would hide the second one, so that is red.
+    found, per_key = {}, {}
     for ref, num, net, near, z in jz:
         names = {_key(s, ref)} | {s.ids[r] for r, _p, _n, _g in near if r in s.ids}
         key = "/".join(sorted(names))
@@ -499,37 +521,55 @@ def _measure_audio(s, pcb_path):
                                      for r, p, n, g in near),
             ", ".join("%.2f" % v for v in z))
         found[key] = found[key] + " + " + msg if key in found else msg
+        per_key[key] = per_key.get(key, 0) + 1
     ok, zdetails, nk = _judge(s, "audio", found)
-    bad, lines = [], []
-    ac = copper(board, AGGRESSORS, rects)
+    zdetails = ["%s: %d zones under one key" % (k, n) for k, n in sorted(per_key.items()) if n > 1] + zdetails
+    ok = ok and all(n == 1 for n in per_key.values())
+    bad, edge_bad, empty, lines = [], [], [], []
+    a_in = {}
+    ac = copper(board, AGGRESSORS, rects, inside=a_in)
     n_aggr = sum(len(v) for v in ac.values())
     for v in victims:
-        vc = copper(board, [v], rects)
+        v_in = {}
+        vc = copper(board, [v], rects, inside=v_in)
         n_vic = sum(len(x) for x in vc.values())
         if not n_vic:
-            bad.append("%s: no copper outside the exemption zones, nothing measured" % v)
+            empty.append("%s: no copper outside the exemption zones" % v)
             continue
-        worst = (float("inf"), None, None)
-        for ln in vc:
-            d = min_distance(vc[ln], ac[ln], AUDIO_MM + 1.0)
-            if d[0] < worst[0]:
-                worst = d
+        worst = _worst([(vc[ln], ac[ln]) for ln in LAYERS], AUDIO_MM + 1.0)
         if worst[1] is None:
-            lines.append("%s: %d items, no aggressor copper within %.1f mm on its layers"
-                         % (v, n_vic, AUDIO_MM + 1.0))
-            continue
-        line = "%s: %d items, nearest aggressor %.3f mm: %s against %s" % (
-            v, n_vic, worst[0], _where(worst[2]), _where(worst[1]))
+            line = "%s: %d items, no aggressor copper within %.1f mm on its layers" % (v, n_vic, AUDIO_MM + 1.0)
+        else:
+            line = "%s: %d items, nearest aggressor %.3f mm: %s against %s" % (
+                v, n_vic, worst[0], _where(worst[2]), _where(worst[1]))
+            if worst[0] < AUDIO_MM - 1e-6:
+                bad.append(line)
         lines.append(line)
-        if worst[0] < AUDIO_MM - 1e-6:
-            bad.append(line)
+        # Spec §5.4, across a zone edge: exactly one item of the pair inside
+        # a zone (by the test above: a pad's centre, a via's centre, a track
+        # piece's midpoint). An inside pad exempts the pair; inside routed
+        # copper keeps EDGE_MM from the item outside.
+        edge = _worst([(vc[ln], a_in.get(ln, [])) for ln in LAYERS]
+                      + [(v_in.get(ln, []), ac[ln]) for ln in LAYERS], AUDIO_MM + 1.0)
+        if edge[1] is None:
+            eline = "%s across a zone edge: no pair within %.1f mm" % (v, AUDIO_MM + 1.0)
+        else:
+            eline = "%s across a zone edge: nearest %.3f mm: %s against %s" % (
+                v, edge[0], _where(edge[2]), _where(edge[1]))
+            if edge[0] < EDGE_MM - 1e-6:
+                edge_bad.append(eline)
+        lines.append(eline)
     if not n_aggr:
-        bad.append("no aggressor copper outside the exemption zones, nothing measured")
-    ok = ok and not bad
-    return (ok, ("%d victims, %d aggressors (%d items), %d module zones, %d jack zones (%d known), "
-                 "%d below %.1f mm" % (len(victims), len(AGGRESSORS), n_aggr, len(mz), len(found), nk,
-                                       len(bad), AUDIO_MM)),
-            ["audio clearance below %.1f mm: %s" % (AUDIO_MM, b) for b in bad] + zdetails + lines, lines)
+        empty.append("no aggressor copper outside the exemption zones")
+    ok = ok and not bad and not edge_bad and not empty
+    return (ok, ("%d victims, %d aggressors (%d items), %d module zones, %d jack zones (%d keys, %d known), "
+                 "%d below %.1f mm, %d across a zone edge below %.1f mm"
+                 % (len(victims), len(AGGRESSORS), n_aggr, len(mz), len(jz), len(found), nk, len(bad), AUDIO_MM,
+                    len(edge_bad), EDGE_MM)),
+            ["%s %s" % (AUDIO_EMPTY, e) for e in empty]
+            + ["audio clearance below %.1f mm: %s" % (AUDIO_MM, b) for b in bad]
+            + ["audio clearance across a zone edge below %.1f mm: %s" % (EDGE_MM, b) for b in edge_bad]
+            + zdetails + lines, lines)
 
 
 def check_audio(s, pcb_path, prefix):
@@ -540,14 +580,14 @@ def check_audio(s, pcb_path, prefix):
 def check_lr(s, pcb_path, prefix):
     pairs = [] if getattr(s, "lr_missing", False) else list(LR)
     if not pairs:
-        return False, "no L/R pair examined", []
+        return False, "%s no L/R pair examined" % LR_EMPTY, []
     board = _saved_board(s, pcb_path)
     _mz, _jz, rects = _all_zones(s, board)
-    bad, details = [], []
+    bad, empty, details = [], [], []
     for a, b in pairs:
         ca, cb = copper(board, [a], rects), copper(board, [b], rects)
         if not any(ca.values()) or not any(cb.values()):
-            bad.append("%s/%s: no copper to measure" % (a, b))
+            empty.append("%s %s/%s: no copper outside the zones" % (LR_EMPTY, a, b))
             continue
         worst = min((min_distance(ca[ln], cb[ln], LR_MM + 1.0) for ln in ca), key=lambda d: d[0])
         line = "%s/%s: %s" % (a, b, "farther than %.1f mm everywhere" % (LR_MM + 1.0) if worst[1] is None
@@ -555,14 +595,14 @@ def check_lr(s, pcb_path, prefix):
         details.append(line)
         if worst[1] is not None and worst[0] < LR_MM - 1e-6:
             bad.append(line)
-    return not bad, "%d pairs, %d below %.1f mm" % (len(pairs), len(bad), LR_MM), \
-        ["L/R spacing below %.1f mm: %s" % (LR_MM, b) for b in bad] + details
+    return not bad and not empty, "%d pairs, %d below %.1f mm" % (len(pairs), len(bad), LR_MM), \
+        empty + ["L/R spacing below %.1f mm: %s" % (LR_MM, b) for b in bad] + details
 
 
 def _sense_lines(s, pcb_path):
-    """(bad, lines) per SENSE net, measured on the saved board."""
+    """(bad, empty, lines) per SENSE net, measured on the saved board."""
     board = _saved_board(s, pcb_path)
-    bad, lines = [], []
+    bad, empty, lines = [], [], []
     for n in SENSE:
         pts = [(_mm(p.GetPosition().x), _mm(p.GetPosition().y))
                for f in board.GetFootprints() for p in f.Pads() if p.GetNetname() == n]
@@ -571,7 +611,7 @@ def _sense_lines(s, pcb_path):
         vias = sum(1 for t in tracks if t.Type() == pcbnew.PCB_VIA_T)
         tree = CK.mst(pts)
         if len(pts) < 2 or tree <= 0 or length <= 0:
-            bad.append("%s: %d pads, MST %.1f mm, copper %.1f mm -- nothing to measure" % (n, len(pts), tree, length))
+            empty.append("%s %s: %d pads, MST %.1f mm, copper %.1f mm" % (SENSE_EMPTY, n, len(pts), tree, length))
             continue
         f = length / tree
         line = ("%s: %.1f mm copper, MST %.1f mm over %d pads, factor %.2f, %d vias, ~%.0f pF track (estimate)"
@@ -579,15 +619,15 @@ def _sense_lines(s, pcb_path):
         lines.append(line)
         if f > SENSE_FACTOR + 1e-9:
             bad.append(line)
-    return bad, lines
+    return bad, empty, lines
 
 
 def check_sense(s, pcb_path, prefix):
     if getattr(s, "sense_missing", False):
-        return False, "no SENSE net examined", []
-    bad, lines = _sense_lines(s, pcb_path)
-    return not bad, "%d SENSE nets, %d over %.1f x MST" % (len(SENSE), len(bad), SENSE_FACTOR), \
-        ["SENSE length over %.1f x MST: %s" % (SENSE_FACTOR, b) for b in bad] + lines
+        return False, "%s no SENSE net examined" % SENSE_EMPTY, []
+    bad, empty, lines = _sense_lines(s, pcb_path)
+    return not bad and not empty, "%d SENSE nets, %d over %.1f x MST" % (len(SENSE), len(bad), SENSE_FACTOR), \
+        empty + ["SENSE length over %.1f x MST: %s" % (SENSE_FACTOR, b) for b in bad] + lines
 
 
 def _pots(s):
@@ -722,12 +762,16 @@ def check_rules_file(s, pcb_path, prefix):
     RULES), and kicad-cli judges the routed board the same under it as under
     the project SaveBoard wrote beside `pcb_path`."""
     here = os.path.dirname(os.path.abspath(__file__))
-    pro = getattr(s, "rules_pro", None) or os.path.join(here, "kicad", "reva.kicad_pro")
+    pro = os.path.join(here, "kicad", "reva.kicad_pro")
     if getattr(s, "rules_missing", False):
         pro = pro + ".missing"
     try:
-        with open(pro, encoding="utf-8") as fh:
-            rules = json.load(fh)["board"]["design_settings"]["rules"]
+        # sabotage "rules_file" hands in the project file's bytes instead
+        raw = getattr(s, "rules_pro_bytes", None)
+        if raw is None:
+            with open(pro, "rb") as fh:
+                raw = fh.read()
+        rules = json.loads(raw.decode("utf-8"))["board"]["design_settings"]["rules"]
     except (OSError, ValueError, KeyError, TypeError) as e:
         return False, "the committed project file carries no rules: %s" % e, []
     bad = ["%s is %r in %s, not %r" % (k, rules.get(k), os.path.basename(pro), v)
@@ -738,7 +782,8 @@ def check_rules_file(s, pcb_path, prefix):
     d = tempfile.mkdtemp(prefix="rulesfile_")
     try:
         shutil.copyfile(pcb_path, os.path.join(d, "reva.kicad_pcb"))
-        shutil.copyfile(pro, os.path.join(d, "reva.kicad_pro"))
+        with open(os.path.join(d, "reva.kicad_pro"), "wb") as fh:
+            fh.write(raw)
         try:
             PP.drc(os.path.join(d, "reva.kicad_pcb"), os.path.join(d, "r.rpt"))
         except RuntimeError as e:
@@ -794,7 +839,7 @@ def report(s, pcb_path, prefix):
         s.seconds))
     _ok, _line, _det, alines = _audio(s, pcb_path)
     lines += ["audio " + a for a in alines]
-    _bad, slines = _sense_lines(s, pcb_path)
+    _bad, _empty, slines = _sense_lines(s, pcb_path)
     lines += ["sense " + x for x in slines]
     stats = getattr(res, "stats", None) or {}
     for n in VICTIMS + SENSE:
@@ -926,7 +971,88 @@ def _sab_audio(s):
 
 
 def _sab_audio_missing(s):
-    s.audio_missing = True
+    """Every SR_LATCH pad, track and via moved to a renamed net: an
+    aggressor the check names is no longer on the board (spec §5.4: a
+    renamed net cannot empty the rule)."""
+    from gen import kipcb
+    net = kipcb._net(s.board, "SR_LATCH_RENAMED")
+    for t in s.board.GetTracks():
+        if t.GetNetname() == "SR_LATCH":
+            t.SetNet(net)
+    for f in s.board.GetFootprints():
+        for p in f.Pads():
+            if p.GetNetname() == "SR_LATCH":
+                p.SetNet(net)
+
+
+def _sab_audio_zone(s):
+    """A short SR_CLK track just inside an exemption zone, about 1 mm from
+    victim copper outside it (spec §5.4, across a zone edge). Candidates
+    start from the victim track pieces outside every zone whose midpoints
+    lie closest to a zone; the stub (0.4 mm, across the line to the zone)
+    sits 1.2-1.8 mm inside on that line or beside it, at the first place
+    whose copper keeps 0.2 mm from all other copper on the layer (a stub
+    touching other copper takes that net on save). Every check before the
+    fix dropped zone copper, so this stub was invisible to it."""
+    from gen import kipcb
+    rects = zones(s.board) + [z[4] for z in jack_zones(s.board)]
+    vic = {ln: [] for ln in LAYERS}
+    cands = []
+    for v in VICTIMS:
+        for ln, items in copper(s.board, [v], rects).items():
+            vic[ln] += items
+            for _n, kind, g, _h in items:
+                if kind != "track":
+                    continue
+                mx, my = (g[0][0] + g[1][0]) / 2.0, (g[0][1] + g[1][1]) / 2.0
+                for l, t, r, b in rects:
+                    qx, qy = min(max(mx, l), r), min(max(my, t), b)
+                    d = math.hypot(qx - mx, qy - my)
+                    if d > 1e-3:
+                        cands.append((round(d, 6), ln, v, mx, my, qx, qy))
+    others = {ln: [] for ln in LAYERS}
+    for t in s.board.GetTracks():
+        a, b = (_mm(t.GetStart().x), _mm(t.GetStart().y)), (_mm(t.GetEnd().x), _mm(t.GetEnd().y))
+        if t.Type() == pcbnew.PCB_VIA_T:
+            for ln in LAYERS:
+                others[ln].append(("", "via", (a, a), _mm(t.GetWidth(pcbnew.F_Cu)) / 2.0))
+        elif t.GetLayerName() in LAYERS:
+            others[t.GetLayerName()].append(("", "track", (a, b), _mm(t.GetWidth()) / 2.0))
+    for f in s.board.GetFootprints():
+        for p in f.Pads():
+            for ln, lid in LAYERS.items():
+                if p.IsOnLayer(lid):
+                    others[ln].append(("", "pad", _pad_box(p), 0.0))
+    grid = {}
+    for ln, items in others.items():
+        for it in items:
+            _n, k, g, _h = it
+            xs = (g[0], g[2]) if k == "pad" else (g[0][0], g[1][0])
+            ys = (g[1], g[3]) if k == "pad" else (g[0][1], g[1][1])
+            for gx in range(int(min(xs) // 1.0) - 1, int(max(xs) // 1.0) + 2):
+                for gy in range(int(min(ys) // 1.0) - 1, int(max(ys) // 1.0) + 2):
+                    grid.setdefault((ln, gx, gy), []).append(it)
+
+    def crowded(ln, stub):
+        cx, cy = stub[2][0]
+        near = grid.get((ln, int(cx // 1.0), int(cy // 1.0)), [])
+        return any(_dist(stub, it) < 0.2 for it in near)
+    for d, ln, _v, mx, my, qx, qy in sorted(cands)[:400]:
+        nx, ny = (qx - mx) / d, (qy - my) / d
+        for depth in (1.4, 1.2, 1.6, 1.8):
+            for off in (0.0, 0.8, -0.8, 1.6, -1.6):
+                cx, cy = qx + nx * depth - ny * off, qy + ny * depth + nx * off
+                if not _inside(cx, cy, rects):
+                    continue
+                stub = ("SR_CLK", "track", ((cx - ny * 0.2, cy + nx * 0.2), (cx + ny * 0.2, cy - nx * 0.2)), 0.125)
+                if crowded(ln, stub):
+                    continue
+                gap = min_distance([stub], vic[ln], 3.0)[0]
+                if gap < 2.0:
+                    kipcb.add_track(s.board, ln, 0.25, "SR_CLK", list(stub[2]))
+                    s.audio_zone = (ln, round(cx, 3), round(cy, 3), round(gap, 3))
+                    return
+    raise SystemExit("audio_zone sabotage: no clear place inside a zone near victim copper")
 
 
 def _sab_lr(s):
@@ -1016,8 +1142,11 @@ def _sab_planes_missing(s):
 
 
 def _sab_planes_stitch(s):
-    """Plane-net vias removed until there are fewer than SMD plane-net pads:
-    at least one pad has lost its stitch, whatever the surplus of others."""
+    """Plane-net vias removed, lowest x first, until there are fewer than
+    SMD plane-net pads: on the 2026-10-01 board one via, U_MUX1.8's GND
+    stitch at (38.91, 42.51). Every pad stays connected to its plane through
+    other copper (the Task 7 review probed it; routed stays green), so only
+    the planes step's count gate fires."""
     v = sorted((t for t in s.board.GetTracks()
                 if t.Type() == pcbnew.PCB_VIA_T and t.GetNetname() in PLANE_NETS),
                key=lambda t: (t.GetPosition().x, t.GetPosition().y))
@@ -1028,16 +1157,13 @@ def _sab_planes_stitch(s):
 
 
 def _sab_rules_file(s):
-    """rules_file reads a project file whose clearance says 0.15."""
+    """rules_file reads a project file whose clearance says 0.15, handed in
+    as bytes (no temporary file is left behind)."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "kicad", "reva.kicad_pro"), encoding="utf-8") as fh:
         body = json.load(fh)
     body["board"]["design_settings"]["rules"]["min_clearance"] = 0.15
-    d = tempfile.mkdtemp(prefix="sabpro_")
-    path = os.path.join(d, "reva.kicad_pro")
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(body, fh)
-    s.rules_pro = path
+    s.rules_pro_bytes = json.dumps(body).encode("utf-8")
 
 
 def _sab_rules_file_missing(s):
@@ -1048,7 +1174,7 @@ SABOTAGES = {"routed": _sab_routed, "routed_missing": _sab_routed_missing,
              "routed_song": _sab_routed_song,
              "drc": _sab_drc, "drc_missing": _sab_drc_missing, "drc_cut": _sab_drc_cut,
              "rules_file": _sab_rules_file, "rules_file_missing": _sab_rules_file_missing,
-             "audio": _sab_audio, "audio_missing": _sab_audio_missing,
+             "audio": _sab_audio, "audio_missing": _sab_audio_missing, "audio_zone": _sab_audio_zone,
              "lr": _sab_lr, "lr_missing": _sab_lr_missing,
              "sense": _sab_sense, "sense_missing": _sab_sense_missing,
              "pot_keepout": _sab_pot_keepout, "pot_keepout_missing": _sab_pot_keepout_missing,
@@ -1057,7 +1183,8 @@ SABOTAGES = {"routed": _sab_routed, "routed_missing": _sab_routed_missing,
 TURNS_RED = {"routed": "routed", "routed_missing": "routed", "routed_song": "routed",
              "drc": "drc", "drc_missing": "drc", "drc_cut": "drc",
              "rules_file": "rules_file", "rules_file_missing": "rules_file",
-             "audio": "audio", "audio_missing": "audio", "lr": "lr", "lr_missing": "lr",
+             "audio": "audio", "audio_missing": "audio", "audio_zone": "audio",
+             "lr": "lr", "lr_missing": "lr",
              "sense": "sense", "sense_missing": "sense",
              "pot_keepout": "pot_keepout", "pot_keepout_missing": "pot_keepout",
              "planes": "planes", "planes_missing": "planes", "planes_stitch": "planes"}
@@ -1066,9 +1193,11 @@ WHY = {"routed": "unrouted on SENSE_2", "routed_missing": "incomplete",
        "drc": "clearance C10: kicad-cli", "drc_missing": "wrote no report",
        "drc_cut": "was not read",
        "rules_file": "min_clearance is 0.15", "rules_file_missing": "carries no rules",
-       "audio": "audio clearance below 10.0 mm", "audio_missing": "absent from the board",
-       "lr": "L/R spacing below 2.0 mm", "lr_missing": "no L/R pair examined",
-       "sense": "SENSE length over 1.3 x MST", "sense_missing": "no SENSE net examined",
+       "audio": "audio clearance below 10.0 mm",
+       "audio_missing": "audio measured nothing: victims or aggressors absent from the board",
+       "audio_zone": "audio clearance across a zone edge below 3.0 mm",
+       "lr": "L/R spacing below 2.0 mm", "lr_missing": "L/R measured nothing: no L/R pair examined",
+       "sense": "SENSE length over 1.3 x MST", "sense_missing": "SENSE measured nothing: no SENSE net examined",
        "pot_keepout": "F.Cu copper under a pot body", "pot_keepout_missing": "no pot examined",
        "planes": "free island", "planes_missing": "no plane examined",
        "planes_stitch": "stitching:"}
