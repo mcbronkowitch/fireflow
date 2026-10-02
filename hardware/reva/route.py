@@ -15,8 +15,9 @@ reached. Victims and aggressors carry pair groups, U_SM's pad groups and the
 jack zones (a victim pad with aggressor pads already within 10 mm) are
 exemption zones, SENSE and audio route in earlier tiers. U_REG's heat
 copper (REG_COPPER) is a 3V3D-owned B.Cu obstacle and, after routing, a
-3V3D zone. The rules are judged by route_check.py on the saved board, never
-here."""
+3V3D zone. The silkscreen pass (silk.py, P4-3 spec §4.3) runs last, after
+the zone fill. The rules are judged by route_check.py on the saved board,
+never here."""
 import argparse
 import copy
 import os
@@ -33,6 +34,7 @@ for _p in (HW, HERE):
 import pcbnew               # noqa: E402
 import place as P           # noqa: E402
 import rules as RU          # noqa: E402
+import silk                 # noqa: E402
 from gen import kipcb       # noqa: E402
 from gen import place as PL  # noqa: E402
 from gen import route as GR  # noqa: E402  (not `route`: this module is route.py)
@@ -94,6 +96,7 @@ class Routed:
         self.unresolved = []
         self.seconds = 0.0
         self.skip_render = False
+        self.silk = None
 
     def reload(self, path):
         new = Routed()
@@ -307,6 +310,8 @@ def build():
     z.SetPadConnection(pcbnew.ZONE_CONNECTION_FULL)
     z.SetLocalClearance(pcbnew.FromMM(RU.CLEARANCE))
     kipcb.fill_zones(s.board)
+    # P4-3 spec §4.3: the silkscreen pass last, so the byte-identity guard covers it
+    s.silk = silk.apply(s.board)
     return s
 
 
@@ -331,6 +336,7 @@ def main(argv=None):
           % (len(s.widths), len(res.failed), res.failed, res.conflicts, res.iterations,
              sum(v["vias"] for v in res.stats.values()),
              sum(v["length_mm"] for v in res.stats.values()), s.seconds))
+    print("silk: placed %d, hidden %d" % (len(s.silk.placed), len(s.silk.hidden)))
     if s.unresolved:
         print("stitch unresolved: %s" % "; ".join(s.unresolved))
     prefix = os.path.join(a.out, "reva-routed")
