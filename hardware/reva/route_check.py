@@ -9,12 +9,14 @@ import math
 import os
 import re
 import shutil
+import subprocess
 import tempfile
 
 import pcbnew
 
 import check_kit as CK
 import place as P
+from gen import ksexp
 from gen import pcb_proof as PP
 from gen import place as PL
 
@@ -96,6 +98,15 @@ def _drc(s, pcb_path, prefix):
 
 
 PLANE_NETS = ("GND", "SM_3V3")      # In1.Cu, In2.Cu (spec §1)
+HERE_RC = os.path.dirname(os.path.abspath(__file__))
+KICAD_DIR = os.path.join(HERE_RC, "kicad")
+LIB_DIR = os.path.normpath(os.path.join(HERE_RC, "..", "lib"))
+SCH = os.path.join(KICAD_DIR, "reva.kicad_sch")
+PATHS_EMPTY = "paths measured nothing: no component read from KiCad's netlist"
+PARITY_EMPTY = "parity positive control found nothing"
+PARITY_CONTROL = ("R1", "LCSC", "C0")   # this field, changed on a copy, must show up
+_NETLIST_PATHS = None                    # {ref: path}, per process: the schematic does not change in a run
+_PARITY_CACHE = {}                       # link key -> parity items
 _ITEM_PAD_RE = re.compile(r"(?:PTH pad|Pad) (\S+) \[([^\]]+)\] of (\S+)")
 _ITEM_ZONE_RE = re.compile(r"Zone \[([^\]]+)\]")
 # Copper items that name no part (probed 2026-10-01): a gap inside a routed
@@ -934,9 +945,121 @@ def render(s, pcb_path, prefix):
     return not bad, "rendered %s" % (", ".join(made) or "nothing"), bad
 
 
+def _netlist_paths():
+    """{ref: footprint path} from KiCad's own netlist export of the committed
+    schematic: the component's sheetpath tstamps joined with its tstamps
+    (P4-3 spec §3). Components without a footprint (J_SM1..4) are left out.
+    This is the independent reader: it never calls sch_writer's uuid5."""
+    global _NETLIST_PATHS
+    if _NETLIST_PATHS is None:
+        tmp = tempfile.mkdtemp(prefix="reva_net_")
+        try:
+            net = os.path.join(tmp, "reva.net")
+            subprocess.run([ksexp.KICAD_CLI, "sch", "export", "netlist", "--format", "kicadsexpr",
+                            "-o", net, SCH], capture_output=True)
+            out = {}
+            if os.path.exists(net):
+                root = ksexp.parse_file(net)
+                for c in ksexp.children(ksexp.child(root, "components"), "comp"):
+                    if not ksexp.children(c, "footprint"):
+                        continue
+                    sheet = str(ksexp.child(ksexp.child(c, "sheetpath"), "tstamps")[1])
+                    out[str(ksexp.child(c, "ref")[1])] = sheet + str(ksexp.child(c, "tstamps")[1])
+            _NETLIST_PATHS = out
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    return dict(_NETLIST_PATHS)
+
+
+def check_paths(s, pcb_path, prefix):
+    want = {} if getattr(s, "paths_missing", False) else _netlist_paths()
+    if not want:
+        return False, PATHS_EMPTY, []
+    have = {fp.GetReference(): fp.GetPath().AsString() for fp in s.board.GetFootprints()}
+    bad = []
+    for ref in sorted(set(want) | set(have)):
+        if ref not in have:
+            bad.append("%s: in KiCad's netlist, no footprint on the board" % ref)
+        elif ref not in want:
+            bad.append("%s: footprint with no component in KiCad's netlist" % ref)
+        elif have[ref] != want[ref]:
+            bad.append("%s: path %s, KiCad's netlist says %s" % (ref, have[ref] or "(none)", want[ref]))
+    return not bad, "%d footprints against KiCad's netlist, %d wrong" % (len(have), len(bad)), bad
+
+
+def _link_key(board):
+    """What schematic parity depends on: footprint ids, fields, DNP, pad nets."""
+    key = []
+    for fp in sorted(board.GetFootprints(), key=lambda f: f.GetReference()):
+        fields = tuple(sorted((f.GetName(), f.GetText()) for f in fp.GetFields()))
+        nets = tuple(sorted((str(p.GetNumber()), p.GetNetname()) for p in fp.Pads()))
+        key.append((fp.GetReference(), fp.GetFPIDAsString(), fp.IsDNP(), fields, nets))
+    return tuple(key)
+
+
+def _parity_items(pcb_path, with_schematic=True):
+    """kicad-cli's schematic-parity items for a copy of `pcb_path` laid out as
+    the committed project (schematic, project file, lib tables, hardware/lib),
+    or None when kicad-cli wrote no report."""
+    tmp = tempfile.mkdtemp(prefix="reva_parity_")
+    try:
+        kd = os.path.join(tmp, "hardware", "reva", "kicad")
+        os.makedirs(kd)
+        for name in sorted(os.listdir(KICAD_DIR)):
+            sch = name.endswith(".kicad_sch")
+            if (sch and with_schematic) or name.endswith(".kicad_pro") or name.endswith("-lib-table"):
+                shutil.copyfile(os.path.join(KICAD_DIR, name), os.path.join(kd, name))
+        shutil.copytree(LIB_DIR, os.path.join(tmp, "hardware", "lib"))
+        board = os.path.join(kd, "reva.kicad_pcb")
+        shutil.copyfile(pcb_path, board)
+        out = os.path.join(tmp, "parity.json")
+        subprocess.run([ksexp.KICAD_CLI, "pcb", "drc", "--schematic-parity", "--format", "json",
+                        "-o", out, board], capture_output=True)
+        if not os.path.exists(out):
+            return None
+        with open(out, encoding="utf-8") as fh:
+            return json.load(fh).get("schematic_parity", [])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+# The JSON report's item lines are localised (probed 2026-10-02, German
+# locale: "Durchsteckpad 7 [<no net>] von J_PWR"), unlike the text report's.
+_PARITY_REF_RE = re.compile(r"(?:Footprint|of|von) (\S+)")
+
+
+def _parity_lines(items):
+    out = []
+    for it in items:
+        refs = sorted({m for x in it.get("items", []) for m in _PARITY_REF_RE.findall(x.get("description", ""))})
+        out.append("parity item %s on %s" % (it.get("type"), "/".join(refs) or "?"))
+    return sorted(out)
+
+
+def check_parity(s, pcb_path, prefix):
+    with_sch = not getattr(s, "parity_missing", False)
+    key = (with_sch, _link_key(s.board))
+    if key not in _PARITY_CACHE:
+        items = _parity_items(pcb_path, with_sch)
+        # positive control: the same board with one field changed must show it
+        ctrl_pcb = prefix + "-parity-control.kicad_pcb"
+        b = pcbnew.LoadBoard(pcb_path)
+        ref, field, val = PARITY_CONTROL
+        b.FindFootprintByReference(ref).SetField(field, val)
+        pcbnew.SaveBoard(ctrl_pcb, b)
+        control = _parity_items(ctrl_pcb, with_sch)
+        _PARITY_CACHE[key] = (items, control)
+    items, control = _PARITY_CACHE[key]
+    if items is None or not control:
+        return False, "%s (control %s)" % (PARITY_EMPTY, "no report" if control is None else "0 items"), []
+    lines = _parity_lines(items)
+    return not lines, "schematic parity: %d items (positive control %d)" % (len(lines), len(control)), lines
+
+
 STEPS = [("routed", check_routed), ("drc", check_drc), ("rules_file", check_rules_file),
          ("audio", check_audio), ("lr", check_lr), ("sense", check_sense),
          ("pot_keepout", check_pot_keepout), ("planes", check_planes), ("reg_copper", check_reg_copper),
+         ("paths", check_paths), ("parity", check_parity),
          ("report", report),
          ("render", render)]
 
@@ -1318,6 +1441,29 @@ def _sab_rules_file_missing(s):
     s.rules_missing = True
 
 
+def _sab_paths(s):
+    """R1's and R2's schematic links swapped: parity cannot see it (it matches
+    by reference, spec §3), only the netlist comparison can."""
+    a, b = s.board.FindFootprintByReference("R1"), s.board.FindFootprintByReference("R2")
+    pa, pb = a.GetPath(), b.GetPath()
+    a.SetPath(pb)
+    b.SetPath(pa)
+
+
+def _sab_paths_missing(s):
+    s.paths_missing = True
+
+
+def _sab_parity(s):
+    """C2's LCSC field changed: one footprint_symbol_field_mismatch."""
+    s.board.FindFootprintByReference("C2").SetField("LCSC", "C1")
+
+
+def _sab_parity_missing(s):
+    """The schematic left out of the parity copy: the positive control finds nothing."""
+    s.parity_missing = True
+
+
 SABOTAGES = {"routed": _sab_routed, "routed_missing": _sab_routed_missing,
              "routed_song": _sab_routed_song,
              "drc": _sab_drc, "drc_missing": _sab_drc_missing, "drc_cut": _sab_drc_cut,
@@ -1328,7 +1474,9 @@ SABOTAGES = {"routed": _sab_routed, "routed_missing": _sab_routed_missing,
              "pot_keepout": _sab_pot_keepout, "pot_keepout_missing": _sab_pot_keepout_missing,
              "planes": _sab_planes, "planes_missing": _sab_planes_missing,
              "planes_stitch": _sab_planes_stitch,
-             "reg_copper": _sab_reg_copper, "reg_copper_missing": _sab_reg_copper_missing}
+             "reg_copper": _sab_reg_copper, "reg_copper_missing": _sab_reg_copper_missing,
+             "paths": _sab_paths, "paths_missing": _sab_paths_missing,
+             "parity": _sab_parity, "parity_missing": _sab_parity_missing}
 TURNS_RED = {"routed": "routed", "routed_missing": "routed", "routed_song": "routed",
              "drc": "drc", "drc_missing": "drc", "drc_cut": "drc",
              "rules_file": "rules_file", "rules_file_missing": "rules_file",
@@ -1337,7 +1485,9 @@ TURNS_RED = {"routed": "routed", "routed_missing": "routed", "routed_song": "rou
              "sense": "sense", "sense_missing": "sense",
              "pot_keepout": "pot_keepout", "pot_keepout_missing": "pot_keepout",
              "planes": "planes", "planes_missing": "planes", "planes_stitch": "planes",
-             "reg_copper": "reg_copper", "reg_copper_missing": "reg_copper"}
+             "reg_copper": "reg_copper", "reg_copper_missing": "reg_copper",
+             "paths": "paths", "paths_missing": "paths",
+             "parity": "parity", "parity_missing": "parity"}
 WHY = {"routed": "unrouted on SENSE_2", "routed_missing": "incomplete",
        "routed_song": "SONG_A: 2 blocks under one key",
        "drc": "clearance {ref}: kicad-cli", "drc_missing": "wrote no report",
@@ -1351,7 +1501,10 @@ WHY = {"routed": "unrouted on SENSE_2", "routed_missing": "incomplete",
        "pot_keepout": "F.Cu copper under a pot body", "pot_keepout_missing": "no pot examined",
        "planes": "free island", "planes_missing": "no plane examined",
        "planes_stitch": "stitching:",
-       "reg_copper": "U_REG copper below 200.0 mm2", "reg_copper_missing": REG_EMPTY}
+       "reg_copper": "U_REG copper below 200.0 mm2", "reg_copper_missing": REG_EMPTY,
+       "paths": "KiCad's netlist says", "paths_missing": PATHS_EMPTY,
+       "parity": "parity item footprint_symbol_field_mismatch on C2",
+       "parity_missing": PARITY_EMPTY}
 
 
 def why(s, name):

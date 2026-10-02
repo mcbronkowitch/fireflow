@@ -106,12 +106,13 @@ def new_board(width_mm, height_mm, copper_layers, origin=(0.0, 0.0)):
     ONE process-global UUID generator, not a per-board one; a second call
     (a second `new_board()` in the same process) would restart the sequence
     from the same point and hand this board's items UUIDs already used by
-    the first board's. No caller does this today -- one call site, and
-    nothing here links board to schematic by UUID (`SetPath`/`GetPath` are
-    never called; matching is by reference designator throughout) -- so
-    there is no collision risk yet, but a future script that builds more
-    than one board per run needs to reseed with a different value, or not
-    reseed at all, between them.
+    the first board's. No caller does this today (one call site per
+    process), but a future script that builds more than one board per run
+    needs to reseed with a different value, or not reseed at all, between
+    them. That KIID collision is the whole reason for this warning: the
+    footprints' schematic links (`link_part`, P4-3) are not drawn from this
+    generator -- their paths are the schematic's deterministic uuid5s
+    (`sch_writer.symbol_path`), set explicitly, and do not depend on the seed.
     """
     pcbnew.KIID.SeedGenerator(KIID_SEED)
     board = pcbnew.BOARD()
@@ -171,6 +172,42 @@ def add_part(board, part, x_mm, y_mm, rot_deg, side="F"):
         if net_name is not None:
             pad.SetNet(_net(board, net_name))
     return fp
+
+
+def link_part(fp, part, path, sheet_name, sheet_file):
+    """The footprint's schematic link (P4-3 spec §4.2): KiCad path, the full
+    footprint ID with its library nickname, the symbol's fields, DNP and the
+    sheet it sits on -- everything schematic parity compares."""
+    lib, _, name = part.footprint.partition(":")
+    fp.SetFPID(pcbnew.LIB_ID(lib, name))
+    fp.SetPath(pcbnew.KIID_PATH(path))
+    fp.SetSheetname(sheet_name)
+    fp.SetSheetfile(sheet_file)
+    # the same properties sch_writer gives the symbol, in the same order
+    fields = [("Datasheet", ""), ("Description", part.note)]
+    fields += [(k, v) for k, v in (("LCSC", part.lcsc), ("Source", part.source),
+                                   ("PanelId", part.panel_id)) if v]
+    for key, val in fields:
+        fp.SetField(key, val)
+    # hidden, as sch_writer hides them on the symbol: a field SetField
+    # creates is visible 1.27 mm text on F.SilkS (probed 2026-10-02 on the
+    # routed board: silk_over_copper 127 -> 199, silk_overlap 56 -> 199,
+    # 86 nonmirrored_text_on_back_layer)
+    names = {k for k, _v in fields}
+    for f in fp.GetFields():
+        if f.GetName() in names:
+            f.SetVisible(False)
+    fp.SetDNP(bool(part.dnp))
+
+
+def set_pad_net(board, fp, number, net_name):
+    """Put every pad of `fp` numbered `number` on `net_name`; returns the count."""
+    n = 0
+    for pad in fp.Pads():
+        if str(pad.GetNumber()) == str(number):
+            pad.SetNet(_net(board, net_name))
+            n += 1
+    return n
 
 
 def add_zone(board, layer_name, net_name, points_mm):
