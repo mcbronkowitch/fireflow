@@ -110,7 +110,12 @@ narrow and no shift exceeds its type.
   rehearses Rev A's pattern: two muxes live at once on separate sense pins.
   `coupon_span()` reads its input in `kCouponChain` step order, so the play
   image stores each raw word at `step_of(kCouponChain, group, ch)`.
-- `kRevaChain` — generated (§4). Replaces the stale pre-P2 `kPanelChain`.
+- `kRevaChain` — generated (§4); the Rev A play image
+  (`SHELL_PANEL_SCAN=1`, `SHELL_COUPON_PROBE=0`) uses it.
+- `kPanelChain` stays as it is: it is the pre-P2 profile `SHELL_MUX_PROBE`'s
+  CPU cost was measured against (`tests/test_mux_plan.cpp` pins it), and
+  images with neither switch keep it. *Amended 2026-10-02 while planning;
+  the first draft said `kRevaChain` replaces it.*
 
 ### 3.3 Chain, latch and LEDs
 
@@ -140,7 +145,8 @@ exposes a pressed-mask and one press counter per key; keys have no function.
 
 Rev A reads its own span from CAL_GND and CAL_3V3 (`panel-map.json`
 `calibration`) once per sweep: valid when the rail reads at least `kRailFloor`
-and the zero at most `kRailMargin` (`coupon_expect.h`). An invalid sweep keeps
+and the zero at most `kRailMargin` (`coupon_expect.h`); the two bounds already
+order the pair, so no third condition is needed. An invalid sweep keeps
 the previous span; before the first valid span nothing reaches the engine. The
 placeholder `kPanelSpan` goes.
 
@@ -217,10 +223,13 @@ Flash the coupon play image; read `SHELL_PLAY` by hand.
 2. Press the key five times: the press count reads 5; LED0 is lit while held.
 3. Hold the key, pots untouched: no value moves by more than H (LEDs switching
    under the scan).
-4. Feed a known voltage into the D8/D9 test points (P2 §7): D9 to GND and D8
-   to the module's 3V3 → ADC_11 ≈ 0, ADC_12 ≈ rail. Swap: the readings swap.
-   (Where the coupon offers a 3V3 point to jumper from is the plan's to look
-   up in `hardware/coupon/`, not assumed here.)
+4. Feed a known voltage into the D8/D9 test points (P2 §7): D9 to AGND and D8
+   to A3V3 → ADC_11 ≈ zero, ADC_12 ≈ rail. Swap: the readings swap. The
+   coupon's test points are named after its netlist's old comment, which P2 §2
+   corrected: `TP_ADC12` sits on D9 and `TP_ADC11` on D8
+   (`hardware/coupon/scripts/netlist.py:53-54, 290-292`). So: `TP_ADC12` →
+   `TP_AGND` and `TP_ADC11` → `TP_A3V3` must print `adc11` ≈ zero and
+   `adc12` ≈ rail.
 
 ## 8. Documentation
 
