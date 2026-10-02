@@ -34,3 +34,11 @@
 # matched no rule. What is pinned here is a whole vendored directory, so the
 # attribute belongs to the directory.
 hardware/lib/**  -text
+
+# 2026-10-02 (P4-3 spec §4.5): build.py writes these five files with LF. With
+# core.autocrlf=true a checkout writes CRLF, the index keeps the CRLF size, and
+# every build.py run then leaves them "modified" with an empty diff. eol=lf
+# makes the checkout write LF too. Proven: fresh checkout + build.py, status empty.
+hardware/reva/bom-*.csv          text eol=lf
+hardware/reva/review.md          text eol=lf
+hardware/reva/kicad/*-lib-table  text eol=lf

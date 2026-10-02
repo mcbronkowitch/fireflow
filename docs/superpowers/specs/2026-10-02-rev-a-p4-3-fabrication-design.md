@@ -381,6 +381,11 @@ empty BOM, no part read). Determinism is the guard's (§6), not a step.
   `assembly.py` move. No existing guard compares those bytes
   (`hw_gen_coupon_guard` compares nets); the plan decides whether the
   comparison becomes a permanent guard or a one-time proof in a task.
+  Probed during execution, 2026-10-02: the committed `coupon.kicad_sch` is
+  not byte-equal to the generator's output even before this change (it
+  differs in 74LS165 vs 74HC165, the U_SM position, the generator string and
+  the root uuid). The label switch is proven instead by generator output
+  before == after, byte for byte.
 - Committed now: the board, the regenerated schematic and BOMs, renders under
   `docs/hardware/fab/`. Committed at release: `hardware/reva/fab/`.
 

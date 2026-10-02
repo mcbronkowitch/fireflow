@@ -16,7 +16,7 @@ class Sheet:
 class Project:
     def __init__(self, name, title, sheets, power=None, domain_rails=None,
                  holes=None, waivers=None, paper="A3", flat=False, comments=(),
-                 lib_dirs=None, ground="GND"):
+                 lib_dirs=None, ground="GND", global_labels=False):
         self.name, self.title = name, title
         self.sheets = list(sheets)
         self.power = dict(power or {})            # net -> power symbol lib_id
@@ -28,6 +28,9 @@ class Project:
         self.comments = list(comments)
         self.lib_dirs = dict(lib_dirs or {})      # lib name -> abs dir with <lib>.pretty / .kicad_sym
         self.ground = ground
+        # P4-3: every net label global, so KiCad names each net exactly as
+        # the board does (no "/sheet/" prefix) and schematic parity holds.
+        self.global_labels = global_labels
         if flat and len(self.sheets) != 1:
             raise ValueError("a flat project has exactly one sheet")
         names = [s.name for s in self.sheets]

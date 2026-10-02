@@ -1226,46 +1226,81 @@
 	)
 	(wire (pts (xy 50.8 55.88) (xy 54.61 55.88))
 		(stroke (width 0) (type default)) (uuid "1d43dc1f-0d5f-597a-8a04-d6b7ab72ee6c"))
-	(label "M3_CH6"
+	(global_label "M3_CH6"
+		(shape bidirectional)
 		(at 54.61 55.88 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "320c799c-5459-500e-a932-c04bab04e574"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "320c799c-5459-500e-a932-c04bab04e574")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 54.61 55.88 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 50.8 53.34) (xy 54.61 53.34))
 		(stroke (width 0) (type default)) (uuid "13b386df-80b3-5538-b646-efe4efcec192"))
-	(label "M3_CH5"
+	(global_label "M3_CH5"
+		(shape bidirectional)
 		(at 54.61 53.34 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "a89e101b-5d71-58ee-8a74-58f50cc0d626"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "a89e101b-5d71-58ee-8a74-58f50cc0d626")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 54.61 53.34 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 50.8 50.8) (xy 54.61 50.8))
 		(stroke (width 0) (type default)) (uuid "7006f6e5-cdb8-5ac5-9a9f-bc7580ebe63e"))
-	(label "M3_CH4"
+	(global_label "M3_CH4"
+		(shape bidirectional)
 		(at 54.61 50.8 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "9928975c-ca2d-57c2-9229-9684dd079c78"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "9928975c-ca2d-57c2-9229-9684dd079c78")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 54.61 50.8 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 50.8 48.26) (xy 54.61 48.26))
 		(stroke (width 0) (type default)) (uuid "f062da42-ac1e-5018-8456-d57fe2d9de0b"))
-	(label "M3_CH3"
+	(global_label "M3_CH3"
+		(shape bidirectional)
 		(at 54.61 48.26 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "a509cfbc-3b22-5d7a-b4a9-7372dcc8c0a5"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "a509cfbc-3b22-5d7a-b4a9-7372dcc8c0a5")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 54.61 48.26 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 50.8 45.72) (xy 54.61 45.72))
 		(stroke (width 0) (type default)) (uuid "10a8a7c0-7cfe-54a3-be48-ae1eb68f1e7a"))
-	(label "M3_CH2"
+	(global_label "M3_CH2"
+		(shape bidirectional)
 		(at 54.61 45.72 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "25fecf7e-8da5-51cd-9b37-94f5b5367eb2"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "25fecf7e-8da5-51cd-9b37-94f5b5367eb2")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 54.61 45.72 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 50.8 43.18) (xy 54.61 43.18))
 		(stroke (width 0) (type default)) (uuid "7fdc96ac-86ac-59d1-b8ac-700323fabaa3"))
-	(label "M3_CH1"
+	(global_label "M3_CH1"
+		(shape bidirectional)
 		(at 54.61 43.18 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "42982846-3d63-5a16-844c-0592baf3d84e"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "42982846-3d63-5a16-844c-0592baf3d84e")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 54.61 43.18 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 50.8 40.64) (xy 54.61 40.64))
 		(stroke (width 0) (type default)) (uuid "a1fa8796-4f83-529a-863d-4553081c105e"))
-	(label "M3_CH0"
+	(global_label "M3_CH0"
+		(shape bidirectional)
 		(at 54.61 40.64 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "5414ca19-6545-5c50-9e6f-3f3596889002"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "5414ca19-6545-5c50-9e6f-3f3596889002")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 54.61 40.64 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:C")
 		(at 78.74 39.37 0)
@@ -1519,52 +1554,92 @@
 	)
 	(wire (pts (xy 124.46 58.42) (xy 128.27 58.42))
 		(stroke (width 0) (type default)) (uuid "4b6acdee-cdf8-5849-a3b7-a4a37fd90f11"))
-	(label "M4_CH7"
+	(global_label "M4_CH7"
+		(shape bidirectional)
 		(at 128.27 58.42 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "e534cc7f-7bb6-511e-817f-ec64727f83d9"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "e534cc7f-7bb6-511e-817f-ec64727f83d9")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 128.27 58.42 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 124.46 55.88) (xy 128.27 55.88))
 		(stroke (width 0) (type default)) (uuid "13e918a1-c312-5a59-8262-72ffd68faf9c"))
-	(label "M4_CH6"
+	(global_label "M4_CH6"
+		(shape bidirectional)
 		(at 128.27 55.88 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "042b74d4-78c2-536e-af45-76aed0be89c4"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "042b74d4-78c2-536e-af45-76aed0be89c4")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 128.27 55.88 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 124.46 53.34) (xy 128.27 53.34))
 		(stroke (width 0) (type default)) (uuid "15551418-c597-50f4-b175-cc90738c59e4"))
-	(label "M4_CH5"
+	(global_label "M4_CH5"
+		(shape bidirectional)
 		(at 128.27 53.34 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "be0b81cf-6a62-5ae2-86fd-f3710a8aca9b"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "be0b81cf-6a62-5ae2-86fd-f3710a8aca9b")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 128.27 53.34 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 124.46 50.8) (xy 128.27 50.8))
 		(stroke (width 0) (type default)) (uuid "c5bcbe5f-8685-57b8-a924-0af01f463a0c"))
-	(label "M4_CH4"
+	(global_label "M4_CH4"
+		(shape bidirectional)
 		(at 128.27 50.8 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "10e0bb5d-b161-5744-857b-6a7a282f1207"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "10e0bb5d-b161-5744-857b-6a7a282f1207")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 128.27 50.8 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 124.46 48.26) (xy 128.27 48.26))
 		(stroke (width 0) (type default)) (uuid "81bd2574-53e6-56c8-a62f-7203c2d2fcf3"))
-	(label "M4_CH3"
+	(global_label "M4_CH3"
+		(shape bidirectional)
 		(at 128.27 48.26 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "bbbb255e-4b57-562d-a8dd-8d7085f97445"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "bbbb255e-4b57-562d-a8dd-8d7085f97445")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 128.27 48.26 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 124.46 45.72) (xy 128.27 45.72))
 		(stroke (width 0) (type default)) (uuid "b0f33179-d101-5688-9943-80ed1f0f3169"))
-	(label "M4_CH2"
+	(global_label "M4_CH2"
+		(shape bidirectional)
 		(at 128.27 45.72 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "54e2244a-3569-5bd0-bfb2-e3dc18f2d70f"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "54e2244a-3569-5bd0-bfb2-e3dc18f2d70f")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 128.27 45.72 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 124.46 43.18) (xy 128.27 43.18))
 		(stroke (width 0) (type default)) (uuid "4c67af26-5ceb-5d24-a691-4636da0be26c"))
-	(label "M4_CH1"
+	(global_label "M4_CH1"
+		(shape bidirectional)
 		(at 128.27 43.18 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "3888b43f-ac29-548d-b36e-1ffe99051d26"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "3888b43f-ac29-548d-b36e-1ffe99051d26")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 128.27 43.18 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 124.46 40.64) (xy 128.27 40.64))
 		(stroke (width 0) (type default)) (uuid "2a5d72ed-5c62-5d35-93e8-0b975dc421dd"))
-	(label "M4_CH0"
+	(global_label "M4_CH0"
+		(shape bidirectional)
 		(at 128.27 40.64 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "63f2ed76-1ffb-5486-8f84-800687c3b664"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "63f2ed76-1ffb-5486-8f84-800687c3b664")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 128.27 40.64 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:C")
 		(at 152.4 39.37 0)
@@ -1846,46 +1921,81 @@
 	)
 	(wire (pts (xy 198.12 55.88) (xy 201.93 55.88))
 		(stroke (width 0) (type default)) (uuid "ce40e34e-5a8d-5e77-9a9e-19789211902b"))
-	(label "M5_CH6"
+	(global_label "M5_CH6"
+		(shape bidirectional)
 		(at 201.93 55.88 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "f2ca4a0b-ed44-5f6f-adb8-1a5e5ef1a58c"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "f2ca4a0b-ed44-5f6f-adb8-1a5e5ef1a58c")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 201.93 55.88 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 198.12 53.34) (xy 201.93 53.34))
 		(stroke (width 0) (type default)) (uuid "d3290951-0bb0-56b4-83a5-4d86ab2d73d0"))
-	(label "M5_CH5"
+	(global_label "M5_CH5"
+		(shape bidirectional)
 		(at 201.93 53.34 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "fa2bce3f-be15-54be-a2e4-597323f93aaf"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "fa2bce3f-be15-54be-a2e4-597323f93aaf")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 201.93 53.34 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 198.12 50.8) (xy 201.93 50.8))
 		(stroke (width 0) (type default)) (uuid "a23635cb-7efa-5594-bf9f-4f70344fff14"))
-	(label "M5_CH4"
+	(global_label "M5_CH4"
+		(shape bidirectional)
 		(at 201.93 50.8 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "aa76428b-3207-5a01-951f-89f7de8065dc"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "aa76428b-3207-5a01-951f-89f7de8065dc")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 201.93 50.8 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 198.12 48.26) (xy 201.93 48.26))
 		(stroke (width 0) (type default)) (uuid "f85a3526-ac86-5352-abf8-f60d5b710554"))
-	(label "M5_CH3"
+	(global_label "M5_CH3"
+		(shape bidirectional)
 		(at 201.93 48.26 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "9231aeed-8347-5b18-9ac4-e48acfee562a"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "9231aeed-8347-5b18-9ac4-e48acfee562a")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 201.93 48.26 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 198.12 45.72) (xy 201.93 45.72))
 		(stroke (width 0) (type default)) (uuid "2ecadf1b-1aca-5bb3-8f9a-a8046e9087d8"))
-	(label "M5_CH2"
+	(global_label "M5_CH2"
+		(shape bidirectional)
 		(at 201.93 45.72 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "e1a4994b-cf35-554a-9223-f72b09c66216"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "e1a4994b-cf35-554a-9223-f72b09c66216")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 201.93 45.72 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 198.12 43.18) (xy 201.93 43.18))
 		(stroke (width 0) (type default)) (uuid "d1ade147-6d73-548c-9e5e-29e642ca2d1d"))
-	(label "M5_CH1"
+	(global_label "M5_CH1"
+		(shape bidirectional)
 		(at 201.93 43.18 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "21fece0d-4f74-59a8-a703-af33b8d674f6"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "21fece0d-4f74-59a8-a703-af33b8d674f6")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 201.93 43.18 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 198.12 40.64) (xy 201.93 40.64))
 		(stroke (width 0) (type default)) (uuid "893376a7-2421-5d5a-901f-6747a0ef75eb"))
-	(label "M5_CH0"
+	(global_label "M5_CH0"
+		(shape bidirectional)
 		(at 201.93 40.64 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "18ae5c0a-5593-5d1e-9993-cbeb7471bcbd"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "18ae5c0a-5593-5d1e-9993-cbeb7471bcbd")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 201.93 40.64 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:C")
 		(at 226.06 39.37 0)
@@ -2070,10 +2180,15 @@
 	)
 	(wire (pts (xy 247.65 39.37) (xy 251.46 39.37))
 		(stroke (width 0) (type default)) (uuid "e316fbe0-7728-591f-8656-bf0716e77b04"))
-	(label "M3_CH0"
+	(global_label "M3_CH0"
+		(shape bidirectional)
 		(at 251.46 39.37 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "dba5a1c1-7ace-5c13-824a-bd394b28ea2a"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "dba5a1c1-7ace-5c13-824a-bd394b28ea2a")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 251.46 39.37 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 274.32 39.37 0)
@@ -2169,10 +2284,15 @@
 	)
 	(wire (pts (xy 278.13 39.37) (xy 281.94 39.37))
 		(stroke (width 0) (type default)) (uuid "5e324984-680d-5802-a2f8-4e75efe85ddf"))
-	(label "M3_CH1"
+	(global_label "M3_CH1"
+		(shape bidirectional)
 		(at 281.94 39.37 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "5b1a862a-9f0f-50c5-822e-b3d64aae1ed6"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "5b1a862a-9f0f-50c5-822e-b3d64aae1ed6")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 281.94 39.37 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 306.07 39.37 0)
@@ -2268,10 +2388,15 @@
 	)
 	(wire (pts (xy 309.88 39.37) (xy 313.69 39.37))
 		(stroke (width 0) (type default)) (uuid "9a271aef-6945-5e88-a3a2-20cf97184083"))
-	(label "M3_CH2"
+	(global_label "M3_CH2"
+		(shape bidirectional)
 		(at 313.69 39.37 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "ffba41ed-8a9a-5bc9-80ee-0b4a72d5f139"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "ffba41ed-8a9a-5bc9-80ee-0b4a72d5f139")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 313.69 39.37 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 336.55 39.37 0)
@@ -2367,10 +2492,15 @@
 	)
 	(wire (pts (xy 340.36 39.37) (xy 344.17 39.37))
 		(stroke (width 0) (type default)) (uuid "5264ebb9-a987-5212-812e-bd8bb351a0b3"))
-	(label "M3_CH3"
+	(global_label "M3_CH3"
+		(shape bidirectional)
 		(at 344.17 39.37 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "979fd33c-b53d-53e1-a8bd-aea694f3dad5"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "979fd33c-b53d-53e1-a8bd-aea694f3dad5")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 344.17 39.37 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 368.3 39.37 0)
@@ -2466,10 +2596,15 @@
 	)
 	(wire (pts (xy 372.11 39.37) (xy 375.92 39.37))
 		(stroke (width 0) (type default)) (uuid "d9b7b915-4ee2-56e8-a779-5feb49f5b883"))
-	(label "M3_CH4"
+	(global_label "M3_CH4"
+		(shape bidirectional)
 		(at 375.92 39.37 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "cf0957ce-a776-520a-a2a0-6b59f2cb15f2"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "cf0957ce-a776-520a-a2a0-6b59f2cb15f2")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 375.92 39.37 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 22.86 104.14 0)
@@ -2565,10 +2700,15 @@
 	)
 	(wire (pts (xy 26.67 104.14) (xy 30.48 104.14))
 		(stroke (width 0) (type default)) (uuid "1c8ff344-0cc5-5e00-8006-5a9373a37560"))
-	(label "M3_CH5"
+	(global_label "M3_CH5"
+		(shape bidirectional)
 		(at 30.48 104.14 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "3abdb09b-409e-5eee-8d0d-147cf50cf9f7"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "3abdb09b-409e-5eee-8d0d-147cf50cf9f7")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 30.48 104.14 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 54.61 104.14 0)
@@ -2664,10 +2804,15 @@
 	)
 	(wire (pts (xy 58.42 104.14) (xy 62.23 104.14))
 		(stroke (width 0) (type default)) (uuid "e1734f70-1232-58d2-87e7-0a916c905cc3"))
-	(label "M3_CH6"
+	(global_label "M3_CH6"
+		(shape bidirectional)
 		(at 62.23 104.14 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "d7edf874-bcf5-5889-916d-583381a9ac30"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "d7edf874-bcf5-5889-916d-583381a9ac30")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 62.23 104.14 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 85.09 104.14 0)
@@ -2763,10 +2908,15 @@
 	)
 	(wire (pts (xy 88.9 104.14) (xy 92.71 104.14))
 		(stroke (width 0) (type default)) (uuid "03a6f6ba-dee4-5c69-a0c6-ed930decf518"))
-	(label "M4_CH0"
+	(global_label "M4_CH0"
+		(shape bidirectional)
 		(at 92.71 104.14 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "9dd1835c-2e72-574f-933c-916b1a339a77"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "9dd1835c-2e72-574f-933c-916b1a339a77")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 92.71 104.14 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 116.84 104.14 0)
@@ -2862,10 +3012,15 @@
 	)
 	(wire (pts (xy 120.65 104.14) (xy 124.46 104.14))
 		(stroke (width 0) (type default)) (uuid "71ec5f73-4b74-5428-a1e2-91591f91cf2c"))
-	(label "M4_CH1"
+	(global_label "M4_CH1"
+		(shape bidirectional)
 		(at 124.46 104.14 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "3d058307-6024-5b89-b036-61bcdd7bd33d"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "3d058307-6024-5b89-b036-61bcdd7bd33d")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 124.46 104.14 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 147.32 104.14 0)
@@ -2961,10 +3116,15 @@
 	)
 	(wire (pts (xy 151.13 104.14) (xy 154.94 104.14))
 		(stroke (width 0) (type default)) (uuid "fa692aac-b043-5a38-81ca-955c1068ca29"))
-	(label "M4_CH2"
+	(global_label "M4_CH2"
+		(shape bidirectional)
 		(at 154.94 104.14 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "a8b9011a-8ab5-57f4-a2ed-7872b6ac6992"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "a8b9011a-8ab5-57f4-a2ed-7872b6ac6992")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 154.94 104.14 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 179.07 104.14 0)
@@ -3060,10 +3220,15 @@
 	)
 	(wire (pts (xy 182.88 104.14) (xy 186.69 104.14))
 		(stroke (width 0) (type default)) (uuid "ad762a98-b05d-5e53-9078-2c2a8c51bb3f"))
-	(label "M4_CH3"
+	(global_label "M4_CH3"
+		(shape bidirectional)
 		(at 186.69 104.14 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "b8a4dc41-b28c-5a8e-8721-e1e687348681"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "b8a4dc41-b28c-5a8e-8721-e1e687348681")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 186.69 104.14 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 209.55 104.14 0)
@@ -3159,10 +3324,15 @@
 	)
 	(wire (pts (xy 213.36 104.14) (xy 217.17 104.14))
 		(stroke (width 0) (type default)) (uuid "c81ccd67-2f17-5fe9-9032-fe7a07b62912"))
-	(label "M4_CH4"
+	(global_label "M4_CH4"
+		(shape bidirectional)
 		(at 217.17 104.14 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "f2a7477e-1f7d-5f64-8532-35a105a115c7"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "f2a7477e-1f7d-5f64-8532-35a105a115c7")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 217.17 104.14 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 241.3 104.14 0)
@@ -3258,10 +3428,15 @@
 	)
 	(wire (pts (xy 245.11 104.14) (xy 248.92 104.14))
 		(stroke (width 0) (type default)) (uuid "f0ece055-8f55-5cbc-a97d-07f1f9ad9919"))
-	(label "M4_CH5"
+	(global_label "M4_CH5"
+		(shape bidirectional)
 		(at 248.92 104.14 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "2b9152c0-0149-5011-9f25-941f809d81e2"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "2b9152c0-0149-5011-9f25-941f809d81e2")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 248.92 104.14 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 271.78 104.14 0)
@@ -3357,10 +3532,15 @@
 	)
 	(wire (pts (xy 275.59 104.14) (xy 279.4 104.14))
 		(stroke (width 0) (type default)) (uuid "fdd940b8-1840-5032-8298-1fd7e9e1dad8"))
-	(label "M4_CH6"
+	(global_label "M4_CH6"
+		(shape bidirectional)
 		(at 279.4 104.14 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "6a972252-05cc-597a-b1c6-04a738a70962"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "6a972252-05cc-597a-b1c6-04a738a70962")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 279.4 104.14 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 303.53 104.14 0)
@@ -3456,10 +3636,15 @@
 	)
 	(wire (pts (xy 307.34 104.14) (xy 311.15 104.14))
 		(stroke (width 0) (type default)) (uuid "e012c301-f941-5edf-909f-3a23b2191570"))
-	(label "M4_CH7"
+	(global_label "M4_CH7"
+		(shape bidirectional)
 		(at 311.15 104.14 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "1341949d-1fea-5f25-bc45-21c2a7659170"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "1341949d-1fea-5f25-bc45-21c2a7659170")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 311.15 104.14 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 335.28 104.14 0)
@@ -3555,10 +3740,15 @@
 	)
 	(wire (pts (xy 339.09 104.14) (xy 342.9 104.14))
 		(stroke (width 0) (type default)) (uuid "32bb2312-0abe-54b9-bbcc-a5c41b666699"))
-	(label "M5_CH0"
+	(global_label "M5_CH0"
+		(shape bidirectional)
 		(at 342.9 104.14 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "fa786b93-4665-531b-84a9-61c37db1cb87"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "fa786b93-4665-531b-84a9-61c37db1cb87")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 342.9 104.14 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 365.76 104.14 0)
@@ -3654,10 +3844,15 @@
 	)
 	(wire (pts (xy 369.57 104.14) (xy 373.38 104.14))
 		(stroke (width 0) (type default)) (uuid "9c84a060-922e-52d3-a950-ef4c24937648"))
-	(label "M5_CH1"
+	(global_label "M5_CH1"
+		(shape bidirectional)
 		(at 373.38 104.14 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "ee53dd3b-8f13-55a7-8268-0714fe65b97f"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "ee53dd3b-8f13-55a7-8268-0714fe65b97f")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 373.38 104.14 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 22.86 148.59 0)
@@ -3753,10 +3948,15 @@
 	)
 	(wire (pts (xy 26.67 148.59) (xy 30.48 148.59))
 		(stroke (width 0) (type default)) (uuid "9b29bb2e-e4ce-5009-9977-b7efb4f48968"))
-	(label "M5_CH2"
+	(global_label "M5_CH2"
+		(shape bidirectional)
 		(at 30.48 148.59 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "a86030c9-1235-534e-9c4a-fab3cf5a21ef"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "a86030c9-1235-534e-9c4a-fab3cf5a21ef")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 30.48 148.59 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 54.61 148.59 0)
@@ -3852,10 +4052,15 @@
 	)
 	(wire (pts (xy 58.42 148.59) (xy 62.23 148.59))
 		(stroke (width 0) (type default)) (uuid "c4a701e1-340d-5fed-889f-d50d8ea8d369"))
-	(label "M5_CH3"
+	(global_label "M5_CH3"
+		(shape bidirectional)
 		(at 62.23 148.59 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "9908a2cb-fa18-5835-8f40-824157ac1cd1"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "9908a2cb-fa18-5835-8f40-824157ac1cd1")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 62.23 148.59 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 85.09 148.59 0)
@@ -3951,10 +4156,15 @@
 	)
 	(wire (pts (xy 88.9 148.59) (xy 92.71 148.59))
 		(stroke (width 0) (type default)) (uuid "1ac77d7d-e9f4-54b7-9aed-7349c5c0cf46"))
-	(label "M5_CH4"
+	(global_label "M5_CH4"
+		(shape bidirectional)
 		(at 92.71 148.59 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "08c8e684-77a7-5386-b55e-04b22eb3f945"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "08c8e684-77a7-5386-b55e-04b22eb3f945")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 92.71 148.59 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 116.84 148.59 0)
@@ -4050,10 +4260,15 @@
 	)
 	(wire (pts (xy 120.65 148.59) (xy 124.46 148.59))
 		(stroke (width 0) (type default)) (uuid "1cd5450c-348d-59ac-93db-f0d8cb72d378"))
-	(label "M5_CH5"
+	(global_label "M5_CH5"
+		(shape bidirectional)
 		(at 124.46 148.59 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "5c344426-68f0-5b63-b549-abf3e7df01b7"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "5c344426-68f0-5b63-b549-abf3e7df01b7")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 124.46 148.59 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 147.32 148.59 0)
@@ -4149,9 +4364,14 @@
 	)
 	(wire (pts (xy 151.13 148.59) (xy 154.94 148.59))
 		(stroke (width 0) (type default)) (uuid "914933ee-38e6-559e-8478-16f644e7124d"))
-	(label "M5_CH6"
+	(global_label "M5_CH6"
+		(shape bidirectional)
 		(at 154.94 148.59 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "43a5da4f-e1cd-5421-b848-7e27bca6c1ae"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "43a5da4f-e1cd-5421-b848-7e27bca6c1ae")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 154.94 148.59 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(embedded_fonts no)
 )
