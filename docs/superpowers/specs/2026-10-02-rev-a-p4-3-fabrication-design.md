@@ -167,7 +167,7 @@ KIPY   hardware/reva/fab.py [--release]  order package from the committed board
 | File | Role |
 |---|---|
 | `hardware/gen/sch_writer.py` | option: every label global (Rev A on, coupon off) |
-| `hardware/gen/kipcb.py` | `add_part` takes path, full footprint ID, fields, DNP, sheet name/file |
+| `hardware/gen/kipcb.py` | `link_part` sets path, full footprint ID, fields, DNP, sheet name/file on a placed footprint; `set_pad_net` |
 | `hardware/reva/place.py` | computes each footprint's link from the schematic module; names unconnected pads |
 | `hardware/reva/silk.py` (new) | the silkscreen pass, a pure function on a board |
 | `hardware/reva/route.py` | calls `silk.apply()` after the zone fill |
@@ -189,10 +189,12 @@ KIPY   hardware/reva/fab.py [--release]  order package from the committed board
   against the waivers) must stay green on the new files.
 - **Footprint links.** `place.py` reads, for each reference, the symbol UUID
   and its sheet's UUID from the module that builds the schematic (the uuid5
-  keys in `sch_writer.Uuids`), never from a hand-copied table, and passes
-  `/<sheet uuid>/<symbol uuid>` to `kipcb.add_part`. `add_part` also sets the
-  full footprint ID (`nickname:name`), every symbol field (LCSC, Description,
-  Datasheet …), DNP, Sheetname and Sheetfile. The 15 test points keep
+  keys in `sch_writer.Uuids`), never from a hand-copied table. After all parts
+  are placed, `kipcb.link_part` gives each footprint the path
+  `/<sheet uuid>/<symbol uuid>`, the full footprint ID (`nickname:name`),
+  every symbol field (LCSC, Description, Datasheet …), DNP, Sheetname and
+  Sheetfile. (One pass at the end rather than inside `add_part`, which has
+  six call sites in `place.py`; amended with the plan, 2026-10-02.) The 15 test points keep
   `exclude_from_pos_files` and `exclude_from_bom`.
 - **Unconnected pads.** `place.py` gives each pad whose pin the schematic
   leaves unconnected KiCad's `unconnected-(<ref>-<pin name>-Pad<n>)` net
@@ -267,7 +269,13 @@ C0805, D_SMA, SOIC-16, SOT-223): a correction in degrees and a `verified`
 field. `verified` stays empty until Bastian has looked at JLC's placement
 preview, which JLC shows on a quote upload, free and without an order; it then
 carries the date. **No machine can prove a rotation**, and the table says so.
-`--release` refuses while any entry is unverified.
+
+A per-footprint offset cannot fix a bottom-side sign error, because that error
+depends on each part's own rotation. So `BOTTOM_SIGN` (+1 or −1, with its own
+`verified` field) is separate: the CPL rotation of a bottom part is
+`(BOTTOM_SIGN × KiCad rotation + ROT_FIX[package]) mod 360` (amended with the
+plan, 2026-10-02). `--release` refuses while any entry or `BOTTOM_SIGN` is
+unverified.
 
 #### 4.4.4 BOM
 
@@ -328,7 +336,7 @@ literals; thresholds live in the check file.
 | `silk_clear` | DRC: no `silk_over_copper`, no `silk_overlap` with a text among its items, except entries in a new `KNOWN_PANEL["silk"]` (expected empty once front references are hidden; the plan measures it) | one back reference moved onto its own pad | the DRC report's silk entries not read |
 | `no_room` | hidden back references == `NO_ROOM` (judged by `check_kit.judge`) | one entry added; one hidden reference shown | no back footprint examined |
 | `paths` | every footprint's path == KiCad netlist's `sheetpath tstamps` + `tstamps` for that reference; every netlist component except those without a footprint has one | R1's and R2's paths swapped | no component read from the netlist |
-| `parity` | `--schematic-parity` reports 0 items, **and** a board copy with one path and one field removed reports ≥ 1 (positive control, every run) | one footprint field changed | the schematic hidden from the run |
+| `parity` | `--schematic-parity` reports 0 items, **and** a board copy with one field changed (R1's LCSC) reports ≥ 1 (positive control, every run; a path change would not show, §3) | one footprint field changed | the schematic hidden from the run |
 
 The `paths` check exists because parity matches by reference (§3); its
 independent reader is KiCad's own netlist export, not our uuid5 function. The
@@ -341,8 +349,8 @@ schematic could report zero.
 |---|---|---|
 | `gerber_set` | exactly the eleven layer files and two drill files, none empty; Edge.Cuts extent == the board outline (300.8 × 110 mm) | one layer dropped from the export list |
 | `drill` | hole count in the PTH and NPTH files == PTH pads + vias and NPTH holes counted by pcbnew | one hole line deleted |
-| `cpl` | designators: CPL == BOM == board SMD footprints without DNP; every position within 0.01 mm of pcbnew's footprint position (Y sign per §3); every layer `Bottom` | one row dropped; one row shifted 0.1 mm |
-| `rot_table` | every footprint name in the CPL has a `ROT_FIX` entry | one entry removed |
+| `cpl` | designators: CPL == BOM == board SMD footprints without DNP; every position within 0.01 mm of pcbnew's footprint position (Y sign per §3); every layer `Bottom`; every point inside the Gerber's Edge.Cuts extent | one row dropped; one row shifted 0.1 mm; one row's Y sign flipped; a DNP flag cleared |
+| `rot_table` | every footprint name in the CPL has a `ROT_FIX` entry; `BOTTOM_SIGN` is ±1 | one entry removed; `BOTTOM_SIGN` set to 0 |
 | `bom_lcsc` | every BOM line's LCSC == the `LCSC` field of each of its footprints | one footprint field changed |
 | `assembly` | every part labelled on its sheet, no label overlaps another | one label forced onto another |
 
