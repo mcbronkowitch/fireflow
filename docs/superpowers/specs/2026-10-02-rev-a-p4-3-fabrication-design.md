@@ -139,7 +139,7 @@ every number through the real code.
   `(tstamps "<symbol uuid>")` — C1: sheet `565f096c-…`, symbol `7b439dd9-…`.
   The footprint path is their concatenation; the root sheet does not appear.
   The export prints "the schematic has annotation errors" and still writes the
-  file; the cause is not yet known (§7).
+  file; the cause is probed in the next bullet.
 - Probed during execution, 2026-10-02: the annotation warning comes from the
   five references without a trailing digit (`C_LDO_T`, `J_PWR`, `J_SD`,
   `U_REG`, `U_SM`). Appended a 9 to each in a copy of the schematic, the same
