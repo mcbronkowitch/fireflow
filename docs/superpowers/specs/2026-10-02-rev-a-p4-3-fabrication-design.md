@@ -140,6 +140,17 @@ every number through the real code.
   The footprint path is their concatenation; the root sheet does not appear.
   The export prints "the schematic has annotation errors" and still writes the
   file; the cause is not yet known (§7).
+- Probed during execution, 2026-10-02: the annotation warning comes from the
+  five references without a trailing digit (`C_LDO_T`, `J_PWR`, `J_SD`,
+  `U_REG`, `U_SM`). Appended a 9 to each in a copy of the schematic, the same
+  export printed nothing. The export exits 0 while warning and writes the full
+  file. The netlist holds 213 components, one per board footprint, and every
+  one carries `tstamps`, the five bare-named ones included (U_REG:
+  `bde6db50-…`). The other four of the 217 schematic references, J_SM1–J_SM4,
+  are `(on_board no)` and absent from the netlist, as they are from the board.
+  The netlist is multi-line s-expression text; read it with a parser, not a
+  single-line regex. `kicad-cli sch erc` on the same schematic reports 3
+  violations (`pin_not_driven` 2, `pin_to_pin` 1) and no annotation class.
 - 217 schematic symbols carry references, 213 footprints. J_SM1–J_SM4 (the
   module's sockets) have no footprint, and parity did not report them.
 
@@ -383,9 +394,11 @@ empty BOM, no part read). Determinism is the guard's (§6), not a step.
   schematic". Every local-label net today has at least two pins on its sheet,
   so this should not fire; `reva_check_guard` decides.
 - **Annotation warning.** The netlist export warns of annotation errors that
-  ERC does not show. The plan finds the cause before the `paths` step relies
-  on the netlist; it may be references without a trailing number (U_SM,
-  J_PWR, C_LDO_T).
+  ERC does not show. Probed 2026-10-02 (§3): the cause is the five references
+  without a trailing digit (`C_LDO_T`, `J_PWR`, `J_SD`, `U_REG`, `U_SM`); the
+  export exits 0 and every component carries `tstamps`, so the `paths` step
+  can rely on it. The warning stays until those references are renamed, which
+  this spec does not do.
 - **Named unconnected pads change the board.** Pads that had no net now have
   one. The router skips them (§3), but DRC and the routed checks may see new
   items; one re-route measures it.
