@@ -27,6 +27,21 @@ and `STAGES_A/B` share a knob each), **4 keys** (`REC_A`, `REC_B`, `MODBTN`,
 | Keys | Thonk low-profile push buttons, round cap (caps sold separately, packs of 5) | 4 (+2) | Thonk |
 | LEDs | 3 mm flat-top THT | 19 (+6) | Thonk |
 
+**Cap colours (Bastian, 2026-10-02)** follow the plate's part colours: part A
+green, the centre dark blue, part B orange. Counted from the generator by
+region (`_A` / `_B` suffix, everything else centre; every suffix agrees with
+its side of the 152.40 centre line):
+
+| Region | Colour | Big (1900H) | Small (Micro) | Keys |
+|---|---|---|---|---|
+| Part A | Green | 6 (+1) | 22 (+2) | 1 (`REC_A`) |
+| Centre (GLOBAL, TIMING, ROOM) | Dark Blue | 2 | 12 (+2) | 2 (`SHIFTBTN`, `MODBTN`) |
+| Part B | Orange | 6 (+1) | 22 (+2) | 1 (`REC_B`) |
+
+`REV_MIX_A/B` (SEND) sit in their part's LEVEL frame and count with that part.
+The key caps come as Thonk's taster pack (3 each red, yellow, green, blue):
+no orange key cap exists, so `REC_B` takes red or yellow, chosen on the board.
+
 Rationale and rejected options, briefly:
 
 - **Genuine Alpha, not a clone.** The coupon's Amazon RV09 clone missed the
