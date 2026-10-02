@@ -148,6 +148,13 @@ def apply(board):
             if not (isinstance(it, pcbnew.PCB_TEXT) and it.GetLayer() == pcbnew.B_SilkS):
                 continue
             key = fp.GetReference() + ":text"
+            if it.IsVisible():
+                # rule 3 governs every visible silk text (ruling R2/R8): the
+                # stroke always, the height only where it is below TEXT_MM
+                # (U_SM's is 1.1684 mm with a 0.1016 mm stroke)
+                it.SetTextThickness(pcbnew.FromMM(STROKE_MM))
+                if pcbnew.ToMM(it.GetTextSize().y) < TEXT_MM:
+                    it.SetTextSize(size)
             here = _grow(it.GetBoundingBox(), 0.0)
             if _inside(here, area) and not _hits(here, blocked):
                 rep.placed[key] = ("in place", 0.0, it.GetTextAngleDegrees())

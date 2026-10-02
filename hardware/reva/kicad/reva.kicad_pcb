@@ -43524,13 +43524,13 @@
 			(uuid "31d16a7e-1a36-497e-8128-f96ffb9b1057")
 		)
 		(fp_text user "INSTALL ON\nTHIS SIDE"
-			(at -22.977011 4.798092 0)
+			(at -22.904411 4.737834 0)
 			(layer "B.SilkS")
 			(uuid "25374771-436b-4730-bfff-7251367638d2")
 			(effects
 				(font
 					(size 1.1684 1.1684)
-					(thickness 0.1016)
+					(thickness 0.15)
 				)
 				(justify left bottom mirror)
 			)
