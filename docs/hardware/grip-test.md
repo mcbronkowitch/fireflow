@@ -16,8 +16,8 @@ deadline. Delivery dates go in the table when the parcels arrive.
 
 | Supplier | What | Price | Arrived |
 |---|---|---|---|
-| Thonk | One set of panel parts (below) | £164.51 excl. VAT, plus shipping (DDU: import VAT and carrier fee due on delivery) | |
-| Formulor | The plate: `FireflowHW-cut.svg` as of commit `60fbc37e`, clear acrylic GS 3 mm, P2. Formulor read it as one part, 304.4 × 128.5 mm | see the order confirmation | |
+| Thonk | One set of panel parts (below) | **£179.01 paid**: £164.51 parts excl. VAT + £14.50 FedEx International Connect Plus (4–7 days). DDU: import VAT and carrier fee still due on delivery | |
+| Formulor | The plate: `FireflowHW-cut.svg` as of commit `60fbc37e`, clear acrylic GS 3 mm, P2. Formulor read it as one part, 304.4 × 128.5 mm | **28.14 € paid** | |
 
 Thonk cart, 207 items, read back before checkout:
 
