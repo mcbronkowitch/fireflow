@@ -9,6 +9,32 @@ The rail slots leave 1.4 mm of acrylic to the plate edge (Eurorack standard,
 fine in aluminium), so screw the acrylic plate only hand-tight with nylon
 washers, or rest it in the rails unscrewed.
 
+## Orders
+
+Both placed by Bastian on 2026-10-02, a week ahead of the spec's 9 Oct
+deadline. Delivery dates go in the table when the parcels arrive.
+
+| Supplier | What | Price | Arrived |
+|---|---|---|---|
+| Thonk | One set of panel parts (below) | £164.51 excl. VAT, plus shipping (DDU: import VAT and carrier fee due on delivery) | |
+| Formulor | The plate: `FireflowHW-cut.svg` as of commit `60fbc37e`, clear acrylic GS 3 mm, P2. Formulor read it as one part, 304.4 × 128.5 mm | see the order confirmation | |
+
+Thonk cart, 207 items, read back before checkout:
+
+| Qty | Part |
+|---|---|
+| 77 | Alpha 9 mm vertical, T18 shaft, B10K |
+| 7 / 2 / 7 | Davies 1900H T18 — green / dark blue / orange |
+| 23 / 14 / 24 | Micro Knobs T18 — green / dark blue / orange |
+| 20 | Thonkiconn mono (WQP518MA) |
+| 1 | Knurled nuts, bag of 50 |
+| 6 | DPDT momentary low-profile push buttons |
+| 1 | Low-profile button caps, taster pack (3 each red, yellow, green, blue) |
+| 25 | Flat-top 3 mm LEDs, L-424SURDTK (red; Thonk's only single-colour 3 mm LED) |
+
+Green Micro Knobs: Thonk had 23 in stock, so part A's 22 small knobs have one
+spare instead of the spec's two.
+
 ## Measurements (spec §6)
 
 | Date | What | Result |
