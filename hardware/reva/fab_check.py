@@ -5,13 +5,15 @@ a step that examined nothing is red. Thresholds live here, not in fab.py."""
 import csv
 import os
 import re
+import zipfile
 
 import pcbnew
 import check_kit as CK
+from place import X0, Y0, X1, Y1   # the outline, P4-1 spec §2.1
 
 POS_TOL_MM = 0.01
 EDGE_TOL_MM = 0.01
-BOARD_W_MM, BOARD_H_MM = 300.8, 110.0          # P4-1 spec §2.1, the outline
+ROT_TOL_DEG = 1e-3
 EXPECTED_LAYERS = ("F.Cu", "In1.Cu", "In2.Cu", "B.Cu", "F.Mask", "B.Mask", "F.Silkscreen",
                    "B.Silkscreen", "F.Paste", "B.Paste", "Edge.Cuts")
 DRILL_FILES = ("reva-PTH.drl", "reva-NPTH.drl")  # Step 1 measured (kicad-cli 10.0.5)
@@ -66,13 +68,41 @@ def check_gerber_set(s, _a=None, _b=None):
     known = {n for n in names for l in EXPECTED_LAYERS if n.startswith(_gerber_name(l))} | set(DRILL_FILES)
     bad += ["unexpected file %s" % n for n in names if n not in known]
     ext = edge_extent(gdir)
+    want = (X0, -Y1, X1, -Y0)        # Gerber y points up: the outline's y negated
     if ext is None:
         bad.append("Edge.Cuts has no coordinates")
-    else:
-        w, h = ext[2] - ext[0], ext[3] - ext[1]
-        if abs(w - BOARD_W_MM) > EDGE_TOL_MM or abs(h - BOARD_H_MM) > EDGE_TOL_MM:
-            bad.append("Edge.Cuts extent %.3f x %.3f mm, outline is %.1f x %.1f" % (w, h, BOARD_W_MM, BOARD_H_MM))
-    return not bad, "%d files, edge %s" % (len(names), "%.2f x %.2f mm" % (ext[2] - ext[0], ext[3] - ext[1]) if ext else "?"), bad
+    elif any(abs(e - w) > EDGE_TOL_MM for e, w in zip(ext, want)):
+        bad.append("Edge.Cuts extent (%.3f, %.3f)..(%.3f, %.3f) mm, outline (%.3f, %.3f)..(%.3f, %.3f): "
+                   "offset %.3f, %.3f mm, size off by %.3f x %.3f mm"
+                   % (ext + want + (ext[0] - want[0], ext[1] - want[1],
+                                    (ext[2] - ext[0]) - (want[2] - want[0]),
+                                    (ext[3] - ext[1]) - (want[3] - want[1]))))
+    bad += _zip_problems(s.out, gdir, names)
+    return not bad, "%d files, edge %s, zip checked" % (
+        len(names), "%.2f x %.2f mm at (%.2f, %.2f)" % (ext[2] - ext[0], ext[3] - ext[1], ext[0], ext[1])
+        if ext else "?"), bad
+
+
+def _zip_problems(out, gdir, names):
+    """The uploaded zip against the gerber directory: the same members, in
+    sorted order, byte for byte."""
+    import fab as F
+    path = os.path.join(out, F.GERBER_ZIP)
+    if not os.path.exists(path):
+        return ["%s missing" % F.GERBER_ZIP]
+    bad = []
+    with zipfile.ZipFile(path) as z:
+        members = z.namelist()
+        bad += ["zip lacks %s" % n for n in names if n not in members]
+        bad += ["zip has extra member %s" % n for n in members if n not in names]
+        for n in names:
+            if n in members:
+                with open(os.path.join(gdir, n), "rb") as fh:
+                    if z.read(n) != fh.read():
+                        bad.append("zip member %s differs" % n)
+    if not bad and members != names:
+        bad.append("zip members out of order: %s" % members)
+    return bad
 
 
 def _board_holes(board):
@@ -148,7 +178,42 @@ def check_cpl(s, _a=None, _b=None):
                 bad.append("%s: CPL position %.3f, %.3f, board %.3f, %.3f" % (ref, x, y, bx, -by))
         if ext and not (ext[0] <= x <= ext[2] and ext[1] <= y <= ext[3]):
             bad.append("%s: CPL point %.3f, %.3f outside the Edge.Cuts extent" % (ref, x, y))
-    return not bad, "%d CPL rows, %d BOM designators, %d placeable on the board" % (len(cpl), len(bom), len(board)), bad
+    n_rot, rot_bad = _rotation_problems(s, cpl)
+    bad += rot_bad
+    return not bad, "%d CPL rows, %d BOM designators, %d placeable on the board, %d rotations recomputed" % (
+        len(cpl), len(bom), len(board), n_rot), bad
+
+
+def _rotation_problems(s, cpl):
+    """Every CPL rotation recomputed from kicad-cli's raw position file with
+    the run's own tables (s.rot_fix, s.bottom_sign): (sign * Rot +
+    ROT_FIX[Package].deg) mod 360, sign only on the bottom side (spec §4.4.3).
+    The expectation never comes from pcbnew's orientation: how the position
+    file reports a flipped part's rotation is unprobed. A package without a
+    ROT_FIX entry is rot_table's finding, not this one's."""
+    import fab as F
+    raw = {r["Ref"]: r for r in _read_csv(os.path.join(s.out, F.RAW_POS))}
+    if not raw:
+        return 0, ["rotation: kicad-cli's position file %s missing or empty" % F.RAW_POS]
+    bad, n = [], 0
+    for ref, r in sorted(cpl.items()):
+        p = raw.get(ref)
+        if p is None:
+            bad.append("%s: not in kicad-cli's position file" % ref)
+            continue
+        fix = s.rot_fix.get(p["Package"])
+        if fix is None:
+            continue
+        sign = s.bottom_sign["sign"] if p["Side"] == "bottom" else 1
+        want = (sign * float(p["Rot"]) + fix["deg"]) % 360
+        have = float(r["Rotation"])
+        d = (have - want) % 360
+        n += 1
+        if min(d, 360 - d) > ROT_TOL_DEG:
+            bad.append("%s: CPL rotation %g, expected %g" % (ref, have, want))
+    if n == 0:
+        bad.append("rotation: no CPL rotation recomputed")
+    return n, bad
 
 
 def check_rot_table(s, _a=None, _b=None):
@@ -222,6 +287,17 @@ def _sab_gerber_set(s):
     os.remove(os.path.join(gdir, [n for n in os.listdir(gdir) if n.startswith(_gerber_name("F.Paste"))][0]))
 
 
+def _sab_gerber_set_zip(s):
+    """The zip rewritten without reva-PTH.drl; the gerber directory keeps it."""
+    import fab as F
+    p = os.path.join(s.out, F.GERBER_ZIP)
+    with zipfile.ZipFile(p) as z:
+        keep = [(i, z.read(i.filename)) for i in z.infolist() if i.filename != "reva-PTH.drl"]
+    with zipfile.ZipFile(p, "w", zipfile.ZIP_DEFLATED) as z:
+        for info, data in keep:
+            z.writestr(info, data)
+
+
 def _sab_gerber_set_missing(s):
     gdir = os.path.join(s.out, "gerbers")
     for n in os.listdir(gdir):
@@ -241,11 +317,12 @@ def _sab_drill_missing(s):
 
 
 def _rewrite_cpl(s, fn):
+    import fab as F
     p = os.path.join(s.out, "cpl-jlc.csv")
     rows = _read_csv(p)
     rows = fn(rows)
     with open(p, "w", encoding="utf-8", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=["Designator", "Mid X", "Mid Y", "Layer", "Rotation"], lineterminator="\n")
+        w = csv.DictWriter(fh, fieldnames=F.CPL_FIELDS, lineterminator="\n")
         w.writeheader()
         w.writerows(rows)
 
@@ -272,6 +349,16 @@ def _sab_cpl_outside(s):
                 r["Mid Y"] = "%.4f" % -float(r["Mid Y"])
         return rows
     _rewrite_cpl(s, flip)
+
+
+def _sab_cpl_rot(s):
+    """R1's CPL rotation turned by 90 degrees after the export."""
+    def turn(rows):
+        for r in rows:
+            if r["Designator"] == "R1":
+                r["Rotation"] = "%g" % ((float(r["Rotation"]) + 90) % 360)
+        return rows
+    _rewrite_cpl(s, turn)
 
 
 def _sab_cpl_dnp(s):
@@ -313,10 +400,11 @@ def _sab_assembly_missing(s):
     s.assembly_missing = True
 
 
-SABOTAGES = {"gerber_set": _sab_gerber_set, "gerber_set_missing": _sab_gerber_set_missing,
+SABOTAGES = {"gerber_set": _sab_gerber_set, "gerber_set_zip": _sab_gerber_set_zip,
+             "gerber_set_missing": _sab_gerber_set_missing,
              "drill": _sab_drill, "drill_missing": _sab_drill_missing,
              "cpl": _sab_cpl, "cpl_shift": _sab_cpl_shift, "cpl_outside": _sab_cpl_outside,
-             "cpl_dnp": _sab_cpl_dnp, "cpl_missing": _sab_cpl_missing,
+             "cpl_rot": _sab_cpl_rot, "cpl_dnp": _sab_cpl_dnp, "cpl_missing": _sab_cpl_missing,
              "rot_table": _sab_rot_table, "rot_sign": _sab_rot_sign,
              "rot_table_missing": _sab_rot_table_missing,
              "bom_lcsc": _sab_bom_lcsc, "bom_lcsc_missing": _sab_bom_lcsc_missing,
@@ -324,18 +412,20 @@ SABOTAGES = {"gerber_set": _sab_gerber_set, "gerber_set_missing": _sab_gerber_se
 # the assembly flags must be set before export() draws the sheets
 BOARD_SABOTAGES = {"cpl_dnp", "rot_table", "rot_sign", "bom_lcsc",
                    "assembly", "assembly_missing"}
-TURNS_RED = {"gerber_set": "gerber_set", "gerber_set_missing": "gerber_set",
+TURNS_RED = {"gerber_set": "gerber_set", "gerber_set_zip": "gerber_set", "gerber_set_missing": "gerber_set",
              "drill": "drill", "drill_missing": "drill",
-             "cpl": "cpl", "cpl_shift": "cpl", "cpl_outside": "cpl", "cpl_dnp": "cpl",
+             "cpl": "cpl", "cpl_shift": "cpl", "cpl_outside": "cpl", "cpl_rot": "cpl", "cpl_dnp": "cpl",
              "cpl_missing": "cpl",
              "rot_table": "rot_table", "rot_sign": "rot_table", "rot_table_missing": "rot_table",
              "bom_lcsc": "bom_lcsc", "bom_lcsc_missing": "bom_lcsc",
              "assembly": "assembly", "assembly_missing": "assembly"}
-WHY = {"gerber_set": "missing layer F.Paste", "gerber_set_missing": GERBER_EMPTY,
+WHY = {"gerber_set": "missing layer F.Paste", "gerber_set_zip": "zip lacks reva-PTH.drl",
+       "gerber_set_missing": GERBER_EMPTY,
        "drill": "PTH holes: file", "drill_missing": DRILL_EMPTY,
        "cpl": "C1: in the board and the BOM, not in the CPL",
        "cpl_shift": "R1: CPL position",
        "cpl_outside": "outside the Edge.Cuts extent",
+       "cpl_rot": "R1: CPL rotation",
        "cpl_dnp": "C_LDO_T: in the board and the CPL, not in the BOM",
        "cpl_missing": CPL_EMPTY,
        "rot_table": "no ROT_FIX entry for SOIC", "rot_sign": "BOTTOM_SIGN is 0",

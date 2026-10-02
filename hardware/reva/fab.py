@@ -42,6 +42,13 @@ LAYERS = ("F.Cu", "In1.Cu", "In2.Cu", "B.Cu", "F.Mask", "B.Mask", "F.Silkscreen"
 FIXED_DATE = "2000-01-01T00:00:00+00:00"
 FIXED_DATE_SP = "2000-01-01 00:00:00"
 ZIP_TIME = (2000, 1, 1, 0, 0, 0)
+GERBER_ZIP = "reva-gerbers.zip"
+# JLC's CPL columns, in order (spec §4.4.2); fab_check rewrites the CPL for its
+# sabotages with the same tuple
+CPL_FIELDS = ("Designator", "Mid X", "Mid Y", "Layer", "Rotation")
+# kicad-cli's raw position file, relative to the output directory: _export_cpl
+# writes it, fab_check recomputes every CPL rotation from it
+RAW_POS = os.path.join("board", "pos.csv")
 
 # JLC's part library does not always share KiCad's zero orientation (spec
 # §4.4.3). "deg" is added to KiCad's rotation; "verified" stays None until
@@ -125,7 +132,7 @@ def _export_gerbers(s):
 
 
 def _export_cpl(s):
-    tmp = os.path.join(s.out, "board", "pos.csv")
+    tmp = os.path.join(s.out, RAW_POS)
     _cli("pcb", "export", "pos", "--format", "csv", "--units", "mm", "--side", "both",
          "--smd-only", "--exclude-dnp", "-o", tmp, s.board_path)
     with open(tmp, encoding="utf-8", newline="") as fh:
@@ -140,15 +147,14 @@ def _export_cpl(s):
                     "Layer": "Bottom" if r["Side"] == "bottom" else "Top",
                     "Rotation": "%g" % rot})
     with open(os.path.join(s.out, "cpl-jlc.csv"), "w", encoding="utf-8", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=["Designator", "Mid X", "Mid Y", "Layer", "Rotation"],
-                           lineterminator="\n")
+        w = csv.DictWriter(fh, fieldnames=CPL_FIELDS, lineterminator="\n")
         w.writeheader()
         w.writerows(out)
 
 
 def _zip(s):
     gdir = os.path.join(s.out, "gerbers")
-    with zipfile.ZipFile(os.path.join(s.out, "reva-gerbers.zip"), "w", zipfile.ZIP_DEFLATED) as z:
+    with zipfile.ZipFile(os.path.join(s.out, GERBER_ZIP), "w", zipfile.ZIP_DEFLATED) as z:
         for n in sorted(os.listdir(gdir)):
             info = zipfile.ZipInfo(n, date_time=ZIP_TIME)
             info.compress_type = zipfile.ZIP_DEFLATED

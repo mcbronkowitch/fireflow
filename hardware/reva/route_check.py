@@ -1165,7 +1165,9 @@ def check_no_room(s, pcb_path, prefix):
                 found[fp.GetReference() + ":text"] = "footprint text hidden, no free spot"
     known = set(SK.NO_ROOM) | set(getattr(s, "extra_no_room", ()))
     ok, details, n_known = CK.judge(known, found)
-    details = [d.replace("[NEW]", "[NEW] hidden back reference not in NO_ROOM") for d in details]
+    # check_kit.judge names KNOWN_PANEL; this step's known list is silk.NO_ROOM
+    details = [d.replace("[NEW]", "[NEW] hidden back reference not in NO_ROOM")
+               .replace("remove it from KNOWN_PANEL", "remove it from silk.NO_ROOM") for d in details]
     return ok, "%d back footprints, %d hidden (%d listed)" % (len(back), len(found), n_known), details
 
 
