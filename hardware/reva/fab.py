@@ -260,6 +260,72 @@ def _write_big(out, v):
                        '%s</text>' % (cx, value_y, v.font, A.INK, q["value"]))
 
 
+# J_SD is a front part soldered from the back (bom-hand.csv, spec §4.4.5): the
+# back sheet shows its pins, mirrored, as rings drawn outside View (View and
+# its check() do not know the part), with one label of its own.
+BACK_HAND_THT = "J_SD"
+JSD_LABEL = "J_SD (front part: hand-solder its pins here)"
+
+
+def _mark_tht_pins(out, v, part):
+    """Rings on every pad of `part` inside v's region, plus one label placed
+    clear of View's bodies, labels and leaders. Returns (rings drawn,
+    problems)."""
+    if part is None:
+        return 0, []
+    rings = []
+    for pd in part["pads"]:
+        if v.mx0 <= pd["x"] <= v.mx1 and v.my0 <= pd["y"] <= v.my1:
+            x, y = v.px(pd["x"], pd["y"])
+            r = max(2.5, min(pd["w"], pd["h"]) / 2 * v.scale)
+            rings.append((x, y, r))
+    if not rings:
+        return 0, []
+    problems = ["%s pin mark under a label at x=%.0f" % (part["ref"], x)
+                for x, y, r in rings if A.boxes_hit((x - r, y - r, x + r, y + r), v.label_boxes)]
+    lead_boxes = [(min(l[0], l[2]) - 1.5, min(l[1], l[3]) - 1.5, max(l[0], l[2]) + 1.5, max(l[1], l[3]) + 1.5)
+                  for _r, _x, _y, _a, l in v.labels if l]
+    width = len(JSD_LABEL) * A.ADVANCE * v.font
+    cx = sum(x for x, _y, _r in rings) / len(rings)
+    bottom = max(y + r for _x, y, r in rings)
+    top = min(y - r for _x, y, r in rings)
+    found = None
+    for gap in (12, 20, 30, 42, 56, 72, 90, 110):
+        for slide in (0, 40, -40, 80, -80, 120, -120, 160, -160):
+            for ty in (bottom + gap + A.ASCENDER * v.font, top - gap - A.DESCENDER * v.font):
+                tb = v.text_box(cx + slide, ty, "middle", width)
+                box = (tb[0] - 2, tb[1] - 2, tb[2] + 2, tb[3] + 2)
+                if (box[0] < v.ox - v.margin or box[1] < v.oy - v.margin
+                        or box[2] > v.ox + v.w + v.margin or box[3] > v.oy + v.h + v.margin):
+                    continue
+                if (A.boxes_hit(box, v.obstacles) or A.boxes_hit(box, v.label_boxes)
+                        or A.boxes_hit(box, lead_boxes)):
+                    continue
+                ly = tb[1] - 2 if ty > bottom else tb[3] + 2
+                ox, oy, _r = min(rings, key=lambda c: (c[0] - cx - slide) ** 2 + (c[1] - ly) ** 2)
+                lx = min(max(ox, tb[0] + 4), tb[2] - 4)     # the label's nearest point
+                if A.segment_hits(ox, oy, lx, ly, v.label_boxes + v.bodies):
+                    continue
+                found = (cx + slide, ty, ox, oy, lx, ly)
+                break
+            if found:
+                break
+        if found:
+            break
+    if found is None:
+        problems.append("%s's label found no clean slot" % part["ref"])
+    else:
+        tx, ty, ox, oy, lx, ly = found
+        out.append('<line x1="%g" y1="%g" x2="%g" y2="%g" stroke="%s" stroke-width="0.8"/>'
+                   % (ox, oy, lx, ly, A.ALERT))
+        out.append('<text x="%g" y="%g" font-size="%g" fill="%s" text-anchor="middle">%s</text>'
+                   % (tx, ty, v.font, A.ALERT, JSD_LABEL))
+    for x, y, r in rings:
+        out.append('<circle cx="%g" cy="%g" r="%g" fill="none" stroke="%s" stroke-width="1.4"/>'
+                   % (x, y, r, A.ALERT))
+    return len(rings), problems
+
+
 def write_sheets(s):
     """reva-assembly-front.svg (panel parts by panel id) and
     reva-assembly-back.svg (seen from the back, by reference, DNP dashed);
@@ -267,6 +333,7 @@ def write_sheets(s):
     parts, _size = A.read_board(s.board_path, classify)
     front = [dict(p, ref=p["value"]) for p in parts if p["side"] == "F"]   # panel ids
     back = [_mirror(p) for p in parts if p["side"] == "B"]
+    hand_tht = next((_mirror(p) for p in parts if p["ref"] == BACK_HAND_THT), None)
     s.sheets = {}
     w, h = (X1 - X0) * SHEET_SCALE, (Y1 - Y0) * SHEET_SCALE
     # the note and legend sit below the label margin, where no label can stand
@@ -277,9 +344,11 @@ def write_sheets(s):
              "red square = LED cathode: pad 1 of LED_D3.0mm, the flat side of the body; "
              "dot = pad 1 of the other parts"),
             ("back", back, BACK_BIG, BACK_DETAIL,
-             "BACK, seen from the back: JLC fits the SMD parts; hand-solder U_SM's sockets and J_PWR",
-             "red square = J_PWR pin 1, -12 V (the stripe of the ribbon); dot = pad 1, on the SOICs "
-             "the notch end; red dashed outline = DNP: leave the footprint empty")):
+             "BACK, seen from the back: JLC fits the SMD parts; hand-solder U_SM's sockets, J_PWR "
+             "and J_SD's pins",
+             "red square = J_PWR pin 1, -12 V (the stripe of the ribbon); red rings = J_SD's pins "
+             "(a front part); dot = pad 1, on the SOICs the notch end; red dashed outline = DNP: "
+             "leave the footprint empty")):
         out = []
         dv = None
         height = foot + 70
@@ -298,8 +367,8 @@ def write_sheets(s):
                         margin=SHEET_MARGIN, big=big, style=STYLE)
             dv.place_labels()
             problems += ["detail: %s" % p for p in dv.check()]
-        s.sheets[name] = (len(v.here), problems)
         views = [v] + ([dv] if dv else [])
+        tht = hand_tht if name == "back" else None
         for view in views:
             # the big parts stay unlabelled by the search, but draw() must not
             # write their names: _write_big writes them to fit the scale
@@ -308,6 +377,16 @@ def write_sheets(s):
             view.big = big
             _write_big(out, view)
             _mark_pin1(out, view, sheet_parts)
+            if name == "back":
+                n, probs = _mark_tht_pins(out, view, tht)
+                problems += probs if view is v else ["detail: %s" % p for p in probs]
+                if view is v:
+                    want = len(tht["pads"]) if tht else 0
+                    if n == 0:
+                        problems.append("%s's pins not drawn" % BACK_HAND_THT)
+                    elif n != want:
+                        problems.append("%s's pins: %d of %d drawn" % (BACK_HAND_THT, n, want))
+        s.sheets[name] = (len(v.here), problems)
         A.scale_bar(out, SHEET_MARGIN, foot + 8, SHEET_SCALE)
         out.append('<text x="%d" y="%d" font-size="14" fill="%s">%s</text>'
                    % (SHEET_MARGIN, foot + 34, A.INK, note))
