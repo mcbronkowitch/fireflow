@@ -1,7 +1,7 @@
 # FireFlow Rev A — P4-3: fabrication data
 
 **Date:** 2026-10-02
-**Status:** approved in conversation (Bastian), section by section
+**Status:** approved (Bastian, 2026-10-02); implemented on branch reva-p4-3-fab
 **Parent:** the Rev A master plan
 (`docs/superpowers/specs/2026-09-28-rev-a-master-plan-design.md`), sub-project
 P4, the layout generator. Follows P4-1
