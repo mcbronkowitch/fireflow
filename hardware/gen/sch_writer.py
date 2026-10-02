@@ -67,6 +67,26 @@ class Uuids:
         return str(uuid.uuid5(self.NS, k))
 
 
+def _uuid5(project_name, *key):
+    return str(uuid.uuid5(Uuids.NS, "/".join(str(x) for x in (project_name,) + key)))
+
+
+def sheet_uuid(project_name, sheet_name):
+    """The UUID write_project gives sheet `sheet_name` (key "sheet", name)."""
+    return _uuid5(project_name, "sheet", sheet_name)
+
+
+def symbol_uuid(project_name, ref, unit=1):
+    """The UUID write_project gives unit `unit` of symbol `ref` (key "sym")."""
+    return _uuid5(project_name, "sym", ref, unit)
+
+
+def symbol_path(project_name, sheet_name, ref, unit=1):
+    """A footprint's schematic link: "/<sheet uuid>/<symbol uuid>". KiCad's
+    netlist omits the root sheet (probed 2026-10-02, P4-3 spec §3)."""
+    return "/%s/%s" % (sheet_uuid(project_name, sheet_name), symbol_uuid(project_name, ref, unit))
+
+
 def snap(v):
     return round(round(v / GRID) * GRID, 4)
 
@@ -559,7 +579,7 @@ def write_project(project, out_dir):
     def kind(net):
         if net in project.power:
             return "power"
-        if project.flat or len(net_sheets[net]) > 1:
+        if project.flat or project.global_labels or len(net_sheets[net]) > 1:
             return "global"
         return "local"
 

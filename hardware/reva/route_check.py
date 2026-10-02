@@ -9,12 +9,14 @@ import math
 import os
 import re
 import shutil
+import subprocess
 import tempfile
 
 import pcbnew
 
 import check_kit as CK
 import place as P
+from gen import ksexp
 from gen import pcb_proof as PP
 from gen import place as PL
 
@@ -58,6 +60,7 @@ KNOWN_PANEL = {
         "CEIL_L/OUT_R",         # J18.T OUT_R: R34.1 [LED16], R34.2 and D17.2 [LED16_A]
         "IN_L/SHIFTBTN_L",      # J1.T IN_L: D1.2 [LED0_A]
     },
+    "silk": set(),  # silk text entries the panel pass must clear; expected none (P4-3 spec §5.1)
 }
 
 GATED_DRC = ("courtyards_overlap", "pth_inside_courtyard", "shorting_items", "clearance",
@@ -96,6 +99,15 @@ def _drc(s, pcb_path, prefix):
 
 
 PLANE_NETS = ("GND", "SM_3V3")      # In1.Cu, In2.Cu (spec §1)
+HERE_RC = os.path.dirname(os.path.abspath(__file__))
+KICAD_DIR = os.path.join(HERE_RC, "kicad")
+LIB_DIR = os.path.normpath(os.path.join(HERE_RC, "..", "lib"))
+SCH = os.path.join(KICAD_DIR, "reva.kicad_sch")
+PATHS_EMPTY = "paths measured nothing: no component read from KiCad's netlist"
+PARITY_EMPTY = "parity positive control found nothing"
+PARITY_CONTROL = ("R1", "LCSC", "C0")   # this field, changed on a copy, must show up
+_NETLIST_PATHS = None                    # {ref: path}, per process: the schematic does not change in a run
+_PARITY_CACHE = {}                       # link key -> parity items
 _ITEM_PAD_RE = re.compile(r"(?:PTH pad|Pad) (\S+) \[([^\]]+)\] of (\S+)")
 _ITEM_ZONE_RE = re.compile(r"Zone \[([^\]]+)\]")
 # Copper items that name no part (probed 2026-10-01): a gap inside a routed
@@ -934,9 +946,237 @@ def render(s, pcb_path, prefix):
     return not bad, "rendered %s" % (", ".join(made) or "nothing"), bad
 
 
-STEPS = [("routed", check_routed), ("drc", check_drc), ("rules_file", check_rules_file),
+def _netlist_paths():
+    """{ref: footprint path} from KiCad's own netlist export of the committed
+    schematic: the component's sheetpath tstamps joined with its tstamps
+    (P4-3 spec §3). Components without a footprint (J_SM1..4) are left out.
+    This is the independent reader: it never calls sch_writer's uuid5."""
+    global _NETLIST_PATHS
+    if _NETLIST_PATHS is None:
+        tmp = tempfile.mkdtemp(prefix="reva_net_")
+        try:
+            net = os.path.join(tmp, "reva.net")
+            subprocess.run([ksexp.KICAD_CLI, "sch", "export", "netlist", "--format", "kicadsexpr",
+                            "-o", net, SCH], capture_output=True)
+            out = {}
+            if os.path.exists(net):
+                root = ksexp.parse_file(net)
+                for c in ksexp.children(ksexp.child(root, "components"), "comp"):
+                    if not ksexp.children(c, "footprint"):
+                        continue
+                    sheet = str(ksexp.child(ksexp.child(c, "sheetpath"), "tstamps")[1])
+                    out[str(ksexp.child(c, "ref")[1])] = sheet + str(ksexp.child(c, "tstamps")[1])
+            _NETLIST_PATHS = out
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    return dict(_NETLIST_PATHS)
+
+
+def check_paths(s, pcb_path, prefix):
+    want = {} if getattr(s, "paths_missing", False) else _netlist_paths()
+    if not want:
+        return False, PATHS_EMPTY, []
+    have = {fp.GetReference(): fp.GetPath().AsString() for fp in s.board.GetFootprints()}
+    bad = []
+    for ref in sorted(set(want) | set(have)):
+        if ref not in have:
+            bad.append("%s: in KiCad's netlist, no footprint on the board" % ref)
+        elif ref not in want:
+            bad.append("%s: footprint with no component in KiCad's netlist" % ref)
+        elif have[ref] != want[ref]:
+            bad.append("%s: path %s, KiCad's netlist says %s" % (ref, have[ref] or "(none)", want[ref]))
+    return not bad, "%d footprints against KiCad's netlist, %d wrong" % (len(have), len(bad)), bad
+
+
+def _link_key(board):
+    """What schematic parity depends on: footprint ids, fields, DNP, pad nets."""
+    key = []
+    for fp in sorted(board.GetFootprints(), key=lambda f: f.GetReference()):
+        fields = tuple(sorted((f.GetName(), f.GetText()) for f in fp.GetFields()))
+        nets = tuple(sorted((str(p.GetNumber()), p.GetNetname()) for p in fp.Pads()))
+        key.append((fp.GetReference(), fp.GetFPIDAsString(), fp.IsDNP(), fields, nets))
+    return tuple(key)
+
+
+def _parity_items(pcb_path, with_schematic=True):
+    """kicad-cli's schematic-parity items for a copy of `pcb_path` laid out as
+    the committed project (schematic, project file, lib tables, hardware/lib),
+    or None when kicad-cli wrote no report."""
+    tmp = tempfile.mkdtemp(prefix="reva_parity_")
+    try:
+        kd = os.path.join(tmp, "hardware", "reva", "kicad")
+        os.makedirs(kd)
+        for name in sorted(os.listdir(KICAD_DIR)):
+            sch = name.endswith(".kicad_sch")
+            if (sch and with_schematic) or name.endswith(".kicad_pro") or name.endswith("-lib-table"):
+                shutil.copyfile(os.path.join(KICAD_DIR, name), os.path.join(kd, name))
+        shutil.copytree(LIB_DIR, os.path.join(tmp, "hardware", "lib"))
+        board = os.path.join(kd, "reva.kicad_pcb")
+        shutil.copyfile(pcb_path, board)
+        out = os.path.join(tmp, "parity.json")
+        subprocess.run([ksexp.KICAD_CLI, "pcb", "drc", "--schematic-parity", "--format", "json",
+                        "-o", out, board], capture_output=True)
+        if not os.path.exists(out):
+            return None
+        with open(out, encoding="utf-8") as fh:
+            return json.load(fh).get("schematic_parity", [])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+# The JSON report's item lines are localised (probed 2026-10-02, German
+# locale: "Durchsteckpad 7 [<no net>] von J_PWR"), unlike the text report's.
+_PARITY_REF_RE = re.compile(r"(?:Footprint|of|von) (\S+)")
+
+
+def _parity_lines(items):
+    out = []
+    for it in items:
+        refs = sorted({m for x in it.get("items", []) for m in _PARITY_REF_RE.findall(x.get("description", ""))})
+        out.append("parity item %s on %s" % (it.get("type"), "/".join(refs) or "?"))
+    return sorted(out)
+
+
+def check_parity(s, pcb_path, prefix):
+    with_sch = not getattr(s, "parity_missing", False)
+    key = (with_sch, _link_key(s.board))
+    if key not in _PARITY_CACHE:
+        items = _parity_items(pcb_path, with_sch)
+        # positive control: the same board with one field changed must show it
+        ctrl_pcb = prefix + "-parity-control.kicad_pcb"
+        b = pcbnew.LoadBoard(pcb_path)
+        ref, field, val = PARITY_CONTROL
+        b.FindFootprintByReference(ref).SetField(field, val)
+        pcbnew.SaveBoard(ctrl_pcb, b)
+        control = _parity_items(ctrl_pcb, with_sch)
+        _PARITY_CACHE[key] = (items, control)
+    items, control = _PARITY_CACHE[key]
+    if items is None or not control:
+        return False, "%s (control %s)" % (PARITY_EMPTY, "no report" if control is None else "0 items"), []
+    lines = _parity_lines(items)
+    return not lines, "schematic parity: %d items (positive control %d)" % (len(lines), len(control)), lines
+
+
+# --- silkscreen (P4-3 spec §4.3, §5.1) ---
+SILK_MIN_MM = 1.0       # master plan working rule 3 (the check's own copy, not silk.py's)
+SILK_STROKE_MIN_MM = 0.15   # rule 3's stroke (ruling R8; the check's own copy, not silk.py's)
+SILK_TEXT_CLASSES = ("silk_over_copper", "silk_overlap")
+# every silk class: a report with none of them was not read for silk (ruling R7)
+SILK_CLASSES = SILK_TEXT_CLASSES + ("silk_edge_clearance",)
+# kicad-cli 10.0.5 item lines for silk text (probed 2026-10-02 on the routed
+# board; the rule line is localised, the item lines are not):
+#   @(281.9400 mm, 73.6100 mm): Reference field of RV64
+#   @(117.8800 mm, 70.6000 mm): Footprint text of U_SM (INSTALL ON
+#   THIS SIDE)                      <- the text's own line break, not an item line
+# Silk graphics read "@(...): Segment of U_SM on B.Silkscreen" (also Arc,
+# Polygon), which CK._REF_RE keys; it misses the footprint text's owner (the
+# text follows it), so _TEXT_OWNER_RE adds the owner of every text item.
+_TEXT_ITEM_RE = re.compile(r"^\s*@\([^)]*\): (?:Reference field|Value field|Footprint text|Text) ", re.M)
+_TEXT_OWNER_RE = re.compile(r"^\s*@\([^)]*\): (?:Reference field|Value field|Footprint text) of "
+                            r"([A-Za-z_]+[A-Za-z_0-9]*)", re.M)
+SILK_EMPTY = "silk_height measured nothing: no visible silkscreen text"
+FRONT_EMPTY = "silk_front measured nothing: no front footprint"
+CLEAR_EMPTY = "silk_clear measured nothing: no silk block in the DRC report"
+ROOM_EMPTY = "no_room measured nothing: no back footprint"
+
+
+def _silk_texts(board):
+    """(ref, kind, height mm, side, stroke mm) of every visible text on F/B.Silkscreen:
+    every field (reference, value and the schematic fields link_part adds,
+    which are hidden; one made visible is measured here) and every
+    footprint text."""
+    out = []
+    for fp in board.GetFootprints():
+        items = [(f.GetName().lower(), f) for f in fp.GetFields()]
+        items += [("text", it) for it in fp.GraphicalItems() if isinstance(it, pcbnew.PCB_TEXT)]
+        for kind, t in items:
+            if t.IsVisible() and t.GetLayer() in (pcbnew.F_SilkS, pcbnew.B_SilkS):
+                out.append((fp.GetReference(), kind, pcbnew.ToMM(t.GetTextSize().y),
+                            "B" if t.GetLayer() == pcbnew.B_SilkS else "F",
+                            pcbnew.ToMM(t.GetTextThickness())))
+    return out
+
+
+def check_silk_height(s, pcb_path, prefix):
+    """Rule 3 on every visible silk text: height and stroke."""
+    texts = [] if getattr(s, "silk_height_missing", False) else _silk_texts(s.board)
+    if not texts:
+        return False, SILK_EMPTY, []
+    low = sorted(t for t in texts if t[2] < SILK_MIN_MM - 1e-6)
+    thin = sorted(t for t in texts if t[4] < SILK_STROKE_MIN_MM - 1e-6)
+    details = ["silk text below %.1f mm: %s %s %.2f mm" % (SILK_MIN_MM, r, k, h) for r, k, h, _s, _w in low]
+    details += ["silk stroke below %.2f mm: %s %s %.2f mm" % (SILK_STROKE_MIN_MM, r, k, w)
+                for r, k, _h, _s, w in thin]
+    return (not details, "%d silk texts, %d below %.1f mm, %d with a stroke below %.2f mm"
+            % (len(texts), len(low), SILK_MIN_MM, len(thin), SILK_STROKE_MIN_MM), details)
+
+
+def check_silk_front(s, pcb_path, prefix):
+    front = [] if getattr(s, "silk_front_missing", False) else \
+        [fp for fp in s.board.GetFootprints() if not fp.IsFlipped()]
+    if not front:
+        return False, FRONT_EMPTY, []
+    shown = sorted(fp.GetReference() for fp in front if fp.Reference().IsVisible())
+    return (not shown, "%d front footprints, %d with a visible reference" % (len(front), len(shown)),
+            ["visible front reference: %s" % r for r in shown])
+
+
+def check_silk_clear(s, pcb_path, prefix):
+    """KiCad's DRC judges silk text (spec §5.1). Examined nothing (ruling R7):
+    the report holds no silk block of any class, text or graphic, e.g. the
+    silk classes set to ignore, or the blocks not read."""
+    texts = _silk_texts(s.board)
+    txt, err = _drc(s, pcb_path, prefix)
+    if err:
+        return False, err, []
+    blocks = re.split(r"(?=^\[)", txt, flags=re.M)
+    if getattr(s, "silk_clear_missing", False):
+        # sabotage: the report's silk blocks are not read
+        blocks = [b for b in blocks if not b.startswith(tuple("[%s]" % c for c in SILK_CLASSES))]
+    n_silk = sum(1 for b in blocks if b.startswith(tuple("[%s]" % c for c in SILK_CLASSES)))
+    if not n_silk:
+        return False, "%s (%d visible silk texts on the board)" % (CLEAR_EMPTY, len(texts)), []
+    found, graphic = {}, 0
+    for block in blocks:
+        m = re.match(r"^\[([a-z0-9_]+)\]", block)
+        if not m or m.group(1) not in SILK_TEXT_CLASSES:
+            continue
+        if not _TEXT_ITEM_RE.search(block):
+            graphic += 1            # footprint graphics only: counted, not gated (spec §4.3)
+            continue
+        refs = sorted(set(CK._REF_RE.findall(block)) | set(_TEXT_OWNER_RE.findall(block)))
+        found["%s %s" % (m.group(1), "/".join(refs))] = "silk text over a pad or other silk"
+    ok, details, n_known = _judge(s, "silk", found)
+    return ok, ("%d visible silk texts, %d silk blocks in the report, %d text entries (%d known), "
+                "%d graphic-only entries not gated" % (len(texts), n_silk, len(found), n_known, graphic)), details
+
+
+def check_no_room(s, pcb_path, prefix):
+    import silk as SK
+    back = [] if getattr(s, "no_room_missing", False) else \
+        [fp for fp in s.board.GetFootprints() if fp.IsFlipped()]
+    if not back:
+        return False, ROOM_EMPTY, []
+    found = {fp.GetReference(): "reference hidden, no free spot"
+             for fp in back if not fp.Reference().IsVisible()}
+    for fp in back:
+        for it in fp.GraphicalItems():
+            if isinstance(it, pcbnew.PCB_TEXT) and it.GetLayer() == pcbnew.B_SilkS and not it.IsVisible():
+                found[fp.GetReference() + ":text"] = "footprint text hidden, no free spot"
+    known = set(SK.NO_ROOM) | set(getattr(s, "extra_no_room", ()))
+    ok, details, n_known = CK.judge(known, found)
+    # check_kit.judge names KNOWN_PANEL; this step's known list is silk.NO_ROOM
+    details = [d.replace("[NEW]", "[NEW] hidden back reference not in NO_ROOM")
+               .replace("remove it from KNOWN_PANEL", "remove it from silk.NO_ROOM") for d in details]
+    return ok, "%d back footprints, %d hidden (%d listed)" % (len(back), len(found), n_known), details
+
+
+STEPS =[("routed", check_routed), ("drc", check_drc), ("rules_file", check_rules_file),
          ("audio", check_audio), ("lr", check_lr), ("sense", check_sense),
          ("pot_keepout", check_pot_keepout), ("planes", check_planes), ("reg_copper", check_reg_copper),
+         ("paths", check_paths), ("parity", check_parity),
+         ("silk_height", check_silk_height), ("silk_front", check_silk_front),
+         ("silk_clear", check_silk_clear), ("no_room", check_no_room),
          ("report", report),
          ("render", render)]
 
@@ -1318,7 +1558,81 @@ def _sab_rules_file_missing(s):
     s.rules_missing = True
 
 
-SABOTAGES = {"routed": _sab_routed, "routed_missing": _sab_routed_missing,
+def _sab_paths(s):
+    """R1's and R2's schematic links swapped: parity cannot see it (it matches
+    by reference, spec §3), only the netlist comparison can."""
+    a, b = s.board.FindFootprintByReference("R1"), s.board.FindFootprintByReference("R2")
+    pa, pb = a.GetPath(), b.GetPath()
+    a.SetPath(pb)
+    b.SetPath(pa)
+
+
+def _sab_paths_missing(s):
+    s.paths_missing = True
+
+
+def _sab_parity(s):
+    """C2's LCSC field changed: one footprint_symbol_field_mismatch."""
+    s.board.FindFootprintByReference("C2").SetField("LCSC", "C1")
+
+
+def _sab_parity_missing(s):
+    """The schematic left out of the parity copy: the positive control finds nothing."""
+    s.parity_missing = True
+
+
+def _sab_silk_height(s):
+    """R1's reference at 0.8 mm."""
+    s.board.FindFootprintByReference("R1").Reference().SetTextSize(
+        pcbnew.VECTOR2I(pcbnew.FromMM(0.8), pcbnew.FromMM(0.8)))
+
+
+def _sab_silk_height_stroke(s):
+    """R1's reference at a 0.10 mm stroke, its height unchanged."""
+    s.board.FindFootprintByReference("R1").Reference().SetTextThickness(pcbnew.FromMM(0.10))
+
+
+def _sab_silk_height_missing(s):
+    s.silk_height_missing = True
+
+
+def _sab_silk_front(s):
+    s.board.FindFootprintByReference("RV1").Reference().SetVisible(True)
+
+
+def _sab_silk_front_missing(s):
+    s.silk_front_missing = True
+
+
+def _sab_silk_clear(s):
+    """R1's reference moved onto its own pad 1 and shown."""
+    fp = s.board.FindFootprintByReference("R1")
+    pad = [p for p in fp.Pads() if str(p.GetNumber()) == "1"][0]
+    fp.Reference().SetVisible(True)
+    fp.Reference().SetPosition(pad.GetPosition())
+
+
+def _sab_silk_clear_missing(s):
+    """The DRC report's silk blocks are not read (every silk class dropped
+    from the text silk_clear parses); the board's texts stay as they are."""
+    s.silk_clear_missing = True
+
+
+def _sab_no_room(s):
+    """R1's reference hidden although it had room: a NEW hidden reference."""
+    s.board.FindFootprintByReference("R1").Reference().SetVisible(False)
+
+
+def _sab_no_room_stale(s):
+    """R2 listed although its reference is shown: a stale entry."""
+    s.extra_no_room = ("R2",)
+
+
+def _sab_no_room_missing(s):
+    s.no_room_missing = True
+
+
+SABOTAGES ={"routed": _sab_routed, "routed_missing": _sab_routed_missing,
              "routed_song": _sab_routed_song,
              "drc": _sab_drc, "drc_missing": _sab_drc_missing, "drc_cut": _sab_drc_cut,
              "rules_file": _sab_rules_file, "rules_file_missing": _sab_rules_file_missing,
@@ -1328,7 +1642,15 @@ SABOTAGES = {"routed": _sab_routed, "routed_missing": _sab_routed_missing,
              "pot_keepout": _sab_pot_keepout, "pot_keepout_missing": _sab_pot_keepout_missing,
              "planes": _sab_planes, "planes_missing": _sab_planes_missing,
              "planes_stitch": _sab_planes_stitch,
-             "reg_copper": _sab_reg_copper, "reg_copper_missing": _sab_reg_copper_missing}
+             "reg_copper": _sab_reg_copper, "reg_copper_missing": _sab_reg_copper_missing,
+             "paths": _sab_paths, "paths_missing": _sab_paths_missing,
+             "parity": _sab_parity, "parity_missing": _sab_parity_missing,
+             "silk_height": _sab_silk_height, "silk_height_missing": _sab_silk_height_missing,
+             "silk_height_stroke": _sab_silk_height_stroke,
+             "silk_front": _sab_silk_front, "silk_front_missing": _sab_silk_front_missing,
+             "silk_clear": _sab_silk_clear, "silk_clear_missing": _sab_silk_clear_missing,
+             "no_room": _sab_no_room, "no_room_stale": _sab_no_room_stale,
+             "no_room_missing": _sab_no_room_missing}
 TURNS_RED = {"routed": "routed", "routed_missing": "routed", "routed_song": "routed",
              "drc": "drc", "drc_missing": "drc", "drc_cut": "drc",
              "rules_file": "rules_file", "rules_file_missing": "rules_file",
@@ -1337,7 +1659,14 @@ TURNS_RED = {"routed": "routed", "routed_missing": "routed", "routed_song": "rou
              "sense": "sense", "sense_missing": "sense",
              "pot_keepout": "pot_keepout", "pot_keepout_missing": "pot_keepout",
              "planes": "planes", "planes_missing": "planes", "planes_stitch": "planes",
-             "reg_copper": "reg_copper", "reg_copper_missing": "reg_copper"}
+             "reg_copper": "reg_copper", "reg_copper_missing": "reg_copper",
+             "paths": "paths", "paths_missing": "paths",
+             "parity": "parity", "parity_missing": "parity",
+             "silk_height": "silk_height", "silk_height_missing": "silk_height",
+             "silk_height_stroke": "silk_height",
+             "silk_front": "silk_front", "silk_front_missing": "silk_front",
+             "silk_clear": "silk_clear", "silk_clear_missing": "silk_clear",
+             "no_room": "no_room", "no_room_stale": "no_room", "no_room_missing": "no_room"}
 WHY = {"routed": "unrouted on SENSE_2", "routed_missing": "incomplete",
        "routed_song": "SONG_A: 2 blocks under one key",
        "drc": "clearance {ref}: kicad-cli", "drc_missing": "wrote no report",
@@ -1351,7 +1680,16 @@ WHY = {"routed": "unrouted on SENSE_2", "routed_missing": "incomplete",
        "pot_keepout": "F.Cu copper under a pot body", "pot_keepout_missing": "no pot examined",
        "planes": "free island", "planes_missing": "no plane examined",
        "planes_stitch": "stitching:",
-       "reg_copper": "U_REG copper below 200.0 mm2", "reg_copper_missing": REG_EMPTY}
+       "reg_copper": "U_REG copper below 200.0 mm2", "reg_copper_missing": REG_EMPTY,
+       "paths": "KiCad's netlist says", "paths_missing": PATHS_EMPTY,
+       "parity": "parity item footprint_symbol_field_mismatch on C2",
+       "parity_missing": PARITY_EMPTY,
+       "silk_height": "silk text below 1.0 mm: R1", "silk_height_missing": SILK_EMPTY,
+       "silk_height_stroke": "silk stroke below 0.15 mm: R1",
+       "silk_front": "visible front reference: RV1", "silk_front_missing": FRONT_EMPTY,
+       "silk_clear": "silk_over_copper R1", "silk_clear_missing": CLEAR_EMPTY,
+       "no_room": "hidden back reference not in NO_ROOM",
+       "no_room_stale": "listed as known but no longer fails", "no_room_missing": ROOM_EMPTY}
 
 
 def why(s, name):

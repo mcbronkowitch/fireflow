@@ -31,6 +31,7 @@ import build as RB     # noqa: E402
 import rules as RU     # noqa: E402
 from gen import kipcb # noqa: E402
 from gen import place as PL  # noqa: E402
+from gen import sch_writer as W  # noqa: E402
 
 OUT = os.path.join(HERE, "out")
 DOCS = os.path.normpath(os.path.join(HW, "..", "docs", "hardware", "placement"))
@@ -64,6 +65,7 @@ class Placed:
         self.anchor_from = {}
         self.sheet_of = {}
         self.known = {}
+        self.unconnected = []
 
     def reload(self, path):
         new = Placed()
@@ -632,6 +634,34 @@ def place_smd(s, proj):
         _place_one(s, p, a, "other")
 
 
+def unconnected_net(part, number):
+    """KiCad's name for the net of a pin the schematic leaves unconnected
+    (forms probed 2026-10-02: unconnected-(J_PWR-Pin_7-Pad7),
+    unconnected-(U_IN1-~{Q7}-Pad7)); schematic parity checks it. A pin
+    without a name drops the name part: the jacks' TN pins are
+    unconnected-(J1-PadTN) (parity probe on the committed board, 2026-10-02)."""
+    name = part.sym.pin(number)["name"]
+    return "unconnected-(%s-%sPad%s)" % (part.ref, name + "-" if name else "", number)
+
+
+def link_footprints(s, proj):
+    """P4-3 spec §4.2: every footprint linked to its symbol, every unconnected
+    pin on KiCad's unconnected-(...) net. Returns the net names created."""
+    sheet_of = proj.sheet_of()
+    made = []
+    for p in proj.parts():
+        fp = s.board.FindFootprintByReference(p.ref)
+        if fp is None:
+            continue
+        sheet = sheet_of[p.ref]
+        kipcb.link_part(fp, p, W.symbol_path(proj.name, sheet, p.ref), sheet, sheet + ".kicad_sch")
+        for number in p.unconnected():
+            name = unconnected_net(p, number)
+            if kipcb.set_pad_net(s.board, fp, number, name):
+                made.append(name)
+    return sorted(made)
+
+
 def build():
     proj = RB.project()
     s = Placed()
@@ -645,6 +675,7 @@ def build():
     s.blocked = _tht_blocked(s) + [s.shadow]
     place_power_header(s, proj, s.blocked)
     place_smd(s, proj)
+    s.unconnected = link_footprints(s, proj)
     return s
 
 

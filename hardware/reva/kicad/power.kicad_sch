@@ -1753,10 +1753,15 @@
 	)
 	(wire (pts (xy 33.02 36.83) (xy 29.21 36.83))
 		(stroke (width 0) (type default)) (uuid "541798fc-f038-5c46-9eec-9f7c72cfff09"))
-	(label "+12V_IN"
+	(global_label "+12V_IN"
+		(shape bidirectional)
 		(at 29.21 36.83 180)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "2aaee523-5673-58ce-9c51-c816759a3804"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "2aaee523-5673-58ce-9c51-c816759a3804")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 29.21 36.83 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 33.02 31.75) (xy 29.21 31.75))
 		(stroke (width 0) (type default)) (uuid "d7aa12bf-b3e9-58c8-b935-51729ae5980d"))
 	(wire (pts (xy 33.02 29.21) (xy 29.21 29.21))
@@ -1791,16 +1796,26 @@
 	)
 	(wire (pts (xy 33.02 26.67) (xy 29.21 26.67))
 		(stroke (width 0) (type default)) (uuid "c649bb33-a624-5cbc-bb40-1b54dc65089a"))
-	(label "-12V_IN"
+	(global_label "-12V_IN"
+		(shape bidirectional)
 		(at 29.21 26.67 180)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "02b412d7-d897-5e10-9431-ea8f6b4bc484"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "02b412d7-d897-5e10-9431-ea8f6b4bc484")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 29.21 26.67 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 45.72 36.83) (xy 49.53 36.83))
 		(stroke (width 0) (type default)) (uuid "f2c3567a-9d8a-58f7-b51c-23873a01bca1"))
-	(label "+12V_IN"
+	(global_label "+12V_IN"
+		(shape bidirectional)
 		(at 49.53 36.83 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "fe962170-95c8-501d-8917-e70e6c6588f4"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "fe962170-95c8-501d-8917-e70e6c6588f4")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 49.53 36.83 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 45.72 31.75) (xy 49.53 31.75))
 		(stroke (width 0) (type default)) (uuid "743d0d83-6242-5373-80c1-ad04554074cd"))
 	(wire (pts (xy 45.72 29.21) (xy 49.53 29.21))
@@ -1835,10 +1850,15 @@
 	)
 	(wire (pts (xy 45.72 26.67) (xy 49.53 26.67))
 		(stroke (width 0) (type default)) (uuid "3706a79d-1c8a-503c-8645-1d7f8d6a460c"))
-	(label "-12V_IN"
+	(global_label "-12V_IN"
+		(shape bidirectional)
 		(at 49.53 26.67 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "adef616b-14fc-52d7-b9ab-d2b5876266e4"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "adef616b-14fc-52d7-b9ab-d2b5876266e4")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 49.53 26.67 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(no_connect (at 33.02 34.29) (uuid "dbed800c-4c7e-5641-9de2-3ad6896a4579"))
 	(no_connect (at 45.72 34.29) (uuid "0db75d77-0515-5e76-a68a-a9313adca365"))
 	(symbol
@@ -1904,10 +1924,15 @@
 	)
 	(wire (pts (xy 91.44 26.67) (xy 95.25 26.67))
 		(stroke (width 0) (type default)) (uuid "03741eb4-cb73-5cae-a4b9-a4114beca78f"))
-	(label "+12V_IN"
+	(global_label "+12V_IN"
+		(shape bidirectional)
 		(at 95.25 26.67 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "cb2f8a18-fa2f-5add-9978-24cf40c9c4b2"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "cb2f8a18-fa2f-5add-9978-24cf40c9c4b2")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 95.25 26.67 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Diode:SS14")
 		(at 134.62 26.67 0)
@@ -1943,10 +1968,15 @@
 	)
 	(wire (pts (xy 130.81 26.67) (xy 127 26.67))
 		(stroke (width 0) (type default)) (uuid "2ac6f14c-365e-50fe-9596-3b5d95a8e24f"))
-	(label "-12V_IN"
+	(global_label "-12V_IN"
+		(shape bidirectional)
 		(at 127 26.67 180)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "3f2e8c70-65df-5579-804f-ef9f2c80005b"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "3f2e8c70-65df-5579-804f-ef9f2c80005b")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 127 26.67 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 138.43 26.67) (xy 142.24 26.67))
 		(stroke (width 0) (type default)) (uuid "91054229-818e-561f-b5cd-1bf011aa1f4c"))
 	(symbol

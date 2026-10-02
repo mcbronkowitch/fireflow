@@ -4101,6 +4101,48 @@ the coupon has nothing else open.
 LEDs on the 595 — waits for the control PCB's pin map, which should give one
 spare channel to AGND and one to the rail (spec §8).
 
+**2026-10-02 — P4-3 fabrication data: the pipeline stands; the package waits for the panel pass.**
+`KIPY hardware/reva/fab.py` turns the committed board into the order package
+in 7.6 s (measured twice after the final fixes): 11 Gerber layers plus the PTH/NPTH drill files (13 files, edge
+300.80 × 110.00 mm, dates normalised so two exports are byte-identical), the
+zip, a JLC CPL (78 rows = the 78 BOM designators = the 78 placeable parts), the
+BOM, the two renders and two assembly sheets (front 112 parts by panel id, back
+101 parts mirrored, DNP dashed, pin 1 marked, J_SD's pins drawn on the back
+because it is a front part soldered from the back, plus a detail window around
+J_PWR at 15 px/mm). Drill: PTH 1207, NPTH 0. Six gated steps (`gerber_set`,
+`drill`, `cpl`, `rot_table`, `bom_lcsc`, `assembly`), each with a sabotage and
+a `_missing` one that turn it red (18 sabotages); `cpl` recomputes every CPL
+rotation from kicad-cli's raw position file with the run's `ROT_FIX` and
+`BOTTOM_SIGN`, and `gerber_set` opens the uploaded zip and compares its
+members byte for byte with the Gerber directory (and the Edge.Cuts extent's
+absolute position with the outline). Beside it: the netlist
+parity check finds 0 items (its positive control finds at least 1), `paths`
+reads 213 footprints with 0 wrong, 40 single-pad nets stay `unconnected-(…)`,
+and the router is unchanged (187 nets, 580 vias, 11803.5 mm). Silk: 98 back
+references placed (plus U_SM's footprint text), 3 hidden (`silk.NO_ROOM` = C2, C3, C5; the back sheet's detail
+window is their only name, and `fab.py` prints them as informational lines, not
+as open items); silk DRC: silk_over_copper 127 → 17, silk_overlap 56 → 1,
+silk_edge_clearance 38 → 36, the remaining entries graphic-only and ungated by
+design. `reva_fab_guard` re-runs the export in separate processes and
+compares bytes, proves every sabotage red on its own step, proves the date
+normaliser red (the first date pattern disabled turns the byte comparison and
+three normalise cases red), and proves both `--release` paths in-process: one
+open item refuses and writes nothing, no open item writes the package without
+`board/`. It took 105 s in ctest at e2588e5b and 114 s run directly after the
+two newest sabotages were added; `reva_route_guard` measured 1236 s in ctest
+on this branch (1012–1039 s before).
+`fab.py --write` copies the renders and sheets to `docs/hardware/fab/`.
+**Still open:** `order_ready` says "no, 83 open items" — the known panel items
+of P4-1 and P4-2 (they wait for the panel pass) plus `ROT_FIX` for its six
+packages (C_0603_1608Metric, C_0805_2012Metric, D_SMA, R_0603_1608Metric,
+SOIC-16_3.9x9.9mm_P1.27mm, SOT-223-3_TabPin2: all 0°, none verified) and
+`BOTTOM_SIGN`. No machine can prove a rotation: they wait for a JLC quote
+upload (a placement preview, no order). The release (`--release`) waits for
+the panel pass and that upload; whether JLC assembles the bottom side of a
+300.8 × 110 mm board, and at what price, is unconfirmed. Spec
+`docs/superpowers/specs/2026-10-02-rev-a-p4-3-fabrication-design.md`; renders
+and sheets `docs/hardware/fab/`.
+
 **2026-10-01 — P4-2 routing: Rev A is routed.**
 `KIPY hardware/reva/route.py` routes all 187 nets of the placed board (GND
 and SM_3V3 are planes) on 4 layers with our own router in 222.8 s and 24

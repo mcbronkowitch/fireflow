@@ -521,10 +521,15 @@
 	)
 	(wire (pts (xy 21.59 43.18) (xy 21.59 46.99))
 		(stroke (width 0) (type default)) (uuid "cf98c4e0-901f-5631-9e59-46d430c8c5c0"))
-	(label "LED0_A"
+	(global_label "LED0_A"
+		(shape bidirectional)
 		(at 21.59 46.99 270)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "61adce4f-65db-5dc5-89a6-31d9656b882a"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "61adce4f-65db-5dc5-89a6-31d9656b882a")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 21.59 46.99 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 21.59 35.56) (xy 21.59 31.75))
 		(stroke (width 0) (type default)) (uuid "221cb27b-6b15-5b49-adda-81fe7d594ae9"))
 	(global_label "LED0"
@@ -602,10 +607,15 @@
 	)
 	(wire (pts (xy 53.34 26.67) (xy 57.15 26.67))
 		(stroke (width 0) (type default)) (uuid "00dda1a4-c1f6-53f0-b8fb-462c2791ee3b"))
-	(label "LED0_A"
+	(global_label "LED0_A"
+		(shape bidirectional)
 		(at 57.15 26.67 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "c4e2328e-b4e3-5aba-806d-8a52ead96c07"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "c4e2328e-b4e3-5aba-806d-8a52ead96c07")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 57.15 26.67 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R")
 		(at 78.74 39.37 0)
@@ -641,10 +651,15 @@
 	)
 	(wire (pts (xy 78.74 43.18) (xy 78.74 46.99))
 		(stroke (width 0) (type default)) (uuid "1a68020e-8cf6-5813-9dbb-44a0ed4668e7"))
-	(label "LED1_A"
+	(global_label "LED1_A"
+		(shape bidirectional)
 		(at 78.74 46.99 270)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "327fc550-8670-5c73-9ee4-27ef51463e67"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "327fc550-8670-5c73-9ee4-27ef51463e67")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 78.74 46.99 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 78.74 35.56) (xy 78.74 31.75))
 		(stroke (width 0) (type default)) (uuid "df549038-6a79-5f33-bc85-572f6540a9ab"))
 	(global_label "LED1"
@@ -722,10 +737,15 @@
 	)
 	(wire (pts (xy 111.76 26.67) (xy 115.57 26.67))
 		(stroke (width 0) (type default)) (uuid "7cdbe145-fd1f-54e8-8baf-040e8ef6c762"))
-	(label "LED1_A"
+	(global_label "LED1_A"
+		(shape bidirectional)
 		(at 115.57 26.67 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "992a801d-b15d-5997-9697-4624f45d68c0"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "992a801d-b15d-5997-9697-4624f45d68c0")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 115.57 26.67 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R")
 		(at 137.16 39.37 0)
@@ -761,10 +781,15 @@
 	)
 	(wire (pts (xy 137.16 43.18) (xy 137.16 46.99))
 		(stroke (width 0) (type default)) (uuid "9692b0f4-90b3-517d-a2fd-466c9ddb3f1a"))
-	(label "LED2_A"
+	(global_label "LED2_A"
+		(shape bidirectional)
 		(at 137.16 46.99 270)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "19de03be-51d4-5172-9b35-d5815c5cb4a5"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "19de03be-51d4-5172-9b35-d5815c5cb4a5")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 137.16 46.99 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 137.16 35.56) (xy 137.16 31.75))
 		(stroke (width 0) (type default)) (uuid "eb7fc853-cf0d-55a4-aecd-cb8db2018945"))
 	(global_label "LED2"
@@ -842,10 +867,15 @@
 	)
 	(wire (pts (xy 168.91 26.67) (xy 172.72 26.67))
 		(stroke (width 0) (type default)) (uuid "d7f45866-bf6a-5bb1-8ac0-5b7d66be3359"))
-	(label "LED2_A"
+	(global_label "LED2_A"
+		(shape bidirectional)
 		(at 172.72 26.67 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "46b52f16-d331-56c8-b08a-24f6d8d0813e"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "46b52f16-d331-56c8-b08a-24f6d8d0813e")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 172.72 26.67 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R")
 		(at 194.31 39.37 0)
@@ -881,10 +911,15 @@
 	)
 	(wire (pts (xy 194.31 43.18) (xy 194.31 46.99))
 		(stroke (width 0) (type default)) (uuid "c8237bf2-3383-5e11-bc7a-0ffcef8f925d"))
-	(label "LED3_A"
+	(global_label "LED3_A"
+		(shape bidirectional)
 		(at 194.31 46.99 270)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "d9dd2931-7f04-5986-9564-2c044166d36b"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "d9dd2931-7f04-5986-9564-2c044166d36b")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 194.31 46.99 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 194.31 35.56) (xy 194.31 31.75))
 		(stroke (width 0) (type default)) (uuid "2e6b6330-cdc9-5e00-a71e-5e23c3a4b9a6"))
 	(global_label "LED3"
@@ -962,10 +997,15 @@
 	)
 	(wire (pts (xy 227.33 26.67) (xy 231.14 26.67))
 		(stroke (width 0) (type default)) (uuid "5e0d2f89-e279-5a79-a906-a6ce33356ffc"))
-	(label "LED3_A"
+	(global_label "LED3_A"
+		(shape bidirectional)
 		(at 231.14 26.67 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "3c9dd953-3649-5967-a35d-214fb3712deb"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "3c9dd953-3649-5967-a35d-214fb3712deb")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 231.14 26.67 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R")
 		(at 252.73 39.37 0)
@@ -1001,10 +1041,15 @@
 	)
 	(wire (pts (xy 252.73 43.18) (xy 252.73 46.99))
 		(stroke (width 0) (type default)) (uuid "c83434ba-f018-5608-8a88-47eb34fcfdd9"))
-	(label "LED4_A"
+	(global_label "LED4_A"
+		(shape bidirectional)
 		(at 252.73 46.99 270)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "2e066858-a273-55ed-ab7c-b537741a0411"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "2e066858-a273-55ed-ab7c-b537741a0411")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 252.73 46.99 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 252.73 35.56) (xy 252.73 31.75))
 		(stroke (width 0) (type default)) (uuid "56f9441c-7a6d-5e17-aa25-4dee1cbcc938"))
 	(global_label "LED4"
@@ -1082,10 +1127,15 @@
 	)
 	(wire (pts (xy 284.48 26.67) (xy 288.29 26.67))
 		(stroke (width 0) (type default)) (uuid "4ecf9c38-52aa-5ccb-b01d-2ecda34ca0c0"))
-	(label "LED4_A"
+	(global_label "LED4_A"
+		(shape bidirectional)
 		(at 288.29 26.67 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "9adc1145-74e7-5347-91be-9b887c3ee035"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "9adc1145-74e7-5347-91be-9b887c3ee035")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 288.29 26.67 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R")
 		(at 311.15 39.37 0)
@@ -1121,10 +1171,15 @@
 	)
 	(wire (pts (xy 311.15 43.18) (xy 311.15 46.99))
 		(stroke (width 0) (type default)) (uuid "618b51a2-c5f7-56e9-ab84-eb1e236cd62d"))
-	(label "LED5_A"
+	(global_label "LED5_A"
+		(shape bidirectional)
 		(at 311.15 46.99 270)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "5a97db13-c421-5963-a13c-0a68e283f663"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "5a97db13-c421-5963-a13c-0a68e283f663")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 311.15 46.99 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 311.15 35.56) (xy 311.15 31.75))
 		(stroke (width 0) (type default)) (uuid "4a39008e-32f7-56ce-8d0d-b494214be031"))
 	(global_label "LED5"
@@ -1202,10 +1257,15 @@
 	)
 	(wire (pts (xy 342.9 26.67) (xy 346.71 26.67))
 		(stroke (width 0) (type default)) (uuid "af1a7170-169b-5bcf-b6b0-008bf463ad81"))
-	(label "LED5_A"
+	(global_label "LED5_A"
+		(shape bidirectional)
 		(at 346.71 26.67 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "36213319-2c5e-54b1-b90a-0cb729e30ad7"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "36213319-2c5e-54b1-b90a-0cb729e30ad7")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 346.71 26.67 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R")
 		(at 368.3 39.37 0)
@@ -1241,10 +1301,15 @@
 	)
 	(wire (pts (xy 368.3 43.18) (xy 368.3 46.99))
 		(stroke (width 0) (type default)) (uuid "3f4a4296-08fd-56ad-a008-bb85ca3bfdae"))
-	(label "LED6_A"
+	(global_label "LED6_A"
+		(shape bidirectional)
 		(at 368.3 46.99 270)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "152e51a3-de57-52db-94c9-48a8c00dcfda"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "152e51a3-de57-52db-94c9-48a8c00dcfda")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 368.3 46.99 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 368.3 35.56) (xy 368.3 31.75))
 		(stroke (width 0) (type default)) (uuid "fed1d7a3-549f-5dbe-a691-83a9a24442b7"))
 	(global_label "LED6"
@@ -1322,10 +1387,15 @@
 	)
 	(wire (pts (xy 39.37 72.39) (xy 43.18 72.39))
 		(stroke (width 0) (type default)) (uuid "b473f5d2-ff3c-5a20-abd1-e4a36c892cf8"))
-	(label "LED6_A"
+	(global_label "LED6_A"
+		(shape bidirectional)
 		(at 43.18 72.39 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "a8d23466-e582-56ee-b938-7b1b559bbafb"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "a8d23466-e582-56ee-b938-7b1b559bbafb")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 43.18 72.39 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R")
 		(at 64.77 85.09 0)
@@ -1361,10 +1431,15 @@
 	)
 	(wire (pts (xy 64.77 88.9) (xy 64.77 92.71))
 		(stroke (width 0) (type default)) (uuid "4c345639-6de4-5147-be7c-af4908ca198d"))
-	(label "LED7_A"
+	(global_label "LED7_A"
+		(shape bidirectional)
 		(at 64.77 92.71 270)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "a51b3bfc-5ad8-5010-b105-6a9c5df37a55"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "a51b3bfc-5ad8-5010-b105-6a9c5df37a55")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 64.77 92.71 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 64.77 81.28) (xy 64.77 77.47))
 		(stroke (width 0) (type default)) (uuid "c1caeab2-0620-551b-aba3-d505e8053566"))
 	(global_label "LED7"
@@ -1442,10 +1517,15 @@
 	)
 	(wire (pts (xy 97.79 72.39) (xy 101.6 72.39))
 		(stroke (width 0) (type default)) (uuid "a66f7cf5-2141-5017-b721-0cc950a81f45"))
-	(label "LED7_A"
+	(global_label "LED7_A"
+		(shape bidirectional)
 		(at 101.6 72.39 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "9c5ae1db-6193-585b-a1d5-2091908318a3"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "9c5ae1db-6193-585b-a1d5-2091908318a3")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 101.6 72.39 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R")
 		(at 123.19 85.09 0)
@@ -1481,10 +1561,15 @@
 	)
 	(wire (pts (xy 123.19 88.9) (xy 123.19 92.71))
 		(stroke (width 0) (type default)) (uuid "90a8c8f2-460b-5323-b3b9-e434b1ebb3e9"))
-	(label "LED8_A"
+	(global_label "LED8_A"
+		(shape bidirectional)
 		(at 123.19 92.71 270)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "1ebeaac8-52d2-5eff-808b-c703b891f2f0"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "1ebeaac8-52d2-5eff-808b-c703b891f2f0")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 123.19 92.71 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 123.19 81.28) (xy 123.19 77.47))
 		(stroke (width 0) (type default)) (uuid "9f35cabc-ea37-52f1-9da1-90010d8ab48d"))
 	(global_label "LED8"
@@ -1562,10 +1647,15 @@
 	)
 	(wire (pts (xy 154.94 72.39) (xy 158.75 72.39))
 		(stroke (width 0) (type default)) (uuid "efc42a7d-9b11-54a2-aad4-3c4044c91858"))
-	(label "LED8_A"
+	(global_label "LED8_A"
+		(shape bidirectional)
 		(at 158.75 72.39 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "4152c84f-9606-513b-9f76-dad6b34b7623"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "4152c84f-9606-513b-9f76-dad6b34b7623")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 158.75 72.39 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R")
 		(at 180.34 85.09 0)
@@ -1601,10 +1691,15 @@
 	)
 	(wire (pts (xy 180.34 88.9) (xy 180.34 92.71))
 		(stroke (width 0) (type default)) (uuid "0e6d5c4a-1ee7-596e-8374-be7966e69677"))
-	(label "LED9_A"
+	(global_label "LED9_A"
+		(shape bidirectional)
 		(at 180.34 92.71 270)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "cdee1554-7738-5644-a22b-0f5e6d35b0c1"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "cdee1554-7738-5644-a22b-0f5e6d35b0c1")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 180.34 92.71 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 180.34 81.28) (xy 180.34 77.47))
 		(stroke (width 0) (type default)) (uuid "bd0b7da6-b3d2-5eff-ab4e-1ed21998a2da"))
 	(global_label "LED9"
@@ -1682,10 +1777,15 @@
 	)
 	(wire (pts (xy 213.36 72.39) (xy 217.17 72.39))
 		(stroke (width 0) (type default)) (uuid "d0d1b1ec-81f8-5a1c-bb23-98d5f2ef05c7"))
-	(label "LED9_A"
+	(global_label "LED9_A"
+		(shape bidirectional)
 		(at 217.17 72.39 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "3d44c128-ae50-5f1e-88b8-3001124e6073"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "3d44c128-ae50-5f1e-88b8-3001124e6073")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 217.17 72.39 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R")
 		(at 238.76 86.36 0)
@@ -1721,10 +1821,15 @@
 	)
 	(wire (pts (xy 238.76 90.17) (xy 238.76 93.98))
 		(stroke (width 0) (type default)) (uuid "55380b0e-6610-578d-9818-638f5042cf6b"))
-	(label "LED10_A"
+	(global_label "LED10_A"
+		(shape bidirectional)
 		(at 238.76 93.98 270)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "9e0de5ce-2e62-5b8f-b20a-12b3d99a2fd3"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "9e0de5ce-2e62-5b8f-b20a-12b3d99a2fd3")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 238.76 93.98 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 238.76 82.55) (xy 238.76 78.74))
 		(stroke (width 0) (type default)) (uuid "5df309d9-4b67-5fbb-9774-88b5d178cb06"))
 	(global_label "LED10"
@@ -1802,10 +1907,15 @@
 	)
 	(wire (pts (xy 270.51 72.39) (xy 274.32 72.39))
 		(stroke (width 0) (type default)) (uuid "76db0a7b-b657-5478-bffe-e374a0777101"))
-	(label "LED10_A"
+	(global_label "LED10_A"
+		(shape bidirectional)
 		(at 274.32 72.39 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "1221c7bf-5a43-5be6-8153-4ed16febf82f"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "1221c7bf-5a43-5be6-8153-4ed16febf82f")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 274.32 72.39 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R")
 		(at 297.18 86.36 0)
@@ -1841,10 +1951,15 @@
 	)
 	(wire (pts (xy 297.18 90.17) (xy 297.18 93.98))
 		(stroke (width 0) (type default)) (uuid "f69990bc-6ee9-5a7e-805a-e1f64e185f71"))
-	(label "LED11_A"
+	(global_label "LED11_A"
+		(shape bidirectional)
 		(at 297.18 93.98 270)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "9d7c9267-fa85-5a2c-b932-d96c1e0075a9"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "9d7c9267-fa85-5a2c-b932-d96c1e0075a9")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 297.18 93.98 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 297.18 82.55) (xy 297.18 78.74))
 		(stroke (width 0) (type default)) (uuid "8c840859-28b8-5995-a5d4-1eb4343f2964"))
 	(global_label "LED11"
@@ -1922,10 +2037,15 @@
 	)
 	(wire (pts (xy 330.2 72.39) (xy 334.01 72.39))
 		(stroke (width 0) (type default)) (uuid "11a04402-706b-5318-8da8-833c300c8be2"))
-	(label "LED11_A"
+	(global_label "LED11_A"
+		(shape bidirectional)
 		(at 334.01 72.39 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "060dbfc7-dcb4-5682-bb7e-58b36b3d803d"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "060dbfc7-dcb4-5682-bb7e-58b36b3d803d")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 334.01 72.39 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R")
 		(at 356.87 86.36 0)
@@ -1961,10 +2081,15 @@
 	)
 	(wire (pts (xy 356.87 90.17) (xy 356.87 93.98))
 		(stroke (width 0) (type default)) (uuid "1b88fab7-9962-5b1e-a93f-848aa10d46ee"))
-	(label "LED12_A"
+	(global_label "LED12_A"
+		(shape bidirectional)
 		(at 356.87 93.98 270)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "344e7441-fc4b-5d2c-b862-f0c0eeed4978"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "344e7441-fc4b-5d2c-b862-f0c0eeed4978")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 356.87 93.98 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 356.87 82.55) (xy 356.87 78.74))
 		(stroke (width 0) (type default)) (uuid "8ca00a0e-9337-5aa8-826d-f8a69026a8c4"))
 	(global_label "LED12"
@@ -2042,10 +2167,15 @@
 	)
 	(wire (pts (xy 39.37 119.38) (xy 43.18 119.38))
 		(stroke (width 0) (type default)) (uuid "33e0d4ab-4e95-5f2a-a91a-fee32915f73a"))
-	(label "LED12_A"
+	(global_label "LED12_A"
+		(shape bidirectional)
 		(at 43.18 119.38 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "33719ae0-ddbd-5f22-a6c8-fe859ade0752"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "33719ae0-ddbd-5f22-a6c8-fe859ade0752")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 43.18 119.38 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R")
 		(at 66.04 134.62 0)
@@ -2081,10 +2211,15 @@
 	)
 	(wire (pts (xy 66.04 138.43) (xy 66.04 142.24))
 		(stroke (width 0) (type default)) (uuid "1425f8fb-ffa9-5c3c-b209-8fc56e8a6958"))
-	(label "LED13_A"
+	(global_label "LED13_A"
+		(shape bidirectional)
 		(at 66.04 142.24 270)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "e2c798c0-d9f5-51e5-8e40-afa963cefa9b"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "e2c798c0-d9f5-51e5-8e40-afa963cefa9b")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 66.04 142.24 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 66.04 130.81) (xy 66.04 127))
 		(stroke (width 0) (type default)) (uuid "475b0ed3-c3d0-57da-9ea8-9c811926304f"))
 	(global_label "LED13"
@@ -2162,10 +2297,15 @@
 	)
 	(wire (pts (xy 97.79 119.38) (xy 101.6 119.38))
 		(stroke (width 0) (type default)) (uuid "6eb53485-54cc-5708-a71e-0a57ad09c1ec"))
-	(label "LED13_A"
+	(global_label "LED13_A"
+		(shape bidirectional)
 		(at 101.6 119.38 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "c281040b-fc6f-55c2-878d-4a25c5854c1d"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "c281040b-fc6f-55c2-878d-4a25c5854c1d")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 101.6 119.38 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R")
 		(at 124.46 134.62 0)
@@ -2201,10 +2341,15 @@
 	)
 	(wire (pts (xy 124.46 138.43) (xy 124.46 142.24))
 		(stroke (width 0) (type default)) (uuid "c5ea245c-c050-5019-bb8b-82ea046164cb"))
-	(label "LED14_A"
+	(global_label "LED14_A"
+		(shape bidirectional)
 		(at 124.46 142.24 270)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "57ffb73c-d15d-5de1-9c77-dc81ec49bf67"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "57ffb73c-d15d-5de1-9c77-dc81ec49bf67")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 124.46 142.24 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 124.46 130.81) (xy 124.46 127))
 		(stroke (width 0) (type default)) (uuid "382f1621-2317-5f1e-ab60-ddd145cf2446"))
 	(global_label "LED14"
@@ -2282,10 +2427,15 @@
 	)
 	(wire (pts (xy 157.48 119.38) (xy 161.29 119.38))
 		(stroke (width 0) (type default)) (uuid "d0109414-8282-5edd-9526-4e3b9e7995f2"))
-	(label "LED14_A"
+	(global_label "LED14_A"
+		(shape bidirectional)
 		(at 161.29 119.38 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "3418aab1-2561-5bdc-b07a-55ddc0bf8eb7"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "3418aab1-2561-5bdc-b07a-55ddc0bf8eb7")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 161.29 119.38 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R")
 		(at 184.15 134.62 0)
@@ -2321,10 +2471,15 @@
 	)
 	(wire (pts (xy 184.15 138.43) (xy 184.15 142.24))
 		(stroke (width 0) (type default)) (uuid "9b376c6d-91bb-51b0-affa-d4f89ded3f2d"))
-	(label "LED15_A"
+	(global_label "LED15_A"
+		(shape bidirectional)
 		(at 184.15 142.24 270)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "81bd0c40-152c-57f9-81a9-d605adae417a"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "81bd0c40-152c-57f9-81a9-d605adae417a")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 184.15 142.24 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 184.15 130.81) (xy 184.15 127))
 		(stroke (width 0) (type default)) (uuid "291fd5bd-6fe8-574e-9bf2-89c30eac6172"))
 	(global_label "LED15"
@@ -2402,10 +2557,15 @@
 	)
 	(wire (pts (xy 215.9 119.38) (xy 219.71 119.38))
 		(stroke (width 0) (type default)) (uuid "467fd380-d276-5a0c-93fd-3c50455edc2b"))
-	(label "LED15_A"
+	(global_label "LED15_A"
+		(shape bidirectional)
 		(at 219.71 119.38 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "fa44866d-97db-579b-90cb-3d1191304d03"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "fa44866d-97db-579b-90cb-3d1191304d03")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 219.71 119.38 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R")
 		(at 242.57 134.62 0)
@@ -2441,10 +2601,15 @@
 	)
 	(wire (pts (xy 242.57 138.43) (xy 242.57 142.24))
 		(stroke (width 0) (type default)) (uuid "02ca36e3-1704-55a8-96f0-fd99ede3b042"))
-	(label "LED16_A"
+	(global_label "LED16_A"
+		(shape bidirectional)
 		(at 242.57 142.24 270)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "20b2416a-d6b3-5336-9698-86f33088f325"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "20b2416a-d6b3-5336-9698-86f33088f325")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 242.57 142.24 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 242.57 130.81) (xy 242.57 127))
 		(stroke (width 0) (type default)) (uuid "3ad486d1-a069-587a-a1d4-651a2fe95e0a"))
 	(global_label "LED16"
@@ -2522,10 +2687,15 @@
 	)
 	(wire (pts (xy 274.32 119.38) (xy 278.13 119.38))
 		(stroke (width 0) (type default)) (uuid "10ad8d10-ce03-5af6-a7d5-79c98560069b"))
-	(label "LED16_A"
+	(global_label "LED16_A"
+		(shape bidirectional)
 		(at 278.13 119.38 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "f7ffc7c2-8ef4-59a9-826c-1b05fd1733b2"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "f7ffc7c2-8ef4-59a9-826c-1b05fd1733b2")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 278.13 119.38 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R")
 		(at 300.99 134.62 0)
@@ -2561,10 +2731,15 @@
 	)
 	(wire (pts (xy 300.99 138.43) (xy 300.99 142.24))
 		(stroke (width 0) (type default)) (uuid "c8c9c4d3-20a4-54d1-b17a-322f872c83ba"))
-	(label "LED17_A"
+	(global_label "LED17_A"
+		(shape bidirectional)
 		(at 300.99 142.24 270)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "98d308ce-b2aa-5317-8c4d-57a4752c8d36"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "98d308ce-b2aa-5317-8c4d-57a4752c8d36")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 300.99 142.24 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 300.99 130.81) (xy 300.99 127))
 		(stroke (width 0) (type default)) (uuid "b88dd569-28fe-5e46-bd5b-f3c15a713e90"))
 	(global_label "LED17"
@@ -2642,10 +2817,15 @@
 	)
 	(wire (pts (xy 334.01 119.38) (xy 337.82 119.38))
 		(stroke (width 0) (type default)) (uuid "7a0fb388-aec6-501d-80ed-c8c884c36bff"))
-	(label "LED17_A"
+	(global_label "LED17_A"
+		(shape bidirectional)
 		(at 337.82 119.38 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "229662e9-c6a1-582f-bd1a-4dad8ea3753e"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "229662e9-c6a1-582f-bd1a-4dad8ea3753e")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 337.82 119.38 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol
 		(lib_id "Device:R")
 		(at 360.68 134.62 0)
@@ -2681,10 +2861,15 @@
 	)
 	(wire (pts (xy 360.68 138.43) (xy 360.68 142.24))
 		(stroke (width 0) (type default)) (uuid "015ab7c1-4f5a-5ca4-b2d3-42a7ff25de45"))
-	(label "LED18_A"
+	(global_label "LED18_A"
+		(shape bidirectional)
 		(at 360.68 142.24 270)
-		(effects (font (size 1.27 1.27)) (justify right bottom))
-		(uuid "cf237650-0b4d-53d5-9ef4-a93a76f7bc17"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "cf237650-0b4d-53d5-9ef4-a93a76f7bc17")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 360.68 142.24 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(wire (pts (xy 360.68 130.81) (xy 360.68 127))
 		(stroke (width 0) (type default)) (uuid "4f6a20dc-f5ae-5f62-bace-025c51a01425"))
 	(global_label "LED18"
@@ -2762,9 +2947,14 @@
 	)
 	(wire (pts (xy 39.37 167.64) (xy 43.18 167.64))
 		(stroke (width 0) (type default)) (uuid "345d3704-40e4-50ae-a0eb-f0442e94307c"))
-	(label "LED18_A"
+	(global_label "LED18_A"
+		(shape bidirectional)
 		(at 43.18 167.64 0)
-		(effects (font (size 1.27 1.27)) (justify left bottom))
-		(uuid "58a17a88-7411-5ecc-a48a-b4e87e28ec41"))
+		(fields_autoplaced yes)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "58a17a88-7411-5ecc-a48a-b4e87e28ec41")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 43.18 167.64 0)
+			(effects (font (size 1.27 1.27)) (hide yes))))
 	(embedded_fonts no)
 )

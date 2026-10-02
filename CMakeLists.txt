@@ -389,6 +389,10 @@ add_test(NAME hw_gen_coupon_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/hardware/gen/test_coupon_netlist.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME hw_gen_assembly_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/hardware/gen/test_assembly.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 add_test(NAME hw_gen_writer_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/hardware/gen/test_sch_writer.py
@@ -466,6 +470,14 @@ add_test(NAME reva_route_guard
                  ${CMAKE_CURRENT_SOURCE_DIR}/hardware/reva/test_route.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 set_tests_properties(reva_route_guard PROPERTIES TIMEOUT 3600)
+
+# The Rev A order package (P4-3): Gerbers, drill, CPL, BOM, assembly sheets,
+# every check proven red, two exports byte-identical.
+add_test(NAME reva_fab_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/hardware/reva/test_fab.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+set_tests_properties(reva_fab_guard PROPERTIES TIMEOUT 3600)
 
 # The Python guards need a runner or they rot unnoticed -- tools/test_*.py in
 # this repo is wired to nothing, and the VCV panel guard stood red for 23
