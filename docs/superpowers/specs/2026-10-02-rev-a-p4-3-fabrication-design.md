@@ -126,8 +126,9 @@ every number through the real code.
   items, all `net_conflict`, all naming:
   - 177: the schematic names a net from a local label `/<sheet>/NAME`
     (sheets `chains`, `mux_sense_0`–`3`, `power`), the board `NAME`.
-  - 22: an unconnected pin, which the schematic names `unconnected-(…)` and the
-    board leaves without a net.
+  - the rest (22 in this first probe; **40 as measured in Task 3, see the
+    correction below**): an unconnected pin, which the schematic names
+    `unconnected-(…)` and the board leaves without a net.
 - The schematic has 120 local label names, **none on more than one sheet**,
   and 180 global labels. Turning every local label global merges no nets.
 - **Parity matches footprints to symbols by reference, not by path.** The same
@@ -153,6 +154,33 @@ every number through the real code.
   violations (`pin_not_driven` 2, `pin_to_pin` 1) and no annotation class.
 - 217 schematic symbols carry references, 213 footprints. J_SM1–J_SM4 (the
   module's sockets) have no footprint, and parity did not report them.
+- **Correction, 2026-10-02 (Task 3).** Task 3 measured 40 single-pad
+  `unconnected-(…)` nets, not 22: the jacks' TN pins have no pin name, and
+  KiCad names their net `unconnected-(J1-PadTN)`. The earlier "199 each"
+  counts were very likely capped by KiCad's per-type report limit (an
+  inference, not probed).
+- Probed during execution, 2026-10-02 (Task 6), `kicad-cli` 10.0.5 on the
+  committed board after Task 4, with the plan's flags (`--layers` the 11 names,
+  `export drill --excellon-separate-th`, `export pos --format csv --units mm
+  --side both --smd-only --exclude-dnp`):
+  - Gerber files, 11 plus the job file `reva-job.gbrjob` (dropped from the
+    package): `reva-F_Cu.gtl`, `reva-In1_Cu.g1`, `reva-In2_Cu.g2`,
+    `reva-B_Cu.gbl`, `reva-F_Mask.gts`, `reva-B_Mask.gbs`,
+    `reva-F_Silkscreen.gto`, `reva-B_Silkscreen.gbo`, `reva-F_Paste.gtp`,
+    `reva-B_Paste.gbp`, `reva-Edge_Cuts.gm1`.
+  - Drill files: `reva-PTH.drl` with 1207 coordinate lines (slots are one line
+    with `G85`) and `reva-NPTH.drl`, written with 0 holes: the board has no
+    NPTH pad. Both counts equal pcbnew's (vias plus pads with a drill).
+  - CPL: 78 data rows plus the header `Ref,Val,Package,PosX,PosY,Rot,Side`
+    (English, fields quoted), all `bottom`. The six package names:
+    `C_0603_1608Metric` (19), `C_0805_2012Metric` (4), `D_SMA` (2),
+    `R_0603_1608Metric` (36), `SOIC-16_3.9x9.9mm_P1.27mm` (16),
+    `SOT-223-3_TabPin2` (1). The 78 designators are those of `bom-jlc.csv`.
+  - Edge.Cuts in the Gerber spans X 2 to 302.8 mm and Y -9.25 to -119.25 mm
+    (300.8 x 110.0): Gerber y is the board's y negated, as the CPL's is, so one
+    extent serves both checks.
+  - Date forms: the five patterns in `normalise()` cover every one; after
+    normalising, `grep 20[0-9][0-9]-` finds only the fixed date.
 
 **Line endings.** On the development machine (`core.autocrlf=true`)
 `hardware/reva/build.py` writes `bom-hand.csv`, `bom-jlc.csv`, `review.md`,
@@ -162,7 +190,8 @@ every number through the real code.
 and `git status` stays empty after `build.py`.
 
 **Router.** `route.py:271` skips any net with fewer than two terminals, so the
-22 single-pad `unconnected-(…)` nets add no routing work.
+single-pad `unconnected-(…)` nets (40, not 22: see the Task 3 correction in the
+parity bullets above) add no routing work.
 
 ## 4. Design
 
