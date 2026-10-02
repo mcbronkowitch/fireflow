@@ -15,8 +15,8 @@ washers, or rest it in the rails unscrewed.
 |---|---|---|
 | | Alpha support lugs in the coupon's RD901F slots | |
 | | Pot bushing thread and length vs 3 mm acrylic / 2 mm aluminium | |
-| | Jack and key thread vs 3 mm | |
-| | Jack nut and key nut outer diameter (do they cover the satellite LED holes at 6.7 mm?) | |
+| | Jack thread vs 3 mm (the keys have no thread or nut; they sit on the board and are not tested on the acrylic) | |
+| | Jack nut outer diameter (does it cover the `SYNC_L` / `CEIL_L` LED holes at 6.7 mm?) | |
 | | Panel-to-board height, pot and jack seated on a board | |
 | | Alpha anti-rotation tab: present? where? | |
 | | Actual plate width of a bought 60 HP blank, if one is at hand (the cut assumes 304.4 mm) | |
@@ -30,7 +30,7 @@ washers, or rest it in the rails unscrewed.
 | 2 | Turn each knob without brushing a neighbour's cap | | |
 | 3 | All 18 jacks patched with real cables: what gets covered | | |
 | 4 | Every legend readable from playing distance, through the print | | |
-| 5 | All four keys: reach, accidental presses | | |
+| 5 | All four keys: reach, accidental presses | moved to the first Rev A board — the keys sit on the board, not in the acrylic | |
 
 Every fix goes into `host/vcv/res/gen_hw_panel.py`, never into a generated
 file. The freeze tag `panel-freeze-2026-11-06` goes on the generator commit

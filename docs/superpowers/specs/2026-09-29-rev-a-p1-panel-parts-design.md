@@ -23,7 +23,8 @@ and `STAGES_A/B` share a knob each), **4 keys** (`REC_A`, `REC_B`, `MODBTN`,
 | Big caps | Davies 1900H clone, T18 (12 mm Ø × 16 mm) | 14 (+2) | Thonk |
 | Small caps | Thonk Micro Knobs, T18 (7.7 mm Ø × 13.85 mm) | 56 (+6) | Thonk |
 | Jacks | Thonkiconn PJ398SM mono | 18 (+2) | Thonk |
-| Keys | Thonk low-profile push buttons, round cap | 4 (+2) | Thonk |
+| Jack nuts | Knurled nuts, bag of 50 — the jacks ship without nuts (the pots bring their own nut and washer) | 1 bag | Thonk |
+| Keys | Thonk low-profile push buttons, round cap (caps sold separately, packs of 5) | 4 (+2) | Thonk |
 | LEDs | 3 mm flat-top THT | 19 (+6) | Thonk |
 
 Rationale and rejected options, briefly:
@@ -142,8 +143,9 @@ trusted.
 satellite LEDs (`MODBTN_L`, `SHIFTBTN_L`, `SYNC_L`, `CEIL_L`) sat at their
 anchor's class radius + 1.5 mm, leaving 0.85–0.95 mm of material to the real
 key and jack holes. They now sit at `SAT_D` = 6.7 mm (key hole 3.1 + web
-2.0 + LED hole 1.55, rounded up). Whether the jack and key nuts cover them is
-a §6 measurement.
+2.0 + LED hole 1.55, rounded up). Whether the jack nuts cover `SYNC_L` and
+`CEIL_L` is a §6 measurement; the keys have no nut, so `MODBTN_L` and
+`SHIFTBTN_L` stay uncovered.
 
 ## 5. Grip test and freeze
 
@@ -154,7 +156,9 @@ a §6 measurement.
 3. Patch all 18 jacks with real cables; note every knob, key, LED and legend
    a cable or plug covers.
 4. Read every legend from playing distance, through the print.
-5. Press all four keys; note reach and accidental presses.
+5. Press all four keys; note reach and accidental presses. **Moved to the
+   first Rev A board (2026-10-02):** the keys sit on the board, not in the
+   acrylic (§6), so the plate cannot hold them.
 6. Note anything that fails as *position*, *size* or *legend*; each gets a
    fix in the generator, not in a file.
 
@@ -170,7 +174,10 @@ carries the RD901F footprint):
 - the genuine Alpha's support lugs in the coupon's slots — confirms the P4
   footprint;
 - pot bushing thread and length against 3 mm acrylic and 2 mm aluminium;
-- jack and key thread against 3 mm;
+- jack thread against 3 mm. The keys have no thread and no nut (Thonk
+  datasheet, checked 2026-10-02): an 8.5 × 8.5 mm body sits on the board and
+  only the 6 mm cap passes the 6.2 mm hole, so the acrylic plate does not
+  hold them and they are not tested on it;
 - **the panel-to-board height** set by a pot and a jack seated on a board —
   the number the depth budget (15 mm module + 1.6 mm board + this gap, about
   10 mm expected) is still missing;
@@ -185,7 +192,7 @@ Rev A footprints and placement (P4), the aluminium plate's finish and maker
 
 ## Sources
 
-Thonk: [Alpha 9 mm](https://www.thonk.co.uk/shop/alpha-9mm-pots/),
+Thonk: [Alpha 9 mm T18](https://www.thonk.co.uk/shop/alpha-9mm-pots-vertical-t18/),
 [1900H T18](https://www.thonk.co.uk/shop/1900h-t18/),
 [Micro Knobs](https://www.thonk.co.uk/shop/micro-knobs/),
 [Thonkiconn](https://www.thonk.co.uk/shop/thonkiconn/),
