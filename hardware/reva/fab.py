@@ -204,6 +204,11 @@ def main(argv=None):
     print("order_ready: %s" % ("yes" if not blockers else "no, %d open items" % len(blockers)))
     for b in blockers:
         print("        " + b)
+    # spec §4.4.6: informational only, the assembly sheet covers them; not a
+    # blocker and not in the open-item count (release_blockers() stays clean)
+    import silk as SK
+    for ref, why in sorted(SK.NO_ROOM.items()):
+        print("        NO_ROOM %s (informational: the assembly sheet covers it) -- %s" % (ref, why))
     if a.write and green and not a.sabotage:
         os.makedirs(DOCS, exist_ok=True)
         for n in sorted(os.listdir(a.out)):
