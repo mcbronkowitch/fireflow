@@ -21,6 +21,7 @@ DRILL_EMPTY = "drill measured nothing: no drill file read"
 CPL_EMPTY = "cpl measured nothing: no CPL row read"
 ROT_EMPTY = "rot_table measured nothing: no package examined"
 BOM_EMPTY = "bom_lcsc measured nothing: no BOM line read"
+ASSEMBLY_EMPTY = "assembly measured nothing: no part on a sheet"
 
 _COORD_RE = re.compile(r"X(-?\d+)Y(-?\d+)D0[123]\*")
 _HOLE_RE = re.compile(r"^X-?[\d.]+Y-?[\d.]+", re.M)
@@ -179,8 +180,32 @@ def check_bom_lcsc(s, _a=None, _b=None):
     return not bad, "%d BOM placements against the board's LCSC fields" % n, bad
 
 
+def check_assembly(s, _a=None, _b=None):
+    """Both sheets drawn, each with as many parts as the board has on that
+    side (pcbnew's count against gen.assembly's reading), and View.check()
+    clean on each: every part labelled, no label on another or on a part."""
+    sheets = {} if getattr(s, "assembly_missing", False) else getattr(s, "sheets", {})
+    if not sheets or not any(n for n, _p in sheets.values()):
+        return False, ASSEMBLY_EMPTY, []
+    want = {"front": sum(1 for fp in s.board.GetFootprints() if not fp.IsFlipped()),
+            "back": sum(1 for fp in s.board.GetFootprints() if fp.IsFlipped())}
+    bad = []
+    for name in sorted(want):
+        path = os.path.join(s.out, "reva-assembly-%s.svg" % name)
+        if name not in sheets or not os.path.exists(path) or os.path.getsize(path) == 0:
+            bad.append("%s sheet missing" % name)
+            continue
+        n, problems = sheets[name]
+        if n != want[name]:
+            bad.append("%s sheet: %d parts, the board has %d" % (name, n, want[name]))
+        bad += ["%s sheet: %s" % (name, p) for p in problems]
+    return not bad, "front %s, back %s parts" % (sheets.get("front", ("?",))[0],
+                                                  sheets.get("back", ("?",))[0]), bad
+
+
 STEPS = [("gerber_set", check_gerber_set), ("drill", check_drill), ("cpl", check_cpl),
-         ("rot_table", check_rot_table), ("bom_lcsc", check_bom_lcsc)]
+         ("rot_table", check_rot_table), ("bom_lcsc", check_bom_lcsc),
+         ("assembly", check_assembly)]
 
 
 def run(s):
@@ -278,20 +303,34 @@ def _sab_bom_lcsc_missing(s):
     s.bom_missing = True
 
 
+def _sab_assembly(s):
+    """Two labels on the back sheet forced onto one spot (fab.write_sheets
+    reads the flag while it draws)."""
+    s.assembly_overlap = True
+
+
+def _sab_assembly_missing(s):
+    s.assembly_missing = True
+
+
 SABOTAGES = {"gerber_set": _sab_gerber_set, "gerber_set_missing": _sab_gerber_set_missing,
              "drill": _sab_drill, "drill_missing": _sab_drill_missing,
              "cpl": _sab_cpl, "cpl_shift": _sab_cpl_shift, "cpl_outside": _sab_cpl_outside,
              "cpl_dnp": _sab_cpl_dnp, "cpl_missing": _sab_cpl_missing,
              "rot_table": _sab_rot_table, "rot_sign": _sab_rot_sign,
              "rot_table_missing": _sab_rot_table_missing,
-             "bom_lcsc": _sab_bom_lcsc, "bom_lcsc_missing": _sab_bom_lcsc_missing}
-BOARD_SABOTAGES = {"cpl_dnp", "rot_table", "rot_sign", "bom_lcsc"}
+             "bom_lcsc": _sab_bom_lcsc, "bom_lcsc_missing": _sab_bom_lcsc_missing,
+             "assembly": _sab_assembly, "assembly_missing": _sab_assembly_missing}
+# the assembly flags must be set before export() draws the sheets
+BOARD_SABOTAGES = {"cpl_dnp", "rot_table", "rot_sign", "bom_lcsc",
+                   "assembly", "assembly_missing"}
 TURNS_RED = {"gerber_set": "gerber_set", "gerber_set_missing": "gerber_set",
              "drill": "drill", "drill_missing": "drill",
              "cpl": "cpl", "cpl_shift": "cpl", "cpl_outside": "cpl", "cpl_dnp": "cpl",
              "cpl_missing": "cpl",
              "rot_table": "rot_table", "rot_sign": "rot_table", "rot_table_missing": "rot_table",
-             "bom_lcsc": "bom_lcsc", "bom_lcsc_missing": "bom_lcsc"}
+             "bom_lcsc": "bom_lcsc", "bom_lcsc_missing": "bom_lcsc",
+             "assembly": "assembly", "assembly_missing": "assembly"}
 WHY = {"gerber_set": "missing layer F.Paste", "gerber_set_missing": GERBER_EMPTY,
        "drill": "PTH holes: file", "drill_missing": DRILL_EMPTY,
        "cpl": "C1: in the board and the BOM, not in the CPL",
@@ -301,7 +340,9 @@ WHY = {"gerber_set": "missing layer F.Paste", "gerber_set_missing": GERBER_EMPTY
        "cpl_missing": CPL_EMPTY,
        "rot_table": "no ROT_FIX entry for SOIC", "rot_sign": "BOTTOM_SIGN is 0",
        "rot_table_missing": ROT_EMPTY,
-       "bom_lcsc": "C2: BOM says", "bom_lcsc_missing": BOM_EMPTY}
+       "bom_lcsc": "C2: BOM says", "bom_lcsc_missing": BOM_EMPTY,
+       # gen.assembly.View.check()'s own words for an overlap, on the back sheet
+       "assembly": "back sheet: two labels overlap", "assembly_missing": ASSEMBLY_EMPTY}
 
 
 def sabotage(s, name):
