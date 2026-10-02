@@ -38,7 +38,10 @@ hardware/lib/**  -text
 # 2026-10-02 (P4-3 spec §4.5): build.py writes these five files with LF. With
 # core.autocrlf=true a checkout writes CRLF, the index keeps the CRLF size, and
 # every build.py run then leaves them "modified" with an empty diff. eol=lf
-# makes the checkout write LF too. Proven: fresh checkout + build.py, status empty.
+# makes the checkout write LF too, so build.py should leave status empty.
+# Observed: after this change, build.py left `git status` clean in the P4-3
+# worktree. Not reproduced: the "modified" state itself did not appear in that
+# worktree before the change, so the trap and the fix were not seen side by side.
 hardware/reva/bom-*.csv          text eol=lf
 hardware/reva/review.md          text eol=lf
 hardware/reva/kicad/*-lib-table  text eol=lf

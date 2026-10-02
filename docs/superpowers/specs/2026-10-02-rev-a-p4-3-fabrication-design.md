@@ -186,8 +186,11 @@ every number through the real code.
 `hardware/reva/build.py` writes `bom-hand.csv`, `bom-jlc.csv`, `review.md`,
 `kicad/fp-lib-table` and `kicad/sym-lib-table` with LF over a CRLF checkout;
 `git status` then lists all five as modified with an empty diff. With
-`text eol=lf` for those paths in `.gitattributes`, a fresh checkout writes LF
-and `git status` stays empty after `build.py`.
+`text eol=lf` for those paths in `.gitattributes`, a fresh checkout should
+write LF and `git status` should stay empty after `build.py` (the expected
+effect). Observed: after the change, `build.py` left `git status` clean in the
+P4-3 worktree; the "modified" state did not reproduce there before the change,
+so the trap and its fix were not seen side by side.
 
 **Router.** `route.py:271` skips any net with fewer than two terminals, so the
 single-pad `unconnected-(…)` nets (40, not 22: see the Task 3 correction in the
@@ -387,9 +390,9 @@ schematic could report zero.
 
 | Step | Green means | Sabotage |
 |---|---|---|
-| `gerber_set` | exactly the eleven layer files and two drill files, none empty; Edge.Cuts extent == the board outline (300.8 × 110 mm) | one layer dropped from the export list |
+| `gerber_set` | exactly the eleven layer files and two drill files, none empty; Edge.Cuts extent == the board outline (300.8 × 110 mm) at its absolute position (`place`'s X0, −Y1, X1, −Y0, Gerber y up); `reva-gerbers.zip` holds exactly the directory's files, sorted, byte for byte | one layer dropped from the export list; the zip rewritten without `reva-PTH.drl` |
 | `drill` | hole count in the PTH and NPTH files == PTH pads + vias and NPTH holes counted by pcbnew | one hole line deleted |
-| `cpl` | designators: CPL == BOM == board SMD footprints without DNP; every position within 0.01 mm of pcbnew's footprint position (Y sign per §3); every layer `Bottom`; every point inside the Gerber's Edge.Cuts extent | one row dropped; one row shifted 0.1 mm; one row's Y sign flipped; a DNP flag cleared |
+| `cpl` | designators: CPL == BOM == board SMD footprints without DNP; every position within 0.01 mm of pcbnew's footprint position (Y sign per §3); every layer `Bottom`; every point inside the Gerber's Edge.Cuts extent; every rotation == `(sign × Rot + ROT_FIX[Package]) mod 360` recomputed from kicad-cli's raw position file with the run's tables (sign = `BOTTOM_SIGN` on the bottom side), within 0.001° | one row dropped; one row shifted 0.1 mm; one row's Y sign flipped; one row's rotation +90°; a DNP flag cleared |
 | `rot_table` | every footprint name in the CPL has a `ROT_FIX` entry; `BOTTOM_SIGN` is ±1 | one entry removed; `BOTTOM_SIGN` set to 0 |
 | `bom_lcsc` | every BOM line's LCSC == the `LCSC` field of each of its footprints | one footprint field changed |
 | `assembly` | every part labelled on its sheet, no label overlaps another | one label forced onto another |
