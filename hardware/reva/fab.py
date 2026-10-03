@@ -55,17 +55,27 @@ RAW_POS = os.path.join("board", "pos.csv")
 # Bastian has looked at JLC's placement preview (a quote upload, no order) and
 # then carries that date. No machine can prove a rotation. The six package
 # names are the ones kicad-cli's position file printed on 2026-10-02.
+#
+# Verified 2026-10-03 in JLC's placement preview (quote upload, Economic PCBA,
+# bottom side, no order), each package against its copper pads and KiCad's
+# pin-1 silk in JLC's mirrored bottom view; Bastian saw U_IN1 himself. With
+# the old table (sign 1, every deg 0) all 16 SOIC-16 sat 90 degrees across
+# their pads and both SS14 were reversed. Seen with these values: U_IN1
+# (KiCad 90), U_SR1 (KiCad 0), D_N12/D_P12, U_REG, and 0603/0805 parts at 0
+# and 90. U_MUX7 (KiCad 270) follows from the rule and was not looked at.
 ROT_FIX = {
-    "C_0603_1608Metric": {"deg": 0, "verified": None},
-    "C_0805_2012Metric": {"deg": 0, "verified": None},
-    "D_SMA": {"deg": 0, "verified": None},
-    "R_0603_1608Metric": {"deg": 0, "verified": None},
-    "SOIC-16_3.9x9.9mm_P1.27mm": {"deg": 0, "verified": None},
-    "SOT-223-3_TabPin2": {"deg": 0, "verified": None},
+    "C_0603_1608Metric": {"deg": 0, "verified": "2026-10-03"},
+    "C_0805_2012Metric": {"deg": 0, "verified": "2026-10-03"},
+    "D_SMA": {"deg": 180, "verified": "2026-10-03"},
+    "R_0603_1608Metric": {"deg": 0, "verified": "2026-10-03"},
+    "SOIC-16_3.9x9.9mm_P1.27mm": {"deg": 90, "verified": "2026-10-03"},
+    "SOT-223-3_TabPin2": {"deg": 0, "verified": "2026-10-03"},
 }
 # Bottom-side parts: rotation = (sign * KiCad rotation + deg) % 360. A sign
-# error depends on each part's own rotation, so it is verified on its own.
-BOTTOM_SIGN = {"sign": 1, "verified": None}
+# error depends on each part's own rotation, so it is verified on its own:
+# with sign 1 and SOIC +270 U_IN1 (KiCad 90) sat right and U_SR1 (KiCad 0)
+# sat 180 degrees off; sign -1 and SOIC +90 puts both right (2026-10-03).
+BOTTOM_SIGN = {"sign": -1, "verified": "2026-10-03"}
 
 _DATE_RES = [
     (re.compile(r"(%TF\.CreationDate,)[^*]*(\*%)"), r"\g<1>" + FIXED_DATE + r"\g<2>"),

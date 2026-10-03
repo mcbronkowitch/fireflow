@@ -4148,14 +4148,18 @@ open item refuses and writes nothing, no open item writes the package without
 two newest sabotages were added; `reva_route_guard` measured 1236 s in ctest
 on this branch (1012–1039 s before).
 `fab.py --write` copies the renders and sheets to `docs/hardware/fab/`.
-**Still open:** `order_ready` says "no, 83 open items" — the known panel items
-of P4-1 and P4-2 (they wait for the panel pass) plus `ROT_FIX` for its six
-packages (C_0603_1608Metric, C_0805_2012Metric, D_SMA, R_0603_1608Metric,
-SOIC-16_3.9x9.9mm_P1.27mm, SOT-223-3_TabPin2: all 0°, none verified) and
-`BOTTOM_SIGN`. No machine can prove a rotation: they wait for a JLC quote
-upload (a placement preview, no order). The release (`--release`) waits for
-the panel pass and that upload; whether JLC assembles the bottom side of a
-300.8 × 110 mm board, and at what price, is unconfirmed. Spec
+**Still open:** `order_ready` says "no, 76 open items" — the known panel items
+of P4-1 and P4-2; they wait for the panel pass, and so does the release
+(`--release`). **Rotations verified 2026-10-03** in JLC's placement preview
+(a quote upload, no order): with the first table all 16 SOIC-16 would have sat
+90° across their pads and both SS14 reversed. Now `BOTTOM_SIGN` is −1,
+SOIC-16 +90°, D_SMA +180°, and the other four packages 0°, each checked
+against its copper and KiCad's pin-1 silk (`fab.py` names which parts were
+looked at). JLC assembles the bottom side of the 300.8 × 110 mm board as
+Economic PCBA with no large-size surcharge: 78.25 $ for five (board 45.40 $,
+assembly 32.85 $), shipping extra. Before ordering, JLC's BOM step flags the
+100 nF row (C… with C_SD1) and the SS14 row (D_N12 with D_P12) as "multiple
+types" and leaves them unticked; tick both by hand or they are not placed. Spec
 `docs/superpowers/specs/2026-10-02-rev-a-p4-3-fabrication-design.md`; renders
 and sheets `docs/hardware/fab/`.
 
