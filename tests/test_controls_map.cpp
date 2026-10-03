@@ -4,7 +4,11 @@
 // wrong thing". Spec: docs/superpowers/specs/
 // 2026-09-28-coupon-panel-scan-design.md sections 3 and 5.
 #include <doctest/doctest.h>
+#include <set>
+#include <utility>
 #include "../shell/controls.h"
+#include "../shell/generated_panel_map.h"
+#include "../shell/mux_plan.h"
 #include "../shell/pot_plan.h"
 #include "instrument.h"
 
@@ -81,4 +85,54 @@ TEST_CASE("controls: an entry records its sense pin, -1 when unrecorded") {
     // splits macro arguments on the commas inside braces.
     const shell::ControlEntry e{3, 4, spky::P_RATE_B, 1};
     CHECK(e.sense == 1);
+}
+
+TEST_CASE("controls: the Rev A table has one row per pot") {
+    CHECK(shell::kRevaTable.count == 70);
+}
+
+TEST_CASE("controls: every Rev A row is a channel the scan reads, on its own sense pin") {
+    const shell::ChainProfile& p = shell::kRevaChain;
+    for(int i = 0; i < shell::kRevaTable.count; ++i)
+    {
+        const shell::ControlEntry& e = shell::kRevaTable.entries[i];
+        CAPTURE(i);
+        REQUIRE(e.group >= 0);
+        REQUIRE(e.group < p.groups);
+        CHECK(e.sense == p.sense_of_group[e.group]);
+        const int s = shell::step_of(p, e.group, e.ch);
+        REQUIRE(s >= 0);
+        CHECK(shell::group_at(p, s, e.sense) == e.group);
+        CHECK(shell::channel_at(p, s, e.sense) == e.ch);
+    }
+}
+
+TEST_CASE("controls: no two Rev A rows share an input, and none is a calibration channel") {
+    // Review Focus 5.
+    std::set<std::pair<int, int>> seen;
+    for(int i = 0; i < shell::kRevaTable.count; ++i)
+        seen.insert({shell::kRevaTable.entries[i].group, shell::kRevaTable.entries[i].ch});
+    CHECK(static_cast<int>(seen.size()) == shell::kRevaTable.count);
+    CHECK(shell::find_control(shell::kRevaTable, shell::kRevaCalZero.group,
+                              shell::kRevaCalZero.ch) == nullptr);
+    CHECK(shell::find_control(shell::kRevaTable, shell::kRevaCalRail.group,
+                              shell::kRevaCalRail.ch) == nullptr);
+}
+
+TEST_CASE("controls: the Rev A table sends exactly the 35 safe parameters (spec 2.3)") {
+    using namespace spky;
+    const std::set<int> expected = {
+        P_RATE_A, P_RATE_B, P_SHAPE_A, P_SHAPE_B, P_SMOOTH_A, P_SMOOTH_B,
+        P_RANGE_A, P_RANGE_B, P_TUNE_A, P_TUNE_B, P_DECAY_A, P_DECAY_B,
+        P_FILT_A, P_FILT_B, P_COLOR_A, P_COLOR_B, P_LINK_A, P_LINK_B,
+        P_PAN_A, P_PAN_B, P_REVMIX_A, P_REVMIX_B, P_DEPTH_A, P_DEPTH_B,
+        P_MORPH, P_TIDE, P_CHOKE, P_PULL, P_SHUFFLE, P_REV_SIZE, P_REV_DECAY,
+        P_REV_TONE, P_REV_DIFF, P_PACE, P_SCALE};
+    REQUIRE(expected.size() == 35);
+    std::multiset<int> got;
+    for(int i = 0; i < shell::kRevaTable.count; ++i)
+        if(shell::kRevaTable.entries[i].param >= 0)
+            got.insert(shell::kRevaTable.entries[i].param);
+    CHECK(got.size() == 35);
+    CHECK(std::set<int>(got.begin(), got.end()) == expected);
 }

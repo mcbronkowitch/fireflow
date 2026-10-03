@@ -1,0 +1,334 @@
+#!/usr/bin/env python3
+"""Generates shell/generated_panel_map.h: the Rev A panel as the firmware sees it.
+
+Spec: docs/superpowers/specs/2026-10-02-rev-a-p6a-panel-scan-design.md,
+sections 2 and 4.
+
+Inputs, all read, none written:
+  hardware/reva/panel-map.json         P3's assignment (assign.py): pots, muxes,
+                                       calibration and spare channels
+  hardware/reva/blocks.py              P2's tables: SR_OUTPUTS, KEYS, MODULE_PINS
+  engine/param_table.h                 the ParamId names
+  host/vcv/src/generated_hw_panel.hpp  the FireflowHW controls
+
+SAFE and UNMAPPED below are the only hand-written part. A pot P3 adds or
+renames stops the generator until it is put in one of them.
+
+    python shell/gen_panel_map.py           write the header
+    python shell/gen_panel_map.py --check   exit 1 if the committed header is stale
+"""
+import json
+import os
+import re
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.normpath(os.path.join(HERE, ".."))
+REVA = os.path.join(ROOT, "hardware", "reva")
+PANEL_MAP = os.path.join(REVA, "panel-map.json")
+PARAM_TABLE = os.path.join(ROOT, "engine", "param_table.h")
+HW_PANEL = os.path.join(ROOT, "host", "vcv", "src", "generated_hw_panel.hpp")
+OUT = os.path.join(HERE, "generated_panel_map.h")
+
+CHANNELS_PER_MUX = 8   # P2 section 3: ten 74HC4051
+MAX_KEYS = 4           # shell/keys.h kMaxKeys
+SENSE_ADC_BASE = 8     # shell/mux_plan.h kSenseAdcBase (ADC_9)
+# libDaisy's patch_sm ADC index per module pin: the pin table in
+# shell/main.cpp's adc_use_measured_sampling_time(), and P2 section 2.
+ADC_OF_PIN = {"A2": 8, "A3": 9, "D9": 10, "D8": 11}
+CAL_IDS = ("CAL_GND", "CAL_3V3")
+
+# Spec section 2.2: VCV calls exactly the setter apply_param() calls, passes
+# the knob value unchanged, over the same range. Evidence is the line in
+# host/vcv/src/Fireflow.cpp as of 2026-10-02; deck B runs through the same
+# line inside pushParams()' per-deck loop.
+_PER_DECK_SAFE = {
+    "RATE":    ("P_RATE",    "set_rate(mvp), Fireflow.cpp:783"),
+    "SHAPE":   ("P_SHAPE",   "set_shape(mvp), Fireflow.cpp:784"),
+    "SMOOTH":  ("P_SMOOTH",  "set_smooth(mvp), Fireflow.cpp:786"),
+    "RANGE":   ("P_RANGE",   "set_range(mvp), Fireflow.cpp:787"),
+    "MOD":     ("P_DEPTH",   "set_depth(pp(MOD)), Fireflow.cpp:790; "
+                             "apply_param(P_DEPTH) calls set_depth"),
+    "TUNE":    ("P_TUNE",    "set_tune(mvp), Fireflow.cpp:791"),
+    "DECAY":   ("P_DECAY",   "set_voice_decay(mvp), Fireflow.cpp:794"),
+    "FILT":    ("P_FILT",    "set_voice_filt(raw), Fireflow.cpp:798"),
+    "COLOR":   ("P_COLOR",   "set_color(mv), Fireflow.cpp:799"),
+    "LINK":    ("P_LINK",    "set_link(mv), Fireflow.cpp:832"),
+    "PAN":     ("P_PAN",     "set_pan(mv), Fireflow.cpp:898"),
+    "REV_MIX": ("P_REVMIX",  "set_reverb_mix(part, raw), Fireflow.cpp:1241-1242"),
+}
+_GLOBAL_SAFE = {
+    "SHUFFLE":   ("P_SHUFFLE",   "set_shuffle(raw), Fireflow.cpp:781"),
+    "MORPH":     ("P_MORPH",     "set_morph(mv), Fireflow.cpp:1204"),
+    "TIDE":      ("P_TIDE",      "set_tide(mv), Fireflow.cpp:1230"),
+    "CHOKE":     ("P_CHOKE",     "set_choke(raw), Fireflow.cpp:1231"),
+    "PULL":      ("P_PULL",      "set_pull(raw), Fireflow.cpp:1232"),
+    "REV_SIZE":  ("P_REV_SIZE",  "set_reverb_size(mv), Fireflow.cpp:1237"),
+    "REV_DECAY": ("P_REV_DECAY", "set_reverb_decay(mv), Fireflow.cpp:1238"),
+    "REV_TONE":  ("P_REV_TONE",  "set_reverb_tone(mv), Fireflow.cpp:1239"),
+    "REV_DIFF":  ("P_REV_DIFF",  "set_reverb_diffusion(mv), Fireflow.cpp:1240"),
+    "SCALE":     ("P_SCALE",     "set_scale(round), Fireflow.cpp:1253; 13 steps both sides"),
+    "PACE":      ("P_PACE",      "set_pace(raw), Fireflow.cpp:1262"),
+}
+_PER_DECK_UNMAPPED = {
+    "DENSITY":  "also drives sampler_overlap, Fireflow.cpp:993",
+    "ATTACK":   "one pot with STAGES; the BBD re-points it, Fireflow.cpp:1022",
+    "SUB":      "LANE_SIZE on the sampler, Fireflow.cpp:1095",
+    "RES":      "VCV knob 0..1 (Fireflow.cpp:479), table 0..0.75",
+    "DEPTH":    "LANE_MOTION base, Fireflow.cpp:1130",
+    "COMP":     "level/compressor split with a curve, Fireflow.cpp:872-883",
+    "FLUX":     "also switches the FX block on, Fireflow.cpp:840",
+    "GRIT":     "bipolar with a dead zone and a mode, Fireflow.cpp:1143-1148",
+    "MELODY":   "SCAN on the sampler, Fireflow.cpp:1082-1083",
+    "DETUNE":   "squared; SPREAD on FEED, Fireflow.cpp:812-819, 1097",
+    "ENGINE":   "UI remap, Fireflow.cpp:906-914",
+    "STEPS":    "0 = STEP off, per-deck set_step, Fireflow.cpp:1149-1150",
+    "SONG":     "14-rung ladder, Fireflow.cpp:1163-1175",
+    "SOURCE":   "no ParamId; LANE_SOURCE base, Fireflow.cpp:994",
+    "FLUXRATE": "no ParamId; detented index, Fireflow.cpp:822-823",
+    "FLUXFB":   "no ParamId; FX target base, Fireflow.cpp:824-825",
+}
+_GLOBAL_UNMAPPED = {
+    "COUPLE": "sync zone split, Fireflow.cpp:1211-1216",
+    "DRIFT":  "settle zone, Fireflow.cpp:1223-1229",
+    "TEMPO":  "VCV maps 40 + 200 v (Fireflow.cpp:1256), table 50..140",
+}
+
+SAFE = dict(_GLOBAL_SAFE)
+for _base, (_pid, _ev) in _PER_DECK_SAFE.items():
+    for _d in "AB":
+        SAFE["%s_%s" % (_base, _d)] = ("%s_%s" % (_pid, _d), _ev)
+UNMAPPED = dict(_GLOBAL_UNMAPPED)
+for _base, _why in _PER_DECK_UNMAPPED.items():
+    for _d in "AB":
+        UNMAPPED["%s_%s" % (_base, _d)] = _why
+
+
+class GenError(Exception):
+    pass
+
+
+def read(path):
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
+def read_committed():
+    return read(OUT) if os.path.isfile(OUT) else ""
+
+
+def param_names(text):
+    start = text.index("#define SPKY_PARAMS")
+    return set(re.findall(r"X\((P_\w+)", text[start:text.index("enum ParamId", start)]))
+
+
+def hw_panel_ids(text):
+    start = text.index("kParamCtls[]")
+    return set(re.findall(r"^\s*\{(\w+), WK_", text[start:text.index("};", start)], re.M))
+
+
+def load_inputs():
+    if REVA not in sys.path:
+        sys.path.insert(0, REVA)
+    import blocks
+    panel_map = json.loads(read(PANEL_MAP))
+    tables = {
+        "sr_outputs": [list(chip) for chip in blocks.SR_OUTPUTS],
+        "keys": list(blocks.KEYS),
+        "module_pins": dict(blocks.MODULE_PINS),
+        "mux_s": [blocks.sr(n) for n in blocks.MUX_S],
+        "mux_en": [blocks.sr(n) for n in blocks.MUX_EN],
+        "leds": [blocks.led_net(i) for i in range(len(panel_map["leds"]))],
+    }
+    return {"panel_map": panel_map, "tables": tables,
+            "params": param_names(read(PARAM_TABLE)),
+            "hw_ids": hw_panel_ids(read(HW_PANEL)),
+            "safe": dict(SAFE), "unmapped": dict(UNMAPPED)}
+
+
+def _run(flat, nets):
+    """The bit the first of `nets` sits on; they must follow one another."""
+    missing = [n for n in nets if n not in flat]
+    if missing:
+        raise GenError("chain: %s not in SR_OUTPUTS" % ", ".join(missing))
+    idx = [flat.index(n) for n in nets]
+    if idx != list(range(idx[0], idx[0] + len(idx))):
+        raise GenError("chain: %s..%s not contiguous: %s" % (nets[0], nets[-1], idx))
+    return idx[0]
+
+
+def build(panel_map, tables, params, hw_ids, safe, unmapped):
+    pots, cal = panel_map["pots"], panel_map["calibration"]
+    spare, muxes = panel_map.get("spare", []), panel_map["muxes"]
+
+    # muxes and sense pins
+    senses = ["SENSE_%d" % i for i in range(len(muxes))]
+    if sorted(muxes) != senses:
+        raise GenError("sense pins: %s" % sorted(muxes))
+    sense_of_mux = {}
+    for i, s in enumerate(senses):
+        if muxes[s] != sorted(muxes[s]):
+            raise GenError("%s: mux list not ascending: %s" % (s, muxes[s]))
+        for m in muxes[s]:
+            if m in sense_of_mux:
+                raise GenError("mux %d on two sense pins" % m)
+            sense_of_mux[m] = i
+    n_mux = len(sense_of_mux)
+    if sorted(sense_of_mux) != list(range(n_mux)):
+        raise GenError("muxes are not 0..%d: %s" % (n_mux - 1, sorted(sense_of_mux)))
+
+    # every mux input exactly once: pots, calibration, spare (P2 section 3)
+    seen = {}
+    for rows in (pots, cal, spare):
+        for r in rows:
+            m, ch, name = r["mux"], r["channel"], r.get("id", "spare")
+            if m not in sense_of_mux or not 0 <= ch < CHANNELS_PER_MUX:
+                raise GenError("%s: no such mux input: mux %s ch %s" % (name, m, ch))
+            if (m, ch) in seen:
+                raise GenError("twice: mux %d ch %d (%s, %s)" % (m, ch, seen[(m, ch)], name))
+            seen[(m, ch)] = name
+            if r["sense"] != senses[sense_of_mux[m]]:
+                raise GenError("%s: sense %s, but mux %d is on %s"
+                               % (name, r["sense"], m, senses[sense_of_mux[m]]))
+    if len(seen) != n_mux * CHANNELS_PER_MUX:
+        raise GenError("%d of %d mux inputs accounted for"
+                       % (len(seen), n_mux * CHANNELS_PER_MUX))
+
+    # sense pin -> ADC channel: the profile assumes one contiguous run
+    pin_of = {net: pin for pin, net in tables["module_pins"].items()}
+    for i, s in enumerate(senses):
+        adc = ADC_OF_PIN.get(pin_of.get(s))
+        if adc != SENSE_ADC_BASE + i:
+            raise GenError("%s on %s is ADC index %s, expected %d"
+                           % (s, pin_of.get(s), adc, SENSE_ADC_BASE + i))
+
+    # the 595 chain: bit k of the word lands on output k of SR_OUTPUTS
+    flat = [n for chip in tables["sr_outputs"] for n in chip]
+    if len(flat) > 64:
+        raise GenError("chain: %d bits do not fit a 64-bit word" % len(flat))
+    addr_shift = _run(flat, tables["mux_s"])
+    enable_shift = _run(flat, tables["mux_en"][:n_mux])
+    leds = tables["leds"]
+    led_shift = _run(flat, leds)
+
+    # the 165: key i on D i, and the first bit shifted out is D7
+    keys = tables["keys"]
+    if not 0 < len(keys) <= MAX_KEYS:
+        raise GenError("keys: %d, the firmware holds 1..%d" % (len(keys), MAX_KEYS))
+    key_bits = [7 - i for i in range(len(keys))]
+
+    cal_by_id = {c["id"]: c for c in cal}
+    if sorted(cal_by_id) != sorted(CAL_IDS):
+        raise GenError("calibration: %s, expected %s" % (sorted(cal_by_id), list(CAL_IDS)))
+
+    # classification (spec section 2)
+    ids = [p["id"] for p in pots]
+    if len(set(ids)) != len(ids):
+        raise GenError("pot ids not unique")
+    for name in sorted(set(safe) | set(unmapped)):
+        if name not in ids:
+            raise GenError("not a pot: %s" % name)
+    both = sorted(set(safe) & set(unmapped))
+    if both:
+        raise GenError("both SAFE and UNMAPPED: %s" % ", ".join(both))
+    missing = [i for i in ids if i not in safe and i not in unmapped]
+    if missing:
+        raise GenError("unclassified: %s" % ", ".join(missing))
+    for name, (pid, _) in sorted(safe.items()):
+        if pid not in params:
+            raise GenError("%s: no ParamId %s in engine/param_table.h" % (name, pid))
+    for p in pots:
+        for i in p.get("ids", [p["id"]]):
+            if i not in hw_ids:
+                raise GenError("not in generated_hw_panel.hpp: %s" % i)
+
+    rows = []
+    for p in sorted(pots, key=lambda r: (r["mux"], r["channel"])):
+        if p["id"] in safe:
+            pid, ev = safe[p["id"]]
+            rows.append((p, "spky::" + pid, "safe: " + ev))
+        else:
+            rows.append((p, "-1", "unmapped: " + unmapped[p["id"]]))
+
+    return _render(rows, len(senses), n_mux, sense_of_mux, len(flat), addr_shift,
+                   len(tables["mux_s"]), enable_shift, led_shift, len(leds),
+                   cal_by_id, keys, key_bits)
+
+
+def _render(rows, n_sense, n_mux, sense_of_mux, chain_bits, addr_shift, addr_bits,
+            enable_shift, led_shift, led_bits, cal_by_id, keys, key_bits):
+    out = []
+    w = out.append
+    w("// GENERATED by shell/gen_panel_map.py -- do not edit by hand.")
+    w("// Sources: hardware/reva/panel-map.json, hardware/reva/blocks.py,")
+    w("// engine/param_table.h; the SAFE/UNMAPPED lists live in the generator.")
+    w("// Spec: docs/superpowers/specs/2026-10-02-rev-a-p6a-panel-scan-design.md")
+    w("#pragma once")
+    w('#include "controls.h"')
+    w('#include "keys.h"')
+    w('#include "mux_plan.h"')
+    w("")
+    w("namespace shell {")
+    w("")
+    w("// P2 sections 3 and 4: %d 74HC4051 on %d sense pins, one mux per sense pin"
+      % (n_mux, n_sense))
+    w("// per step; a %d-bit 595 chain -- address %d-%d, enables %d-%d, LEDs %d-%d."
+      % (chain_bits, addr_shift, addr_shift + addr_bits - 1, enable_shift,
+         enable_shift + n_mux - 1, led_shift, led_shift + led_bits - 1))
+    w("inline constexpr ChainProfile kRevaChain{")
+    w("    %d, kSenseAdcBase, %d," % (n_sense, n_mux))
+    w("    {%s}," % ", ".join([str(CHANNELS_PER_MUX)] * n_mux))
+    w("    {%s}," % ", ".join(str(sense_of_mux[m]) for m in range(n_mux)))
+    w("    %d, %d, %d, %d, %d, -1, %d, true};"
+      % (chain_bits, addr_shift, enable_shift, led_shift, led_bits, addr_bits))
+    w("")
+    w("// One row per pot in (mux, channel) order; SHELL_PLAY_V prints the values")
+    w("// in this order. param -1: scanned and reported, sent nowhere (spec 2.3).")
+    w("inline constexpr ControlEntry kRevaControls[] = {")
+    for i, (p, target, note) in enumerate(rows):
+        w("    {%d, %d, %s, %d},  // row %d %s -- %s"
+          % (p["mux"], p["channel"], target, sense_of_mux[p["mux"]], i, p["id"], note))
+    w("};")
+    w("inline constexpr ControlTable kRevaTable{")
+    w("    kRevaControls,")
+    w("    static_cast<int>(sizeof(kRevaControls) / sizeof(kRevaControls[0]))};")
+    w("")
+    w("// The calibration channels (P2 section 3): the panel reads its own span.")
+    z, r = cal_by_id["CAL_GND"], cal_by_id["CAL_3V3"]
+    w("inline constexpr MuxChannel kRevaCalZero{%d, %d};  // CAL_GND" % (z["mux"], z["channel"]))
+    w("inline constexpr MuxChannel kRevaCalRail{%d, %d};  // CAL_3V3" % (r["mux"], r["channel"]))
+    w("")
+    w("// %s on the 165's D0..D%d; the first bit shifted out is D7."
+      % (", ".join(keys), len(keys) - 1))
+    w("inline constexpr KeyPad kRevaKeys{%d, {%s}};"
+      % (len(keys), ", ".join(str(b) for b in key_bits)))
+    w("")
+    w("} // namespace shell")
+    return "\n".join(out) + "\n"
+
+
+def check_text(committed, generated):
+    return committed.replace("\r\n", "\n") == generated
+
+
+def main(argv):
+    try:
+        text = build(**load_inputs())
+    except GenError as e:
+        print("gen_panel_map: %s" % e, file=sys.stderr)
+        return 2
+    if "--check" in argv:
+        if check_text(read_committed(), text):
+            print("shell/generated_panel_map.h is current")
+            return 0
+        print("shell/generated_panel_map.h is STALE: run python shell/gen_panel_map.py",
+              file=sys.stderr)
+        return 1
+    with open(OUT, "w", encoding="utf-8", newline="\n") as f:
+        f.write(text)
+    print("wrote shell/generated_panel_map.h")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

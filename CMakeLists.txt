@@ -536,6 +536,14 @@ add_test(NAME read_scan_check_guard
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_read_scan_check.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
 
+# The Rev A panel as the firmware sees it: shell/generated_panel_map.h is
+# regenerated and compared, and every input check proves its RED
+# (spec 2026-10-02-rev-a-p6a-panel-scan-design.md section 4).
+add_test(NAME shell_panel_map_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_gen_panel_map.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
+
 # The two budget calculations under tools/. scan_budget imports settle_budget,
 # so a constant revised there reaches both guards; scan_budget also reads the
 # pot count from host/vcv/res/gen_hw_panel.py and goes red when the panel moves.

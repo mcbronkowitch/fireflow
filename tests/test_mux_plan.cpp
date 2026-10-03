@@ -6,6 +6,7 @@
 #include <set>
 #include <utility>
 #include <vector>
+#include "../shell/generated_panel_map.h"
 #include "../shell/mux_plan.h"
 
 namespace {
@@ -416,4 +417,34 @@ TEST_CASE("coupon play chain: the coupon's wiring, run in parallel") {
     }
     for(int step = 8; step < 16; ++step)
         CHECK(shell::step_pattern(p, step).address == step);       // the 4067's upper half
+}
+
+TEST_CASE("mux plan: the generated Rev A chain is P2's, field for field") {
+    const shell::ChainProfile& p = shell::kRevaChain;
+    const shell::ChainProfile& e = kRevaShape;
+    CHECK(p.sense_pins == e.sense_pins);
+    CHECK(p.sense_adc_base == e.sense_adc_base);
+    CHECK(p.groups == e.groups);
+    for(int g = 0; g < shell::kMaxGroups; ++g)
+    {
+        CHECK(p.channels[g] == e.channels[g]);
+        CHECK(p.sense_of_group[g] == e.sense_of_group[g]);
+    }
+    CHECK(p.chain_bits == e.chain_bits);
+    CHECK(p.addr_shift == e.addr_shift);
+    CHECK(p.enable_shift == e.enable_shift);
+    CHECK(p.led_shift == e.led_shift);
+    CHECK(p.led_bits == e.led_bits);
+    CHECK(p.button_bit == e.button_bit);
+    CHECK(p.addr_bits == e.addr_bits);
+    CHECK(p.parallel_sense == e.parallel_sense);
+    CHECK(shell::scan_steps(p) == 24);
+}
+
+TEST_CASE("mux plan: Rev A's keys are D0..D3 of the 165") {
+    REQUIRE(shell::kRevaKeys.count == 4);
+    CHECK(shell::kRevaKeys.bit[0] == 7);
+    CHECK(shell::kRevaKeys.bit[1] == 6);
+    CHECK(shell::kRevaKeys.bit[2] == 5);
+    CHECK(shell::kRevaKeys.bit[3] == 4);
 }
