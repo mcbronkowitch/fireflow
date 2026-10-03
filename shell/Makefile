@@ -329,7 +329,8 @@ endif
 # The playing image (spec 2026-09-28-coupon-panel-scan-design.md section 5):
 # the scan runs first in the callback and drives the engine through the
 # board's control table. With SHELL_COUPON_PROBE=1 it is the coupon's chain
-# and table; without it, the panel's chain and its (still empty) table.
+# and table; without it, kRevaChain and the generated 70-row table
+# (generated_panel_map.h).
 SHELL_PANEL_SCAN ?= 0
 
 ifneq ($(filter $(SHELL_PANEL_SCAN),0 1),$(SHELL_PANEL_SCAN))

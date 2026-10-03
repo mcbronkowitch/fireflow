@@ -18,6 +18,9 @@ void feed(shell::KeyState& s, const shell::KeyPad& p, uint32_t ret, int n)
 }
 
 TEST_CASE("keys: fewer equal reads than the debounce are not a press") {
+    // Spec section 3.4: three equal reads (6 ms). The cases below are written
+    // against kKeyDebounce, so this is the line that pins the value itself.
+    CHECK(shell::kKeyDebounce == 3);
     shell::KeyState s;
     feed(s, shell::kCouponKeys, down(7), shell::kKeyDebounce - 1);
     CHECK(s.pressed == 0);

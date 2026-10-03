@@ -537,8 +537,9 @@ add_test(NAME read_scan_check_guard
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
 
 # The Rev A panel as the firmware sees it: shell/generated_panel_map.h is
-# regenerated and compared, and every input check proves its RED
-# (spec 2026-10-02-rev-a-p6a-panel-scan-design.md section 4).
+# regenerated and compared, and every check the spec names proves its RED
+# (spec 2026-10-02-rev-a-p6a-panel-scan-design.md section 4; a few purely
+# defensive generator checks have no sabotage).
 add_test(NAME shell_panel_map_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_gen_panel_map.py

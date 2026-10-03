@@ -244,7 +244,7 @@ A pot added to the panel stops the generator until it is classified.
 
 **Keys and LEDs.** Every step reads the 165 in the same pass as the write;
 keys debounce over three reads (6 ms). LED bits only ever travel in the latch
-that carries the mux address (P2 §4). Keys have no function yet.
+that carries the mux address (P2 §4). On Rev A the keys have no function yet.
 
 **The span** comes from CAL_GND and CAL_3V3 once per sweep; until a sweep has
 measured a valid one, no knob reaches the engine.
@@ -252,7 +252,8 @@ measured a valid one, no knob reaches the engine.
 **Reading it.** The coupon prints part 1's `SHELL_PLAY` line plus
 `SHELL_PLAY_IO keys= presses= adc11= adc12=`. Rev A prints seven
 `SHELL_PLAY_V r=<first row> <ten values>` lines (row order and names are in
-the generated header's comments; values ×1000, −1000 = never moved) and one
+the generated header's comments; values ×1000, −1000 = never emitted: no valid span yet, i.e. calibration
+never succeeded) and one
 `SHELL_PLAY` summary line with key mask and press counts.
 
 **Coupon session** (spec §7) on the coupon play image:
@@ -326,18 +327,13 @@ the 16:1, 48 ms on the 8:1.
    [`docs/hardware/scan-measured.md`](../docs/hardware/scan-measured.md).
    Board session 2 played `SHELL_PANEL_SCAN` on the coupon, and RV2, RV4 and
    RV6 all moved the engine audibly, and all three reached both stops (RV4's
-   low stop in a later read the same day). **Part 2** — the 70-pot
-   table, the four keys on the 165 and the 19 LEDs on the 595 — waits for
-   the Rev A board's pin map (one board since 2026-09-28), which does not
-   exist yet; the pin map should
-   give one spare channel to AGND and one to the rail, so the panel
-   calibrates its own span instead of trusting one coupon's number (spec §8).
-   Code space for part 2 is tight: the coupon playing image uses 98.8 % of
-   `SRAM_EXEC`. The linker-map diff in `docs/roadmap.md` (M6, 2026-09-28)
-   puts most of the 13.4 KB it added on routing through `apply_param` and the
-   engine setters that drags in, a one-time cost; part 2's table rows are
-   what comes on top. Part 2's table must also key on the sense pin, not only
-   `(group, ch)`.
+   low stop in a later read the same day). **Part 2 (P6a) is built**: the
+   Rev A scan, the generated 70-row table (keyed by global mux 0-9 plus
+   channel, unique; the sense pin rides along as a host-tested check field),
+   35 pots sending, the four keys on the 165, and the span calibrated from
+   two channels. Code space is tight: `SRAM_EXEC` is 99.10 % on the coupon
+   play image and 99.35 % on the Rev A play image. The coupon session is
+   still open; see "Panel scan part 2: Rev A's pin map (P6a)" above.
 2. **Skipped on the coupon, by decision (Bastian, 2026-09-28):** round one's
    four RV4 cases (`SHELL_XTALK_RV4=1`) — the scan check already read every
    channel clean in the real pattern, with the engine running — and a second

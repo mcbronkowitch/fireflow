@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Guard for shell/gen_panel_map.py (spec 2026-10-02-rev-a-p6a-panel-scan-design.md
 section 4). Plain script -- pytest is not installed here -- and its exit code
-is the verdict. Every input check has a sabotage that must turn it red.
+is the verdict. Every check the spec names (section 4) has a sabotage that
+must turn it red; a few purely defensive generator checks have none.
 """
 import copy
 import os

@@ -102,7 +102,7 @@ TEST_CASE("scan value: a collapsed rail or a lifted zero is not a panel span") {
     CHECK(shell::panel_span(shell::kRailMargin, 63484).valid);
 }
 
-TEST_CASE("scan value: an invalid span emits nothing, before or after a valid one") {
+TEST_CASE("scan value: an invalid span emits nothing before a valid one") {
     // Boot: the play images start with an invalid span and nothing may reach
     // the engine until a sweep has measured one (Review Focus 2).
     shell::PotFilter f;

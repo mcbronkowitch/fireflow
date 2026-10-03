@@ -30,10 +30,6 @@
 
 namespace shell {
 
-// Which board this image is built for. The switch header is generated at
-// Makefile PARSE time; see write_shell_coupon_probe.py for why a bare -D
-// is not enough.
-//
 // Which board and which step model this image runs (spec
 // 2026-10-02-rev-a-p6a-panel-scan-design.md section 3.2):
 //   coupon probes      -- kCouponChain, sequential, exactly as measured
@@ -96,13 +92,14 @@ class MuxScan
     // after the 595s' RCLK rising edge.
     //
     // t = 0 IS THAT EDGE, not the start of the bit-bang. write_chain() clocks
-    // 16 bits before the address reaches the mux at all, so timing from the
+    // chain_bits bits (16 on the coupon) before the address reaches the mux
+    // at all, so timing from the
     // call would fold the bit-bang into every settle time and make the fast
     // channels look slow by a constant nobody measured.
     uint32_t write_chain_timed(uint64_t word);
 
     // Like write_chain_timed(), but the RCLK pulse is left out entirely:
-    // 16 bits are clocked and nothing is latched. Returns the DWT cycle
+    // chain_bits bits are clocked and nothing is latched. Returns the DWT cycle
     // count taken immediately after the last SRCLK falling edge.
     //
     // WHAT THIS IS FOR. The 595's outputs follow its STORAGE register, which
