@@ -26,6 +26,12 @@ inline constexpr Span kPanelSpan{0, 63485, true};
 // the two differ.
 inline constexpr int kPotHysteresis = 16;
 
+// The span Rev A measures for itself once per sweep from its two calibration
+// channels, CAL_GND and CAL_3V3 (spec 2026-10-02 section 3.5): coupon_span()'s
+// rail floor and zero ceiling. There is no tie spread to check -- one channel
+// per rail -- and the two bounds already order the pair.
+Span panel_span(uint16_t zero, uint16_t rail);
+
 // (raw - zero) / (rail - zero), clamped to 0..1. The clamp belongs here, on
 // the reading side: only the reader knows the span. An invalid or inverted
 // span gives 0 rather than a division by zero or a negative scale.

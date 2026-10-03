@@ -61,3 +61,24 @@ TEST_CASE("controls: applying RV2's entry moves part A's rate and only it") {
     CHECK(inst.rate(spky::PART_A) == doctest::Approx(0.75f));
     CHECK(inst.rate(spky::PART_B) == doctest::Approx(b_before));
 }
+
+TEST_CASE("controls: an entry without a parameter is refused, not applied") {
+    // Rev A's table carries rows that are scanned and reported but sent
+    // nowhere (spec section 2.3). apply_param() would index kParams[-1].
+    spky::Instrument inst;
+    inst.init(48000.0f);
+    const float a = inst.rate(spky::PART_A);
+    CHECK_FALSE(shell::apply_control(shell::ControlEntry{0, 0, -1}, 0.9f, inst));
+    CHECK_FALSE(shell::apply_control(shell::ControlEntry{0, 0, spky::P_COUNT}, 0.9f, inst));
+    CHECK(inst.rate(spky::PART_A) == doctest::Approx(a));
+    CHECK(shell::apply_control(shell::ControlEntry{0, 2, spky::P_RATE_A}, 0.9f, inst));
+    CHECK(inst.rate(spky::PART_A) == doctest::Approx(0.9f));
+}
+
+TEST_CASE("controls: an entry records its sense pin, -1 when unrecorded") {
+    CHECK(shell::kCouponControls[0].sense == -1);
+    // A local, not a braced temporary inside CHECK(): the preprocessor
+    // splits macro arguments on the commas inside braces.
+    const shell::ControlEntry e{3, 4, spky::P_RATE_B, 1};
+    CHECK(e.sense == 1);
+}

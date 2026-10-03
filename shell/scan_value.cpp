@@ -2,6 +2,11 @@
 
 namespace shell {
 
+Span panel_span(uint16_t zero, uint16_t rail)
+{
+    return Span{zero, rail, rail >= kRailFloor && zero <= kRailMargin};
+}
+
 float span_normalize(uint16_t raw, const Span& span)
 {
     if(!span.valid || span.rail <= span.zero) return 0.0f;

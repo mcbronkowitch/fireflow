@@ -18,9 +18,10 @@ namespace shell {
 
 struct ControlEntry
 {
-    int group;   // mux group (chip) as in mux_plan.h
-    int ch;      // channel on that chip
-    int param;   // spky::ParamId
+    int group;       // mux group (chip) as in mux_plan.h; on Rev A the global mux 0..9
+    int ch;          // channel on that chip
+    int param;       // spky::ParamId, or -1: scanned and reported, sent nowhere
+    int sense = -1;  // the sense pin the schematic wires the group to, -1 = not recorded
 };
 
 struct ControlTable
@@ -51,6 +52,7 @@ const ControlEntry* find_control(const ControlTable& t, int group, int ch);
 float control_value(int param, float v);
 
 // Scales v into the entry's parameter range and routes it via apply_param().
-void apply_control(const ControlEntry& e, float v, spky::Instrument& inst);
+// Returns false, and touches nothing, for an entry without a parameter.
+bool apply_control(const ControlEntry& e, float v, spky::Instrument& inst);
 
 } // namespace shell

@@ -93,3 +93,27 @@ TEST_CASE("scan value: the hysteresis band obeys the spec's rule") {
     CHECK(shell::kPotHysteresis >= 16);
     CHECK(shell::kPotHysteresis % 16 == 0);
 }
+
+TEST_CASE("scan value: the panel span is the two calibration channels") {
+    const shell::Span s = shell::panel_span(31, 63484);
+    CHECK(s.valid);
+    CHECK(s.zero == 31);
+    CHECK(s.rail == 63484);
+}
+
+TEST_CASE("scan value: a collapsed rail or a lifted zero is not a panel span") {
+    CHECK_FALSE(shell::panel_span(31, shell::kRailFloor - 1).valid);
+    CHECK(shell::panel_span(31, shell::kRailFloor).valid);
+    CHECK_FALSE(shell::panel_span(shell::kRailMargin + 1, 63484).valid);
+    CHECK(shell::panel_span(shell::kRailMargin, 63484).valid);
+}
+
+TEST_CASE("scan value: an invalid span emits nothing, before or after a valid one") {
+    // Boot: the play images start with an invalid span and nothing may reach
+    // the engine until a sweep has measured one (Review Focus 2).
+    shell::PotFilter f;
+    float v = -1.0f;
+    CHECK_FALSE(shell::pot_filter(f, 30000, shell::Span{0, 0, false}, 16, &v));
+    CHECK(v == -1.0f);
+    CHECK(shell::pot_filter(f, 30000, shell::panel_span(31, 63484), 16, &v));
+}
