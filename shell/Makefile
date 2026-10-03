@@ -50,6 +50,12 @@ C_USR_FLAGS = -ffast-math -funroll-loops
 # nachgewiesen wurde. Eigener Commit, eigener Beweis.
 C_DEFS += -DBENCH_BOARD_PATCH_SM
 
+# The firmware drops the parameter-name strings (engine/param_table.h): nothing
+# in shell/ reads ParamInfo::name, and the strings cost 752 B of SRAM_EXEC
+# (measured) in a region the play images fill to the byte (spec 2026-10-02-rev-a-p6a-panel-scan-design.md
+# section 6).
+C_DEFS += -DSPKY_NO_PARAM_NAMES
+
 # --- Selbsttest ----------------------------------------------------------
 # Das Submodule hat keine Klinkenbuchse. "Macht es Ton" laesst sich deshalb
 # ohne Verdrahtung nicht hoeren -- aber messen: der Shell laeuft seinen
@@ -360,6 +366,7 @@ CPP_SOURCES = \
 	scan_check.cpp \
 	scan_value.cpp \
 	controls.cpp \
+	keys.cpp \
 	panel_scan.cpp \
 	mux_scan.cpp \
 	../engine/body/mode_bank.cpp \
@@ -400,6 +407,14 @@ override OPT := -O3
 
 SYSTEM_FILES_DIR = $(LIBDAISY_DIR)/core
 include $(SYSTEM_FILES_DIR)/Makefile
+
+# The one exception to -O3 above: the parallel step model's runtime loops in
+# mux_plan.cpp are inlined by -O3 into ~2.6 KB that the play images have no
+# room for (SRAM_EXEC, spec 2026-10-02-rev-a-p6a-panel-scan-design.md section 6,
+# decided 2026-10-03). The scan path runs once per block, not per sample.
+# After the include on purpose: BUILD_DIR is defined there, and above it this
+# line would name the target "/mux_plan.o" and silently do nothing.
+$(BUILD_DIR)/mux_plan.o: override OPT := -Os
 
 # --- generierte Schalter-Header ------------------------------------------
 # Als echte Header und mit echter Abhaengigkeitskante, nicht als blankes
@@ -451,7 +466,7 @@ $(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_selftest.h $(BUILD_DIR)/shell_cpu_probe.
 $(BUILD_DIR)/wait_probe.o: $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/shell_coupon_probe.h
 $(BUILD_DIR)/xtalk_probe.o: $(BUILD_DIR)/shell_xtalk_probe.h $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/shell_coupon_probe.h
 $(BUILD_DIR)/tone_probe.o: $(BUILD_DIR)/shell_tone_probe.h $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/shell_coupon_probe.h
-$(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o: $(BUILD_DIR)/shell_coupon_probe.h
+$(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o: $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_panel_scan.h
 $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/wait_probe.o: $(BUILD_DIR)/shell_pot_round.h
 $(BUILD_DIR)/pot_report.o: $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/scan_check.o: $(BUILD_DIR)/shell_scan_check.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_git_hash.h

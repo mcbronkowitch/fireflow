@@ -6,9 +6,9 @@
 // one row.
 //
 // The coupon's table maps its three measured pots (pot_plan.h), Bastian's
-// choice of 2026-09-28. The panel's table is empty: which pot sits on which
-// mux channel is the control PCB's pin map, part 2 of the panel scan, and
-// filling it before that exists would decide the routing in code.
+// choice of 2026-09-28.
+// Rev A's table is generated: shell/generated_panel_map.h, from
+// hardware/reva/panel-map.json (spec 2026-10-02-rev-a-p6a-panel-scan-design.md).
 //
 // Spec: ../docs/superpowers/specs/2026-09-28-coupon-panel-scan-design.md
 #include "instrument.h"
@@ -39,8 +39,6 @@ inline constexpr ControlEntry kCouponControls[] = {
 inline constexpr ControlTable kCouponTable{
     kCouponControls,
     static_cast<int>(sizeof(kCouponControls) / sizeof(kCouponControls[0]))};
-
-inline constexpr ControlTable kPanelTable{nullptr, 0};
 
 // The entry for (group, ch), or nullptr. A channel that is not in the table
 // changes nothing: a half-seated chip produces indices nobody planned, and

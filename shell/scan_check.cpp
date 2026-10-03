@@ -14,6 +14,8 @@
 
 namespace shell {
 
+static_assert(!kActiveChain.parallel_sense,
+              "scan_check walks the sequential model; build it without SHELL_PANEL_SCAN");
 static_assert(scan_steps(kActiveChain) == kCheckSteps,
               "SHELL_SCAN_CHECK walks the coupon's 24 steps; the Makefile "
               "requires SHELL_COUPON_PROBE=1");

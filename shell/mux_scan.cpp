@@ -42,9 +42,13 @@ void MuxScan::init()
     // submodule, hence the pull-up: a floating input is a current source and
     // a noise source, and this round is about noise.
     sense_in_.Init(kIn, daisy::GPIO::Mode::INPUT, daisy::GPIO::Pull::PULLUP);
+
+    // P2 section 3: the enables are undefined until the first latch, so the
+    // firmware latches first -- every mux disabled, every LED dark.
+    write_chain(chain_word(kActiveChain, step_pattern(kActiveChain, -1), 0u));
 }
 
-void MuxScan::write_chain(uint32_t word)
+void MuxScan::write_chain(uint64_t word)
 {
     // MSB first, no delay between edges: at 480 MHz two register writes are
     // some nanoseconds apart, which a 74HC595 at 3V3 may or may not accept.
@@ -60,7 +64,7 @@ void MuxScan::write_chain(uint32_t word)
     latch_.Write(false);
 }
 
-uint32_t MuxScan::write_chain_timed(uint32_t word)
+uint32_t MuxScan::write_chain_timed(uint64_t word)
 {
     // Same shift loop as write_chain(), copied rather than reconstructed --
     // its bit order and its latch rest state are load-bearing.
@@ -76,7 +80,7 @@ uint32_t MuxScan::write_chain_timed(uint32_t word)
     return t0;
 }
 
-uint32_t MuxScan::shift_chain_timed(uint32_t word)
+uint32_t MuxScan::shift_chain_timed(uint64_t word)
 {
     // Same shift loop as write_chain() and write_chain_timed(), copied
     // rather than reconstructed -- its bit order is load-bearing and the
@@ -93,7 +97,7 @@ uint32_t MuxScan::shift_chain_timed(uint32_t word)
     return cycles_now();
 }
 
-uint32_t MuxScan::read_chain(uint32_t word)
+uint32_t MuxScan::read_chain(uint64_t word)
 {
     // Latch LOW first: that is the 165's ~PL, and the parallel load happens
     // while it is low. The 595s do not care -- they latch on the rising
@@ -107,8 +111,11 @@ uint32_t MuxScan::read_chain(uint32_t word)
         // Sample BEFORE the clock edge: for the first bit that is the
         // parallel-loaded value sitting at Q7 from ~PL above, and for every
         // bit after it, it is the one the previous edge shifted there.
-        if(sense_in_.Read())
-            in |= 1u << (kActiveChain.chain_bits - 1 - i);
+        // Only the 165's eight stages carry anything: with DS on GND every
+        // later bit reads 0 (P2 section 4), and on a 40-bit chain a shift
+        // past 31 would be undefined.
+        const int bit = kActiveChain.chain_bits - 1 - i;
+        if(bit < 8 && sense_in_.Read()) in |= 1u << bit;
         data_.Write(((word >> i) & 1u) != 0u);
         clock_.Write(true);
         clock_.Write(false);
@@ -127,7 +134,15 @@ uint32_t MuxScan::read_chain(uint32_t word)
 void MuxScan::select(int step)
 {
     const StepPattern p = step_pattern(kActiveChain, step);
-    write_chain(chain_word(kActiveChain, p, leds_));
+    const uint64_t    w = chain_word(kActiveChain, p, leds_);
+    // read_chain() raises the latch once before it shifts, for the 165's
+    // parallel load; that edge re-latches the word already latched, so no
+    // output moves, and the one latch that changes anything is still the
+    // one carrying this step's address (spec section 3.3).
+    if(read_keys_)
+        last_return_ = read_chain(w);
+    else
+        write_chain(w);
     live_step_ = step;
 }
 

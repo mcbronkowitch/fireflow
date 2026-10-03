@@ -21,7 +21,11 @@
 // mux_scan.cpp sees only this header, and a profile that differs between
 // two objects gives g_mux_raw two sizes in one link.
 #include "shell_coupon_probe.h"
+#include "shell_panel_scan.h"
 #include "mux_plan.h"
+#if SHELL_PANEL_SCAN && !SHELL_COUPON_PROBE
+#include "generated_panel_map.h"
+#endif
 #include "cycles.h"
 
 namespace shell {
@@ -29,8 +33,19 @@ namespace shell {
 // Which board this image is built for. The switch header is generated at
 // Makefile PARSE time; see write_shell_coupon_probe.py for why a bare -D
 // is not enough.
-#if SHELL_COUPON_PROBE
+//
+// Which board and which step model this image runs (spec
+// 2026-10-02-rev-a-p6a-panel-scan-design.md section 3.2):
+//   coupon probes      -- kCouponChain, sequential, exactly as measured
+//   coupon play image  -- kCouponPlayChain: the coupon's wiring, Rev A's model
+//   Rev A play image   -- kRevaChain, generated from the pin map
+//   anything else      -- kPanelChain, the profile SHELL_MUX_PROBE priced
+#if SHELL_COUPON_PROBE && SHELL_PANEL_SCAN
+inline constexpr ChainProfile kActiveChain = kCouponPlayChain;
+#elif SHELL_COUPON_PROBE
 inline constexpr ChainProfile kActiveChain = kCouponChain;
+#elif SHELL_PANEL_SCAN
+inline constexpr ChainProfile kActiveChain = kRevaChain;
 #else
 inline constexpr ChainProfile kActiveChain = kPanelChain;
 #endif
@@ -75,7 +90,7 @@ class MuxScan
     // Public because the coupon bring-up probe drives the chain directly
     // instead of stepping the scan: it has to hold one address still while
     // the ADC is read, which step() deliberately never does.
-    void write_chain(uint32_t word);
+    void write_chain(uint64_t word);
 
     // Like write_chain(), but returns the DWT cycle count taken immediately
     // after the 595s' RCLK rising edge.
@@ -84,7 +99,7 @@ class MuxScan
     // 16 bits before the address reaches the mux at all, so timing from the
     // call would fold the bit-bang into every settle time and make the fast
     // channels look slow by a constant nobody measured.
-    uint32_t write_chain_timed(uint32_t word);
+    uint32_t write_chain_timed(uint64_t word);
 
     // Like write_chain_timed(), but the RCLK pulse is left out entirely:
     // 16 bits are clocked and nothing is latched. Returns the DWT cycle
@@ -100,13 +115,25 @@ class MuxScan
     // The 165 is clocked too -- it shares CP -- which is what the shipping
     // scan does on every step anyway, so this is not a quieter event than
     // production, it is the production event minus the latch.
-    uint32_t shift_chain_timed(uint32_t word);
+    uint32_t shift_chain_timed(uint64_t word);
 
     // Clocks `word` out and the 165's parallel load back in, in the same
     // pass -- the two chains share clock and latch, so a separate read pass
     // would cost a second latch and re-load the buttons mid-flight.
     // Returns the return stream, first bit shifted out in bit 0.
-    uint32_t read_chain(uint32_t word);
+    // Only the 165's eight stages are returned: with DS on GND everything after reads 0.
+    uint32_t read_chain(uint64_t word);
+
+    // The LED field the next select() latches (spec section 3.3). It never
+    // reaches the 595s on its own: LED bits change only in the latch that
+    // carries the mux address (P2 section 4).
+    void set_leds(uint32_t leds) { leds_ = leds; }
+
+    // The play images read the keys in the same pass as every select()
+    // (spec section 3.4); the probes keep the write-only pass they were
+    // measured with.
+    void     set_read_keys(bool on) { read_keys_ = on; }
+    uint32_t last_return() const { return last_return_; }
 
   private:
     daisy::GPIO data_, clock_, latch_, sense_in_;
@@ -115,6 +142,8 @@ class MuxScan
     int         live_step_ = -1;
     uint32_t    steps_     = 0;
     bool        walk_leds_ = true;
+    bool        read_keys_   = false;
+    uint32_t    last_return_ = 0xFFFFFFFFu;   // every key released
 };
 
 // Where the scan puts what it read: the raw 16-bit DMA word per channel,

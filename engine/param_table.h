@@ -135,7 +135,11 @@ enum ParamId {
 struct ParamInfo { const char* name; float lo, hi; int steps; };
 
 constexpr ParamInfo kParams[P_COUNT] = {
+#if defined(SPKY_NO_PARAM_NAMES)
+#define SPKY_INFO(id, lo_, hi_, st) { nullptr, lo_, hi_, st },
+#else
 #define SPKY_INFO(id, lo_, hi_, st) { #id, lo_, hi_, st },
+#endif
   SPKY_PARAMS(SPKY_INFO)
 #undef SPKY_INFO
 };

@@ -9,8 +9,12 @@
 
 #include "controls.h"
 #include "coupon_expect.h"
+#include "keys.h"
 #include "mux_scan.h"
 #include "scan_value.h"
+#if !SHELL_COUPON_PROBE
+#include "generated_panel_map.h"
+#endif
 
 namespace shell {
 
@@ -18,8 +22,10 @@ namespace {
 
 #if SHELL_COUPON_PROBE
 constexpr ControlTable kTable = kCouponTable;
+constexpr KeyPad       kKeys  = kCouponKeys;
 #else
-constexpr ControlTable kTable = kPanelTable;
+constexpr ControlTable kTable = kRevaTable;
+constexpr KeyPad       kKeys  = kRevaKeys;
 #endif
 
 constexpr int kSteps    = scan_steps(kActiveChain);
@@ -27,19 +33,24 @@ constexpr int kChannels = mux_total(kActiveChain);
 
 MuxScan   g_scan;
 PotFilter g_filter[kChannels];
+KeyState  g_keys;
 
 // Last emitted value per channel, -1 = never emitted. Read by the
 // foreground for SHELL_PLAY only.
 volatile float g_value[kChannels];
 
-// The span the value path uses. On the coupon it starts invalid and is
-// replaced after every full sweep whose ties give a valid one; an invalid
-// sweep leaves it in place. On the panel it is kPanelSpan until part 2.
+// The span the value path uses. It starts invalid -- nothing reaches the
+// engine before a sweep has measured one -- and an invalid sweep keeps the
+// last valid span (spec 2026-10-02-rev-a-p6a-panel-scan-design.md 3.5).
+Span g_span{0, 0, false};
 #if SHELL_COUPON_PROBE
-Span     g_span{0, 0, false};
-uint16_t g_step_raw[kSteps];   // the live pin's raw word per step
+// The coupon's ties, in kCouponChain's step order: coupon_span() reads that
+// order, and this image scans in kCouponPlayChain's (spec section 3.2).
+constexpr int kCouponSteps = scan_steps(kCouponChain);
+uint16_t      g_step_raw[kCouponSteps];
 #else
-Span g_span = kPanelSpan;
+uint16_t g_cal_zero = 0;
+uint16_t g_cal_rail = 0;
 #endif
 volatile uint32_t g_sweeps = 0;
 
@@ -49,33 +60,44 @@ void panel_scan_init()
 {
     g_scan.init();
     g_scan.set_walk_leds(false);
+    g_scan.set_read_keys(true);
     for(int c = 0; c < kChannels; ++c) g_value[c] = -1.0f;
 }
 
 void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
 {
     const int step = g_scan.step(hw);
+    // The return stream of the latch step() just clocked: the 165 loads on
+    // the same edge, so the keys are read once per block.
+    key_update(g_keys, kKeys, g_scan.last_return());
+#if SHELL_COUPON_PROBE
+    // Key held, LED_1 lit: the key path, the LED field and the latch rule in
+    // one gesture (spec section 3.7). It reaches the 595s with the NEXT
+    // step's latch, never on its own.
+    g_scan.set_leds((g_keys.pressed & 1u) != 0u ? 1u : 0u);
+#endif
     if(step < 0) return;
 
-    const int g  = group_of_step(kActiveChain, step);
-    const int ch = static_cast<int>(step_pattern(kActiveChain, step).address);
     for(int s = 0; s < kActiveChain.sense_pins; ++s)
     {
-        if(!sense_live(kActiveChain, step, s)) continue;
+        // A pin with no live channel this step floats; group_at() says so.
+        const int g = group_at(kActiveChain, step, s);
+        if(g < 0) continue;
+        const int      ch  = channel_at(kActiveChain, step, s);
         const int      idx = mux_channel(kActiveChain, step, s);
         const uint16_t raw = g_mux_raw[idx];
 #if SHELL_COUPON_PROBE
-        g_step_raw[step] = raw;
+        g_step_raw[step_of(kCouponChain, g, ch)] = raw;
+#else
+        if(g == kRevaCalZero.group && ch == kRevaCalZero.ch) g_cal_zero = raw;
+        if(g == kRevaCalRail.group && ch == kRevaCalRail.ch) g_cal_rail = raw;
 #endif
-        // On the panel profile every group sits on all four pins, so (g, ch)
-        // names four channels; part 2's table will key on the sense pin too.
-        // With an empty table this lookup never matches.
         const ControlEntry* e = find_control(kTable, g, ch);
         if(e == nullptr) continue;
         float v;
         if(pot_filter(g_filter[idx], raw, g_span, kPotHysteresis, &v))
         {
-            apply_control(*e, v, inst);
+            apply_control(*e, v, inst);   // refuses a row without a parameter
             g_value[idx] = v;
         }
     }
@@ -83,9 +105,11 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
     if(step == kSteps - 1)
     {
 #if SHELL_COUPON_PROBE
-        const Span sp = coupon_span(g_step_raw, kSteps);
-        if(sp.valid) g_span = sp;
+        const Span sp = coupon_span(g_step_raw, kCouponSteps);
+#else
+        const Span sp = panel_span(g_cal_zero, g_cal_rail);
 #endif
+        if(sp.valid) g_span = sp;
         g_sweeps = g_sweeps + 1u;
     }
 }
@@ -103,6 +127,7 @@ void run_panel_scan_report(bench::Board& hw)
         const int zero  = g_span.zero;
         const int rail  = g_span.rail;
         const int valid = g_span.valid ? 1 : 0;
+        const int keys  = g_keys.pressed;
 #if SHELL_COUPON_PROBE
         int v[3];
         for(int i = 0; i < 3; ++i)
@@ -117,9 +142,36 @@ void run_panel_scan_report(bench::Board& hw)
                      "valid=%d sweeps=%d",
                      v[0], v[1], v[2], zero, rail, valid,
                      static_cast<int>(g_sweeps));
+        // A second line, so the first keeps part 1's format and each stays
+        // inside libDaisy's 128-byte log buffer (LOGGER_BUFFER).
+        hw.PrintLine("SHELL_PLAY_IO keys=%d presses=%d adc11=%d adc12=%d", keys,
+                     static_cast<int>(g_keys.presses[0]),
+                     static_cast<int>(hw.adc.Get(daisy::patch_sm::ADC_11)),
+                     static_cast<int>(hw.adc.Get(daisy::patch_sm::ADC_12)));
 #else
-        hw.PrintLine("SHELL_PLAY zero=%d rail=%d valid=%d sweeps=%d", zero,
-                     rail, valid, static_cast<int>(g_sweeps));
+        // Ten values per line, in generated_panel_map.h's row order: seventy
+        // in one line would overrun libDaisy's 128-byte log buffer.
+        static_assert(kTable.count % 10 == 0, "SHELL_PLAY_V prints ten rows a line");
+        for(int r0 = 0; r0 < kTable.count; r0 += 10)
+        {
+            int v[10];
+            for(int i = 0; i < 10; ++i)
+            {
+                const ControlEntry& e    = kTable.entries[r0 + i];
+                const int           step = step_of(kActiveChain, e.group, e.ch);
+                const int           idx  = mux_channel(kActiveChain, step, e.sense);
+                v[i] = static_cast<int>(g_value[idx] * 1000.0f);
+            }
+            hw.PrintLine("SHELL_PLAY_V r=%d %d %d %d %d %d %d %d %d %d %d", r0,
+                         v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9]);
+        }
+        hw.PrintLine("SHELL_PLAY zero=%d rail=%d valid=%d sweeps=%d keys=%d "
+                     "presses=%d,%d,%d,%d",
+                     zero, rail, valid, static_cast<int>(g_sweeps), keys,
+                     static_cast<int>(g_keys.presses[0]),
+                     static_cast<int>(g_keys.presses[1]),
+                     static_cast<int>(g_keys.presses[2]),
+                     static_cast<int>(g_keys.presses[3]));
 #endif
         hw.Delay(500);
     }

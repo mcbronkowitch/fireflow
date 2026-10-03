@@ -12,12 +12,6 @@
 
 namespace shell {
 
-// The panel's span until part 2 gives the control PCB its own tie channels
-// (spec section 8): the rail the coupon's 0 ohm ties read through libDaisy's
-// path on 2026-09-17, 63485 of 65535. One board's reading, not a property of
-// the design.
-inline constexpr Span kPanelSpan{0, 63485, true};
-
 // The hysteresis band, in raw counts: the widest max - min any of the
 // coupon's seven pots showed in the scan-check image's arm S, across every
 // complete block of docs/hardware/captures/scan-check-capture-c04ba77.txt,

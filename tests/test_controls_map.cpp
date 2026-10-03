@@ -31,11 +31,6 @@ TEST_CASE("controls: the coupon table's channels are pot_plan.h's pots") {
     }
 }
 
-TEST_CASE("controls: the panel table is empty until part 2") {
-    CHECK(shell::kPanelTable.count == 0);
-    CHECK(shell::find_control(shell::kPanelTable, 0, 0) == nullptr);
-}
-
 TEST_CASE("controls: find_control answers only for mapped channels") {
     const shell::ControlTable& t = shell::kCouponTable;
     REQUIRE(shell::find_control(t, 0, 6) != nullptr);

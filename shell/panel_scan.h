@@ -2,9 +2,10 @@
 
 // The playing image (SHELL_PANEL_SCAN=1): the scan runs first in the audio
 // callback, and every mapped channel it reads goes through the value path
-// (scan_value.h) into the engine (controls.h). On the coupon, RV2/RV4/RV6
-// drive RATE_A/DENSITY_A/FILT_A; on the panel profile the table is empty
-// until part 2 and nothing is applied.
+// (scan_value.h) into the engine (controls.h).
+// On the coupon, RV2/RV4/RV6 drive RATE_A/DENSITY_A/FILT_A over Rev A's step
+// model (kCouponPlayChain); on Rev A, the 35 safe pots of the generated table
+// drive their parameters (spec 2026-10-02-rev-a-p6a-panel-scan-design.md).
 //
 // Spec: ../docs/superpowers/specs/2026-09-28-coupon-panel-scan-design.md
 // section 5.

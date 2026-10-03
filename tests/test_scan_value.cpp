@@ -83,12 +83,6 @@ TEST_CASE("scan value: both stops are reachable through the band") {
     CHECK_FALSE(shell::pot_filter(g, 60100, kSpan, kH, &v));
 }
 
-TEST_CASE("scan value: the panel span is the coupon's rail reading") {
-    CHECK(shell::kPanelSpan.zero == 0);
-    CHECK(shell::kPanelSpan.rail == 63485);
-    CHECK(shell::kPanelSpan.valid);
-}
-
 TEST_CASE("scan value: the hysteresis band obeys the spec's rule") {
     CHECK(shell::kPotHysteresis >= 16);
     CHECK(shell::kPotHysteresis % 16 == 0);
