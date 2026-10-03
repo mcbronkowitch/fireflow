@@ -5,16 +5,18 @@
 // address pattern is one visible line instead of a knob that misbehaves on a
 // board.
 //
-// Topology (docs/hardware/io-budget.md §3): up to eight CD74HC4067 share the
-// four raw ADC pins; their address lines and their enables ride on the same
-// 74HC595 chain that carries the LEDs, which is what makes the whole panel
-// cost zero GPIOs and is the reason the 4-bit SD slot fits. One STEP of the
-// scan is one address plus one enabled group. On the shipping panel every
-// group sits on all four sense pins, so a step yields four channels at once.
-// The test coupon (kCouponChain) is a second, differently-shaped profile:
-// two groups of unequal size (16 and 8 channels), each wired to its own
-// single sense pin (`sense_of_group`), so a step there yields one channel,
-// not four.
+// Two step models (spec 2026-10-02-rev-a-p6a-panel-scan-design.md section 3.1):
+//
+//   sequential -- one group (chip) is enabled per step, and the steps walk
+//                 group 0's channels, then group 1's. Every coupon probe was
+//                 measured this way (kCouponChain), and SHELL_MUX_PROBE priced
+//                 its CPU cost on kPanelChain.
+//   parallel   -- each sense pin owns the groups wired to it, in group order,
+//                 and at step k every sense pin enables the group holding its
+//                 k-th channel. The address lines are shared by every chip, so
+//                 every enabled group sees the same address. A sense pin whose
+//                 channels are exhausted has all of its groups disabled. This
+//                 is Rev A (P2 section 3: one mux per sense pin per step).
 #include <cstdint>
 
 namespace shell {
@@ -25,13 +27,13 @@ namespace shell {
 // header -- mux_scan.cpp static_asserts the two against each other.
 inline constexpr int kSenseAdcBase = 8;
 
-inline constexpr int kMaxGroups = 2;
+// Rev A has ten muxes, each with its own enable (P2 section 3).
+inline constexpr int kMaxGroups = 10;
 
-// One board's chain, as data. Two boards exist: the shipping panel and the
-// test coupon, and they differ in every number below. This is a value and
-// not a set of #defines so that the host test can run the same assertions
-// against both -- a wrong address pattern is a line here and a knob that
-// misbehaves on a board there.
+// One board's chain, as data. This is a value and not a set of #defines so
+// that the host test can run the same assertions against every profile -- a
+// wrong address pattern is a line here and a knob that misbehaves on a board
+// there.
 struct ChainProfile
 {
     int sense_pins;        // raw ADC pins this board populates
@@ -39,19 +41,23 @@ struct ChainProfile
     int groups;            // enable lines, one per group
     int channels[kMaxGroups];        // channels on that group's chip
     int sense_of_group[kMaxGroups];  // sense pin carrying it, -1 = all of them
+                                     // (sequential profiles only)
     int chain_bits;        // bits clocked per step; the bit-bang cost scales
     int addr_shift;
     int enable_shift;
     int led_shift;
     int led_bits;
     int button_bit;        // index into the bits shifted out of the 165, -1 = none
+    int  addr_bits      = 4;      // address lines on the chain
+    bool parallel_sense = false;  // the step model, see the top of this file
 };
 
-// The shipping panel. 32 = four 74HC595: 19 LEDs (what FireflowHW draws
-// today), four address lines, two enables, seven spare. Up to eight
-// CD74HC4067 share the four raw ADC pins (io-budget section 3), which is
-// what makes the panel cost zero GPIOs. Demand today is 67 pot positions,
-// so the 128 channels are headroom, not a plan.
+// The pre-P2 panel draft: four 74HC595 = 32 bits, 19 LEDs, four address
+// lines, two 16-channel groups on all four sense pins. It is no longer the
+// panel -- Rev A is kRevaChain in generated_panel_map.h -- but it is the
+// profile SHELL_MUX_PROBE's CPU cost was measured against
+// (docs/bench/2026-08-23-978cbaf-shell-mux-placement.md), and images with
+// neither SHELL_COUPON_PROBE nor SHELL_PANEL_SCAN keep it.
 inline constexpr ChainProfile kPanelChain{
     4, kSenseAdcBase, 2, {16, 16}, {-1, -1}, 32, 0, 4, 8, 19, -1};
 
@@ -59,14 +65,44 @@ inline constexpr ChainProfile kPanelChain{
 // CD74HC4067 on ADC_9 and one CD74HC4051 on ADC_10 -- so the two groups do
 // NOT have the same channel count, and each sits on its own sense pin.
 // Derivation of the bit order: netlist.py:267 plus MSB-first clocking
-// through U_SR1.QH' -> U_SR2.SER.
+// through U_SR1.QH' -> U_SR2.SER. Sequential: every coupon probe was
+// measured with exactly these patterns.
 inline constexpr ChainProfile kCouponChain{
     2, kSenseAdcBase, 2, {16, 8}, {0, 1}, 16, 0, 4, 6, 8, 7};
+
+// The coupon's wiring, scanned with Rev A's model: the 4067 and the 4051
+// enabled together on their separate sense pins for steps 0-7, the 4067
+// alone for 8-15. The coupon play image runs it so the coupon rehearses Rev
+// A's pattern (spec section 3.2).
+inline constexpr ChainProfile kCouponPlayChain{
+    2, kSenseAdcBase, 2, {16, 8}, {0, 1}, 16, 0, 4, 6, 8, 7, 4, true};
+
+// One mux input, named by group (chip) and channel.
+struct MuxChannel
+{
+    int group;
+    int ch;
+};
+
+// The channels of every group wired to `sense`.
+constexpr int sense_channels(const ChainProfile& p, int sense)
+{
+    int n = 0;
+    for(int g = 0; g < p.groups; ++g)
+        if(p.sense_of_group[g] == sense) n += p.channels[g];
+    return n;
+}
 
 constexpr int scan_steps(const ChainProfile& p)
 {
     int n = 0;
-    for(int g = 0; g < p.groups; ++g) n += p.channels[g];
+    if(!p.parallel_sense)
+    {
+        for(int g = 0; g < p.groups; ++g) n += p.channels[g];
+        return n;
+    }
+    for(int s = 0; s < p.sense_pins; ++s)
+        if(sense_channels(p, s) > n) n = sense_channels(p, s);
     return n;
 }
 
@@ -77,49 +113,49 @@ constexpr int mux_total(const ChainProfile& p)
 
 struct StepPattern
 {
-    uint8_t address;      // 0..channels[group]-1
-    uint8_t enable_mask;  // active low: exactly one group's bit is 0
+    uint8_t  address;      // the shared address lines
+    uint16_t enable_mask;  // active low, one bit per group
 };
 
+// The chain's address and enables for `step`. A step that does not exist
+// parks the scan with every enable off.
 StepPattern step_pattern(const ChainProfile& p, int step);
 
-// The group a step belongs to, or -1 for a step that does not exist.
+// The group a SEQUENTIAL step belongs to, or -1 for a step that does not
+// exist -- and always -1 on a parallel profile, where a step has one group
+// per sense pin; ask group_at() there.
 int group_of_step(const ChainProfile& p, int step);
 
-// The channel a sense pin carries during `step`, or -1 for an index that does
-// not exist. Out of range gets an answer instead of an assumption: a
-// half-seated chip produces steps nobody planned, and an access past the end
-// would be a crash inside the audio callback.
-//
-// This is an index bijection over (step, sense) pairs, not a claim about the
-// board: it ignores `sense_of_group`, so on a profile where a group is wired
-// to only one sense pin (the coupon's), some (step, sense) pairs this
-// function happily answers name a sense pin whose mux is disabled during
-// that step -- no live channel reaches it. Callers that care which sense pin
-// is actually live for a step must read `sense_of_group` themselves.
+// The group the scan reads on sense pin `sense` during `step`, or -1 when no
+// live channel reaches that pin (it does not exist, its group is not the
+// enabled one, or -- parallel -- its channels are exhausted and the node
+// floats). Both models.
+int group_at(const ChainProfile& p, int step, int sense);
+
+// The channel group_at()'s group is on during `step`, or -1 where group_at()
+// says -1.
+int channel_at(const ChainProfile& p, int step, int sense);
+
+// The index g_mux_raw stores (step, sense) under, or -1 for an index that
+// does not exist. This is an index bijection over (step, sense) pairs, not a
+// claim about the board: callers that store values must ask sense_live()
+// first, because a pin with no live channel floats.
 int mux_channel(const ChainProfile& p, int step, int sense);
 
-// Whether sense pin `sense` carries a live channel during `step`: the step's
-// group is the one enabled, and that group is wired to this pin (or to all
-// of them, sense_of_group == -1). mux_channel() deliberately ignores the
-// wiring; a reader that stores values must ask this first, because on the
-// coupon the other pin's mux is disabled and its node floats.
+// Whether sense pin `sense` carries a live channel during `step`:
+// group_at() >= 0.
 bool sense_live(const ChainProfile& p, int step, int sense);
 
-// The scan step that selects channel `ch` on group `group`: group 0's
-// channels occupy the start of the step space, group 1's follow all of
-// group 0's -- the same layout step_pattern() and group_of_step() walk.
-//
-// Out of range returns -1, for the same reason mux_channel() does: a
-// half-seated chip produces indices nobody planned, and an out-of-range
-// address would still select SOME channel and hand back a foreign knob's
-// voltage, which is worse than reading nothing. The two groups do NOT have
-// the same channel count on the coupon (16 and 8), so the bound has to be
-// the group's own.
+// The step that selects channel `ch` on group `group`, or -1 out of range --
+// an out-of-range address would still select SOME channel and hand back a
+// foreign knob's voltage. The bound is the group's own: the coupon's two
+// groups are 16 and 8 channels.
 int step_of(const ChainProfile& p, int group, int ch);
 
-// The chain word for a step, with `leds` in the LED field.
-uint32_t chain_word(const ChainProfile& p, StepPattern s, uint32_t leds);
+// The chain word for a step, with `leds` in the LED field. The address is
+// masked to addr_bits, the enables to the profile's groups, the LEDs to
+// led_bits, so no field can reach another.
+uint64_t chain_word(const ChainProfile& p, StepPattern s, uint32_t leds);
 
 // Which bit of the 74HC165 return stream carries the board's button, counted
 // from the first bit shifted out, or -1 if the board has none.

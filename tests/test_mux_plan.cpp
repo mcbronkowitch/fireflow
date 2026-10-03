@@ -4,6 +4,7 @@
 // line. Nothing in this file may include a hardware header.
 #include <doctest/doctest.h>
 #include <set>
+#include <utility>
 #include <vector>
 #include "../shell/mux_plan.h"
 
@@ -223,4 +224,196 @@ TEST_CASE("mux plan: sense_live refuses what does not exist") {
         CHECK_FALSE(shell::sense_live(p, 0, -1));
         CHECK_FALSE(shell::sense_live(p, 0, p.sense_pins));
     }
+}
+
+namespace {
+// A Rev A-shaped profile written out by hand from P2 sections 3 and 4: ten
+// 8-channel muxes, 3/3/2/2 on four sense pins, a 40-bit chain with three
+// address lines, ten enables and nineteen LEDs. Task 3 holds the generated
+// kRevaChain to these same numbers.
+constexpr shell::ChainProfile kRevaShape{
+    4, shell::kSenseAdcBase, 10,
+    {8, 8, 8, 8, 8, 8, 8, 8, 8, 8},
+    {0, 0, 0, 1, 1, 1, 2, 2, 3, 3},
+    40, 0, 3, 13, 19, -1, 3, true};
+
+const std::vector<shell::ChainProfile> kParallelProfiles
+    = {kRevaShape, shell::kCouponPlayChain};
+
+int total_channels(const shell::ChainProfile& p)
+{
+    int n = 0;
+    for(int g = 0; g < p.groups; ++g) n += p.channels[g];
+    return n;
+}
+}
+
+TEST_CASE("parallel: a group is enabled exactly when its sense pin reads it") {
+    // P2 section 3: one mux per sense pin per step. Two muxes of one pin on
+    // at once short two wipers together; a mux on with nothing reading it is
+    // harmless but means the model and the chain disagree.
+    for(const auto& p : kParallelProfiles)
+        for(int step = 0; step < shell::scan_steps(p); ++step)
+        {
+            const shell::StepPattern sp = shell::step_pattern(p, step);
+            for(int g = 0; g < p.groups; ++g)
+            {
+                const bool on = ((sp.enable_mask >> g) & 1u) == 0u;
+                CAPTURE(step);
+                CAPTURE(g);
+                CHECK(on == (shell::group_at(p, step, p.sense_of_group[g]) == g));
+            }
+        }
+}
+
+TEST_CASE("parallel: every enabled group sees the step's shared address") {
+    // The address lines are common to every mux, so a step is only coherent
+    // if each sense pin's channel IS the address on the chain.
+    for(const auto& p : kParallelProfiles)
+        for(int step = 0; step < shell::scan_steps(p); ++step)
+        {
+            const shell::StepPattern sp = shell::step_pattern(p, step);
+            for(int s = 0; s < p.sense_pins; ++s)
+                if(shell::group_at(p, step, s) >= 0)
+                    CHECK(shell::channel_at(p, step, s) == sp.address);
+        }
+}
+
+TEST_CASE("parallel: every (group, channel) is read exactly once per sweep") {
+    for(const auto& p : kParallelProfiles)
+    {
+        std::set<std::pair<int, int>> seen;
+        int reads = 0;
+        for(int step = 0; step < shell::scan_steps(p); ++step)
+            for(int s = 0; s < p.sense_pins; ++s)
+            {
+                const int g = shell::group_at(p, step, s);
+                if(g < 0) continue;
+                ++reads;
+                seen.insert({g, shell::channel_at(p, step, s)});
+            }
+        CHECK(reads == total_channels(p));
+        CHECK(static_cast<int>(seen.size()) == total_channels(p));
+    }
+}
+
+TEST_CASE("parallel: a sense pin whose channels are exhausted is fully off") {
+    // Its node floats then. Storing it would put noise under a real
+    // channel's index (Review Focus 1).
+    for(int step = 16; step < 24; ++step)
+    {
+        const shell::StepPattern sp = shell::step_pattern(kRevaShape, step);
+        for(int g = 6; g < 10; ++g) CHECK(((sp.enable_mask >> g) & 1u) == 1u);
+        CHECK_FALSE(shell::sense_live(kRevaShape, step, 2));
+        CHECK_FALSE(shell::sense_live(kRevaShape, step, 3));
+        CHECK(shell::sense_live(kRevaShape, step, 0));
+        CHECK(shell::sense_live(kRevaShape, step, 1));
+    }
+    for(int step = 8; step < 16; ++step)
+    {
+        CHECK_FALSE(shell::sense_live(shell::kCouponPlayChain, step, 1));
+        CHECK(shell::step_pattern(shell::kCouponPlayChain, step).enable_mask == 0x2u);
+    }
+}
+
+TEST_CASE("parallel: step_of finds each channel where the scan reads it") {
+    for(const auto& p : kParallelProfiles)
+        for(int g = 0; g < p.groups; ++g)
+            for(int ch = 0; ch < p.channels[g]; ++ch)
+            {
+                const int s = shell::step_of(p, g, ch);
+                REQUIRE(s >= 0);
+                CHECK(shell::group_at(p, s, p.sense_of_group[g]) == g);
+                CHECK(shell::channel_at(p, s, p.sense_of_group[g]) == ch);
+            }
+}
+
+TEST_CASE("parallel: step counts") {
+    CHECK(shell::scan_steps(kRevaShape) == 24);
+    CHECK(shell::mux_total(kRevaShape) == 96);
+    CHECK(shell::sense_channels(kRevaShape, 0) == 24);
+    CHECK(shell::sense_channels(kRevaShape, 3) == 16);
+    CHECK(shell::scan_steps(shell::kCouponPlayChain) == 16);
+    CHECK(shell::mux_total(shell::kCouponPlayChain) == 32);
+}
+
+TEST_CASE("parallel: steps that do not exist enable nothing and read nothing") {
+    for(const auto& p : kParallelProfiles)
+        for(int step : {-1, shell::scan_steps(p), shell::scan_steps(p) + 5})
+        {
+            const shell::StepPattern sp = shell::step_pattern(p, step);
+            CHECK(sp.enable_mask == static_cast<uint16_t>((1u << p.groups) - 1u));
+            for(int s = 0; s < p.sense_pins; ++s)
+            {
+                CHECK(shell::group_at(p, step, s) == -1);
+                CHECK(shell::channel_at(p, step, s) == -1);
+                CHECK_FALSE(shell::sense_live(p, step, s));
+            }
+            CHECK(shell::group_of_step(p, 0) == -1);   // sequential only
+        }
+}
+
+TEST_CASE("chain word: Rev A's address cannot reach the enable field") {
+    // Three address lines sit directly below EN0 (Review Focus 4). With
+    // every enable ON (mask 0), an unmasked 4-bit address 0x0F would set
+    // bit 3 and switch mux 0 off.
+    const uint64_t w = shell::chain_word(kRevaShape, shell::StepPattern{0x0F, 0}, 0u);
+    CHECK((w & 0x7u) == 0x7u);
+    CHECK(((w >> 3) & 0x3FFu) == 0u);
+}
+
+TEST_CASE("chain word: a 40-bit word puts LEDs at 13..31 and nothing above") {
+    const uint64_t lit = shell::chain_word(kRevaShape, shell::StepPattern{0, 0}, 0xFFFFFFFFu);
+    CHECK(((lit >> 13) & 0x7FFFFu) == 0x7FFFFu);
+    CHECK((lit & 0x1FFFu) == 0u);
+    CHECK((lit >> 32) == 0u);
+    const uint64_t off = shell::chain_word(kRevaShape, shell::step_pattern(kRevaShape, -1), 0u);
+    CHECK(off == (uint64_t{0x3FF} << 3));
+}
+
+TEST_CASE("coupon chain: words are bit for bit what part 1 clocked") {
+    // Every coupon probe was measured on these words. Recomputed with part
+    // 1's formula, independent of chain_word(): 4 address bits, 2 enables at
+    // 4, 8 LEDs at 6.
+    for(int step = 0; step < 24; ++step)
+        for(uint32_t leds : {0u, 0xA5u, 0xFFu})
+        {
+            const shell::StepPattern sp = shell::step_pattern(shell::kCouponChain, step);
+            const uint64_t legacy = (uint64_t{sp.address} & 0x0Fu)
+                                    | ((uint64_t{sp.enable_mask} & 0x3u) << 4)
+                                    | ((uint64_t{leds} & 0xFFu) << 6);
+            CAPTURE(step);
+            CHECK(shell::chain_word(shell::kCouponChain, sp, leds) == legacy);
+        }
+    CHECK(shell::step_pattern(shell::kCouponChain, 0).enable_mask == 0x2u);
+    CHECK(shell::step_pattern(shell::kCouponChain, 16).enable_mask == 0x1u);
+    CHECK(shell::step_pattern(shell::kCouponChain, 23).address == 7);
+    CHECK_FALSE(shell::kCouponChain.parallel_sense);
+    CHECK(shell::kCouponChain.addr_bits == 4);
+}
+
+TEST_CASE("coupon play chain: the coupon's wiring, run in parallel") {
+    const shell::ChainProfile& c = shell::kCouponChain;
+    const shell::ChainProfile& p = shell::kCouponPlayChain;
+    CHECK(p.parallel_sense);
+    CHECK(p.sense_pins == c.sense_pins);
+    CHECK(p.groups == c.groups);
+    CHECK(p.channels[0] == c.channels[0]);
+    CHECK(p.channels[1] == c.channels[1]);
+    CHECK(p.sense_of_group[0] == c.sense_of_group[0]);
+    CHECK(p.sense_of_group[1] == c.sense_of_group[1]);
+    CHECK(p.chain_bits == c.chain_bits);
+    CHECK(p.addr_shift == c.addr_shift);
+    CHECK(p.enable_shift == c.enable_shift);
+    CHECK(p.led_shift == c.led_shift);
+    CHECK(p.led_bits == c.led_bits);
+    CHECK(p.button_bit == c.button_bit);
+    CHECK(p.addr_bits == c.addr_bits);
+    for(int step = 0; step < 8; ++step)
+    {
+        CHECK(shell::step_pattern(p, step).enable_mask == 0x0u);   // both on
+        CHECK(shell::step_pattern(p, step).address == step);
+    }
+    for(int step = 8; step < 16; ++step)
+        CHECK(shell::step_pattern(p, step).address == step);       // the 4067's upper half
 }
