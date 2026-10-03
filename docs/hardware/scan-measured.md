@@ -276,3 +276,36 @@ session's 60 s gave five complete blocks after the one the port opened into:
 ```bash
 python shell/read_scan_check.py COM4 capture.txt 60
 ```
+
+## P6a coupon session (2026-10-03)
+
+The coupon play image of P6a (`SHELL_PANEL_SCAN=1 SHELL_COUPON_PROBE=1`,
+main 757f072b, `SRAM_EXEC` 260524 B) on the coupon, flashed over the Daisy
+bootloader's DFU to `0x90040000`. It scans the coupon's wiring with Rev A's
+parallel model (`kCouponPlayChain`: the 4067 and the 4051 enabled together).
+The serial log was captured with a timestamping pyserial reader for 147 s:
+230 `SHELL_PLAY` and 229 `SHELL_PLAY_IO` lines. Checks from spec §7:
+
+1. **Pots: pass.** RV2, RV4 and RV6 each reached both stops: `rv4=1000`,
+   `rv2=1000`, `rv6=1000`, and every pot returned to 0. Every rest stretch
+   repeats exactly (`rv2=0 rv4=0 rv6=0` over dozens of lines). All of those
+   stretches were at the 0 stop; no rest in mid-travel was captured.
+2. **Key: pass.** `presses` steps 0 → 1 → 2 → 3 → 4 → 5 over the five
+   presses (71.6–74.5 s). It then reads 6 and 7 for the two holds that
+   followed. `keys=1` appears in the lines written while the key was down.
+   Bastian saw LED_1 lit while SW1 was held.
+3. **Held key, pots untouched: pass.** During the long hold (86.5–101.3 s,
+   `keys=1 presses=7`) and in every other line with `keys=1` (33 lines in
+   all), `rv2`/`rv4`/`rv6` repeat exactly. Caveat: all three pots sat at the
+   0 stop during the hold, so this is the weakest position for showing LED
+   switching coupling into a wiper.
+4. **D8/D9: not run.** No jumpers were at hand for `TP_ADC12`→`TP_AGND` and
+   `TP_ADC11`→`TP_A3V3`. Unjumpered, `adc11` and `adc12` float (for example
+   6018 / 6463, then 10489 / 7219 one line later), which says nothing about
+   the mapping. Still open.
+
+**Also seen:**
+- The span stayed valid the whole time: `zero=0`, `rail` 63482–63485.
+- `sweeps` rose from 31 to 5093 in 146.5 s of host time, 34.6 sweeps/s. That
+  is a 1.81 ms step against the 2 ms the README assumes. Not part of the four
+  checks, and not explained here.
