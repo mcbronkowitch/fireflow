@@ -215,6 +215,15 @@ If it does not fit: first drop the parameter-name strings from `kParams` in
 the firmware build (748 B, never read there); if that is not enough, STOP and
 report the numbers.
 
+*Amended 2026-10-03 after the STOP:* the name strings alone were not enough.
+With them dropped, the coupon play image still overflowed `SRAM_EXEC` at
+263012 B (+132) and the Rev A play image at 263668 B (+788), because -O3
+inlined the parallel step model's runtime loops into about 2.6 KB. Bastian
+chose to compile `mux_plan.o` with `-Os` as the second stage. Resulting
+`SRAM_EXEC`: 260524 B (coupon play) and 261180 B (Rev A play), both linking.
+The other measured option, all six scan-path objects at `-Os`, gave 259364 /
+259996 B and was not taken.
+
 ## 7. Coupon session (Bastian, about 15 minutes)
 
 Flash the coupon play image; read `SHELL_PLAY` by hand.

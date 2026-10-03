@@ -219,6 +219,51 @@ Betriebspunkt auf einem Daisy Seed mit dessen eigenem Audioausgang messen.
 Zeigt der es auch, steckt es im Modul; zeigt er es nicht, im Trägerboard.
 Das ist eine Messung und keine Vermutung, und sie kostet einen Boardwechsel.
 
+## Panel scan part 2: Rev A's pin map (P6a)
+
+Spec: `docs/superpowers/specs/2026-10-02-rev-a-p6a-panel-scan-design.md`.
+
+**The step model.** Rev A enables one 4051 per sense pin per step (P2 §3),
+so a step reads up to four channels: 24 steps, 48 ms a sweep. `mux_plan.h`
+calls this *parallel*. The coupon probes keep the *sequential* model they
+were measured with (`kCouponChain`, unchanged). The coupon play image
+(`SHELL_PANEL_SCAN=1 SHELL_COUPON_PROBE=1`) runs the coupon's wiring with
+Rev A's model (`kCouponPlayChain`): the 4067 and the 4051 live together.
+
+Since P6a, `mux_plan.o` builds with `-Os` and the firmware drops the `kParams`
+name strings (`SPKY_NO_PARAM_NAMES`), so a `SHELL_MUX_PROBE` re-run is not
+like-for-like with the 2026-08-23 bench numbers.
+
+**The table is generated.** `python shell/gen_panel_map.py` writes
+`shell/generated_panel_map.h` from `hardware/reva/panel-map.json`,
+`hardware/reva/blocks.py` and `engine/param_table.h`. Never edit the header;
+`shell_panel_map_guard` regenerates and compares it. 35 of the 70 pots send
+a parameter — those whose VCV law is exactly `apply_param()`'s (spec §2). The
+other 35 are scanned and printed, and wait for P6b's shared control layer.
+A pot added to the panel stops the generator until it is classified.
+
+**Keys and LEDs.** Every step reads the 165 in the same pass as the write;
+keys debounce over three reads (6 ms). LED bits only ever travel in the latch
+that carries the mux address (P2 §4). Keys have no function yet.
+
+**The span** comes from CAL_GND and CAL_3V3 once per sweep; until a sweep has
+measured a valid one, no knob reaches the engine.
+
+**Reading it.** The coupon prints part 1's `SHELL_PLAY` line plus
+`SHELL_PLAY_IO keys= presses= adc11= adc12=`. Rev A prints seven
+`SHELL_PLAY_V r=<first row> <ten values>` lines (row order and names are in
+the generated header's comments; values ×1000, −1000 = never moved) and one
+`SHELL_PLAY` summary line with key mask and press counts.
+
+**Coupon session** (spec §7) on the coupon play image:
+1. All three pots reach both stops; at rest their printed values do not change.
+2. Press SW1 five times: `presses=5`; LED_1 is lit while SW1 is held.
+3. Hold SW1, pots untouched: `rv2`/`rv4`/`rv6` do not change.
+4. Jumper `TP_ADC12` (D9) to `TP_AGND` and `TP_ADC11` (D8) to `TP_A3V3`:
+   `adc11` reads near `zero`, `adc12` near `rail`. Swap the jumpers: they
+   swap. (The coupon's test points carry its netlist's old D8/D9 names; P2 §2
+   corrected them.)
+
 ## Where the work stands, and where it goes next
 
 *Rewritten 2026-09-28 in English, like everything added to the repo since
@@ -282,7 +327,7 @@ the 16:1, 48 ms on the 8:1.
    Board session 2 played `SHELL_PANEL_SCAN` on the coupon, and RV2, RV4 and
    RV6 all moved the engine audibly, and all three reached both stops (RV4's
    low stop in a later read the same day). **Part 2** — the 70-pot
-   table, the three keycaps on the 165 and the 19 LEDs on the 595 — waits for
+   table, the four keys on the 165 and the 19 LEDs on the 595 — waits for
    the Rev A board's pin map (one board since 2026-09-28), which does not
    exist yet; the pin map should
    give one spare channel to AGND and one to the rail, so the panel

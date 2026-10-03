@@ -4097,9 +4097,25 @@ coupon, which is worth building only once a control-PCB decision hangs on
 the LED-word finding (`crosstalk-measured.md` row 7). Both remain runnable;
 the coupon has nothing else open.
 
-**Next:** part 2 — the 70-pot table, the three keycaps on the 165 and the 19
+**Next:** part 2 — the 70-pot table, the four keys on the 165 and the 19
 LEDs on the 595 — waits for the control PCB's pin map, which should give one
 spare channel to AGND and one to the rail (spec §8).
+
+**2026-10-02 — P6a panel scan over Rev A's pin map: built, the coupon session is open.**
+Spec `docs/superpowers/specs/2026-10-02-rev-a-p6a-panel-scan-design.md`,
+plan `docs/superpowers/plans/2026-10-02-rev-a-p6a-panel-scan.md`.
+- `shell/` scans Rev A as P2 and P3 define it: ten 4051s, one per sense pin per step (24 steps), the 40-bit chain, the four keys on the 165, and a span from CAL_GND/CAL_3V3.
+- `shell/gen_panel_map.py` generates the table. 35 of the 70 pots send a parameter: those whose VCV law is exactly `apply_param()`'s. The other 35 wait for P6b's shared control layer, which also carries the MOD layer.
+- **Finding:** `apply_param()` is not VCV's control law. DEPTH, COMP, FLUX, GRIT and the engine-dependent knobs differ (spec §2.1).
+- Code space (`SRAM_EXEC`, from the linker), coupon play and Rev A play images:
+
+  | Image | Before | After |
+  |---|---|---|
+  | coupon play | 259788 B (98.82 %) | 260524 B (99.10 %) |
+  | Rev A play | 259092 B (98.56 %) | 261180 B (99.35 %) |
+
+  Both play images overflowed with the `kParams` name strings dropped (Task 4 Step 9) alone — coupon 263012 B, Rev A 263668 B — so on 2026-10-03 `mux_plan.o` was moved to `-Os` as well (spec §6, amended).
+- **Open:** the coupon session (spec §7) — parallel scan clean, keys and LED_1, LEDs switching under the scan, D8/D9 as ADC_12/ADC_11.
 
 **2026-10-02 — P4-3 fabrication data: the pipeline stands; the package waits for the panel pass.**
 `KIPY hardware/reva/fab.py` turns the committed board into the order package
