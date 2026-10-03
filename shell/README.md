@@ -334,7 +334,7 @@ the 16:1, 48 ms on the 8:1.
    two channels. Code space is tight: `SRAM_EXEC` is 99.10 % on the coupon
    play image and 99.35 % on the Rev A play image. The coupon session
    (2026-10-03, `docs/hardware/scan-measured.md`) passed checks 1–3; check 4,
-   D8/D9 as ADC_12/ADC_11, is still open (no jumpers at hand).
+   D8/D9 as ADC_12/ADC_11, is deferred to P7 bring-up by decision.
 2. **Skipped on the coupon, by decision (Bastian, 2026-09-28):** round one's
    four RV4 cases (`SHELL_XTALK_RV4=1`) — the scan check already read every
    channel clean in the real pattern, with the engine running — and a second

@@ -302,7 +302,10 @@ The serial log was captured with a timestamping pyserial reader for 147 s:
 4. **D8/D9: not run.** No jumpers were at hand for `TP_ADC12`→`TP_AGND` and
    `TP_ADC11`→`TP_A3V3`. Unjumpered, `adc11` and `adc12` float (for example
    6018 / 6463, then 10489 / 7219 one line later), which says nothing about
-   the mapping. Still open.
+   the mapping. Deferred to P7 bring-up by decision (Bastian, 2026-10-03),
+   where P2 §7 lists it: a swapped mapping would show on Rev A as SENSE_2
+   and SENSE_3 trading places, fixed by two entries of `ADC_OF_PIN` in
+   `shell/gen_panel_map.py`.
 
 **Also seen:**
 - The span stayed valid the whole time: `zero=0`, `rail` 63482–63485.
