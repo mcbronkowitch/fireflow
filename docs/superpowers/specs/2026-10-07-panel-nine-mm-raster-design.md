@@ -141,11 +141,11 @@ orange 24 for part B's 23); pots: 74 against 77 bought.
 
 ## 5. LEDs
 
-19 lamps drawn today, **17** after.
+19 lamps drawn today, **15** after.
 
 | Lamp | Where | Shows | Status |
 |---|---|---|---|
-| `SONG_A_L` / `_B_L` | under SONG (cluster) | flash on a phrase change | unchanged meaning; position probed (§5.1) |
+| `SONG_A_L` / `_B_L` | **beside** SONG, inboard (§5.1) | flash on a phrase change | unchanged meaning; leaves the caption cluster |
 | `GATE_A_L` / `_B_L` | under ATTACK (cluster) | a note is sounding (`inst.gate()`) | unchanged |
 | `LVL_A_L` / `_B_L` | under COMP (cluster) | **this deck delivers signal at all** — lit while the deck's own output into the mix is above a floor, dark when nothing comes out (cutoff all the way down, LVL at zero, an empty sampler) | **new meaning** (was the `LANE_LEVEL` excursion, i.e. modulation). Tap and floor: a P6b / VCV-host probe |
 | `FTIME_A_L` / `_B_L` | under FLUXRATE, caption TIME (cluster) | one flash per FLUX time period — the repeat tempo TIME sets — **only while that deck's FLUX MIX > 0** | **new**. FLUX is a tempo-synced delay and TIME picks its division (`set_flux_rate(slice_idx)`), so this is timing; gating on MIX keeps it from doubling `TEMPO_L` at a quarter note and says FLUX is in the sound |
@@ -153,13 +153,13 @@ orange 24 for part B's 23); pots: 74 against 77 bought.
 | `TEMPO_L` | under TEMPO (cluster) | the transport beat | unchanged |
 | `CLK_L` | jack-row satellite of CLOCK, inboard (129.30) | a flash on every pulse arriving at the CLOCK jack | **renamed from `SYNC_L`** (the COUPLE knob's printed caption is also SYNC and has no lamp; the two were confused in review) and **given a meaning** — today it is held dark. Not redundant with `TEMPO_L`: with PACE in use the beat and the incoming pulse run at different rates |
 | `RST_L` | jack-row satellite of RESET, outboard (168.80 + 6.7 = 175.50) | a flash on every reset received | **new**; mirrors `CLK_L` about the centre line |
-| `IN_LVL_L` | jack-row satellite of IN_L, outboard (33.00 − 6.7 = 26.30) | input signal, the peak of IN L and IN R together | **new**. 2.50 mm of material to the SHFT lamp's hole, 2.15 to IN L's, both over `MIN_WEB`; whether IN L's nut covers it is the grip-test measurement already listed for `CLK_L`/`CEIL_L`. Inside IN L's audio jack zone by construction (§5.2) |
-| `SHIFTBTN_L` | unchanged (20.70) | one pulse when a **new engine** (either deck) or a **new scale** has actually taken effect — at the switch, not when the knob turns. Once SHIFT has functions, steady while held. The pulse must read differently from that and from MOD's double pulse; pattern is P6b's | **given a meaning** (held dark today) |
-| `MODBTN_L` | unchanged | the MOD latch | unchanged |
-| `CEIL_L` | unchanged | the master limiter bending | unchanged |
+| `SHIFTBTN_L` | jack row, **centred between the SHFT key and IN L**: x = (14.00 + 33.00) / 2 = 23.50 | **two jobs** (Bastian, 2026-10-07): steady while SHIFT is latched; otherwise the **input signal**, the peak of IN L and IN R together. On top of either, one pulse when a **new engine** (either deck) or a **new scale** has actually taken effect — at the switch, not when the knob turns — which must read clearly against the level display and against MOD's double pulse; patterns are P6b's | **moved** (was a satellite at 20.70) and **given its meanings** (held dark today). Replaces the separate IN lamp first planned here, saving one LED. 9.50 mm to both anchors: 4.85 mm of material to the SHFT key's hole, 4.95 to IN L's |
+| `MODBTN_L` | jack row, **centred between OUT R and the MOD key**: x = (271.80 + 290.80) / 2 = 281.30 | **two jobs** (Bastian, 2026-10-07): MOD's double pulse while the MOD latch is engaged; otherwise the **master limiter** bending (what `CEIL_L` showed). While MOD is latched the limiter is not shown — accepted | **moved** (was a satellite at 284.10) and takes over `CEIL_L`, saving one LED; mirrors `SHIFTBTN_L` about the centre line |
 
 **Removed** (lane excursions, i.e. modulation): `SRC_A_L`/`_B_L` (TIMB),
-`FLT_A_L`/`_B_L` (FILT), `CLR_A_L`/`_B_L` (COLR).
+`FLT_A_L`/`_B_L` (FILT), `CLR_A_L`/`_B_L` (COLR). **Folded into `MODBTN_L`:**
+`CEIL_L`. **Never added:** the separate IN lamp (`IN_LVL_L`), folded into
+`SHIFTBTN_L` the same day.
 
 **Asked for and dropped the same day:** a STEPS lamp (a step-advance flash
 differs from the gate lamp only on rests and held notes — so spec 2026-08-16
@@ -168,33 +168,44 @@ song-phrase-flash S4 stands, `FLOW_*` stay undrawn and
 scales the texture lanes' rate, PACE the modulator's base rate — both would
 show modulation speed).
 
-### 5.1 The SONG lamp needs a probe
+### 5.1 The SONG lamp sits beside its knob
 
 A cluster LED sits ~7 mm under its control, and the **top row's pots have
 their pins south** (`POT_TOP_ROT` = 90 in `place.py`), right where that LED
 lands. P4-1 measured that the SONG lamp needed a 2.6 mm drop at LED rotation
-0 for 0.51 mm pad clearance (P4-1 placement spec, SONG item). With the real
-`BODY_R["S"]` = 3.85 the cluster sits 0.55 mm *higher* still. SONG is the
-only top-row knob lamp (REC is a key, not a pot; FTIME, TEMPO and the others
-sit in R3/R4 over pots whose pins point north, away from them). Under SONG now
-stands the small `SHAPE` (cap top 30.775), so a drop has room.
+0 for 0.51 mm pad clearance (P4-1 placement spec, SONG item). SONG is the only
+top-row knob lamp (REC is a key; FTIME, TEMPO and the others sit in R3/R4,
+where their own pot's pins point north, away from them).
 
-**The plan's first board step probes SONG's lamp** against the pot pads, with
-two candidates: the cluster dropped by a measured amount, or the lamp beside
-the knob in the 11.15 mm gap. The winning position and its measured
-clearance go into this section before the generator is changed for it.
+**A drop is ruled out by the fields** (§7): the SEQUENCE band's bottom may sit
+at most 24.175 (MOTION's band starts at `MOD`'s cap, 28.625 − 1.45, minus
+`BOX_GAP`), and today's cluster already puts it at 24.110 — 0.065 mm of room.
 
-### 5.2 The IN lamp sits in a jack zone — admitted
+**So the SONG lamp stands beside its knob, inboard, on the knob's line:**
+x = SONG.x + 18.85 / 2 = 38.975 on deck A (mirrored on B), y = 14.50,
+halfway to STEPS; the SONG caption stays centred under the knob. Computed
+from KiCad's `Potentiometer_Alpha_RD901F-40-00D_Single_Vertical`: at rotation
+90 the support lugs sit 4.8 mm left and right of the shaft, pads 2.72 × 3.24,
+so their outer edge is 6.16 mm out; an LED with its pads stacked vertically
+at 9.425 mm keeps **2.36 mm** pad to pad to both SONG's and STEPS's lugs.
+Plate web to SONG's hole: 4.38 mm. The board task confirms it with
+`place_check.py`; if that disagrees with this arithmetic, the board task
+stops and reports.
+
+### 5.2 The jack-row lamps sit in jack zones — admitted
 
 `route_check.py`'s audio step flags every LED pad within 10 mm of an audio
 jack's tip pad: the 595-driven LED lines are aggressors, the jack a victim.
-Bastian admitted two such pairs on 2026-09-30 (`CEIL_L/OUT_R`,
-`IN_L/SHIFTBTN_L`). A lamp "beside IN" cannot keep 10 mm, so **`IN_L/IN_LVL_L`
-is admitted as the third pair** (Bastian, 2026-10-07), on the same terms:
-whether it actually couples is measured on the first Rev A board with the
-coupon's crosstalk rig, not argued away now. The `"audio"` set and
-`test_route.py`'s `JACK_ZONES` therefore hold these three keys after the pass,
-with whatever aggressor pads the audio step finds for them on the new board.
+Bastian admitted two such pairs on 2026-09-30, `CEIL_L/OUT_R` and
+`IN_L/SHIFTBTN_L`. A lamp that shows the input beside IN cannot keep 10 mm,
+and neither can the combined lamps of §5 (9.50 mm from their jack's centre,
+their pads closer still). So after the pass **exactly two pairs stay
+admitted** (Bastian, 2026-10-07): `IN_L/SHIFTBTN_L` (unchanged key) and
+`MODBTN_L/OUT_R` (replaces `CEIL_L/OUT_R`). Combining the lamps is what keeps
+it at two rather than three. Whether they actually couple is measured on the
+first Rev A board with the coupon's crosstalk rig, not argued away now. The
+`"audio"` set and `test_route.py`'s `JACK_ZONES` hold these two keys, with
+whatever aggressor pads the audio step finds for them on the new board.
 
 ## 6. Jack row
 
@@ -231,9 +242,10 @@ A group's field is built from its cells, no longer from the fixed
   at 3.0 that is 15.55. The notch still clears the left corner
   (3.0 − 1.0 ≥ 1.5 + 0.4).
 - **Jack row:** keeps its own frames (IN, CV, MOD, CLOCK, OUT; no legends),
-  ink ± `FIELD_MARGIN` vertically, the existing x cuts — except the row now
-  starts at x = 23.30 instead of 28.00 so `IN_LVL_L` sits inside IN. Its top
-  (108.20) keeps 4.3 mm to the knob fields above.
+  ink ± `FIELD_MARGIN` vertically, the existing x cuts. The two keys and
+  their centred lamps stay loose, as the keys and their lamps are today
+  (`SHIFTBTN_L`'s edge at 25.00 keeps 3.00 mm to IN's frame at 28.00).
+  Its top (108.20) keeps 4.3 mm to the knob fields above.
 - **Keys drawn round:** the plate draws a key as its real 6 mm round cap
   (r = `BODY_R["P"]` = 3.0), not an 8 mm square; `kFfPadR` follows. It is
   also used by the big module's ENGINE latch, so that widget gets a look.
@@ -284,10 +296,11 @@ schematic change.
   at 89.86, DECY/TONE at 79.0/97.0 — layout pins, not by-ear decisions;
   `docs/by-ear-decisions.md` has no entry for them — and the GLOBAL row's
   13.0 mm pitch). Each removal is named in its commit message.
-- **Rewritten:** `test_led_inventory_after_the_feedback_round` to §5 (17
-  lamps, the six removed absent, the new four present, `CLK_L` not `SYNC_L`);
-  `test_satellite_lamps_clear_their_anchor_hole` to `MODBTN_L`,
-  `SHIFTBTN_L`, `CEIL_L`, `CLK_L`, `RST_L`, `IN_LVL_L`;
+- **Rewritten:** `test_led_inventory_after_the_feedback_round` to §5 (15
+  lamps; the six removed and `CEIL_L` absent; `FTIME_*`, `RST_L` present;
+  `CLK_L` not `SYNC_L`); `test_satellite_lamps_clear_their_anchor_hole` to
+  `CLK_L` and `RST_L` at `SAT_D`, plus `SHIFTBTN_L` and `MODBTN_L` centred
+  between their key and jack with `MIN_WEB` to both holes;
   `test_size_classes_match_the_spec` and `test_hw_only_inventory` to the
   reserved four; every jack-row y check reads `JACK_Y`.
 - **Kept, unchanged in intent:** 60 HP, rail keep-out, mirror symmetry (also
@@ -298,7 +311,7 @@ schematic change.
 
 Downstream guards change their pinned counts with reasons: 74 pot rows and
 35 safe rows plus 4 reserved in `shell/test_gen_panel_map.py` and
-`tests/test_controls_map.cpp`; 17 LED bits in the Rev A chain profile
+`tests/test_controls_map.cpp`; 15 LED bits in the Rev A chain profile
 (`tests/test_mux_plan.cpp`); `test_assign.py` to the relaxed split, with a
 sabotage that forbids an unnecessary column split.
 
@@ -311,13 +324,13 @@ the drawing is polished.
    lamps, jack row, fields, keys; `gen_hw_cut.py` regenerates the hole list,
    cut file and print sheet.
 2. **Assignment** (§8) — `assign.py` relaxed, `panel-map.json` regenerated.
-3. **Schematic** — `blocks.py`'s shift-register chain carries 17 LED nets
-   (`LED0..LED16`) and two more `SR_SPARE` outputs; `build.py` places 74 pots
+3. **Schematic** — `blocks.py`'s shift-register chain carries 15 LED nets
+   (`LED0..LED14`) and four more `SR_SPARE` outputs; `build.py` places 74 pots
    from the panel map; the check and ERC stay green.
-4. **Board** — the SONG lamp probe (§5.1) first; then `place.py` →
+4. **Board** — `place.py` →
    `route.py` → `route_check.py` → P4-3's export and `reva_fab_guard`.
    Gate: `place_check.KNOWN_PANEL` empty; `route_check.KNOWN_PANEL` empty but
-   for `"audio"`, which holds exactly the three admitted jack-zone pairs
+   for `"audio"`, which holds exactly the two admitted jack-zone pairs
    (§5.2); `test_place.py` / `test_route.py` assert exactly that. New pot positions near back-side parts may need
    `OVERRIDES` in `place.py`, as P4-1/P4-2 did. If the router does not
    close, that is a stop-and-report, not a reason to move knobs back.
@@ -341,8 +354,9 @@ the drawing is polished.
 
 - **Router does not close** on the new pot positions (§10.4). It runs right
   after the generator, so a failure costs one task, not a redrawn plate.
-- **The SONG lamp has no measured position yet** (§5.1). If neither candidate
-  clears the pads, that comes back to Bastian before the generator moves.
+- **The SONG lamp's clearance is arithmetic from the footprint file** (§5.1),
+  not yet a `place_check` run. If the board disagrees, that comes back to
+  Bastian before anything else moves.
 - **Field margin 1.45 mm is tight by construction** (§7): it is exactly what
   the worst pair allows. Any later lamp over a big cap breaks it; the field
   guard catches that.
