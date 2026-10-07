@@ -375,6 +375,14 @@ add_test(
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
 )
 
+# The group fields of the 60 HP plate are rectilinear unions of cell rects
+# (spec docs/superpowers/specs/2026-10-07-panel-nine-mm-raster-design.md §7).
+add_test(
+    NAME hw_fields_guard
+    COMMAND ${Python3_EXECUTABLE} res/test_hw_fields.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
+)
+
 # Rev A P1: the acrylic cut file, the print sheet and the hole list the board
 # will be placed from (spec docs/superpowers/specs/2026-09-29-rev-a-p1-
 # panel-parts-design.md §4). Same runner shape as the two guards above.
