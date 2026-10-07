@@ -12,20 +12,29 @@ all jacks) passed — the jack row was fine.
 edge**. Spacing beats thematic grouping — form follows function. The Rev A
 board is not ordered yet, so the board follows the plate.
 
+This is also **the one panel pass** that P4-1 left its known panel violations
+for (decided 2026-10-04): the jack row's height and the LED rework travel
+with it, so the scripted chain to the board runs once, not three times.
+
 ## 1. Goal and scope
 
 Every knob and every key on the 60 HP plate keeps at least 9.0 mm between cap
-edges, measured with the real caps. The plate stays 60 HP, the jack row stays
-where it is, deck B stays deck A mirrored.
+edges, measured with the real caps. The plate stays 60 HP, deck B stays
+deck A mirrored. The jack row keeps its x positions and rises to
+`JACK_Y` = 112.75 (§3.4). The LED inventory changes as in §3.3.
 
 Done means: the generator places every knob from one cell table, a guard
 proves the 9 mm rule (and has been seen red once), the hole list, cut file,
 panel map, placed and routed Rev A board, generated firmware table and VCV
-`FireflowHW` panel all come from the new positions, and every gate along that
-chain is green.
+`FireflowHW` panel all come from the new positions, every gate along that
+chain is green, and the board's `KNOWN_PANEL` exemption lists
+(`place_check.py`, `route_check.py`) are **empty**.
 
-**Not in scope:** the jack row (positions, pitch, satellites), the big VCV
-module (`Fireflow`), the engine, plate colours, key functions, the LED law.
+**Not in scope:** jack x positions and pitch (patching passed the grip test),
+the big VCV module (`Fireflow`), the engine, plate colours, key functions.
+**How** the new LEDs light (§3.3 states what each one means) belongs to P6b's
+LED law on the board and to the VCV host's light code; this pass gives them
+LightIds, positions, holes and footprints.
 
 ## 2. What was measured
 
@@ -45,8 +54,8 @@ drawn with, not the 7.7 mm part (P1 §3.1, deferred to this round).
 Big beside small lands on exactly 9.00 (20 pairs); small beside small is
 11.15 mm across and 12.43 mm down; median nearest-neighbour gap 10.27 mm.
 Deck-to-centre seam 11.48 mm. Caps span x 4.70 .. 300.10 (4.5 mm to each
-plate edge of the 304.4 mm plate); lowest cap edge y 101.00, 13 mm above the
-jack row at 114.0.
+plate edge of the 304.4 mm plate); lowest cap edge y 101.00, 11.75 mm above the
+jack row at its new height of 112.75 (§3.4).
 
 Rejected on the numbers: keeping the current groups and only stretching them.
 Today's knobs stand on seven to eight distinct heights; at a ≥ 16.7 mm
@@ -101,16 +110,66 @@ at 11.48 mm. Approved by Bastian 2026-10-07 from a 1:1 preview.
 `REV_DECAY` cannot sit in R4: directly under `MORPH` the two big caps would be
 7.75 mm apart.
 
-### 3.3 LEDs
+### 3.3 LEDs (Bastian, 2026-10-07)
 
-- **Knob-owned lamps** (SONG, ATTACK, SOURCE, FILT, COLOR, COMP, TEMPO) keep
-  their caption cluster and move with their knob; nothing to decide.
-- **`REC_A_L` / `REC_B_L`** stop being hand-placed (today `(108.50, Y_TOP)`)
-  and become satellites of their key at `SAT_D` = 6.7 mm, inboard:
-  x = 111.65 on deck A. Its hole keeps 7.4 mm of material to `SCALE`'s pot
-  hole.
-- **Jack-row satellites** (`SYNC_L`, `MODBTN_L`, `SHIFTBTN_L`, `CEIL_L`) do
-  not move.
+19 lamps drawn today, 19 after: six go, six come.
+
+**Removed:**
+`SRC_A_L`/`SRC_B_L` (TIMB), `FLT_A_L`/`FLT_B_L` (FILT), `CLR_A_L`/`CLR_B_L`
+(COLR). Their LightIds go from `gen_panel.py`'s `HW_ONLY_LIGHTS`.
+
+**Added:**
+
+| Lamp | Where | Shows |
+|---|---|---|
+| `STEP_A_L` / `STEP_B_L` | beside `STEPS` (knob lamp) | a flash on every sequencer step advance of that deck |
+| `TIDE_L` | beside `TIDE` (knob lamp) | the tide cycle: a slow breathe at the period TIDE sets |
+| `PACE_L` | beside `PACE` (knob lamp) | the modulation base clock that PACE scales, one blink per period |
+| `IN_LVL_L` | jack-row satellite of `IN_L`, outboard (left): x = 33.0 − 6.7 = 26.30 | input signal, the peak of IN L and IN R together |
+| `RST_L` | jack-row satellite of `RESET`, outboard: x = 168.8 + 6.7 = 175.50 | a flash on every reset received |
+
+`RST_L` mirrors `SYNC_L` (129.30, inboard of CLOCK) about the centre line,
+so the CLOCK group reads symmetric. `IN_LVL_L` sits between `SHIFTBTN_L`
+(20.70) and `IN_L`: 2.50 mm of material to the SHFT lamp's hole and 2.15 mm
+to IN L's hole, both above `MIN_WEB` = 2.0. Whether IN L's nut covers it is
+the grip-test measurement already listed for `SYNC_L`/`CEIL_L`.
+
+The STEPS lamp reverses spec 2026-08-16 (song-phrase-flash S4), which struck
+`FLOW_A_L`/`FLOW_B_L` beside STEPS because they were drawn and never lit.
+The new lamps are new LightIds with their own meaning; `FLOW_*` stay
+undrawn as they are.
+
+**Unchanged:** the other knob lamps (`SONG_*`, `GATE_*` at ATTACK, `LVL_*` at
+COMP, `TEMPO_L`) keep their caption cluster and move with their knob.
+`REC_A_L` / `REC_B_L` stop being hand-placed (today `(108.50, Y_TOP)`) and
+become satellites of their key at `SAT_D` = 6.7 mm, inboard: x = 111.65 on
+deck A, 7.4 mm of material to `SCALE`'s pot hole. `SYNC_L`, `MODBTN_L`,
+`SHIFTBTN_L`, `CEIL_L` keep their x.
+
+**Placement rule for every lamp:** the plate web (`MIN_WEB`) to every hole
+**and** the board's pad clearance to every pot pad, as `place_check.py`
+judges it. The second half is what P4-1 found broken: a knob lamp's caption
+cluster puts the LED ~7 mm under its pot, and the **top row's pots have
+their pins south** (`POT_TOP_ROT` = 90, `place.py`), right where that LED
+lands. That hit `SONG_*` and now also hits the new `STEP_*`; with the real
+`BODY_R["S"]` = 3.85 the cluster moves 0.55 mm *closer* still. Lower-row
+pots have their pins north, away from their own lamp. P4-1 measured that the
+SONG lamp needs a 2.6 mm drop at LED rotation 0 for 0.51 mm pad clearance
+(P4-1 placement spec, SONG item and its drop table); in the new raster a drop that size runs into the row
+below (STEPS sits over the big `MOD`). **So the top-row lamps' position is the
+first thing the plan probes** — candidates are a dropped cluster or a lamp
+beside the knob in the 11.15 mm gap, as Bastian's "beside STEPS" literally
+reads — and the probe's numbers go into this spec before code follows.
+
+### 3.4 Jack row
+
+`JACK_Y` 114.00 → **112.75**. P4-1 measured that the jacks' tip pads lie
+past the board edge at 114.0 and that the row must sit at y ≤ 112.77; keys,
+jack-row LEDs and the SD slot share `JACK_Y` and move with it. The 9 mm rule
+reaches the jack row through its keys: SHFT sits under `COLOR_A` (and MOD
+under `COLOR_B`) at 9.05 mm, measured — at `JACK_Y` = 112.50 it would be
+8.81 and fail, so 112.75 is not a rounding of 112.77 but the window between
+two limits. Nearest jack centre to a cap edge: 12.29 mm (13.50 at 114.0).
 
 ## 4. Generator changes (`host/vcv/res/gen_hw_panel.py`)
 
@@ -119,8 +178,9 @@ at 11.48 mm. Approved by Bastian 2026-10-07 from a 1:1 preview.
    of §3 turn cells into millimetres. The hand-tuned machinery that existed
    only to place knobs between lines goes: `Y_B1K/Y_B1M/Y_B1G`,
    `Y_B2K/Y_B2G/Y_B2B/Y_B2L`, `CENTRE_PITCH`, `VOICE_MID`, the LEVEL band
-   (`LEVEL_*`, `_lvl0`, `LEVEL_SLOTS`, the foot/shoulder constants). `JACK_Y`,
-   `JACK_POS`, `SD_*` and `MODBTN`'s jack-row slot stay.
+   (`LEVEL_*`, `_lvl0`, `LEVEL_SLOTS`, the foot/shoulder constants).
+   `JACK_POS`, `SD_*` and `MODBTN`'s jack-row slot stay; `JACK_Y` becomes
+   112.75 (§3.4).
 2. **Real cap radii.** `BODY_R` = {G 6.0, S 3.85, P 3.0, J 3.1, L 1.5}. This
    is P1 §3.1, deferred to exactly this round. Captions stay at
    `CAPTION_GAP` = 3.60 below the body edge, so they rise 0.55 mm with it.
@@ -135,7 +195,16 @@ at 11.48 mm. Approved by Bastian 2026-10-07 from a 1:1 preview.
    that: today's 2.15 + 3.0 + 2.15 = 7.30 does not; 1.80 + 3.0 + 1.80 = 6.60
    does. The margin is a drawing number and may shrink; the knob raster is
    not moved for a frame.
-4. **Outputs regenerate:** `FireflowHW.svg`, `FireflowHW-print.svg`,
+4. **Lamps (§3.3).** `KNOB_LAMPS` loses the SOURCE/FILT/COLOR entries and
+   gains `STEP_*` → `STEPS_*`, `TIDE_L` → `TIDE`, `PACE_L` → `PACE`;
+   `LIGHT_POS` gains `IN_LVL_L` and `RST_L` as jack-row satellites and
+   derives `REC_*_L` from its key. The LightIds change in `gen_panel.py`'s
+   `HW_ONLY_LIGHTS`, so the header's `LightId` enum regenerates; the VCV host
+   compiles against it and every removed id must leave `host/vcv/src` too.
+   The VCV host may leave the new lamps dark in this pass — lighting them is
+   §1's out-of-scope item — but must not crash or draw them in the wrong
+   place.
+5. **Outputs regenerate:** `FireflowHW.svg`, `FireflowHW-print.svg`,
    `FireflowHW-holes.json`, the header, and (via `gen_hw_cut.py`, which places
    nothing) `FireflowHW-cut.svg`.
 
@@ -145,7 +214,8 @@ at 11.48 mm. Approved by Bastian 2026-10-07 from a 1:1 preview.
   centre distance − r₁ − r₂ ≥ 9.0 (tolerance 1e-6), with the cap radii of §2
   written into the test, not imported from `BODY_R`, so a later edit to the
   generator cannot loosen the guard. Also asserts the pair count is non-zero
-  and that 70 knobs and 2 deck keys were seen. **RED proven once** by moving
+  and that 70 knobs and all 4 keys (`REC_A/B`, `SHIFTBTN`, `MODBTN`) were
+  seen. **RED proven once** by moving
   one knob 0.1 mm towards a neighbour.
 - **New — cell table is the source.** Every knob position equals its cell's
   raster coordinate; no knob is placed outside the table.
@@ -154,10 +224,16 @@ at 11.48 mm. Approved by Bastian 2026-10-07 from a 1:1 preview.
   `test_level_band_clears_rooms_shoulder`,
   `test_level_band_holds_pan_in_slot_zero`,
   `test_middle_band_runs_on_three_lines`, `test_group_raster_closes`,
-  `test_rows_are_centred_on_their_ink`, and the coordinate pins inside
+  `test_rows_are_centred_on_their_ink`,
+  `test_steps_has_no_lamp_on_the_hw_plate` (reversed by §3.3), and the
+  coordinate pins inside
   `test_drawing_geometry` (DECY/TONE at 79.0/97.0 — a layout pin, not a
   by-ear decision; `docs/by-ear-decisions.md` has no entry for it).
   Each removal is listed in the commit message with its reason.
+- **Rewritten:** `test_led_inventory_after_the_feedback_round` to §3.3's
+  list (19 lamps, the six removed absent, the six added present);
+  `test_satellite_lamps_clear_their_anchor_hole` extended to `IN_LVL_L`,
+  `RST_L`, `REC_*_L`; every jack-row y check reads `JACK_Y`, not 114.0.
 - **Kept, unchanged in intent:** 60 HP, rail keep-out, mirror symmetry (also
   of captions), same runtime params in the same order as the big panel,
   footprints, captions clear of neighbours and of their own knob, lamp
@@ -168,20 +244,28 @@ at 11.48 mm. Approved by Bastian 2026-10-07 from a 1:1 preview.
 
 The board is the real risk, so it runs before the drawing is polished.
 
-1. **Generator + guard** (§4.1, §4.2, §5) — positions, holes, cut file.
-2. **Board.** `hardware/reva/assign.py` → `panel-map.json` (pot → mux
+1. **Probe the top-row lamps** (§3.3) against the pot footprint's pads,
+   both candidates, and write the chosen position and its measured clearance
+   into §3.3 before any generator code.
+2. **Generator + guard** (§4.1, §4.2, §4.4, §5) — positions, lamps, jack
+   row, holes, cut file.
+3. **Board.** `hardware/reva/assign.py` → `panel-map.json` (pot → mux
    assignment changes with the positions) → `place.py` → `route.py` →
    `route_check.py`, then P4-3's export (Gerbers, drill, CPL, BOM, assembly
    sheets) and `reva_fab_guard`. The pots get more room than before (13.0 →
    18.85 / 20.125 mm pitch), but the router has to prove it; if it does not
-   close, that is a stop-and-report, not a reason to move knobs back.
-3. **Firmware table.** `shell/gen_panel_map.py` → `generated_panel_map.h`;
+   close, that is a stop-and-report, not a reason to move knobs back. Gate:
+   both `KNOWN_PANEL` lists empty and `test_place.py` / `test_route.py`
+   asserting the empty sets. The LED count is unchanged (19 drawn), so the
+   five 595s keep enough bits; `assign.py` reassigns indices.
+4. **Firmware table.** `shell/gen_panel_map.py` → `generated_panel_map.h`;
    `cmake --build` and `ctest` in **Release** (`test_controls_map`,
-   `test_mux_plan`).
-4. **Drawing** (§4.3) — frames, print, VCV header.
-5. **VCV.** `host/vcv/build-local.sh install`, then restart Rack; a headless
+   `test_mux_plan`). Any firmware code naming a removed lamp
+   (`SRC_*`, `FLT_*`, `CLR_*`) goes with it.
+5. **Drawing** (§4.3) — frames, print, VCV header.
+6. **VCV.** `host/vcv/build-local.sh install`, then restart Rack; a headless
    render (`Rack.exe -u <throwaway> -t 2`) confirms the panel draws.
-6. **Docs.** `docs/hardware/grip-test.md`: items 1–2 recorded as failed with
+7. **Docs.** `docs/hardware/grip-test.md`: items 1–2 recorded as failed with
    the 5.3 mm measurement and this spec as the fix, item 3 as passed;
    `docs/roadmap.md` M6 entry.
 
@@ -191,8 +275,13 @@ The board is the real risk, so it runs before the drawing is polished.
 
 ## 7. Risks
 
-- **Router does not close** on the new pot positions (§6.2). Mitigation: it
-  runs second, before any drawing work, so a failure costs one task.
+- **Router does not close** on the new pot positions (§6.3). Mitigation: it
+  runs right after the generator, before any drawing work, so a failure
+  costs one task. The new jack-row height and the new lamp positions near
+  back-side parts may need `OVERRIDES` in `place.py`, as P4-1/P4-2 did.
+- **Top-row lamps have no measured position yet** (§3.3). The plan's first
+  task is the probe; if neither candidate clears the pads, that comes back
+  to Bastian before the generator moves.
 - **Frame margins** (§4.3) may need to drop below 1.80 somewhere the probe
   did not look. The guard "bodies and captions inside their frame" plus
   "frames do not overlap" decides; a margin change is a drawing change only.
