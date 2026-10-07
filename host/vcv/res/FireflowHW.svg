@@ -278,14 +278,14 @@
 <circle cx="237.300" cy="112.750" r="2.000" fill="none" stroke="#7f8f96" stroke-width="0.7"/>
 <circle cx="237.300" cy="112.750" r="1.178" fill="#050607"/>
 <text x="237.300" y="119.450" fill="#b9cdd7" text-anchor="middle" font-family="monospace" font-size="2.2">GATE</text>
-<circle cx="53.450" cy="61.408" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="53.450" cy="61.408" r="0.750" fill="#297260"/>
-<circle cx="255.450" cy="61.408" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="255.450" cy="61.408" r="0.750" fill="#855a3c"/>
-<circle cx="114.050" cy="20.308" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="114.050" cy="20.308" r="0.750" fill="#81352b"/>
-<circle cx="194.850" cy="20.308" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="194.850" cy="20.308" r="0.750" fill="#81352b"/>
+<circle cx="53.724" cy="61.408" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="53.724" cy="61.408" r="0.750" fill="#297260"/>
+<circle cx="255.724" cy="61.408" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="255.724" cy="61.408" r="0.750" fill="#855a3c"/>
+<circle cx="115.243" cy="20.308" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="115.243" cy="20.308" r="0.750" fill="#81352b"/>
+<circle cx="196.043" cy="20.308" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="196.043" cy="20.308" r="0.750" fill="#81352b"/>
 <circle cx="93.850" cy="83.683" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
 <circle cx="93.850" cy="83.683" r="0.750" fill="#297260"/>
 <circle cx="215.050" cy="83.683" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>

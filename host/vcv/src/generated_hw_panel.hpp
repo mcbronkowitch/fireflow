@@ -276,10 +276,10 @@ static const PanelCtl kOutputCtls[] = {
     {GATE_B, WK_OUT, {237.300f, 112.750f}, "GATE", {237.300f, 119.450f}, 0, 2.20f, 0xB9CDD7, "Gate B"},
 };
 static const PanelCtl kLightCtls[] = {
-    {GATE_A_L, WK_LIGHT, {53.450f, 61.408f}, "", {53.450f, 61.408f}, 0, 2.20f, 0xB9CDD7, ""},
-    {GATE_B_L, WK_LIGHT, {255.450f, 61.408f}, "", {255.450f, 61.408f}, 0, 2.20f, 0xB9CDD7, ""},
-    {REC_A_L, WK_LIGHT, {114.050f, 20.308f}, "", {114.050f, 20.308f}, 0, 2.20f, 0xB9CDD7, ""},
-    {REC_B_L, WK_LIGHT, {194.850f, 20.308f}, "", {194.850f, 20.308f}, 0, 2.20f, 0xB9CDD7, ""},
+    {GATE_A_L, WK_LIGHT, {53.724f, 61.408f}, "", {53.724f, 61.408f}, 0, 2.20f, 0xB9CDD7, ""},
+    {GATE_B_L, WK_LIGHT, {255.724f, 61.408f}, "", {255.724f, 61.408f}, 0, 2.20f, 0xB9CDD7, ""},
+    {REC_A_L, WK_LIGHT, {115.243f, 20.308f}, "", {115.243f, 20.308f}, 0, 2.20f, 0xB9CDD7, ""},
+    {REC_B_L, WK_LIGHT, {196.043f, 20.308f}, "", {196.043f, 20.308f}, 0, 2.20f, 0xB9CDD7, ""},
     {LVL_A_L, WK_LIGHT, {93.850f, 83.683f}, "", {93.850f, 83.683f}, 0, 2.20f, 0xB9CDD7, ""},
     {LVL_B_L, WK_LIGHT, {215.050f, 83.683f}, "", {215.050f, 83.683f}, 0, 2.20f, 0xB9CDD7, ""},
     {SONG_A_L, WK_LIGHT, {61.500f, 14.500f}, "", {61.500f, 14.500f}, 0, 2.20f, 0xB9CDD7, ""},

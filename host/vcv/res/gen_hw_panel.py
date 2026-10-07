@@ -21,7 +21,7 @@ where the index used to.
 Shares all parameter identity with gen_panel.py (import); defines only
 geometry. Run from host/vcv/:  python3 res/gen_hw_panel.py
 """
-import os, copy
+import os, copy, math
 import itertools
 import gen_panel as gp
 import hw_fields
@@ -409,6 +409,13 @@ def caption_led_cluster(knob):
     LED centre sits on the caption's glyph midline. The body then hangs
     ~0.7 mm below the baseline, and the group field counts it as its
     owner's ink (spec 2026-10-07 §7).
+
+    The LED slides outward (larger x, along that midline) when the centred
+    position would leave less than MIN_WEB of acrylic between its hole and its
+    owner's hole (spec 2026-10-07; P1's MIN_WEB). The caption and the LED's y
+    stay put -- lowering either would eat the VOICE/FLUX field gap. The slide
+    is the smallest that restores the web, solved from the hole diameters and
+    the fixed dy, so a lamp that already holds MIN_WEB does not move.
     """
     w = len(knob.label) * (CAPTION_SIZE * FONT_ADVANCE)
     led_r = BODY_R["L"]
@@ -418,6 +425,13 @@ def caption_led_cluster(knob):
     cap_y = knob.y + CLASS_LBL_DY[hw_class(knob.enum)]
     led_x = x0 + w + LED_CAPTION_GAP + led_r
     led_y = cap_y - (CAPTION_SIZE * FONT_CAP) / 2.0
+    # The hole list rounds every centre to 0.001 mm (gen_hw_cut.py), which can
+    # cost a web of exactly MIN_WEB up to ~0.0015 mm -- so aim 0.002 mm over.
+    need = (HOLE_D[hw_class(knob.enum)] / 2.0 + MIN_WEB + HOLE_D["L"] / 2.0
+            + 0.002)
+    dy = led_y - knob.y
+    if abs(dy) < need:
+        led_x = max(led_x, knob.x + math.sqrt(need * need - dy * dy))
     return cap_x, cap_y, led_x, led_y
 
 # Stay-put lamps only. Knob-owned entries are filled from caption_led_cluster

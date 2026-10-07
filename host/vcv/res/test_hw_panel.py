@@ -713,11 +713,20 @@ def test_knob_lamps_sit_in_the_caption_cluster():
         w = len(k.label) * (hw.CAPTION_SIZE * hw.FONT_ADVANCE)
         x0 = cap_x - w / 2.0
         x1 = l.x + led_r
-        check(abs((x0 + x1) / 2.0 - k.x) < 1e-6,
-              f"{lamp} cluster is not centred on {knob_enum}")
         gap = (l.x - led_r) - (cap_x + w / 2.0)
-        check(abs(gap - hw.LED_CAPTION_GAP) < 1e-6,
-              f"{lamp} caption-to-LED gap is {gap:.2f}, not {hw.LED_CAPTION_GAP}")
+        if gap > hw.LED_CAPTION_GAP + 1e-6:
+            # The LED slid outward to keep the acrylic web to its owner's
+            # hole: allowed, but only by the smallest amount that does it.
+            web = (((l.x - k.x) ** 2 + (l.y - k.y) ** 2) ** 0.5
+                   - hw.HOLE_D[hw.hw_class(knob_enum)] / 2 - hw.HOLE_D["L"] / 2)
+            check(hw.MIN_WEB - 1e-9 <= web < hw.MIN_WEB + 0.01,
+                  f"{lamp} slid out to gap {gap:.2f} but its web is "
+                  f"{web:.4f}, not the smallest that holds MIN_WEB")
+        else:
+            check(abs(gap - hw.LED_CAPTION_GAP) < 1e-6,
+                  f"{lamp} caption-to-LED gap is {gap:.2f}, not {hw.LED_CAPTION_GAP}")
+            check(abs((x0 + x1) / 2.0 - k.x) < 1e-6,
+                  f"{lamp} cluster is not centred on {knob_enum}")
         check(l.x > cap_x, f"{lamp} is not after the {knob_enum} word")
         mid = cap_y - (hw.CAPTION_SIZE * hw.FONT_CAP) / 2.0
         check(abs(l.y - mid) < 1e-6,
@@ -726,6 +735,20 @@ def test_knob_lamps_sit_in_the_caption_cluster():
         checked += 1
     check(checked == len(hw.KNOB_LAMPS),
           f"expected {len(hw.KNOB_LAMPS)} clustered lamps, checked {checked}")
+
+
+def test_every_lamp_keeps_the_acrylic_web_to_its_owner():
+    """Spec 2026-10-07: between a lamp's hole and its owner's hole the acrylic
+    keeps MIN_WEB (P1). hw_cut_guard measures the same web on the cut file;
+    this catches it at the generator, before any cut is written."""
+    by = {c.enum: c for c in hw.ALL_HW}
+    for lamp, owner in hw.LAMP_OWNER.items():
+        l, k = by[lamp], by[owner]
+        d = ((l.x - k.x) ** 2 + (l.y - k.y) ** 2) ** 0.5
+        web = d - hw.HOLE_D[hw.hw_class(owner)] / 2 - hw.HOLE_D["L"] / 2
+        check(web >= hw.MIN_WEB - 1e-6,
+              f"{lamp} leaves {web:.3f} mm of acrylic to {owner} "
+              f"(MIN_WEB {hw.MIN_WEB})")
 
 
 def test_song_lamp_stands_beside_its_knob():
