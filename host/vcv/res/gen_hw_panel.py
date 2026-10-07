@@ -2,8 +2,9 @@
 """Hardware-mode panel: the 60 HP envelope draft (envelope spec 2026-08-08 §4).
 
 Emits res/FireflowHW.svg + src/generated_hw_panel.hpp (namespace spkyhw).
-Geometry is the 2026-08-10 redistribution as drawn in
-docs/hardware/2026-08-10-hw-panel-redistribution.svg (graphics round 15 Aug).
+Geometry is the 9 mm raster of spec docs/superpowers/specs/2026-10-07-panel-
+nine-mm-raster-design.md: every knob and key on one cell table, every group
+field built from its cells.
 
 Plate graphics are "Option B" (owner decision 2026-08-29, picked from a
 rendered design round): the plate is ONE continuous dark surface -- no zone
@@ -21,7 +22,9 @@ Shares all parameter identity with gen_panel.py (import); defines only
 geometry. Run from host/vcv/:  python3 res/gen_hw_panel.py
 """
 import os, copy
+import itertools
 import gen_panel as gp
+import hw_fields
 
 HP = 60
 W  = HP * gp.MM_PER_HP            # 304.8 mm
@@ -79,11 +82,11 @@ NOTCH_DEPTH = 1.10                # clears the baseline (LEGEND_DY 0.75) by 0.35
 # in test_hw_panel.py starts refusing a plate.
 
 # Real hardware bodies, not the finger-clearance radius the layout is spaced
-# on. The frames are drawn against THESE, which is what buys the air between
-# the boxes (design note 2a).
-# P is 4.0 because that is the keycap this file actually draws (an 8 mm
-# square), not the 3.1 the design's cap-radius rule would hand a 4.0 slot.
-BODY_R = {"G": 6.0, "S": 4.4, "P": 4.0, "J": 3.1, "L": 1.5}
+# on. The fields are drawn against THESE. They are the real parts (spec
+# 2026-10-07 §2; the deferred P1 §3.1 lands here): Davies 1900H 12 mm cap,
+# Micro Knob 7.7 mm, Thonk low-profile key cap 6 mm -- a key draws as its
+# round cap.
+BODY_R = {"G": 6.0, "S": 3.85, "P": 3.0, "J": 3.1, "L": 1.5}
 
 # Distance from the printed word to the real body edge -- ONE number, not a
 # per-class offset. Read off the small pots, which are 51 of the 69 params,
@@ -189,24 +192,19 @@ HW_SIZE = {
     "RATE": "S", "SHAPE": "S", "SMOOTH": "S", "RANGE": "S", "MELODY": "S",
     "COLOR": "G",
     "TUNE": "S", "DETUNE": "S",
-    # FILT is big again since 2026-08-23. It went G -> S on 2026-08-19 for
-    # RASTER, not for room: at r=8.5 its neighbour spacing is 14.5 mm against
-    # 12 for every other pair, so it could not sit on the 13 mm pitch beside
-    # TIMB and DPTH. That reason is gone -- FILT no longer sits IN the pitch.
-    # It moved to the end of VOICE's lower row (column 4, under SUB) and the
-    # column between it and DPTH stays empty, which is what buys the 14.5.
+    # Big caps stand where the 9 mm raster allows them: rows 2 and 4, never
+    # deck column 6, never side by side (spec 2026-10-07 §3; the cell guard
+    # in test_hw_panel.py holds it).
     "FILT": "G",
     "SOURCE": "S",                                 # TIMB is small (graphics round)
     "DEPTH": "S",                                   # FEED, the VOICE knob
     "ATTACK": "S", "DECAY": "S", "RES": "S", "SUB": "S", "STAGES": "S",
     "FLUX": "G",
     "FLUXRATE": "S", "FLUXFB": "S", "LINK": "S",
-    # SEND went G -> S on 2026-08-30 when it left ROOM for LEVEL. Not a taste
-    # call: at r=8.5 it needs 14.5 mm to its neighbour, and the LEVEL band runs
-    # on TIMING's 13.0 pitch. A big SEND cannot stand on that pitch at all --
-    # see the guard test_level_band_is_evenly_divided.
+    # SEND went G -> S on 2026-08-30 when it left ROOM for LEVEL; on the
+    # raster it stands in row 5, which stays small (spec 2026-10-07 §3).
     "REV_MIX": "S",
-    "PAN": "S",                                     # the LEVEL band's third small knob
+    "PAN": "S",
     "COMP": "G", "GRIT": "S",
     "STEPS": "S", "SONG": "S",
     "ENGINE": "S", "REC": "P",                     # ENGINE is a 5-zone detent pot
@@ -214,6 +212,7 @@ HW_SIZE = {
     "TEMPO": "S", "COUPLE": "S", "SHUFFLE": "S",
     "SCALE": "S", "DRIFT": "S",
     "REV_DECAY": "G", "REV_SIZE": "S", "REV_TONE": "S", "REV_DIFF": "S",
+    "ROOT": "S", "REV_MOD": "S",                    # reserved pots, spec 2026-10-07 §4
 }
 
 CLASS_R = {"G": 8.5, "S": 6.0, "P": 4.0, "J": 4.0, "L": 1.5}
@@ -276,168 +275,99 @@ _JACK_ENUMS = ({c.enum for c in gp.INPUTS} | {c.enum for c in gp.OUTPUTS}
                | {c.enum for c in gp.HW_MOD_INPUTS})
 _LIGHT_ENUMS = {c.enum for c in gp.LIGHTS}
 
-# Row rhythm (spec 2026-08-10 §8). The middle band runs on three lines and
-# nothing sits between them: small knobs at Y_B1K, the four that had drifted
-# to 47.61/49.25/50.22 gathered on Y_B1M, and every big cap on Y_B1G. FILT
-# came DOWN to that line rather than the other three coming up -- MORPH
-# cannot rise past 52.0 without displacing SYNC's caption, and shortening
-# this band would leave the jack row without a margin (only 0.75 mm of slack
-# is left in the whole row chain).
-Y_TOP = 14.5
-Y_B1K, Y_B1M, Y_B1G = 34.0, 50.22, 53.0
-# Y_B2K was 76.0 until 2026-08-30, when the last big cap left it for Y_B2B.
-# It is 74.40 for one reason and it is arithmetic, not taste: a small body is
-# 4.40, so 74.40 puts its top on 70.00 -- exactly where the big caps' tops
-# used to be. The row's topmost ink therefore does not move, its margin stays
-# 2.15, and its bottom edge stays on 107.15. Change this number and the whole
-# chain below shifts; test_row3_ceiling_holds_at_seventy is the guard.
-Y_B2K, Y_B2G = 74.40, 95.0
-# The line REV_DECAY has always sat on, 3 mm under the small caps. FLUX's MIX
-# joined it 2026-08-30. Note what a move onto this line costs: while ANY big
-# cap is still on Y_B2K its body top (70.00) is the row's topmost ink, so the
-# row frame does not move and the move is free. The last one to leave takes
-# the topmost ink down to the small caps at 71.60, and row_frames() mirrors
-# that onto the bottom edge -- 1.60 mm the chain to the jack row has not got.
-Y_B2B = 79.0
-# The LEVEL band, on the line REV_TONE already used. When it was chosen this
-# was forced: with the small caps still on 76.00, REV_SIZE's caption sat at
-# 84.00 and the shoulder/foot chain was 0.70 mm short on Y_B2G. That reason
-# EXPIRED on 2026-08-30 when Y_B2K went to 74.40 and the caption rose to
-# 82.40 -- Y_B2G would fit again now. The band stays here for the reason it
-# is kept, not the one that put it here: FB, PAN, GRIT, SEND and TONE read
-# as ONE line across the plate, and REV_TONE anchors it.
-Y_B2L = 97.0
-JACK_Y = 114.0
+# P4-1 measured the jacks' tip pads past the board edge at 114.0; the row
+# must sit at y <= 112.77 (spec 2026-10-07 §6). Keys, jack-row lamps and the
+# SD slot share this line and move with it.
+JACK_Y = 112.75
 SD_X, SD_Y, SD_W, SD_H = 152.4, JACK_Y, 11.0, 6.0
-
-# The small-BIG-small figure, used twice on this plate: TIMING's TIDE/MRPH/
-# PACE and, since 2026-08-23, VOICE's lower row. Both are written from these
-# two numbers so the two cannot drift apart -- the whole reason VOICE reads
-# calm in that shape is that the eye has already learnt it from TIMING.
-# CENTRE_PITCH is what a small knob needs beside a big one (14.5 mm) plus a
-# margin; VOICE_MID is the centre of deck A's VOICE frame, which GROUP_ROWS
-# row 2 puts at 57.75..120.00. test_hw_panel pins VOICE_MID against the real
-# frame rather than trusting this comment.
-CENTRE_PITCH = 16.0
-VOICE_MID = 88.875
 
 # CV jack columns — uniform 11.5 mm raster, not under the knobs (spec §13).
 X_COLOR, X_FILT, X_TIMB, X_LVL = 79.0, 90.5, 102.0, 113.5
 
 # ---------------------------------------------------------------------------
-#  The LEVEL band (2026-08-30). SEND left ROOM for LEVEL, which is where it
-#  belongs -- it is a per-deck send, not a reverb control. LEVEL's frame has no
-#  room for it, so the frame grows a FOOT past the deck edge and the three
-#  small knobs stand in the band that main box and foot form together.
-#
-#  Only ONE number here is chosen: LEVEL_H_MARGIN. Everything else follows.
-#  The pitch is TIMING's own (TEMP - SYNC - SHFL); the outer slots hug their
-#  edges with the margin, which centres the group by construction; and the
-#  foot's right edge is wherever SEND's margin ends.
-#
-#  Why 5.40 and not the 2.15 the ROW uses: 2.15 is the VERTICAL margin. The
-#  plate's knob rows hold 3.10..9.00 horizontally (median 5.98), and every mm
-#  the band takes costs ROOM's tongue two -- it closes in from both sides. The
-#  balance point is 16.25 - 2m = m, i.e. 5.42; 5.40 rounds it and leaves the
-#  band 5.40 and REV_TONE 5.45. Pinned by test_level_band_is_evenly_divided.
-LEVEL_BAND_L = 93.95              # LEVEL A's own left edge; the guard pins this
-LEVEL_PITCH = 13.00               # TEMP -> SYNC -> SHFL, unchanged since
-LEVEL_H_MARGIN = 5.40             # the one free number
-_lvl0 = LEVEL_BAND_L + BODY_R["S"] + LEVEL_H_MARGIN
-# Slot 0 held PAN before PAN had a ParamId, on the argument that an empty slot
-# costs the same geometry as a filled one and it was cheaper to pay once than
-# to re-pitch the band later. That bet paid off on 2026-08-30: PAN arrived and
-# nothing moved. The guard that protected the reservation
-# (test_level_band_holds_an_empty_slot) has been replaced by its successor,
-# test_level_band_holds_pan_in_slot_zero, which now pins the slot as FILLED.
-LEVEL_SLOTS = (_lvl0, _lvl0 + LEVEL_PITCH, _lvl0 + 2 * LEVEL_PITCH)
+#  The 9 mm raster (spec docs/superpowers/specs/2026-10-07-panel-nine-mm-
+#  raster-design.md §3). One pitch for all fifteen columns -- six per deck,
+#  three in the centre -- centred on 152.4; 7 x 20.2 + 6.0 puts deck A's outer
+#  big cap 5.0 mm from the nominal edge. Rows run 14.5 .. 95.0. Every gap the
+#  grip test asked for (>= 9 mm between caps) is >= 10.27 mm here, measured.
+#  Big caps stand in rows 2 and 4 only, never in deck column 6, never side by
+#  side: two adjacent big caps would need 21.0 mm.
+# ---------------------------------------------------------------------------
+COL_PITCH = 20.2
+ROW_Y = (14.500, 34.625, 54.750, 74.875, 95.000)
+ROW_PITCH = ROW_Y[1] - ROW_Y[0]
 
-DECK_POS = {
-    "STEPS":  (35.00, Y_TOP), "SONG": (48.00, Y_TOP),
-    "RATE":   (61.00, Y_TOP), "MELODY": (74.00, Y_TOP),
-    "REC":    (101.00, Y_TOP),
-    "SHAPE":  (18.25, Y_B1K), "SMOOTH": (31.25, Y_B1K), "RANGE": (44.25, Y_B1K),
-    "MOD":    (21.75, Y_B1G), "DENSITY": (40.75, Y_B1G),
-    "ATTACK": (68.25, Y_B1K), "DECAY": (81.25, Y_B1K),
-    "RES":    (94.25, Y_B1K), "SUB": (107.25, Y_B1K),
-    # VOICE's lower row is TIMING's row, copied: small - BIG - small, the big
-    # one centred, on the CENTRE_PITCH raster. TIDE/MRPH/PACE has stood that
-    # way since the graphics round and reads calm even though it, too, spans
-    # two of the band's lines -- because it is symmetric about its big cap.
-    #
-    # The lower row left the ATTACK/DECAY/RES/SUB column raster to get there,
-    # and that is the point. It followed those columns until 2026-08-23, when
-    # FILT went back to a big cap and landed at the end of the row: that left
-    # two small knobs crowded at 4.20 mm, a 15.60 mm hole, and a big cap alone
-    # on a third line -- three heights in a two-row group, which is what made
-    # VOICE read restless next to MOTION. Approved by eye 2026-08-23 against
-    # three alternatives; the numbers here are measured, not chosen:
-    # body gaps 5.60/5.60, frame air 10.72 either side.
-    #
-    # (The old column 3 was RES's partner DAMP, the EDGE knob, until
-    # 2026-08-20; ENGINE opened this row at 70.25 before it moved to its own
-    # status-row frame, which is what freed the slot DPTH holds now.)
-    "SOURCE": (VOICE_MID - CENTRE_PITCH, Y_B1M),
-    "FILT":   (VOICE_MID, Y_B1G),
-    "DEPTH":  (VOICE_MID + CENTRE_PITCH, Y_B1M),
-    "ENGINE": (16.25, Y_TOP),
-    "TUNE":   (17.00, Y_B2K), "DETUNE": (30.00, Y_B2K),
-    "COLOR":  (23.50, Y_B2G),
-    "FLUX":   (67.00, Y_B2B),
-    # FB came off Y_B2G onto the LEVEL band's line 2026-08-30, so the plate's
-    # bottom line reads straight across: FB, PAN, GRIT, SEND, TONE. Free of
-    # charge -- its caption lands on 105.00, where REV_TONE's already was, so
-    # the row's ink and therefore its frame do not move.
-    "FLUXRATE": (54.00, 89.86), "FLUXFB": (67.00, Y_B2L), "LINK": (80.00, 89.86),
-    # LVL keeps its place; only the band below it is new. GRIT came off Y_B2G
-    # to join it, and SEND came the whole way over from ROOM.
-    "COMP":   (106.50, Y_B2B),
-    "PAN":    (LEVEL_SLOTS[0], Y_B2L),
-    "GRIT":   (LEVEL_SLOTS[1], Y_B2L),
-    "REV_MIX": (LEVEL_SLOTS[2], Y_B2L),
-    "STAGES": (68.25, Y_B1K),
-}
 
-CENTER_POS = {
-    # The GLOBAL centre row carries FOUR knobs since 2026-08-23. It used to be
-    # three on a 13.0 mm pitch centred on 152.40; PULL made it four, so the
-    # group was re-centred and the three existing knobs each moved 6.5 mm left.
-    # The pitch is UNCHANGED at 13.0 and so is the 1.0 mm gap between bodies --
-    # this row sets no new clearance precedent, it just uses the width the
-    # centre cell always had (measured: bodies span 126.90..177.90 inside a
-    # cell of 123.00..181.80, so 3.90 mm spare on each side).
-    #
-    # What it costs, and it is deliberate: with an even count no knob sits on
-    # the centre line any more, and GLOBAL no longer flushes with TEMPO/COUPLE/
-    # SHUFFLE in the TIMING row below. Re-centring is not optional -- leaving
-    # SCALE at 139.40 and hanging PULL off the right end lands it at 178.40,
-    # whose body overruns the cell edge by 2.60 mm.
-    "SCALE":  (132.90, Y_TOP), "DRIFT": (145.90, Y_TOP), "CHOKE": (158.90, Y_TOP),
-    "TEMPO":  (139.40, Y_B1K), "COUPLE": (152.40, Y_B1K), "SHUFFLE": (165.40, Y_B1K),
-    # The small-BIG-small figure VOICE's lower row now copies. Same two
-    # numbers, so re-tuning one row re-tunes both -- which is what keeps them
-    # reading as the same figure instead of two rows that merely resemble it.
-    "TIDE":   (W / 2 - CENTRE_PITCH, Y_B1M), "MORPH": (W / 2, Y_B1G),
-    "PACE":   (W / 2 + CENTRE_PITCH, Y_B1M),
-    "REV_SIZE": (136.40, Y_B2K), "REV_DECAY": (152.40, Y_B2B), "REV_DIFF": (168.40, Y_B2K),
-    "REV_TONE": (152.40, 97.00),
-    # PULL (spec 2026-07-19 pull-chord-gravity), fourth in the GLOBAL row and
-    # deliberately next to CHOKE: those two are the only bipolar controls in
-    # the whole centre (-1..+1; every other centre knob is 0..1 or stepped),
-    # they share the sign-picks-a-deck convention PULL was designed on, and
-    # both read "how do the two decks relate to each other".
-    #
-    # It shipped loose here first (2026-08-22): a scan for a slot that needed
-    # NOTHING to move found none -- best margin -1.201 mm in ROOM, -0.945 in
-    # GLOBAL, +0.100 in TIMING, which is fabrication noise. That was the right
-    # answer to the wrong question. Re-pitching the row was always the way in;
-    # it just was not an implementer's call to make. Bastian made it 2026-08-23.
-    "PULL": (171.90, Y_TOP),
-    # MODBTN is a real latch param now (spec 2026-08-22 mod-latch-layer §5),
-    # placed through the same place() path as every sound knob; the
-    # coordinates are unchanged from its old HW_ONLY slot.
-    "MODBTN": (W - 14.00, JACK_Y),
+def deck_col_x(col):
+    """Deck A column 1..6 (1 = outer edge); deck B is W - x."""
+    return CX - (8 - col) * COL_PITCH
+
+
+def centre_col_x(k):
+    """Centre column k = -1, 0, +1."""
+    return CX + k * COL_PITCH
+
+
+# Deck A (deck B mirrored): stem -> (row, column). ATTACK and STAGES share a
+# knob. ROOT is reserved (§4).
+DECK_CELLS = {
+    "ENGINE": (1, 1), "STEPS": (1, 2), "SONG": (1, 3), "RATE": (1, 4),
+    "MELODY": (1, 5), "REC": (1, 6),
+    "MOD": (2, 1), "SHAPE": (2, 2), "DENSITY": (2, 3), "SOURCE": (2, 4),
+    "FILT": (2, 5), "DEPTH": (2, 6),
+    "SMOOTH": (3, 1), "RANGE": (3, 2), "ATTACK": (3, 3), "STAGES": (3, 3),
+    "DECAY": (3, 4), "RES": (3, 5), "SUB": (3, 6),
+    "COLOR": (4, 1), "TUNE": (4, 2), "FLUX": (4, 3), "FLUXRATE": (4, 4),
+    "COMP": (4, 5), "PAN": (4, 6),
+    "ROOT": (5, 1), "DETUNE": (5, 2), "FLUXFB": (5, 3), "LINK": (5, 4),
+    "GRIT": (5, 5), "REV_MIX": (5, 6),
 }
+# Centre: name -> (row, k). Mirror-symmetric: TIMING is an arch (row 2 whole,
+# legs at k = -1/+1 down to row 4), ROOM an inverted T inside it. COUPLE
+# (printed SYNC) and DRIFT are the arch's mirrored legs: together / apart.
+CENTRE_CELLS = {
+    "SCALE": (1, -1), "CHOKE": (1, 0), "PULL": (1, 1),
+    "TIDE": (2, -1), "MORPH": (2, 0), "PACE": (2, 1),
+    "TEMPO": (3, -1), "REV_SIZE": (3, 0), "SHUFFLE": (3, 1),
+    "COUPLE": (4, -1), "REV_DECAY": (4, 0), "DRIFT": (4, 1),
+    "REV_DIFF": (5, -1), "REV_TONE": (5, 0), "REV_MOD": (5, 1),
+}
+DECK_GROUPS = {
+    "ENG": ("ENGINE",),
+    "SEQUENCE": ("STEPS", "SONG", "RATE", "MELODY"),
+    "CAPTURE": ("REC",),
+    "MOTION": ("MOD", "SHAPE", "DENSITY", "SMOOTH", "RANGE"),
+    "VOICE": ("SOURCE", "FILT", "DEPTH", "ATTACK", "STAGES", "DECAY", "RES", "SUB"),
+    "PITCH": ("COLOR", "TUNE", "ROOT", "DETUNE"),
+    "FLUX": ("FLUX", "FLUXRATE", "FLUXFB", "LINK"),
+    "LEVEL": ("COMP", "PAN", "GRIT", "REV_MIX"),
+}
+CENTRE_GROUPS = {
+    "GLOBAL": ("SCALE", "CHOKE", "PULL"),
+    "TIMING": ("TIDE", "MORPH", "PACE", "TEMPO", "SHUFFLE", "COUPLE", "DRIFT"),
+    "ROOM": ("REV_SIZE", "REV_DECAY", "REV_DIFF", "REV_TONE", "REV_MOD"),
+}
+# Reserved pots (spec §4): a hole, a caption and a pot on plate and board, a
+# mux channel, a firmware row that sends nothing -- no ParamId, no Rack widget.
+RESERVED = {"ROOT": ("ROOT", "reserved: per-deck scale root (spec 2026-10-07 §4)"),
+            "REV_MOD": ("WOBL", "reserved: reverb tail wobble (spec 2026-10-07 §4)")}
+
+
+def _deck_xy(stem):
+    row, col = DECK_CELLS[stem]
+    return deck_col_x(col), ROW_Y[row - 1]
+
+
+def _centre_xy(name):
+    row, k = CENTRE_CELLS[name]
+    return centre_col_x(k), ROW_Y[row - 1]
+
+
+DECK_POS = {s: _deck_xy(s) for s in DECK_CELLS if s not in RESERVED}
+CENTER_POS = {n: _centre_xy(n) for n in CENTRE_CELLS if n not in RESERVED}
+# MODBTN is a real latch param (spec 2026-08-22 mod-latch-layer §5), placed
+# through place() like every sound knob, on the jack row.
+CENTER_POS["MODBTN"] = (W - 14.00, JACK_Y)
 
 JACK_POS = {"PITCH_A": 56.00, "GATE_A": 67.50,
             "IN_L": 33.00, "IN_R": 44.50, "CLOCK": 136.00,
@@ -449,17 +379,24 @@ JACK_POS = {"PITCH_A": 56.00, "GATE_A": 67.50,
 
 # Knob-owned lamps: the caption and the LED are one block under the knob,
 # word then air then LED, centred on the knob x. Same reading order on both
-# decks -- not an optical [LED][word] mirror. Pads, the CLOCK jack lamp and
-# the ceiling lamp stay as satellites (LIGHT_POS below).
+# decks -- not an optical [LED][word] mirror. The jack-row keys, the CLOCK
+# jack lamp and the ceiling lamp stay as satellites (LIGHT_POS below).
 KNOB_LAMPS = {
     "SRC_A_L": "SOURCE_A", "SRC_B_L": "SOURCE_B",
     "FLT_A_L": "FILT_A",   "FLT_B_L": "FILT_B",
     "CLR_A_L": "COLOR_A",  "CLR_B_L": "COLOR_B",
     "LVL_A_L": "COMP_A",   "LVL_B_L": "COMP_B",
-    "SONG_A_L": "SONG_A",  "SONG_B_L": "SONG_B",
     "GATE_A_L": "ATTACK_A", "GATE_B_L": "ATTACK_B",
     "TEMPO_L": "TEMPO",
+    # REC's lamp joined the cluster on 2026-10-07: beside the key it reached
+    # 0.25 mm out of CAPTURE's cell (spec §5).
+    "REC_A_L": "REC_A", "REC_B_L": "REC_B",
 }
+# SONG's lamp stands BESIDE its knob, inboard, on the knob's line: the top
+# row's pots have their pins south, where a cluster LED would land, and the
+# row band leaves no room to drop it (spec §5.1).
+SIDE_LAMPS = {"SONG_A_L": "SONG_A", "SONG_B_L": "SONG_B"}
+LAMP_OWNER = {**KNOB_LAMPS, **SIDE_LAMPS}
 KNOBS_WITH_LAMPS = set(KNOB_LAMPS.values())
 LED_CAPTION_GAP = 0.8   # mm of air between the word's ink and the LED body
 CAPTION_SIZE = 2.2      # same size hw_label prints
@@ -469,8 +406,8 @@ def caption_led_cluster(knob):
     """(cap_x, cap_y, led_x, led_y) for a knob-owned lamp.
 
     LED centre sits on the caption's glyph midline. The body then hangs
-    ~0.7 mm below the baseline; _row_ink() ignores these lamps so the
-    frame chain does not grow -- the caption already defines that floor.
+    ~0.7 mm below the baseline, and the group field counts it as its
+    owner's ink (spec 2026-10-07 §7).
     """
     w = len(knob.label) * (CAPTION_SIZE * FONT_ADVANCE)
     led_r = BODY_R["L"]
@@ -484,8 +421,7 @@ def caption_led_cluster(knob):
 
 # Stay-put lamps only. Knob-owned entries are filled from caption_led_cluster
 # after HW_PARAMS exists -- do not hand-edit those back in here.
-LIGHT_POS = {"REC_A_L": (108.50, Y_TOP), "REC_B_L": (W - 108.50, Y_TOP),
-             # Jack-row satellites, all at SAT_D from their anchor (Rev A P1,
+LIGHT_POS = {# Jack-row satellites, all at SAT_D from their anchor (Rev A P1,
              # 2026-09-29; they were at the class radius + 1.5 mm = 5.5,
              # which left 0.85-0.95 mm of material to the real holes).
              # SYNC_L is inboard of CLOCK, SHFT's lamp inboard of SHFT,
@@ -530,6 +466,10 @@ HW_PARAMS = HW_PARAMS + [place(gp.MODBTN_CTL)]
 _by_param = {c.enum: c for c in HW_PARAMS}
 for lamp, knob_enum in KNOB_LAMPS.items():
     LIGHT_POS[lamp] = caption_led_cluster(_by_param[knob_enum])[2:]
+for lamp, knob_enum in SIDE_LAMPS.items():
+    k = _by_param[knob_enum]
+    inboard = COL_PITCH / 2.0 if k.x < CX else -COL_PITCH / 2.0
+    LIGHT_POS[lamp] = (k.x + inboard, k.y)
 HW_INPUTS  = [place(c) for c in gp.INPUTS] + [place(c) for c in gp.HW_MOD_INPUTS]
 HW_OUTPUTS = [place(c) for c in gp.OUTPUTS]
 _SKIP_HW_LIGHTS = {"FLOW_A_L", "FLOW_B_L"}
@@ -542,12 +482,15 @@ class HwOnly:
 
     def __init__(self, enum, cls, x, y, label, tip):
         self.enum, self.x, self.y, self.label, self.tip = enum, x, y, label, tip
-        self.kind = {"P": gp.LATCH, "J": gp.IN, "L": gp.LIGHT}[cls]
+        self.kind = {"P": gp.LATCH, "J": gp.IN, "L": gp.LIGHT, "S": gp.SMKNOB}[cls]
         self.r = CLASS_R[cls]
 
 
 HW_ONLY = [
     HwOnly("SHIFTBTN", "P", 14.00, JACK_Y, "SHFT", "reserved, no function"),
+    HwOnly("ROOT_A", "S", *_deck_xy("ROOT"), *RESERVED["ROOT"]),
+    HwOnly("ROOT_B", "S", W - _deck_xy("ROOT")[0], _deck_xy("ROOT")[1], *RESERVED["ROOT"]),
+    HwOnly("REV_MOD", "S", *_centre_xy("REV_MOD"), *RESERVED["REV_MOD"]),
 ]
 
 ALL_HW = HW_PARAMS + HW_INPUTS + HW_OUTPUTS + HW_LIGHTS + HW_ONLY
@@ -592,50 +535,13 @@ def hw_label(c):
 
 
 # =============================================================================
-#  Group frames: one fixed raster of drawing boxes
+#  Group fields: rect unions built from the cells (spec 2026-10-07 §7)
 # =============================================================================
-# Four rows straight across the plate, 3 mm of air everywhere between boxes,
-# a shared outer edge at 8 mm, a shared deck edge at 120 mm, and deck B is
-# deck A mirrored. Boxes are cut at CUTS, which is the centre of the 3 mm
-# gap, so the arithmetic can never leave a sliver or an overlap.
+# Every group's field is the union of its controls' cell rects, so a field
+# can be any rectilinear shape -- TIMING is an arch with ROOM standing inside
+# it. 3 mm of air between fields of different groups; deck B is deck A
+# mirrored because its controls are.
 BOX_GAP = 3.0
-DECK_EDGE = 120.0                 # right edge of the last deck-A box
-CENTRE_L = 123.0                  # left edge of the centre column
-
-# A box's LOWER BAND may run to a different width than its upper one -- that
-# is the whole of the L, expressed once. LEVEL's lower band is WIDER (it
-# reaches past the deck edge into the master area); ROOM's is NARROWER by the
-# same amount plus the usual gap, which is what makes room for it. Neither
-# frame is a special case in the drawing code: both are "a rectangle whose
-# bottom part has its own left and right edge".
-BAND_INK_MARGIN = 2.15            # the row's own vertical ink margin, reused
-                                  # for the horizontal step -- it is a frame
-                                  # edge running past ink either way
-LEVEL_FOOT_R = LEVEL_SLOTS[2] + BODY_R["S"] + LEVEL_H_MARGIN
-FOOT_TOP = Y_B2L - BODY_R["S"] - BAND_INK_MARGIN
-SHOULDER_BOT = FOOT_TOP - BOX_GAP          # ROOM's upper band stops here
-ROOM_FOOT_L = LEVEL_FOOT_R + BOX_GAP
-PLATE_EDGE = 8.0                  # outer edge of a full-width row
-
-# The y/h pair in each row below is a SEED, not the drawn frame: it only
-# says which controls belong to the row. The frame that gets drawn is
-# derived in row_frames() from what the row actually prints.
-# (seed y, seed h, first x, cuts, deck-A names, deck-B names, centre name)
-GROUP_ROWS = [
-    # ENG is its own frame at the outer edge, left of SEQUENCE on deck A and
-    # mirrored on B. The status row used to start at x=28 and leave the plate's
-    # outer 20 mm empty; the side keep-out is only 2 mm, so that space was
-    # always there. Moving ENG out of VOICE is what pays for DPTH and the
-    # free slot beside it (DAMP, the EDGE knob, removed 2026-08-20).
-    (9.00, 16.0, PLATE_EDGE, [26.00, 85.20],
-     ["ENG", "SEQUENCE", "CAPTURE"], ["ENG", "SEQUENCE", "CAPTURE"], "GLOBAL"),
-    (28.00, 38.2, PLATE_EDGE, [56.25],
-     ["MOTION", "VOICE"], ["MOTION", "VOICE"], "TIMING"),
-    (69.20, 38.2, PLATE_EDGE, [42.00, 92.45],
-     ["PITCH", "FLUX", "LEVEL"], ["PITCH", "FLUX", "LEVEL"], "ROOM"),
-    (110.40, 15.0, 28.00, [50.25, 73.25],
-     ["IN", "CV A", "MOD A"], ["OUT", "CV B", "MOD B"], "CLOCK"),
-]
 
 # Every group name the plate carries, in reading order: decks top to bottom,
 # then the centre column, then the jack row. This printed as a two-digit index
@@ -653,121 +559,27 @@ LEGEND_INSET = 4.0                # legend's left edge, in from the frame's.
                                   # so the lettering did not move on 2026-08-30
                                   # -- only the two digits in front of it went.
 
-# The one free number in the whole vertical chain. Not a taste value: the
-# status row sits as high as its own legend is allowed to print, so that
-# legend's baseline lands exactly on the rail line.
-ROW1_TOP = KEEP_TOP - LEGEND_DY
-
 
 def body_r(c):
     """Radius of the real component body, not the layout clearance circle."""
     return BODY_R[hw_class(c.enum)]
 
 
-def _row_cells(row):
-    """(name, side, x, w) for every frame in a row, left to right."""
-    _y, _h, x0, cuts, names_a, names_b, centre = row
-    edges = [x0] + list(cuts) + [DECK_EDGE]
+FIELD_MARGIN = 1.45                 # spec §7: the worst pair allows 1.4825
+CELL_HALF = (COL_PITCH - BOX_GAP) / 2.0
 
-    def span(i):
-        lo = edges[i] + (BOX_GAP / 2.0 if i else 0.0)
-        hi = edges[i + 1] - (BOX_GAP / 2.0 if i + 1 < len(names_a) else 0.0)
-        return lo, hi
-
-    cells = []
-    for i, n in enumerate(names_a):
-        lo, hi = span(i)
-        cells.append((n, "A", lo, hi - lo))
-    cells.append((centre, "C", CENTRE_L, W - 2 * CENTRE_L))
-    for i, n in enumerate(names_b):
-        lo, hi = span(i)
-        cells.append((n, "B", W - hi, hi - lo))
-    return cells
+# The jack row keeps its own frames (no legends since 2026-08-30).
+JACK_ROW_X0, JACK_ROW_CUTS = 28.00, (50.25, 73.25)
+JACK_ROW_A, JACK_ROW_B, JACK_ROW_C = ("IN", "CV A", "MOD A"), ("OUT", "CV B", "MOD B"), "CLOCK"
+DECK_EDGE, CENTRE_L = 120.0, 123.0
 
 
-def _row_ink(row):
-    """Top and bottom of everything a row PRINTS: real component bodies and
-    caption ink. hw_label() raises when a caption has nowhere clear to go --
-    that is by design and must stay loud, so it is not caught here."""
-    y0, h = row[0], row[1]
-    spans = [(x, x + w) for _n, _s, x, w in _row_cells(row)]
-    top = bot = None
-    for c in ALL_HW:
-        if not (y0 <= c.y <= y0 + h):
-            continue
-        if not any(x0 <= c.x <= x1 for x0, x1 in spans):
-            continue
-        if c.enum in KNOB_LAMPS:
-            # Cluster lamp: hangs slightly below the caption baseline by
-            # design. The caption ink already sets the row floor.
-            continue
-        r = body_r(c)
-        edges = [(c.y - r, c.y + r)]
-        if c.label:
-            _lx, ly, _anchor, size, _col = hw_label(c)
-            edges.append((ly - size * FONT_CAP, ly))
-        for a, b in edges:
-            top = a if top is None else min(top, a)
-            bot = b if bot is None else max(bot, b)
-    if top is None:
-        raise ValueError(f"group row seeded at y={y0} prints nothing")
-    return top, bot
+class Box(hw_fields.Field):
+    """A group field: a rect union with a name, a side and a legend."""
 
-
-def row_frames():
-    """(y, h) per row. Every frame hugs its own ink with the SAME margin
-    above and below -- a frame whose contents sit high in it reads as a
-    mistake, and with captions below their controls that is what a fixed
-    row height produces. The rows are then chained by BOX_GAP, so the air
-    between them stays uniform and only ROW1_TOP is chosen."""
-    out, prev = [], None
-    for row in GROUP_ROWS:
-        t, b = _row_ink(row)
-        m = t - ROW1_TOP if prev is None else t - (prev + BOX_GAP)
-        out.append((t - m, (b + m) - (t - m)))
-        prev = b + m
-    return out
-
-
-ROW_FRAMES = row_frames()
-JACK_ROW_Y = ROW_FRAMES[-1][0]
-
-
-class Box:
-    """A group frame. Rectangular, EXCEPT that its lower band may have its own
-    left and right edge -- `foot` is (x0, x1, y): below y the frame spans
-    x0..x1 instead of x..x+w. Wider than the box makes an L (LEVEL), narrower
-    makes a bracket (ROOM). None means a plain rectangle, which is 24 of 26."""
-
-    __slots__ = ("n", "side", "x", "y", "w", "h", "foot")
-
-    def __init__(self, n, side, x, y, w, h, foot=None):
-        self.n, self.side, self.x, self.y, self.w, self.h = n, side, x, y, w, h
-        self.foot = foot
-
-    @property
-    def bands(self):
-        """((x0, x1, y0, y1), ...) -- one entry for a plain box, two when the
-        lower band differs. Everything that asks 'what does this frame cover'
-        goes through here, so a foot cannot be honoured in one place and
-        forgotten in another."""
-        if self.foot is None:
-            return ((self.x, self.x + self.w, self.y, self.y + self.h),)
-        fx0, fx1, fy = self.foot
-        return ((self.x, self.x + self.w, self.y, fy),
-                (fx0, fx1, fy, self.y + self.h))
-
-    def covers(self, x, y):
-        return any(x0 - 1e-9 <= x <= x1 + 1e-9 and y0 - 1e-9 <= y <= y1 + 1e-9
-                   for x0, x1, y0, y1 in self.bands)
-
-    def overlaps(self, other):
-        for ax0, ax1, ay0, ay1 in self.bands:
-            for bx0, bx1, by0, by1 in other.bands:
-                if (ax0 < bx1 - 1e-9 and bx0 < ax1 - 1e-9
-                        and ay0 < by1 - 1e-9 and by0 < ay1 - 1e-9):
-                    return True
-        return False
+    def __init__(self, n, side, rects):
+        super().__init__(rects)
+        self.n, self.side = n, side
 
     @property
     def stem(self):
@@ -778,15 +590,9 @@ class Box:
     def prints_legend(self):
         """The jack row prints none since 2026-08-30 -- IN / CV A / MOD A /
         CLOCK / MOD B / CV B / OUT are struck. The jacks are the one row a
-        legend never helped: they are already the only sockets on the plate,
-        the captions under them name every one, and the words had to ride
-        ABOVE their frame to escape Rack's 8.03 mm PJ301M widgets, which put
-        them in the gap between two rows rather than on either.
-
-        That lift was the only reason a legend could fail to straddle its own
-        top edge, so with the jack row silent, printing and straddling are the
-        same question and LEGEND_LIFT is gone."""
-        return self.y != JACK_ROW_Y
+        legend never helped: they are the only sockets on the plate and the
+        captions under them name every one."""
+        return abs(self.y - JACK_ROW_Y) > 1e-9
 
     @property
     def legend_y(self):
@@ -796,7 +602,7 @@ class Box:
     @property
     def notch(self):
         """(x0, x1) of the bite this field's top edge takes around its own
-        legend, or None where the frame prints no legend to make room for."""
+        legend, or None where the field prints no legend to make room for."""
         if not self.prints_legend:
             return None
         _, ink_r, _, _ = text_run(self.x + LEGEND_INSET, self.legend_y,
@@ -804,29 +610,123 @@ class Box:
         return (self.x + LEGEND_INSET - NOTCH_PAD, ink_r + NOTCH_PAD)
 
 
-# The two frames that are not rectangles, keyed by (name, side). Deck B is
-# mirrored here rather than written out, so the two can never disagree.
-FEET = {
-    ("LEVEL", "A"): (LEVEL_BAND_L, LEVEL_FOOT_R, FOOT_TOP),
-    ("ROOM", "C"): (ROOM_FOOT_L, W - ROOM_FOOT_L, SHOULDER_BOT),
-}
+def _ink(c):
+    """Everything control c prints: body, caption, and any lamp it owns."""
+    r = body_r(c)
+    x0, x1, y0, y1 = c.x - r, c.x + r, c.y - r, c.y + r
+    if c.label:
+        lx, ly, anchor, size, _col = hw_label(c)
+        tx0, tx1, ty0, ty1 = text_run(lx, ly, size, 0.0, anchor, c.label)
+        x0, x1, y0, y1 = min(x0, tx0), max(x1, tx1), min(y0, ty0), max(y1, ty1)
+    lr = BODY_R["L"]
+    for lamp, owner in LAMP_OWNER.items():
+        if owner == c.enum:
+            lx, ly = LIGHT_POS[lamp]
+            x0, x1 = min(x0, lx - lr), max(x1, lx + lr)
+            y0, y1 = min(y0, ly - lr), max(y1, ly + lr)
+    return x0, x1, y0, y1
 
 
-def _foot_for(n, side, x, w):
-    key = (n, "A" if side == "B" else side)
-    if key not in FEET:
-        return None
-    fx0, fx1, fy = FEET[key]
-    return (W - fx1, W - fx0, fy) if side == "B" else (fx0, fx1, fy)
+def _knob_field_rects(members):
+    """Spec §7: each control's cell rect (its ink plus FIELD_MARGIN, at least
+    its column cell), stretched to its row's band within the group, plus the
+    joins between neighbouring cells of the same group."""
+    rows = {}
+    for c in members:
+        x0, x1, y0, y1 = _ink(c)
+        cell = [min(x0 - FIELD_MARGIN, c.x - CELL_HALF), max(x1 + FIELD_MARGIN, c.x + CELL_HALF),
+                y0 - FIELD_MARGIN, y1 + FIELD_MARGIN]
+        rows.setdefault(round(c.y, 6), []).append((c, cell))
+    cells = []
+    for row in rows.values():
+        top = min(cell[2] for _c, cell in row)
+        bot = max(cell[3] for _c, cell in row)
+        for c, cell in row:
+            cell[2], cell[3] = top, bot
+            cells.append((c, cell))
+    rects = [tuple(cell) for _c, cell in cells]
+    for (a, ra), (b, rb) in itertools.combinations(cells, 2):
+        if abs(a.y - b.y) < 1e-6 and abs(abs(a.x - b.x) - COL_PITCH) < 1e-6:
+            lo, hi = (ra, rb) if a.x < b.x else (rb, ra)
+            if lo[1] < hi[0]:
+                rects.append((lo[1], hi[0], ra[2], ra[3]))
+        elif abs(a.x - b.x) < 1e-6 and abs(abs(a.y - b.y) - ROW_PITCH) < 1e-6:
+            up, dn = (ra, rb) if a.y < b.y else (rb, ra)
+            if up[3] < dn[2]:
+                rects.append((max(up[0], dn[0]), min(up[1], dn[1]), up[3], dn[2]))
+    # A 2 x 2 block of one group's cells (MOTION, VOICE, PITCH, FLUX, LEVEL)
+    # leaves a hole where its four joins meet. Fill it: a field is one piece
+    # without holes (hw_fields.outline refuses a ring). It lies inside the
+    # group's own rects, so no gap to another field changes.
+    at = {}
+    for c, cell in cells:
+        k = (round(c.x, 6), round(c.y, 6))
+        o = at.get(k, cell)
+        at[k] = (min(o[0], cell[0]), max(o[1], cell[1]), cell[2], cell[3])
+    for (x, y), ul in at.items():
+        ur = at.get((round(x + COL_PITCH, 6), y))
+        dl = at.get((x, round(y + ROW_PITCH, 6)))
+        dr = at.get((round(x + COL_PITCH, 6), round(y + ROW_PITCH, 6)))
+        if ur and dl and dr:
+            hx0, hx1 = min(ul[1], dl[1]), max(ur[0], dr[0])
+            if hx0 < hx1 and ul[3] < dl[2]:
+                rects.append((hx0, hx1, ul[3], dl[2]))
+    return rects
+
+
+def _jack_row_cells():
+    """(name, side, x, w) for the jack row's frames, left to right."""
+    edges = [JACK_ROW_X0] + list(JACK_ROW_CUTS) + [DECK_EDGE]
+
+    def span(i):
+        lo = edges[i] + (BOX_GAP / 2.0 if i else 0.0)
+        hi = edges[i + 1] - (BOX_GAP / 2.0 if i + 1 < len(JACK_ROW_A) else 0.0)
+        return lo, hi
+
+    cells = []
+    for i, n in enumerate(JACK_ROW_A):
+        lo, hi = span(i)
+        cells.append((n, "A", lo, hi - lo))
+    cells.append((JACK_ROW_C, "C", CENTRE_L, W - 2 * CENTRE_L))
+    for i, n in enumerate(JACK_ROW_B):
+        lo, hi = span(i)
+        cells.append((n, "B", W - hi, hi - lo))
+    return cells
+
+
+def _jack_row_band():
+    spans = [(x, x + w) for _n, _s, x, w in _jack_row_cells()]
+    top = bot = None
+    for c in ALL_HW:
+        if abs(c.y - JACK_Y) > 0.5 or not any(x0 <= c.x <= x1 for x0, x1 in spans):
+            continue
+        r = body_r(c)
+        edges = [(c.y - r, c.y + r)]
+        if c.label:
+            _lx, ly, _a, size, _col = hw_label(c)
+            edges.append((ly - size * FONT_CAP, ly))
+        for a, b in edges:
+            top = a if top is None else min(top, a)
+            bot = b if bot is None else max(bot, b)
+    return top - FIELD_MARGIN, bot + FIELD_MARGIN
+
+
+JACK_ROW_Y = _jack_row_band()[0]
 
 
 def group_boxes():
-    """The 26 drawing frames, left to right within each row. Two of them (and
-    deck B's mirror of one) carry a foot -- see Box and FEET."""
+    """The 26 group fields: deck A, deck B, the centre, then the jack row."""
+    by = {c.enum: c for c in ALL_HW}
     out = []
-    for row, (y, h) in zip(GROUP_ROWS, ROW_FRAMES):
-        for n, side, x, w in _row_cells(row):
-            out.append(Box(n, side, x, y, w, h, _foot_for(n, side, x, w)))
+    for side in "AB":
+        for name, stems in DECK_GROUPS.items():
+            members = [by[f"{s}_{side}"] for s in stems if f"{s}_{side}" in by]
+            out.append(Box(name, side, _knob_field_rects(members)))
+    for name, names in CENTRE_GROUPS.items():
+        out.append(Box(name, "C", _knob_field_rects([by[n] for n in names])))
+    y0, y1 = _jack_row_band()
+    for n, side, x, w in _jack_row_cells():
+        out.append(Box(n, side, [(x, x + w, y0, y1)]))
     return out
 
 
@@ -834,11 +734,8 @@ BOXES = group_boxes()
 
 
 def box_of(c):
-    """The frame a control's centre falls in, or None (SHFT/MOD sit loose).
-
-    Asks the box, so a foot counts: SEND's centre is past the deck edge and
-    still belongs to LEVEL, which is the entire point of the 2026-08-30 round.
-    A plain rectangle comparison here would hand it to nobody."""
+    """The field a control's centre falls in, or None (SHFT/MOD sit loose).
+    Asks the field's own rect union, so an arch's leg or a T's foot counts."""
     for b in BOXES:
         if b.covers(c.x, c.y):
             return b
@@ -846,35 +743,25 @@ def box_of(c):
 
 
 def _field_d(b):
-    """One group field as a path: a rounded rect with a bite taken out of the
-    top edge where the legend prints.
+    """One group field as a path: the union's outline, every corner rounded,
+    with a bite out of the top edge where the legend prints.
 
     A path and not a <rect rx>, because the bite has to come out of the
-    OUTLINE. The field is a fill, so the old trick -- a knockout patch laid
-    over the frame in the plate's own colour -- has nothing to hide any more:
-    it would have to repaint the plate exactly, and the plate is a gradient.
-    Cutting the fill instead cannot drift out of step with what is under it.
+    OUTLINE: the field is a fill over a gradient plate, so a knockout patch
+    could never repaint what is under it. The outline's first edge is the
+    top edge from the top-left corner (hw_fields.outline), which is the edge
+    the legend straddles.
 
     Quadratic curves, not elliptical arcs: at NOTCH_R = 0.4 mm the two are
     indistinguishable, and Q takes the sweep-flag question -- and any question
     about NanoSVG's arc parser -- off the table entirely."""
-    x, y, w, h = b.x, b.y, b.w, b.h
-    fx0, fx1, fy = b.foot if b.foot else (x, x + w, y + h)
-
-    # Vertices clockwise from the top-left, with the notch inserted into the
-    # top edge and the foot's step into the sides. Where the foot matches the
-    # box on one side, two vertices coincide and _rounded_poly drops them --
-    # so an L, a bracket and a plain rectangle all come out of this one list.
-    pts = [(x, y)]
-    rad = [FIELD_R]
+    pts = list(b.outline)
+    rad = [FIELD_R] * len(pts)
     if b.notch:
         n0, n1 = b.notch
-        pts += [(n0, y), (n0, y + NOTCH_DEPTH),
-                (n1, y + NOTCH_DEPTH), (n1, y)]
-        rad += [NOTCH_R] * 4
-    pts += [(x + w, y), (x + w, fy), (fx1, fy), (fx1, y + h),
-            (fx0, y + h), (fx0, fy), (x, fy)]
-    rad += [FIELD_R] * 7
+        _x, y = pts[0]
+        pts[1:1] = [(n0, y), (n0, y + NOTCH_DEPTH), (n1, y + NOTCH_DEPTH), (n1, y)]
+        rad[1:1] = [NOTCH_R] * 4
     return _rounded_poly(pts, rad)
 
 
@@ -1019,9 +906,8 @@ def svg():
             P.append(f'<circle cx="{mm(c.x)}" cy="{mm(c.y)}" r="0.750" '
                       f'fill="{led_bed(c)}"/>')
         elif hw_class(c.enum) == "P":
-            P.append(f'<rect x="{mm(c.x-c.r)}" y="{mm(c.y-c.r)}" width="{mm(2*c.r)}" '
-                      f'height="{mm(2*c.r)}" rx="1.2" fill="{PAD_FILL}" '
-                      f'stroke="{pad_accent(c)}" stroke-width="0.3"/>')
+            P.append(f'<circle cx="{mm(c.x)}" cy="{mm(c.y)}" r="{mm(br)}" '
+                      f'fill="{PAD_FILL}" stroke="{pad_accent(c)}" stroke-width="0.3"/>')
         else:
             # The mounting hole, drawn at the real pot body -- not a cap. Rack
             # puts its own knob widget on top and a plate has a hole here.
