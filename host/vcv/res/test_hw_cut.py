@@ -113,14 +113,14 @@ def test_every_control_id_is_in_the_hole_list():
 
 
 def test_hole_counts():
-    """Counted 2026-09-28 from the generator: 70 pot positions (ATTACK and
-    STAGES share a knob per deck), 4 keys, 18 jacks, 19 LEDs, the SD slot and
-    four mounting slots. When the plate changes, this goes red on purpose --
-    update the numbers in the same commit as the plate."""
+    """Counted 2026-10-07 from the generator (spec 2026-10-07): 73 pot positions
+    (ATTACK and STAGES share a knob; three reserved), 4 keys, 18 jacks, 15 LEDs,
+    the SD slot and four mounting slots. When the plate changes, this goes red
+    on purpose -- update the numbers in the same commit as the plate."""
     kinds = {}
     for h in _committed_holes():
         kinds[h["kind"]] = kinds.get(h["kind"], 0) + 1
-    want = {"pot": 70, "key": 4, "jack": 18, "led": 19, "sd": 1, "mount": 4}
+    want = {"pot": 73, "key": 4, "jack": 18, "led": 15, "sd": 1, "mount": 4}
     check(kinds == want, f"hole counts {kinds}, expected {want}")
 
 
