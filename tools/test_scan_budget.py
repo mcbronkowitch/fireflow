@@ -95,18 +95,21 @@ def test_blocking_placements_against_the_reserve():
 def test_panel_channel_count_and_topology():
     # The count comes from the hardware panel generator, not from a document.
     # io-budget section 3 still says 65; the plate has had 70 pot positions
-    # since 2026-08-30.  If this goes red, the panel moved: re-read
-    # scan-budget.md section 5 and io-budget section 3 in the same commit.
+    # since 2026-08-30 and 73 since the 9 mm raster, which adds the three
+    # reserved pots ROOT_A, ROOT_B and REV_MOD -- each is read through a mux
+    # channel like every pot (spec 2026-10-07 section 4 and 8).  If this goes
+    # red, the panel moved: re-read scan-budget.md section 5 and io-budget
+    # section 3 in the same commit.
     n = s.pot_positions()
-    check(n == 70, "the hardware panel has %d pot positions, scan-budget.md "
-          "says 70" % n)
+    check(n == 73, "the hardware panel has %d pot positions, scan-budget.md "
+          "says 73" % n)
     a = s.topology(s.CHIPS[G67], n)
     b = s.topology(s.CHIPS[G51], n)
     check((a["chips"], a["steps"]) == (5, 32),
           "16:1 at %d channels: %d chips, %d steps; section 5 says 5 and 32"
           % (n, a["chips"], a["steps"]))
-    check((b["chips"], b["steps"]) == (9, 24),
-          "8:1 at %d channels: %d chips, %d steps; section 5 says 9 and 24"
+    check((b["chips"], b["steps"]) == (10, 24),
+          "8:1 at %d channels: %d chips, %d steps; section 5 says 10 and 24"
           % (n, b["chips"], b["steps"]))
     # And the old count gives the same steps, which is why settle-budget.md's
     # sweep figures survive the recount.
