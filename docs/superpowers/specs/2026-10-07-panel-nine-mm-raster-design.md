@@ -122,7 +122,7 @@ at 11.48 mm. Approved by Bastian 2026-10-07 from a 1:1 preview.
 
 | Lamp | Where | Shows |
 |---|---|---|
-| `STEP_A_L` / `STEP_B_L` | beside `STEPS` (knob lamp) | a flash on every sequencer step advance of that deck |
+| `FTIME_A_L` / `FTIME_B_L` | beside `FLUXRATE` (caption TIME, knob lamp) | one flash per FLUX time period of that deck — the repeat tempo TIME sets |
 | `TIDE_L` | beside `TIDE` (knob lamp) | the tide cycle: a slow breathe at the period TIDE sets |
 | `PACE_L` | beside `PACE` (knob lamp) | the modulation base clock that PACE scales, one blink per period |
 | `IN_LVL_L` | jack-row satellite of `IN_L`, outboard (left): x = 33.0 − 6.7 = 26.30 | input signal, the peak of IN L and IN R together |
@@ -134,10 +134,13 @@ so the CLOCK group reads symmetric. `IN_LVL_L` sits between `SHIFTBTN_L`
 to IN L's hole, both above `MIN_WEB` = 2.0. Whether IN L's nut covers it is
 the grip-test measurement already listed for `SYNC_L`/`CEIL_L`.
 
-The STEPS lamp reverses spec 2026-08-16 (song-phrase-flash S4), which struck
-`FLOW_A_L`/`FLOW_B_L` beside STEPS because they were drawn and never lit.
-The new lamps are new LightIds with their own meaning; `FLOW_*` stay
-undrawn as they are.
+**Not added: a STEPS lamp.** Asked for first, then dropped by Bastian the
+same day: a step-advance flash would differ from the ATK gate lamp
+(`GATE_*_L`, `inst.gate()` straight through in `host/vcv/src/led_law.hpp`)
+only on rests and on notes held across steps. Its two LEDs went to FLUX
+TIME instead. So spec 2026-08-16 (song-phrase-flash S4) stands: STEPS keeps
+no lamp, `FLOW_*` stay undrawn, and
+`test_steps_has_no_lamp_on_the_hw_plate` stays.
 
 **Unchanged:** the other knob lamps (`SONG_*`, `GATE_*` at ATTACK, `LVL_*` at
 COMP, `TEMPO_L`) keep their caption cluster and move with their knob.
@@ -151,15 +154,17 @@ deck A, 7.4 mm of material to `SCALE`'s pot hole. `SYNC_L`, `MODBTN_L`,
 judges it. The second half is what P4-1 found broken: a knob lamp's caption
 cluster puts the LED ~7 mm under its pot, and the **top row's pots have
 their pins south** (`POT_TOP_ROT` = 90, `place.py`), right where that LED
-lands. That hit `SONG_*` and now also hits the new `STEP_*`; with the real
+lands. That hit `SONG_*` — the only top-row knob lamp, since none of the
+new ones sits in R1 (`FLUXRATE` is R4, `TIDE`/`PACE` R3); with the real
 `BODY_R["S"]` = 3.85 the cluster moves 0.55 mm *closer* still. Lower-row
 pots have their pins north, away from their own lamp. P4-1 measured that the
 SONG lamp needs a 2.6 mm drop at LED rotation 0 for 0.51 mm pad clearance
-(P4-1 placement spec, SONG item and its drop table); in the new raster a drop that size runs into the row
-below (STEPS sits over the big `MOD`). **So the top-row lamps' position is the
-first thing the plan probes** — candidates are a dropped cluster or a lamp
-beside the knob in the 11.15 mm gap, as Bastian's "beside STEPS" literally
-reads — and the probe's numbers go into this spec before code follows.
+(P4-1 placement spec, SONG item and its drop table). In the new raster SONG
+(R1 c3) has `SMOOTH` under it, whose cap top is at 30.775, and the dropped
+cluster also pushes the SEQUENCE/MOTION frame seam (§4.3). **So the SONG
+lamp's position is the first thing the plan probes** — candidates are a
+dropped cluster or a lamp beside the knob in the 11.15 mm gap — and the
+probe's numbers go into this spec before code follows.
 
 ### 3.4 Jack row
 
@@ -196,7 +201,7 @@ two limits. Nearest jack centre to a cap edge: 12.29 mm (13.50 at 114.0).
    does. The margin is a drawing number and may shrink; the knob raster is
    not moved for a frame.
 4. **Lamps (§3.3).** `KNOB_LAMPS` loses the SOURCE/FILT/COLOR entries and
-   gains `STEP_*` → `STEPS_*`, `TIDE_L` → `TIDE`, `PACE_L` → `PACE`;
+   gains `FTIME_*` → `FLUXRATE_*`, `TIDE_L` → `TIDE`, `PACE_L` → `PACE`;
    `LIGHT_POS` gains `IN_LVL_L` and `RST_L` as jack-row satellites and
    derives `REC_*_L` from its key. The LightIds change in `gen_panel.py`'s
    `HW_ONLY_LIGHTS`, so the header's `LightId` enum regenerates; the VCV host
@@ -225,8 +230,7 @@ two limits. Nearest jack centre to a cap edge: 12.29 mm (13.50 at 114.0).
   `test_level_band_holds_pan_in_slot_zero`,
   `test_middle_band_runs_on_three_lines`, `test_group_raster_closes`,
   `test_rows_are_centred_on_their_ink`,
-  `test_steps_has_no_lamp_on_the_hw_plate` (reversed by §3.3), and the
-  coordinate pins inside
+  and the coordinate pins inside
   `test_drawing_geometry` (DECY/TONE at 79.0/97.0 — a layout pin, not a
   by-ear decision; `docs/by-ear-decisions.md` has no entry for it).
   Each removal is listed in the commit message with its reason.
@@ -244,7 +248,7 @@ two limits. Nearest jack centre to a cap edge: 12.29 mm (13.50 at 114.0).
 
 The board is the real risk, so it runs before the drawing is polished.
 
-1. **Probe the top-row lamps** (§3.3) against the pot footprint's pads,
+1. **Probe the SONG lamps** (§3.3) against the pot footprint's pads,
    both candidates, and write the chosen position and its measured clearance
    into §3.3 before any generator code.
 2. **Generator + guard** (§4.1, §4.2, §4.4, §5) — positions, lamps, jack
@@ -279,7 +283,7 @@ The board is the real risk, so it runs before the drawing is polished.
   runs right after the generator, before any drawing work, so a failure
   costs one task. The new jack-row height and the new lamp positions near
   back-side parts may need `OVERRIDES` in `place.py`, as P4-1/P4-2 did.
-- **Top-row lamps have no measured position yet** (§3.3). The plan's first
+- **The SONG lamps have no measured position yet** (§3.3). The plan's first
   task is the probe; if neither candidate clears the pads, that comes back
   to Bastian before the generator moves.
 - **Frame margins** (§4.3) may need to drop below 1.80 somewhere the probe
