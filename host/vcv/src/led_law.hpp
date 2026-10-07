@@ -142,10 +142,11 @@ inline void fill(const spky::Instrument& inst, Panel& p, float dt,
                  int steps, bool mod_latched, int* duty_out) {
     using namespace spkyvcv;
 
-    // Written, not skipped. FLOW and SYNC need host state this round does
-    // not wire, and SHIFTBTN still waits for the round that builds SHIFT.
-    // MODBTN left this list on 2026-08-22: its latch exists now.
-    for (int id : {FLOW_A_L, FLOW_B_L, SYNC_L, SHIFTBTN_L})
+    // Written, not skipped. These lamps are placed and wired, but what they
+    // show (FTIME: the FLUX time period, CLK/RST: the jack pulses, SHIFTBTN:
+    // latch / input level) is P6b (spec 2026-10-07 §5); FLOW has no lamp on
+    // the plate at all. MODBTN left this list on 2026-08-22: its latch exists.
+    for (int id : {FLOW_A_L, FLOW_B_L, CLK_L, RST_L, FTIME_A_L, FTIME_B_L, SHIFTBTN_L})
         duty_out[id] = 0;
 
     // Metronome: a short pulse on the transport downbeat. Hard on/off, no
@@ -162,16 +163,20 @@ inline void fill(const spky::Instrument& inst, Panel& p, float dt,
     // Written here, AFTER the blink advance, so it reads the same phase REC
     // reads further down; from above the advance it would sit one tick behind
     // its twin and the two lamps would beat against each other.
-    duty_out[MODBTN_L] = (mod_latched && mod_pulse_on(p.blink)) ? steps - 1 : 0;
+    //
+    // One lamp, two jobs: the latch while engaged, otherwise the master
+    // limiter that the separate ceiling lamp used to show (spec 2026-10-07 §5).
+    duty_out[MODBTN_L] = mod_latched ? (mod_pulse_on(p.blink) ? steps - 1 : 0)
+                                     : duty(inst.limiter_squash(), steps);
 
+    // LVL keeps its LANE_LEVEL excursion for now; its meaning moves to "the
+    // deck delivers signal" in P6b (spec 2026-10-07 §5). The SOURCE/SIZE/
+    // MOTION excursion lamps left the plate with that spec.
     struct Slot { int id; int lane; };
-    static const Slot kExc[8] = {
-        {SRC_A_L, spky::LANE_SOURCE}, {SRC_B_L, spky::LANE_SOURCE},
-        {FLT_A_L, spky::LANE_SIZE},   {FLT_B_L, spky::LANE_SIZE},
-        {CLR_A_L, spky::LANE_MOTION}, {CLR_B_L, spky::LANE_MOTION},
+    static const Slot kExc[2] = {
         {LVL_A_L, spky::LANE_LEVEL},  {LVL_B_L, spky::LANE_LEVEL},
     };
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < 2; ++i) {
         const int part = i & 1;
         const float e  = inst.lane_excursion(part, kExc[i].lane);
         p.lamp[kExc[i].id].follow(e, dt);
@@ -204,8 +209,6 @@ inline void fill(const spky::Instrument& inst, Panel& p, float dt,
     const int gateId[2] = {GATE_A_L, GATE_B_L};
     for (int part = 0; part < 2; ++part)
         duty_out[gateId[part]] = inst.gate(part) ? steps - 1 : 0;
-
-    duty_out[CEIL_L] = duty(inst.limiter_squash(), steps);
 
     // REC keeps the three-state behaviour it already had: pulsing while
     // recording, steady at the fill level when the part holds content, dark

@@ -138,11 +138,11 @@ def _blend_hex(fg, bg, t):
 # at partial alpha has to be mixed down here or Rack would print it solid.
 LED_ON = {s: _blend_hex(ACC[s], LED_OFF, 0.55) for s in ACC}
 
-# Three of the nineteen lamps sit at the plate's edges and would be filed
-# under a deck by position alone: the MOD and SHFT lamps, and CEIL_L, which
-# reports the master limiter and merely happens to stand beside OUT R. Same
-# correction GLOBAL_KEYS makes for the keycaps -- see pad_accent().
-LED_GLOBALS = {"MODBTN_L", "SHIFTBTN_L", "CEIL_L"}
+# Two of the fifteen lamps sit at the plate's edges and would be filed under
+# a deck by position alone: the MOD and SHFT lamps (the limiter lamp CEIL_L
+# folded into MODBTN_L, spec 2026-10-07 §5). Same correction GLOBAL_KEYS makes
+# for the keycaps -- see pad_accent().
+LED_GLOBALS = {"MODBTN_L", "SHIFTBTN_L"}
 
 
 def led_accent(c):
@@ -367,7 +367,8 @@ DECK_POS = {s: _deck_xy(s) for s in DECK_CELLS if s not in RESERVED}
 CENTER_POS = {n: _centre_xy(n) for n in CENTRE_CELLS if n not in RESERVED}
 # MODBTN is a real latch param (spec 2026-08-22 mod-latch-layer §5), placed
 # through place() like every sound knob, on the jack row.
-CENTER_POS["MODBTN"] = (W - 14.00, JACK_Y)
+SHIFT_X = 14.00     # the SHFT key's x; MODBTN mirrors it about the centre line
+CENTER_POS["MODBTN"] = (W - SHIFT_X, JACK_Y)
 
 JACK_POS = {"PITCH_A": 56.00, "GATE_A": 67.50,
             "IN_L": 33.00, "IN_R": 44.50, "CLOCK": 136.00,
@@ -380,12 +381,12 @@ JACK_POS = {"PITCH_A": 56.00, "GATE_A": 67.50,
 # Knob-owned lamps: the caption and the LED are one block under the knob,
 # word then air then LED, centred on the knob x. Same reading order on both
 # decks -- not an optical [LED][word] mirror. The jack-row keys, the CLOCK
-# jack lamp and the ceiling lamp stay as satellites (LIGHT_POS below).
+# jack lamps stay as satellites or between key and jack (LIGHT_POS below).
 KNOB_LAMPS = {
-    "SRC_A_L": "SOURCE_A", "SRC_B_L": "SOURCE_B",
-    "FLT_A_L": "FILT_A",   "FLT_B_L": "FILT_B",
-    "CLR_A_L": "COLOR_A",  "CLR_B_L": "COLOR_B",
     "LVL_A_L": "COMP_A",   "LVL_B_L": "COMP_B",
+    # FTIME flashes once per FLUX time period: timing, not modulation (spec
+    # 2026-10-07 §5). It sits in FLUXRATE's caption cluster.
+    "FTIME_A_L": "FLUXRATE_A", "FTIME_B_L": "FLUXRATE_B",
     "GATE_A_L": "ATTACK_A", "GATE_B_L": "ATTACK_B",
     "TEMPO_L": "TEMPO",
     # REC's lamp joined the cluster on 2026-10-07: beside the key it reached
@@ -421,17 +422,17 @@ def caption_led_cluster(knob):
 
 # Stay-put lamps only. Knob-owned entries are filled from caption_led_cluster
 # after HW_PARAMS exists -- do not hand-edit those back in here.
-LIGHT_POS = {# Jack-row satellites, all at SAT_D from their anchor (Rev A P1,
-             # 2026-09-29; they were at the class radius + 1.5 mm = 5.5,
-             # which left 0.85-0.95 mm of material to the real holes).
-             # SYNC_L is inboard of CLOCK, SHFT's lamp inboard of SHFT,
-             # MOD's inboard of MOD, the limiter lamp outboard of OUT_R.
-             "SYNC_L":     (136.00 - SAT_D, JACK_Y),
-             "MODBTN_L":   (290.80 - SAT_D, JACK_Y),
-             "SHIFTBTN_L": (14.00 + SAT_D, JACK_Y),
-             # Limiter lamp: jack-row satellite of OUT_R, outboard, same y as
-             # MODBTN_L. Unsuffixed, so _twin_enum declares no mirror partner.
-             "CEIL_L":     (JACK_POS["OUT_R"] + SAT_D, JACK_Y)}
+LIGHT_POS = {
+    # Satellites at SAT_D (Rev A P1): CLK_L inboard of CLOCK, RST_L outboard
+    # of RESET -- the two mirror each other about the centre line.
+    "CLK_L":      (JACK_POS["CLOCK"] - SAT_D, JACK_Y),
+    "RST_L":      (JACK_POS["RESET"] + SAT_D, JACK_Y),
+    # Spec 2026-10-07 §5: one lamp each, centred between key and jack, two
+    # jobs each (SHIFT latched / input level; MOD latched / limiter). Both sit
+    # in their jack's audio zone, admitted (spec §5.3).
+    "SHIFTBTN_L": ((SHIFT_X + JACK_POS["IN_L"]) / 2.0, JACK_Y),
+    "MODBTN_L":   ((JACK_POS["OUT_R"] + (W - SHIFT_X)) / 2.0, JACK_Y),
+}
 
 
 def place(c):
@@ -487,7 +488,7 @@ class HwOnly:
 
 
 HW_ONLY = [
-    HwOnly("SHIFTBTN", "P", 14.00, JACK_Y, "SHFT", "reserved, no function"),
+    HwOnly("SHIFTBTN", "P", SHIFT_X, JACK_Y, "SHFT", "reserved, no function"),
     HwOnly("ROOT_A", "S", *_deck_xy("ROOT"), *RESERVED["ROOT"]),
     HwOnly("ROOT_B", "S", W - _deck_xy("ROOT")[0], _deck_xy("ROOT")[1], *RESERVED["ROOT"]),
     HwOnly("REV_MOD", "S", *_centre_xy("REV_MOD"), *RESERVED["REV_MOD"]),

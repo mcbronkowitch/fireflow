@@ -999,8 +999,8 @@ def test_hw_only_lights_are_in_the_enum_but_not_in_the_table():
     check(extra is not None, "gen_panel has no HW_ONLY_LIGHTS list")
     if extra is None:
         return
-    check(len(g.LIGHTS) + len(extra) == 21,
-          f"expected 21 lights in the enum, got {len(g.LIGHTS)} + {len(extra)}")
+    check(len(g.LIGHTS) + len(extra) == 17,
+          f"expected 17 lights in the enum, got {len(g.LIGHTS)} + {len(extra)}")
     names = {c.enum for c in g.LIGHTS}
     for c in extra:
         check(c.enum not in names, f"{c.enum} is in both lists")

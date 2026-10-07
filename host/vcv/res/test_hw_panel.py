@@ -469,8 +469,8 @@ def test_hw_only_inventory():
     still reserved and inert) and three reserved small pots -- ROOT_A,
     ROOT_B and REV_MOD (spec 2026-10-07 §4): a hole, a caption and a pot,
     no ParamId. No extra LEDs. MODBTN moved out of HW_ONLY 2026-08-22 -- it
-    is a real latch param now, drawn from hw.HW_PARAMS instead. 19 lamps
-    drawn on the plate, 21 LightIds (`FLOW_*` undrawn). The eight MOD jacks
+    is a real latch param now, drawn from hw.HW_PARAMS instead. 15 lamps
+    drawn on the plate (`FLOW_*` stay LightIds, undrawn). The eight MOD jacks
     are real inputs (unwired), no longer HW_ONLY placeholders."""
     kinds = {}
     for c in hw.HW_ONLY:
@@ -484,7 +484,7 @@ def test_hw_only_inventory():
     assert [c.enum for c in hw.HW_PARAMS] == \
         [c.enum for c in gp.RUNTIME_PANEL_PARAMS] + ["MODBTN"]
     total_leds = len([c for c in hw.ALL_HW if hw.hw_class(c.enum) == "L"])
-    check(total_leds == 19, f"expected 19 LEDs on the plate, got {total_leds}")
+    check(total_leds == 15, f"expected 15 LEDs on the plate, got {total_leds}")
 
 
 def test_mod_wreaths():
@@ -618,11 +618,10 @@ def test_pad_keycaps_are_dark_and_accented():
 
 def test_light_accent_table():
     """Every LED takes its zone accent, printed bed and live glow from the
-    same led_accent() (2026-08-30). Three of the nineteen sit at the plate's
+    same led_accent() (2026-08-30). Two of the fifteen sit at the plate's
     edges and would be read as a deck by position alone: the MOD and SHFT
-    lamps, and CEIL_L, which reports the master limiter and merely happens to
-    stand next to OUT R. REC stays red on both plates."""
-    check(hw.LED_GLOBALS == {"MODBTN_L", "SHIFTBTN_L", "CEIL_L"},
+    lamps. REC stays red on both plates."""
+    check(hw.LED_GLOBALS == {"MODBTN_L", "SHIFTBTN_L"},
           f"LED_GLOBALS drifted: {hw.LED_GLOBALS}")
     svg = open(os.path.join(HERE, "FireflowHW.svg"), encoding="utf-8").read()
     for c in hw.HW_LIGHTS:
@@ -644,7 +643,7 @@ def test_light_accent_table():
                   f"{c.enum} light accent {a}/{b} is not {want}")
         by = {c.enum: rows[i] for i, c in enumerate(hw.HW_LIGHTS) if i < len(rows)}
         neutral = hw.rgb(hw.ACC["C"])
-        for enum in ("MODBTN_L", "SHIFTBTN_L", "CEIL_L"):
+        for enum in ("MODBTN_L", "SHIFTBTN_L"):
             check(by.get(enum) == (neutral, neutral),
                   f"{enum} is not neutral: {by.get(enum)}")
     check("kLightAccent desynced" in src, "kLightAccent has no length static_assert")
@@ -666,24 +665,23 @@ def test_steps_has_no_lamp_on_the_hw_plate():
               f"{enum} caption x={lx:.2f} is not on the knob ({by[enum].x:.2f})")
 
 
-def test_led_inventory_after_the_feedback_round():
-    """19 lamps drawn on FireflowHW (21 LightIds, FLOW_* undrawn), the two
-    capture indicators gone, GATE out of the timing row and SYNC at the
-    CLOCK jack. Spec 2026-08-16 sections 3.1-3.5."""
+def test_led_inventory_after_the_panel_pass():
+    """15 lamps drawn (spec 2026-10-07 §5): the lane-excursion lamps and CEIL_L
+    gone, FTIME and RST new, SYNC_L renamed CLK_L, SHIFT and MOD lamps centred
+    between their key and jack."""
     names = {c.enum for c in hw.HW_LIGHTS}
-    check(len(hw.HW_LIGHTS) == 19, f"{len(hw.HW_LIGHTS)} lights, expected 19")
-    for dead in ("CAP_A_L", "CAP_B_L"):
-        check(dead not in names, f"{dead} still drawn -- capture was deleted 2026-07-14")
-    for new in ("SRC_A_L", "FLT_A_L", "CLR_A_L", "LVL_A_L", "SONG_A_L",
-                "MODBTN_L", "SHIFTBTN_L", "CEIL_L"):
-        check(new in names, f"{new} missing")
-    by = {c.enum: c for c in hw.HW_LIGHTS}
-    check(abs(by["SYNC_L"].y - hw.JACK_Y) < 1e-6,
-          f"SYNC_L is at y={by['SYNC_L'].y}, not on the jack row")
-    check(abs(by["CEIL_L"].y - hw.JACK_Y) < 1e-6,
-          f"CEIL_L is at y={by['CEIL_L'].y}, not on the jack row with MODBTN_L")
-    check(by["CEIL_L"].x > hw.JACK_POS["OUT_R"],
-          "CEIL_L is not outboard of OUT_R")
+    check(len(hw.HW_LIGHTS) == 15, f"{len(hw.HW_LIGHTS)} lights, expected 15")
+    for dead in ("SRC_A_L", "SRC_B_L", "FLT_A_L", "FLT_B_L", "CLR_A_L", "CLR_B_L",
+                 "CEIL_L", "SYNC_L", "CAP_A_L", "CAP_B_L"):
+        check(dead not in names, f"{dead} is still drawn")
+    for want in ("FTIME_A_L", "FTIME_B_L", "RST_L", "CLK_L", "LVL_A_L", "SONG_A_L",
+                 "GATE_A_L", "REC_A_L", "TEMPO_L", "MODBTN_L", "SHIFTBTN_L"):
+        check(want in names, f"{want} missing")
+    lights = {c.enum for c in gp.LIGHTS + gp.HW_ONLY_LIGHTS}
+    for dead in ("SRC_A_L", "FLT_A_L", "CLR_A_L", "CEIL_L", "SYNC_L"):
+        check(dead not in lights, f"{dead} is still a LightId")
+    check(hw.KNOB_LAMPS.get("FTIME_A_L") == "FLUXRATE_A",
+          "FTIME_A_L is not FLUXRATE_A's cluster lamp")
 
 
 def test_knob_lamps_sit_in_the_caption_cluster():
@@ -693,8 +691,9 @@ def test_knob_lamps_sit_in_the_caption_cluster():
     A lamp typed to a clear-but-wrong side of the knob still passes the
     overlap guard; this checks the cluster itself. REC's lamp joined the
     cluster on 2026-10-07; SONG's left it for a side lamp (SIDE_LAMPS, see
-    test_song_lamp_stands_beside_its_knob). The jack-row keys, SYNC_L and
-    CEIL_L stay on the satellite rule -- see the test below."""
+    test_song_lamp_stands_beside_its_knob). CLK_L and RST_L stay on the
+    satellite rule and SHIFTBTN_L/MODBTN_L stand between key and jack -- see
+    test_jack_row_lamps."""
     by = {c.enum: c for c in hw.ALL_HW}
     checked = 0
     led_r = hw.BODY_R["L"]
@@ -740,34 +739,27 @@ def test_song_lamp_stands_beside_its_knob():
     check("SONG_A" not in hw.KNOBS_WITH_LAMPS, "SONG is still a cluster lamp")
 
 
-def test_satellite_lamps_clear_their_anchor_hole():
-    """Satellite lamps sit on the jack row beside their key or jack, at ONE
-    derived distance SAT_D: the larger anchor hole's radius, the minimum
-    material web, and the LED hole's radius (Rev A P1 spec, 2026-09-29).
-    Until 2026-09-29 they sat at the anchor's class radius + 1.5 mm = 5.5,
-    which the real holes turned into a 0.85-0.95 mm web -- acrylic cracks
-    there. SYNC_L joins the rule; it was a literal before."""
-    SATELLITES = {
-        "MODBTN_L": "MODBTN", "SHIFTBTN_L": "SHIFTBTN",
-        "CEIL_L": "OUT_R", "SYNC_L": "CLOCK",
-    }
-    need = (max(hw.HOLE_D["P"], hw.HOLE_D["J"]) / 2 + hw.MIN_WEB
-            + hw.HOLE_D["L"] / 2)
-    check(hw.SAT_D >= need - 1e-9,
-          f"SAT_D {hw.SAT_D} leaves less than {hw.MIN_WEB} mm "
-          f"(needs {need:.2f})")
+def test_jack_row_lamps():
+    """CLK_L and RST_L are satellites at SAT_D; SHIFTBTN_L and MODBTN_L stand
+    centred between their key and jack (spec 2026-10-07 §5), every hole web
+    at least MIN_WEB."""
     by = {c.enum: c for c in hw.ALL_HW}
-    checked = 0
-    for lamp, anchor in SATELLITES.items():
-        if lamp not in by or anchor not in by:
-            check(False, f"{lamp} or its anchor {anchor} is missing from the panel")
-            continue
+    for lamp, anchor in (("CLK_L", "CLOCK"), ("RST_L", "RESET")):
         l, a = by[lamp], by[anchor]
         d = ((l.x - a.x) ** 2 + (l.y - a.y) ** 2) ** 0.5
-        check(abs(d - hw.SAT_D) < 0.01,
-              f"{lamp} is {d:.3f} mm from {anchor}, not SAT_D ({hw.SAT_D:.2f} mm)")
-        checked += 1
-    check(checked == 4, f"expected 4 satellites, checked {checked}")
+        check(abs(d - hw.SAT_D) < 0.01, f"{lamp} is {d:.3f} mm from {anchor}, not SAT_D")
+    check(by["CLK_L"].x < by["CLOCK"].x and by["RST_L"].x > by["RESET"].x,
+          "CLK_L is not inboard of CLOCK or RST_L not outboard of RESET")
+    for lamp, key, jack in (("SHIFTBTN_L", "SHIFTBTN", "IN_L"), ("MODBTN_L", "MODBTN", "OUT_R")):
+        l, k, j = by[lamp], by[key], by[jack]
+        check(abs(l.x - (k.x + j.x) / 2) < 1e-9 and abs(l.y - hw.JACK_Y) < 1e-9,
+              f"{lamp} is not centred between {key} and {jack}")
+        for anchor in (k, j):
+            web = (abs(l.x - anchor.x) - hw.HOLE_D[hw.hw_class(anchor.enum)] / 2
+                   - hw.HOLE_D["L"] / 2)
+            check(web >= hw.MIN_WEB - 1e-9, f"{lamp} leaves {web:.2f} mm to {anchor.enum}")
+    need = max(hw.HOLE_D["P"], hw.HOLE_D["J"]) / 2 + hw.MIN_WEB + hw.HOLE_D["L"] / 2
+    check(hw.SAT_D >= need - 1e-9, f"SAT_D {hw.SAT_D} leaves less than {hw.MIN_WEB} mm")
 
 
 def test_mod_jacks_on_the_jack_row():
@@ -1043,19 +1035,17 @@ def test_bodies_and_captions_sit_inside_their_frame():
         lx, ly = hw.hw_label(c)[:2]
         check(b.covers(lx, ly),
               f"caption {c.enum} at ({lx:.1f},{ly:.1f}) is outside {b.n}/{b.side}")
-    # LED feedback round (2026-08-16): MODBTN_L/SHIFTBTN_L are satellites of
-    # the two pads, at anchor radius + 1.5 mm -- exactly as loose as the pads
-    # themselves, which is what makes them read as "this pad is lit" rather
-    # than as members of the jack-row frame. CEIL_L sits the same way, just
-    # outside the OUT frame to the right of OUT_R.
+    # MODBTN_L/SHIFTBTN_L stand centred between their pad and jack (spec
+    # 2026-10-07 §5) -- exactly as loose as the pads themselves, which is
+    # what makes them read as "this pad is lit" rather than as members of
+    # the jack-row frame.
     # PULL was on this list for one day (2026-08-22 -> 2026-08-23) while it sat
     # loose in the seam beside the GLOBAL box. It is gone again: re-pitching the
     # GLOBAL centre row to four knobs gave it a real frame slot, so this guard
     # is back to asserting "every knob lives inside a frame" with no knob
     # exception. Only pads and their satellite LEDs are loose, which is the
     # invariant this list is for -- keep it that way.
-    check(sorted(loose) == ["CEIL_L", "MODBTN", "MODBTN_L",
-                             "SHIFTBTN", "SHIFTBTN_L"],
+    check(sorted(loose) == ["MODBTN", "MODBTN_L", "SHIFTBTN", "SHIFTBTN_L"],
           f"controls outside the frame raster: {sorted(loose)}")
     # The SD slot is a body on the jack row like any other.
     sd = [b for b in hw.BOXES if b.n == "CLOCK"][0]
