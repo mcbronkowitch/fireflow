@@ -125,15 +125,23 @@ latch, limiter).
 
 | Lamp | Where | Shows |
 |---|---|---|
-| `FTIME_A_L` / `FTIME_B_L` | beside `FLUXRATE` (caption TIME, knob lamp) | one flash per FLUX time period of that deck — the repeat tempo TIME sets |
+| `FTIME_A_L` / `FTIME_B_L` | beside `FLUXRATE` (caption TIME, knob lamp) | one flash per FLUX time period of that deck — the repeat tempo TIME sets — **only while that deck's FLUX `MIX` > 0**, so at a quarter-note TIME it does not just double `TEMPO_L`, and it also says FLUX is in the sound |
 | `IN_LVL_L` | jack-row satellite of `IN_L`, outboard (left): x = 33.0 − 6.7 = 26.30 | input signal, the peak of IN L and IN R together |
 | `RST_L` | jack-row satellite of `RESET`, outboard: x = 168.8 + 6.7 = 175.50 | a flash on every reset received |
 
-`RST_L` mirrors `SYNC_L` (129.30, inboard of CLOCK) about the centre line,
+`RST_L` mirrors `CLK_L` (129.30, inboard of CLOCK) about the centre line,
 so the CLOCK group reads symmetric. `IN_LVL_L` sits between `SHIFTBTN_L`
 (20.70) and `IN_L`: 2.50 mm of material to the SHFT lamp's hole and 2.15 mm
 to IN L's hole, both above `MIN_WEB` = 2.0. Whether IN L's nut covers it is
-the grip-test measurement already listed for `SYNC_L`/`CEIL_L`.
+the grip-test measurement already listed for `CLK_L`/`CEIL_L`.
+
+**Meanings for lamps that had none** (both are drawn and wired today but
+held dark by `led_law.hpp`, "needs host state" / "waits for SHIFT"):
+
+| Lamp | Shows |
+|---|---|
+| `CLK_L` (renamed from `SYNC_L`) | a flash on every pulse arriving at the CLOCK jack. Not redundant with `TEMPO_L`: with PACE in use the transport's beat and the incoming pulse run at different rates, and this lamp is how the player sees which pulse is actually patched. Renamed because `SYNC` is also the printed caption of the `COUPLE` knob, which has no lamp — the two were confused in review. |
+| `SHIFTBTN_L` | one pulse when a **new engine** (either deck) or a **new scale** has actually taken effect — at the switch, not when the knob is turned, so the player sees the moment the next engine runs. Once SHIFT gets functions, steady while SHIFT is held. The pulse must read differently from both that steady light and the MOD latch's double pulse; the pattern is P6b's. |
 
 **Not added: a STEPS lamp.** Asked for first, then dropped by Bastian the
 same day: a step-advance flash would differ from the ATK gate lamp
@@ -162,7 +170,7 @@ question and needs a probe; the panel pass only keeps the lamp where it is.
 COMP with its new meaning, `TEMPO_L`) keep their caption cluster and move with their knob.
 `REC_A_L` / `REC_B_L` stop being hand-placed (today `(108.50, Y_TOP)`) and
 become satellites of their key at `SAT_D` = 6.7 mm, inboard: x = 111.65 on
-deck A, 7.4 mm of material to `SCALE`'s pot hole. `SYNC_L`, `MODBTN_L`,
+deck A, 7.4 mm of material to `SCALE`'s pot hole. `CLK_L`, `MODBTN_L`,
 `SHIFTBTN_L`, `CEIL_L` keep their x.
 
 **Placement rule for every lamp:** the plate web (`MIN_WEB`) to every hole
@@ -217,7 +225,9 @@ two limits. Nearest jack centre to a cap edge: 12.29 mm (13.50 at 114.0).
    does. The margin is a drawing number and may shrink; the knob raster is
    not moved for a frame.
 4. **Lamps (§3.3).** `KNOB_LAMPS` loses the SOURCE/FILT/COLOR entries and
-   gains `FTIME_*` → `FLUXRATE_*`;
+   gains `FTIME_*` → `FLUXRATE_*`; `SYNC_L` is renamed `CLK_L` everywhere
+   it is named (`gen_panel.py`, `led_law.hpp`, the guards, `panel-map.json`
+   via `assign.py`, the shell's generated table);
    `LIGHT_POS` gains `IN_LVL_L` and `RST_L` as jack-row satellites and
    derives `REC_*_L` from its key. The LightIds change in `gen_panel.py`'s
    `HW_ONLY_LIGHTS`, so the header's `LightId` enum regenerates; the VCV host
