@@ -28,7 +28,9 @@ proves the 9 mm rule and has been seen red once; the hole list, cut file,
 print sheet, panel map, placed and routed Rev A board, order package,
 generated firmware table and the VCV `FireflowHW` panel all come from the new
 positions; every gate along that chain is green; and the board's
-`KNOWN_PANEL` exemption sets (`place_check.py`, `route_check.py`) are empty.
+`KNOWN_PANEL` exemption sets (`place_check.py`, `route_check.py`) are empty
+— except `route_check.py`'s `"audio"` set, which holds exactly the admitted
+jack-zone pairs (§5.2).
 
 **In scope:** the knob raster (§3), four reserved knob positions (§4), the
 LED inventory (§5), the jack row's height (§6), the group fields (§7), the
@@ -151,7 +153,7 @@ orange 24 for part B's 23); pots: 74 against 77 bought.
 | `TEMPO_L` | under TEMPO (cluster) | the transport beat | unchanged |
 | `CLK_L` | jack-row satellite of CLOCK, inboard (129.30) | a flash on every pulse arriving at the CLOCK jack | **renamed from `SYNC_L`** (the COUPLE knob's printed caption is also SYNC and has no lamp; the two were confused in review) and **given a meaning** — today it is held dark. Not redundant with `TEMPO_L`: with PACE in use the beat and the incoming pulse run at different rates |
 | `RST_L` | jack-row satellite of RESET, outboard (168.80 + 6.7 = 175.50) | a flash on every reset received | **new**; mirrors `CLK_L` about the centre line |
-| `IN_LVL_L` | jack-row satellite of IN_L, outboard (33.00 − 6.7 = 26.30) | input signal, the peak of IN L and IN R together | **new**. 2.50 mm of material to the SHFT lamp's hole, 2.15 to IN L's, both over `MIN_WEB`; whether IN L's nut covers it is the grip-test measurement already listed for `CLK_L`/`CEIL_L` |
+| `IN_LVL_L` | jack-row satellite of IN_L, outboard (33.00 − 6.7 = 26.30) | input signal, the peak of IN L and IN R together | **new**. 2.50 mm of material to the SHFT lamp's hole, 2.15 to IN L's, both over `MIN_WEB`; whether IN L's nut covers it is the grip-test measurement already listed for `CLK_L`/`CEIL_L`. Inside IN L's audio jack zone by construction (§5.2) |
 | `SHIFTBTN_L` | unchanged (20.70) | one pulse when a **new engine** (either deck) or a **new scale** has actually taken effect — at the switch, not when the knob turns. Once SHIFT has functions, steady while held. The pulse must read differently from that and from MOD's double pulse; pattern is P6b's | **given a meaning** (held dark today) |
 | `MODBTN_L` | unchanged | the MOD latch | unchanged |
 | `CEIL_L` | unchanged | the master limiter bending | unchanged |
@@ -181,6 +183,18 @@ stands the small `SHAPE` (cap top 30.775), so a drop has room.
 two candidates: the cluster dropped by a measured amount, or the lamp beside
 the knob in the 11.15 mm gap. The winning position and its measured
 clearance go into this section before the generator is changed for it.
+
+### 5.2 The IN lamp sits in a jack zone — admitted
+
+`route_check.py`'s audio step flags every LED pad within 10 mm of an audio
+jack's tip pad: the 595-driven LED lines are aggressors, the jack a victim.
+Bastian admitted two such pairs on 2026-09-30 (`CEIL_L/OUT_R`,
+`IN_L/SHIFTBTN_L`). A lamp "beside IN" cannot keep 10 mm, so **`IN_L/IN_LVL_L`
+is admitted as the third pair** (Bastian, 2026-10-07), on the same terms:
+whether it actually couples is measured on the first Rev A board with the
+coupon's crosstalk rig, not argued away now. The `"audio"` set and
+`test_route.py`'s `JACK_ZONES` therefore hold these three keys after the pass,
+with whatever aggressor pads the audio step finds for them on the new board.
 
 ## 6. Jack row
 
@@ -302,8 +316,9 @@ the drawing is polished.
    from the panel map; the check and ERC stay green.
 4. **Board** — the SONG lamp probe (§5.1) first; then `place.py` →
    `route.py` → `route_check.py` → P4-3's export and `reva_fab_guard`.
-   Gate: both `KNOWN_PANEL` sets empty and `test_place.py` / `test_route.py`
-   asserting the empty sets. New pot positions near back-side parts may need
+   Gate: `place_check.KNOWN_PANEL` empty; `route_check.KNOWN_PANEL` empty but
+   for `"audio"`, which holds exactly the three admitted jack-zone pairs
+   (§5.2); `test_place.py` / `test_route.py` assert exactly that. New pot positions near back-side parts may need
    `OVERRIDES` in `place.py`, as P4-1/P4-2 did. If the router does not
    close, that is a stop-and-report, not a reason to move knobs back.
 5. **Firmware table** — `shell/gen_panel_map.py` gains a `RESERVED` table
