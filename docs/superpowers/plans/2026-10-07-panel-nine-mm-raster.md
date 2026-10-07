@@ -25,7 +25,7 @@
 - Final LED count on the plate: **15**. Pots: **73**. Mux inputs used: **75 of 80**.
 - **No runtime claim without a probe** (CLAUDE.md probe rule): a number that goes into a doc or a test comment is printed by code first.
 - A test that cannot go red gets fixed; prove each new guard RED once.
-- **Before Task 5 touches `hardware/reva/`:** `git status` shows four files with uncommitted changes that predate this plan (`hardware/reva/bom-hand.csv`, `bom-jlc.csv`, `kicad/fp-lib-table`, `review.md`). Do not overwrite, stage or revert them — stop and ask Bastian how to handle them before Task 5.
+- **Start from a clean tree.** On 2026-10-07 `git status` listed four `hardware/reva/` files as modified; they were byte-identical to HEAD (a stale index stat) and cleared with `git add`. If `git status` shows anything before a task starts, find out what it is before touching it.
 
 ## Review Focus
 
@@ -1071,8 +1071,6 @@ Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>"
 ---
 
 ### Task 5: The relaxed mux split
-
-**Prerequisite:** the four files with pre-existing uncommitted changes in `hardware/reva/` (see Global Constraints) are settled with Bastian.
 
 **Files:**
 - Modify: `hardware/reva/assign.py` (`_split_regions`, module docstring)
