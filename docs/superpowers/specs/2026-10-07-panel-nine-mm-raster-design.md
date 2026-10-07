@@ -112,9 +112,12 @@ at 11.48 mm. Approved by Bastian 2026-10-07 from a 1:1 preview.
 
 ### 3.3 LEDs (Bastian, 2026-10-07)
 
-19 lamps drawn today, 19 after: six go, six come.
+19 lamps drawn today, **17** after: six go, four come, two change meaning.
+The guiding rule (Bastian): **the plate shows timing, not modulation** —
+plus the few states a player must see at a glance (signal present, record,
+latch, limiter).
 
-**Removed:**
+**Removed** — they showed lane excursions, i.e. modulation:
 `SRC_A_L`/`SRC_B_L` (TIMB), `FLT_A_L`/`FLT_B_L` (FILT), `CLR_A_L`/`CLR_B_L`
 (COLR). Their LightIds go from `gen_panel.py`'s `HW_ONLY_LIGHTS`.
 
@@ -123,8 +126,6 @@ at 11.48 mm. Approved by Bastian 2026-10-07 from a 1:1 preview.
 | Lamp | Where | Shows |
 |---|---|---|
 | `FTIME_A_L` / `FTIME_B_L` | beside `FLUXRATE` (caption TIME, knob lamp) | one flash per FLUX time period of that deck — the repeat tempo TIME sets |
-| `TIDE_L` | beside `TIDE` (knob lamp) | the tide cycle: a slow breathe at the period TIDE sets |
-| `PACE_L` | beside `PACE` (knob lamp) | the modulation base clock that PACE scales, one blink per period |
 | `IN_LVL_L` | jack-row satellite of `IN_L`, outboard (left): x = 33.0 − 6.7 = 26.30 | input signal, the peak of IN L and IN R together |
 | `RST_L` | jack-row satellite of `RESET`, outboard: x = 168.8 + 6.7 = 175.50 | a flash on every reset received |
 
@@ -142,8 +143,23 @@ TIME instead. So spec 2026-08-16 (song-phrase-flash S4) stands: STEPS keeps
 no lamp, `FLOW_*` stay undrawn, and
 `test_steps_has_no_lamp_on_the_hw_plate` stays.
 
+**Not added: TIDE and PACE lamps.** Also asked for first and dropped the
+same day under the timing rule: TIDE scales the texture lanes' rate
+(`SuperModulator::set_tide`) and PACE the modulator's base rate
+(`set_pace`), so both lamps would have shown modulation speed, not musical
+time. FLUX TIME is timing: FLUX is a tempo-synced delay and TIME picks its
+division (`set_flux_rate(slice_idx)` on the bpm).
+
+**Changed meaning — `LVL_A_L` / `LVL_B_L`** (at COMP, caption LVL): today
+the `LANE_LEVEL` excursion (`led_law.hpp`), i.e. modulation. From now on:
+**does this deck deliver signal at all** — lit while the deck's own output
+into the mix is above a floor, dark when nothing comes out (filter cutoff
+all the way down, LVL at zero, an empty sampler). The point is to see at a
+glance which deck is silent. Which tap and which floor is a P6b / VCV-host
+question and needs a probe; the panel pass only keeps the lamp where it is.
+
 **Unchanged:** the other knob lamps (`SONG_*`, `GATE_*` at ATTACK, `LVL_*` at
-COMP, `TEMPO_L`) keep their caption cluster and move with their knob.
+COMP with its new meaning, `TEMPO_L`) keep their caption cluster and move with their knob.
 `REC_A_L` / `REC_B_L` stop being hand-placed (today `(108.50, Y_TOP)`) and
 become satellites of their key at `SAT_D` = 6.7 mm, inboard: x = 111.65 on
 deck A, 7.4 mm of material to `SCALE`'s pot hole. `SYNC_L`, `MODBTN_L`,
@@ -155,7 +171,7 @@ judges it. The second half is what P4-1 found broken: a knob lamp's caption
 cluster puts the LED ~7 mm under its pot, and the **top row's pots have
 their pins south** (`POT_TOP_ROT` = 90, `place.py`), right where that LED
 lands. That hit `SONG_*` — the only top-row knob lamp, since none of the
-new ones sits in R1 (`FLUXRATE` is R4, `TIDE`/`PACE` R3); with the real
+new ones sits in R1 (`FLUXRATE` is R4); with the real
 `BODY_R["S"]` = 3.85 the cluster moves 0.55 mm *closer* still. Lower-row
 pots have their pins north, away from their own lamp. P4-1 measured that the
 SONG lamp needs a 2.6 mm drop at LED rotation 0 for 0.51 mm pad clearance
@@ -201,7 +217,7 @@ two limits. Nearest jack centre to a cap edge: 12.29 mm (13.50 at 114.0).
    does. The margin is a drawing number and may shrink; the knob raster is
    not moved for a frame.
 4. **Lamps (§3.3).** `KNOB_LAMPS` loses the SOURCE/FILT/COLOR entries and
-   gains `FTIME_*` → `FLUXRATE_*`, `TIDE_L` → `TIDE`, `PACE_L` → `PACE`;
+   gains `FTIME_*` → `FLUXRATE_*`;
    `LIGHT_POS` gains `IN_LVL_L` and `RST_L` as jack-row satellites and
    derives `REC_*_L` from its key. The LightIds change in `gen_panel.py`'s
    `HW_ONLY_LIGHTS`, so the header's `LightId` enum regenerates; the VCV host
@@ -235,7 +251,7 @@ two limits. Nearest jack centre to a cap edge: 12.29 mm (13.50 at 114.0).
   by-ear decision; `docs/by-ear-decisions.md` has no entry for it).
   Each removal is listed in the commit message with its reason.
 - **Rewritten:** `test_led_inventory_after_the_feedback_round` to §3.3's
-  list (19 lamps, the six removed absent, the six added present);
+  list (17 lamps, the six removed absent, the four added present);
   `test_satellite_lamps_clear_their_anchor_hole` extended to `IN_LVL_L`,
   `RST_L`, `REC_*_L`; every jack-row y check reads `JACK_Y`, not 114.0.
 - **Kept, unchanged in intent:** 60 HP, rail keep-out, mirror symmetry (also
@@ -260,7 +276,7 @@ The board is the real risk, so it runs before the drawing is polished.
    18.85 / 20.125 mm pitch), but the router has to prove it; if it does not
    close, that is a stop-and-report, not a reason to move knobs back. Gate:
    both `KNOWN_PANEL` lists empty and `test_place.py` / `test_route.py`
-   asserting the empty sets. The LED count is unchanged (19 drawn), so the
+   asserting the empty sets. The LED count drops from 19 to 17, so the
    five 595s keep enough bits; `assign.py` reassigns indices.
 4. **Firmware table.** `shell/gen_panel_map.py` → `generated_panel_map.h`;
    `cmake --build` and `ctest` in **Release** (`test_controls_map`,
