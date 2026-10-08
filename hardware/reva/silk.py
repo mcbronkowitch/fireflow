@@ -46,10 +46,17 @@ ANGLES = (0, 90)
 
 # Back references (and footprint texts, "<ref>:text") with no free spot,
 # measured by the first run (P4-3 Task 4); each entry says what blocked it.
-# Empty since the 9 mm panel pass (Task 7c, 2026-10-08): C2, C3 and C5, the
-# caps that had sat between J_PWR's outline and D_P12/D_N12, all found a
-# spot on the new board (route_check no_room: "0 hidden").
-NO_ROOM = {}
+# The 9 mm panel pass (Task 7c, 2026-10-08) freed C2, C3 and C5 (the caps that
+# had sat between J_PWR's outline and D_P12/D_N12). After U_SM was pinned and
+# the shift registers moved, three other references found no free spot in
+# every route run (route_check no_room); the assembly sheet still names them
+# (Bastian, 2026-10-08).
+_PANEL_PASS = "no free back-side spot after the 9 mm panel pass (Task 7c, 2026-10-08); the assembly sheet names it"
+NO_ROOM = {
+    "C_SENSE3": _PANEL_PASS,
+    "R25": _PANEL_PASS,
+    "U_SR5": _PANEL_PASS,
+}
 
 
 class Report:
