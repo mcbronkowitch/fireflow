@@ -221,6 +221,46 @@ def _tht_clear_of_front(fp, bodies, pads):
     return True
 
 
+def _front_courtyards(board, refs):
+    """[(courtyard polygon, its box)] of the front parts in `refs` on the board."""
+    out = []
+    for ref in refs:
+        fp = board.FindFootprintByReference(ref)
+        if fp is None:
+            continue
+        cy = fp.GetCourtyard(pcbnew.F_CrtYd)
+        if cy.OutlineCount():
+            out.append((cy, PL.box(cy.BBox())))
+    return out
+
+
+def _holes_clear_of_courtyards(fp, courtyards):
+    """No through hole of `fp` overlaps a front courtyard (P4.1 §4.3, amended
+    2026-10-08): KiCad's gated pth_inside_courtyard. The hole's bounding box
+    is intersected with the courtyard polygon. Calibrated on the 9 mm panel
+    board: none at U_SM (152.40, 69.75) rot 90, where the DRC found none;
+    exactly B1/REV_DIFF and C5/REV_MOD at (152.40, 57.75) rot 270, the two
+    items the DRC reported."""
+    for p in fp.Pads():
+        if p.GetAttribute() not in (pcbnew.PAD_ATTRIB_PTH, pcbnew.PAD_ATTRIB_NPTH):
+            continue
+        hb = p.GetEffectiveHoleShape().BBox()
+        hbox = PL.box(hb)
+        for cy, cbox in courtyards:
+            if not PL.overlaps(hbox, cbox):
+                continue
+            hole = pcbnew.SHAPE_POLY_SET()
+            hole.NewOutline()
+            for x, y in ((hb.GetLeft(), hb.GetTop()), (hb.GetRight(), hb.GetTop()),
+                         (hb.GetRight(), hb.GetBottom()), (hb.GetLeft(), hb.GetBottom())):
+                hole.Append(x, y)
+            x2 = pcbnew.SHAPE_POLY_SET(cy)
+            x2.BooleanIntersection(hole)
+            if x2.Area() > 0:
+                return False
+    return True
+
+
 def back_tht_refs(s):
     return [r for r in ("U_SM", "J_PWR") if s.board.FindFootprintByReference(r) is not None]
 
@@ -236,23 +276,68 @@ def _tht_blocked(s):
     return out
 
 
+# The module's pinned spot (spec §4.3, amended 2026-10-08, Task 7c; Bastian):
+# (x, y, rotation, reason), or None for the spiral search. place_module runs
+# its own legality tests on the pin and raises when the spot is illegal.
+SM_PIN = (152.40, 56.00, 270,
+          "U_SM sweep 2026-10-08 (Task 7c report, Resumes 3 and 4): the spiral's spot "
+          "(152.40, 69.75) rot 90 left SD_CMD and SENSE_3 (pins D7/D8 boxed in by "
+          "RV34's netless tab, 0.63 mm) and SR_CLK/SR_DATA (pins B7/B8 against the "
+          "audio pair marks) unroutable. Legal window by the body/pad tests, x 0.1 / "
+          "y 0.25 mm grid: rot 90 y 51.50..53.75 and 69.75..72.00, rot 270 y "
+          "54.00..58.00 and 74.25..74.75 (x 152.0..152.8); with the courtyard test "
+          "rot 270 keeps y 54.00..56.50 and 74.25..74.75. Courtyard-clean spots where "
+          "probe routes (every net, pair rules on) take every module net out: only "
+          "rot 270 y 54.50..56.50. Here place_check is GREEN and 30 router rounds "
+          "left no net unrouted (13 conflicts). (152.40, 57.75) rot 270, approved "
+          "first, was refused by the gated DRC (pth_inside_courtyard B1/REV_DIFF, "
+          "C5/REV_MOD). Reserve: 0.4 mm in x to the legal window, 0.50 mm in y to "
+          "the courtyard limit (y 56.50)")
+
+
+def _module_legal(fp, inner, bodies, pads, courtyards):
+    """place_module's legality tests for one footprint position: the shadow
+    inside the inset outline, every pin clear of the front bodies and pads,
+    and every hole clear of the front courtyards."""
+    return (PL.inside(module_shadow(fp), inner) and _tht_clear_of_front(fp, bodies, pads)
+            and _holes_clear_of_courtyards(fp, courtyards))
+
+
 def place_module(s, proj):
-    """U_SM on the back, any of SM_ROTS, the spiral spot nearest the board
-    centre whose pins miss every front body and whose shadow (its silkscreen
-    box) stays EDGE_INSET inside the outline (spec §4.3). Rotations 90/270
-    were admitted 2026-10-08 (§4.3 amendment): the 9 mm raster leaves no
-    0/180 spot, and the USB clearance rule is rotation-agnostic."""
+    """U_SM on the back. With SM_PIN set: exactly at that spot, which must
+    pass the same tests as the search (ValueError otherwise). Without it:
+    any of SM_ROTS, the spiral spot nearest the board centre whose pins miss
+    every front body, keep PAD_CLEAR to every front pad and whose holes
+    miss every front courtyard, and whose shadow (its silkscreen box) stays
+    EDGE_INSET inside the outline (spec §4.3). Rotations 90/270 were
+    admitted 2026-10-08 (§4.3 amendment): the 9 mm raster leaves no 0/180
+    spot, and the USB clearance rule is rotation-agnostic. The courtyard
+    test and the pin came the same day (§4.3, second amendment)."""
     part = {p.ref: p for p in proj.parts()}["U_SM"]
     cx, cy = (X0 + X1) / 2.0, (Y0 + Y1) / 2.0
     fp = kipcb.add_part(s.board, part, cx, cy, 0, side="B")
     bodies, pads = _front_obstacles(s.board, s.front, None)
+    courtyards = _front_courtyards(s.board, s.front)
     inner = PL.grow(outline_box(), -EDGE_INSET)
+    if SM_PIN is not None:
+        x, y, rot, reason = SM_PIN
+        fp.SetOrientationDegrees(rot)
+        fp.SetPosition(kipcb._pt(x, y))
+        if not _module_legal(fp, inner, bodies, pads, courtyards):
+            raise ValueError("U_SM's pinned spot (%.2f, %.2f) rot %d is not legal: its shadow leaves the "
+                             "inset outline, a pin meets a front body or pad, or a hole a front courtyard"
+                             % (x, y, rot))
+        s.parts["U_SM"] = part
+        s.shadow = module_shadow(fp)
+        s.anchors["U_SM"] = (x, y)
+        s.overrides_used.append("U_SM pinned at (%.2f, %.2f) rot %d: %s" % (x, y, rot, reason))
+        return
     best = None
     for rot in SM_ROTS:
         for x, y in PL.spiral(cx, cy, 0.5, 60.0):
             fp.SetOrientationDegrees(rot)
             fp.SetPosition(kipcb._pt(x, y))
-            if PL.inside(module_shadow(fp), inner) and _tht_clear_of_front(fp, bodies, pads):
+            if _module_legal(fp, inner, bodies, pads, courtyards):
                 d = math.hypot(x - cx, y - cy)
                 if best is None or d < best[0]:
                     best = (d, x, y, rot)

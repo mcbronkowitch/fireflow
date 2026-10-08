@@ -89,7 +89,11 @@ the windows between pot lugs missed by 3.75 mm (Task 7a's whole-board
 scan). Measured with the board placer's own tests at 23.0: U_SM fits at
 rotation 90/270 with its centre at x 152.00 .. 152.80, never at 0/180;
 `place.py` puts it at (152.40, 69.75) rot 90 (P4.1 §4.3 amendment of the
-same day admits 90/270). Cost on the plate, measured: deck column 6 to the
+same day admits 90/270). *Amended 2026-10-08 (Task 7c):* that spot left four
+module nets unroutable. U_SM is pinned at (152.40, 56.00) rot 270 (P4.1
+§4.3, second amendment of that day, which records the sweep).
+(152.40, 57.75) rot 270 was approved first and refused by the gated DRC's
+`pth_inside_courtyard`. Cost on the plate, measured: deck column 6 to the
 outer centre column is 17.40 mm centre to centre, so the **smallest cap-edge
 gap is 9.70 mm**, above the 9.0 rule — the eight small-beside-small pairs
 across that seam (R2–R5 on both sides, e.g. COUPLE/PAN_A); every other pair

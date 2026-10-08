@@ -18,6 +18,9 @@ exit code is the verdict. Re-runs itself under KiCad's Python.
    own stated reason.
 7. On a panel-only board every LED has a rotation, and no LED's body box
    overlaps another front body (P4.1 §4.2, amended 2026-10-08).
+8. U_SM sits exactly on place.SM_PIN; an illegal pinned spot is refused
+   (pins in bodies, holes in front courtyards); without the pin the search
+   still finds a spot (P4.1 §4.3, amended 2026-10-08, Task 7c).
 
 The committed hardware/reva/kicad/reva.kicad_pcb is the routed board since
 P4-2; reva_route_guard (test_route.py) compares it with a fresh route.py run,
@@ -184,6 +187,58 @@ def check_led_rule():
               % (s.ids[r], fps[r].GetOrientationDegrees(), hit))
 
 
+def check_module_pin():
+    """P4.1 §4.3 (amended 2026-10-08, Task 7c): with SM_PIN set, U_SM lands
+    exactly on it; a pinned spot that fails place_module's own tests is
+    refused, both (152.40, 64.25) rot 0 (pins in pot bodies: Task 7a found
+    no upright spot on the 9 mm raster) and (152.40, 57.75) rot 270 (legal by
+    bodies and pads, but B1 and C5 sit in REV_DIFF's / REV_MOD's courtyards:
+    the gated DRC's pth_inside_courtyard). Without the pin the search still
+    finds a spot (printed)."""
+    import build as RB
+    from gen import kipcb
+    proj = RB.project()
+
+    def panel_board():
+        s = P.Placed()
+        s.board = kipcb.new_board(P.X1 - P.X0, P.Y1 - P.Y0, P.LAYERS, origin=(P.X0, P.Y0))
+        P.place_panel(s, proj)
+        return s
+
+    def spot(s):
+        fp = s.board.FindFootprintByReference("U_SM")
+        return (round(P.pcbnew.ToMM(fp.GetPosition().x), 4), round(P.pcbnew.ToMM(fp.GetPosition().y), 4),
+                int(round(fp.GetOrientationDegrees())) % 360)
+    check(P.SM_PIN is not None, "U_SM has a pinned spot (SM_PIN)")
+    if P.SM_PIN is None:
+        return
+    s = panel_board()
+    P.place_module(s, proj)
+    check(spot(s) == (P.SM_PIN[0], P.SM_PIN[1], P.SM_PIN[2] % 360),
+          "U_SM sits on its pin %r (got %r)" % (P.SM_PIN[:3], spot(s)))
+    keep = P.SM_PIN
+    try:
+        for bad in ((152.40, 64.25, 0, "pins in pot bodies"),
+                    (152.40, 57.75, 270, "holes in front courtyards")):
+            P.SM_PIN = bad
+            try:
+                P.place_module(panel_board(), proj)
+                refused = False
+            except ValueError:
+                refused = True
+            check(refused, "an illegal pinned U_SM spot (%.2f, %.2f) rot %d (%s) is refused" % bad)
+        P.SM_PIN = None
+        s = panel_board()
+        try:
+            P.place_module(s, proj)
+            found = spot(s)
+        except ValueError as e:
+            found = str(e)
+        check(isinstance(found, tuple), "without the pin the search still finds a spot: %r" % (found,))
+    finally:
+        P.SM_PIN = keep
+
+
 def main():
     global ROOT
     ROOT = tempfile.mkdtemp(prefix="reva_place_guard_")
@@ -213,6 +268,7 @@ def run():
     check_parser()
     check_sabotage_coverage()
     check_led_rule()
+    check_module_pin()
 
     base = P.build()
     d0 = scratch("base_")
