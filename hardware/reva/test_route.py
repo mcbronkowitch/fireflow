@@ -7,15 +7,15 @@ verdict. Re-runs itself under KiCad's Python.
 3. Every gated step of route_check has a sabotage and a `_missing` one, and
    every sabotage has its own phrase (WHY).
 4. KNOWN_PANEL names only what spec §4.4 admits, and the name rule itself
-   refuses what it must refuse:
-   - drc keys: a gated class word, then names of the 18 jacks (hole y 114.0),
-     the SONG clusters or the pairs GATE_A_L/SOURCE_A and LVL_B_L/PAN_B, each
-     pair only with its own partner;
-   - routed keys: "unrouted", then such names; a key with one name is only
-     one of the two SONG plane cut-offs ("unrouted SONG_A", "unrouted
-     SONG_B"); "unrouted net ..." never;
+   refuses what it must refuse. Since the 9 mm panel pass (2026-10-08) the
+   SONG clusters, the GATE_A_L/SOURCE_A and LVL_B_L/PAN_B pairs and the SONG
+   plane cut-offs are no longer admitted:
+   - drc keys: a gated class word, then names of the 18 jacks (hole y 112.75);
+   - routed keys: "unrouted", then such names, at least two; "unrouted net
+     ..." never;
    - audio keys (bare, no class word): exactly one of the jack-zone pairs
-     CEIL_L/OUT_R and IN_L/SHIFTBTN_L (Bastian, 2026-09-30).
+     IN_L/SHIFTBTN_L and MODBTN_L/OUT_R (Bastian, 2026-09-30, renewed
+     2026-10-07 for the combined lamps).
 5. An in-process build, saved and reloaded, is green in every step. Its
    exemption zones (module and jack) lie pairwise more than AUDIO_MM apart
    (a pair with items in two different zones is exempt and never measured),
@@ -68,22 +68,26 @@ KIPY = sys.executable
 ROOT = None                  # scratch directory of this run, removed at the end
 UNGATED_STEPS = ("report", "render")
 
-# Spec §4.4. The P4-1 pairs (Bastian, 2026-09-29) and the jack-zone pairs
-# (Bastian, 2026-09-30): a key naming one of a pair names nothing else. The
-# jack-zone pairs are admitted for the audio step's jack zones only.
-PAIRS = ({"GATE_A_L", "SOURCE_A"}, {"LVL_B_L", "PAN_B"})
-ZONE_PAIRS = ({"CEIL_L", "OUT_R"}, {"IN_L", "SHIFTBTN_L"})
-SONG = {"SONG_A", "SONG_B", "SONG_A_L", "SONG_B_L"}
-CUT_OFF_KEYS = {"unrouted SONG_A", "unrouted SONG_B"}   # the SONG lamps' plane cut-offs
+# Spec §4.4. The P4-1 pairs (Bastian, 2026-09-29), the SONG clusters and
+# their plane cut-offs were admitted until the panel pass and are gone since
+# 2026-10-08 (Task 7c): nothing of them may be listed again. The jack-zone
+# pairs (Bastian, 2026-09-30; renewed 2026-10-07 for the combined lamps) stay,
+# for the audio step's jack zones only: a key naming one of a pair names
+# nothing else.
+PAIRS = ()
+ZONE_PAIRS = ({"IN_L", "SHIFTBTN_L"}, {"MODBTN_L", "OUT_R"})
+SONG = set()
+CUT_OFF_KEYS = set()
 CLASS_WORDS = {"routed": {"unrouted"}, "drc": set(RC.GATED_DRC)}
 
-# The jack zones as the audio step finds them on the 2026-10-01 board (spec
-# §4.2.2, review M2): the key, the victim pad and every aggressor pad by
-# ref.pad. A new aggressor pad (panel or not) that widens a zone under the
-# same key turns this red. Empties with KNOWN_PANEL["audio"] at the panel pass.
+# The jack zones as the audio step finds them (spec §4.2.2, review M2): the
+# key, the victim pad and every aggressor pad by ref.pad. A new aggressor pad
+# (panel or not) that widens a zone under the same key turns this red. The
+# panel pass (2026-10-08, Task 7c) did not empty them: two pairs stay,
+# admitted, with the members of the new board's route_check report.
 JACK_ZONES = {
-    "CEIL_L/OUT_R": ("J18.T", {"D17.2", "R34.1", "R34.2"}),
-    "IN_L/SHIFTBTN_L": ("J1.T", {"D1.2"}),
+    "IN_L/SHIFTBTN_L": ("J1.T", {"D1.2", "R18.1", "R18.2"}),
+    "MODBTN_L/OUT_R": ("J18.T", {"D15.2"}),
 }
 
 STEP_RE = re.compile(r"^(RED|   ) \d+\. (\S+)")
@@ -147,7 +151,7 @@ def admissible(chk, key, jacks):
     if chk == "audio":
         # bare keys: no class word, the names are the whole key
         names = set(CK.key_names(key, set()))
-        return (CK.key_allowed(key, jacks | {"CEIL_L", "SHIFTBTN_L"}, ZONE_PAIRS, set())
+        return (CK.key_allowed(key, jacks | set().union(*ZONE_PAIRS), ZONE_PAIRS, set())
                 and names in [set(p) for p in ZONE_PAIRS])
     words = CLASS_WORDS.get(chk)
     if words is None or key.partition(" ")[0] not in words or key.startswith("unrouted net "):
@@ -161,29 +165,31 @@ def admissible(chk, key, jacks):
 
 def check_key_names(jacks):
     """The name rule is itself able to go red (keys it must refuse)."""
-    good = [("drc", "copper_edge_clearance CLOCK"), ("drc", "shorting_items GATE_A_L/SOURCE_A"),
-            ("drc", "shorting_items SONG_A/SONG_A_L"), ("drc", "clearance IN_L/IN_R"),
-            ("routed", "unrouted SONG_A"), ("routed", "unrouted SONG_B"), ("routed", "unrouted CLOCK/RESET"),
-            ("audio", "CEIL_L/OUT_R"), ("audio", "IN_L/SHIFTBTN_L")]
+    good = [("drc", "copper_edge_clearance CLOCK"), ("drc", "clearance IN_L/IN_R"),
+            ("routed", "unrouted CLOCK/RESET"),
+            ("audio", "MODBTN_L/OUT_R"), ("audio", "IN_L/SHIFTBTN_L")]
     bad = [("routed", "unrouted OUT_L"),          # a pad-to-track gap at one jack
-           ("routed", "unrouted SOURCE_A"),       # one name of an admitted pair
-           ("routed", "unrouted SONG_A_L"),       # one name, but not a listed cut-off
+           ("routed", "unrouted SOURCE_A"),       # one name of a pair no longer admitted
+           ("routed", "unrouted SONG_A"),         # a SONG plane cut-off, gone with the panel pass
+           ("routed", "unrouted SONG_A_L"),       # one name, not a cut-off
            ("routed", "unrouted net SENSE_2"),    # a gap between tracks
            ("routed", "unrouted net ?"),
            ("routed", "unrouted CLOCK_BOGUS"),    # not a part
            ("routed", "clearance CLOCK"),         # a drc class word under routed
-           ("drc", "unrouted SONG_A"),            # routed's class word under drc
+           ("drc", "unrouted CLOCK/RESET"),       # routed's class word under drc
            ("drc", "CLOCK"),                      # no class word
            ("drc", "widget CLOCK"),               # an unknown class word
-           ("drc", "clearance CEIL_L/OUT_R"),     # a jack-zone pair outside the audio step
-           ("drc", "shorting_items SONG_A/GATE_A_L"),   # one of a pair with a stranger
+           ("drc", "clearance MODBTN_L/OUT_R"),   # a jack-zone pair outside the audio step
+           ("drc", "shorting_items GATE_A_L/SOURCE_A"),  # a P4-1 pair, gone with the panel pass
+           ("drc", "shorting_items SONG_A/SONG_A_L"),    # a SONG cluster, gone with the panel pass
            ("drc", "clearance "),                 # no names at all
            ("audio", "OUT_R"),                    # a jack alone
-           ("audio", "CEIL_L/IN_L"),              # across the two pairs
-           ("audio", "CEIL_L/OUT_R/SHIFTBTN_L"),
-           ("audio", "jack CEIL_L/OUT_R"),        # a class word on a bare key
+           ("audio", "IN_L/MODBTN_L"),            # across the two pairs
+           ("audio", "MODBTN_L/OUT_R/SHIFTBTN_L"),
+           ("audio", "CEIL_L/OUT_R"),             # the 2026-09-30 name, gone with the panel pass
+           ("audio", "jack MODBTN_L/OUT_R"),      # a class word on a bare key
            ("audio", "IN_L/SHIFTBTN_L/SONG_A"),
-           ("planes", "unrouted SONG_A")]         # a check that has no known list
+           ("planes", "unrouted CLOCK/RESET")]    # a check that has no known list
     for chk, k in good:
         check(admissible(chk, k, jacks), "name rule accepts %s %r" % (chk, k))
     for chk, k in bad:
@@ -470,10 +476,10 @@ def run():
           and open(R.COMMITTED, "rb").read() == open(pcb1, "rb").read(),
           "committed %s equals a fresh run (rerun route.py --write)" % os.path.relpath(R.COMMITTED))
 
-    # The jack row: the 18 jacks, hole y 114.0.
+    # The jack row: the 18 jacks, hole y 112.75 (JACK_Y since the 9 mm panel pass).
     jacks = {h["id"] for h in assign.load_holes()
-             if h["kind"] == "jack" and abs(h["y_mm"] - 114.0) < 1e-6}
-    check(len(jacks) == 18, "the jack row is the 18 jacks at y 114.0 (%d)" % len(jacks))
+             if h["kind"] == "jack" and abs(h["y_mm"] - 112.75) < 1e-6}
+    check(len(jacks) == 18, "the jack row is the 18 jacks at y 112.75 (%d)" % len(jacks))
     check_key_names(jacks)
     check_known_names(jacks)
     check_sabotage_coverage()

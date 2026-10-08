@@ -373,6 +373,11 @@ on the saved board.
 - Two more pairs, for the jack zones of §4.2.2 only (Bastian, 2026-09-30):
   CEIL_L/OUT_R and SHIFTBTN_L/IN_L, each only with its own partner. They must
   be gone after the panel pass like every other entry.
+  *Amended 2026-10-08 (Task 7c):* the panel pass (spec 2026-10-07 §5.3)
+  renewed the two jack-zone pairs for the combined lamps: IN_L/SHIFTBTN_L
+  and MODBTN_L/OUT_R stay admitted. Every other entry (the jack row, the
+  SONG clusters, GATE_A_L/SOURCE_A, LVL_B_L/PAN_B) is gone and may not be
+  listed again.
 - An unrouted connection between two non-panel pads is never listable.
 - An unconnected item on a plane net (GND, SM_3V3) is keyed by the pad that
   is cut off from its plane, found through the board's own connectivity, not

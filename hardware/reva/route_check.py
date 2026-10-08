@@ -21,45 +21,21 @@ from gen import ksexp
 from gen import pcb_proof as PP
 from gen import place as PL
 
-# Filled from the first converged full run (Task 6, 2026-10-01), restricted by
-# the owner's rule (spec §4.4) to the jack row, the SONG clusters, the
-# GATE_A_L/SOURCE_A and LVL_B_L/PAN_B pairs and the jack-zone pairs
-# CEIL_L/OUT_R and SHIFTBTN_L/IN_L. The jack-zone pairs have no routed or drc
-# item; they are found items of the audio step (Task 7, spec §5.4).
+# Emptied by the 9 mm panel pass (spec 2026-10-07 §1; Task 7c, 2026-10-08):
+# the jack row, the SONG clusters and the GATE_A_L/SOURCE_A and LVL_B_L/PAN_B
+# pairs no longer fail. Two jack-zone pairs stay, admitted (spec §4.4); they
+# have no routed or drc item and are found items of the audio step (§5.4).
+# A non-empty "routed" / "drc" / "silk" entry needs Bastian's decision.
 # A listed "routed" key is admitted only from a plane cut-off block (below).
 KNOWN_PANEL = {
-    "routed": {
-        # SONG lamp legs overlap the pot's pin 3 (P4-1 SONG item): D3 on
-        # RV3.3, D16 on RV56.3, so SM_3V3 cannot reach the pin (spec §4.4)
-        "unrouted SONG_A",
-        "unrouted SONG_B",
-    },
-    "drc": {
-        # jack past the edge: the 18 y 114 jacks' tip pad T lies past the
-        # 0.5 mm edge clearance (P4-1 jack row, spec §4.4)
-        "copper_edge_clearance CLOCK", "copper_edge_clearance GATE_A",
-        "copper_edge_clearance GATE_B", "copper_edge_clearance IN_L",
-        "copper_edge_clearance IN_R", "copper_edge_clearance MOD1_A",
-        "copper_edge_clearance MOD1_B", "copper_edge_clearance MOD2_A",
-        "copper_edge_clearance MOD2_B", "copper_edge_clearance MOD3_A",
-        "copper_edge_clearance MOD3_B", "copper_edge_clearance MOD4_A",
-        "copper_edge_clearance MOD4_B", "copper_edge_clearance OUT_L",
-        "copper_edge_clearance OUT_R", "copper_edge_clearance PITCH_A",
-        "copper_edge_clearance PITCH_B", "copper_edge_clearance RESET",
-        # SONG lamp on its pot: D3's / D16's legs on RV3's / RV56's pins (P4-1 SONG item)
-        "shorting_items SONG_A/SONG_A_L", "shorting_items SONG_B/SONG_B_L",
-        # the admitted pairs: D4's legs on RV10's pins, D12's on RV48's
-        # (P4-1, Bastian 2026-09-29, spec §4.4); pad to pad, no routed copper
-        "clearance GATE_A_L/SOURCE_A", "shorting_items GATE_A_L/SOURCE_A",
-        "shorting_items LVL_B_L/PAN_B",
-    },
+    "routed": set(),
+    "drc": set(),
     "audio": {
-        # jack zones (spec §4.2.2): placement already puts aggressor pads
-        # within 10 mm of these jacks' victim pads, keyed by the panel ids
-        # of the jack and the panel LED involved, sorted like every key
-        # (Bastian, 2026-09-30: the pairs CEIL_L/OUT_R and SHIFTBTN_L/IN_L)
-        "CEIL_L/OUT_R",         # J18.T OUT_R: R34.1 [LED16], R34.2 and D17.2 [LED16_A]
-        "IN_L/SHIFTBTN_L",      # J1.T IN_L: D1.2 [LED0_A]
+        # jack zones admitted by Bastian (2026-09-30, renewed 2026-10-07 for the
+        # combined lamps, spec 2026-10-07 §5.3): the lamps centred between key
+        # and jack sit within 10 mm of the jack's tip pad by construction.
+        "IN_L/SHIFTBTN_L",      # J1.T IN_L: D1.2 [LED0_A] 6.93 mm, R18.1 [LED0] 7.96 mm, R18.2 [LED0_A] 6.34 mm
+        "MODBTN_L/OUT_R",       # J18.T OUT_R: D15.2 [LED14_A] 9.29 mm
     },
     "silk": set(),  # silk text entries the panel pass must clear; expected none (P4-3 spec §5.1)
 }
@@ -1215,12 +1191,19 @@ def _sab_routed_missing(s):
 
 
 def _sab_routed_song(s):
-    """A signal gap at a listed SONG pot: every M0_CH2 track with an end on
-    RV3.2 (SONG_A's wiper) removed, so the pad stands alone. kicad-cli pairs
-    the pad with the net's nearest track end, and the block keys as
-    "unrouted SONG_A", the listed plane cut-off's key (the Task 6 review's
-    gate hole: before the fix that block merged into the listed key, green)."""
-    fp = _fp(s.board, "RV3")
+    """A signal gap at a listed pot: every track with an end on SONG_A's
+    wiper (pad 2) removed, so the pad stands alone, and "unrouted SONG_A"
+    listed as a known plane cut-off for this run. kicad-cli pairs the pad
+    with the net's nearest track end, and the block keys as "unrouted
+    SONG_A", the listed key; the step must still call it NEW, "not a plane
+    cut-off" (the Task 6 review's gate hole: before the fix that block merged
+    into the listed key, green). Since the 9 mm panel pass (2026-10-08) the
+    real list is empty, so the sabotage lists the key itself; the pot is
+    found by its panel id (it was RV3)."""
+    ref = [r for r, pid in s.ids.items() if pid == "SONG_A"][0]
+    s.known = dict(s.known)
+    s.known["routed"] = set(s.known.get("routed", set())) | {"unrouted SONG_A"}
+    fp = _fp(s.board, ref)
     pad = [p for p in fp.Pads() if str(p.GetNumber()) == "2"][0]
     gone = [t for t in s.board.GetTracks()
             if t.Type() == pcbnew.PCB_TRACE_T and t.GetNetname() == pad.GetNetname()
@@ -1674,7 +1657,7 @@ TURNS_RED = {"routed": "routed", "routed_missing": "routed", "routed_song": "rou
              "silk_clear": "silk_clear", "silk_clear_missing": "silk_clear",
              "no_room": "no_room", "no_room_stale": "no_room", "no_room_missing": "no_room"}
 WHY = {"routed": "unrouted on SENSE_2", "routed_missing": "incomplete",
-       "routed_song": "SONG_A: 2 blocks under one key",
+       "routed_song": "unrouted SONG_A: kicad-cli unconnected_items, not a plane cut-off",
        "drc": "clearance {ref}: kicad-cli", "drc_missing": "wrote no report",
        "drc_cut": "was not read",
        "rules_file": "min_clearance is 0.15", "rules_file_missing": "carries no rules",
