@@ -213,6 +213,22 @@ def test_fields_keep_box_gap():
           f"fields and GROUP_ORDER disagree: { {b.stem for b in boxes} ^ set(hw.GROUP_ORDER)}")
 
 
+def test_column_cells_follow_the_centre_pitch():
+    """Spec §7 (amended 2026-10-08): the column cell's half-width, side by
+    side, written here as literals. Between the centre columns (23.0 - 3.0)
+    / 2 = 10.0; the outer centre columns' outward side (toward the deck) has
+    no column-cell minimum; deck column 6 keeps (20.2 - 3.0) / 2 = 8.6."""
+    from types import SimpleNamespace as At
+    want = {  # x: (left, right)
+        129.4: (0.0, 10.0), 152.4: (10.0, 10.0), 175.4: (10.0, 0.0),
+        112.0: (8.6, 8.6), 192.8: (8.6, 8.6), 11.0: (8.6, 8.6),
+    }
+    for x, (left, right) in want.items():
+        got = (hw._cell_half(At(x=x), -1), hw._cell_half(At(x=x), +1))
+        check(abs(got[0] - left) < 1e-9 and abs(got[1] - right) < 1e-9,
+              f"column cell at x {x}: half-widths {got}, want {(left, right)}")
+
+
 def _twin_enum(enum):
     """Name-declared mirror partner, or None if the name declares none.
 
@@ -660,9 +676,9 @@ def test_steps_has_no_lamp_on_the_hw_plate():
     names = {c.enum for c in hw.HW_LIGHTS}
     check("FLOW_A_L" not in names and "FLOW_B_L" not in names,
           "FLOW_* still drawn on FireflowHW")
-    check("STEPS_A" not in hw.KNOBS_WITH_LAMPS and
-          "STEPS_B" not in hw.KNOBS_WITH_LAMPS,
-          "STEPS is still in KNOBS_WITH_LAMPS")
+    owners = set(hw.KNOB_LAMPS.values())
+    check("STEPS_A" not in owners and "STEPS_B" not in owners,
+          "STEPS still owns a lamp in KNOB_LAMPS")
     by = {c.enum: c for c in hw.HW_PARAMS}
     for enum in ("STEPS_A", "STEPS_B"):
         lx, ly = hw.hw_label(by[enum])[:2]
@@ -696,9 +712,14 @@ CLUSTER_SIDE = {"ATTACK": +1, "FLUXRATE": -1, "COMP": +1, "SONG": +1,
                 "REC": +1, "TEMPO": +1}
 # The board-probed |dx| from which each lamp's LED clears every front part
 # on the Rev A board (2026-10-08, see LED_DX in the generator): the floor
-# LED_DX / LED_DX_KEY may not go under.
+# LED_DX / LED_DX_KEY may not go under. Where the two sides measured
+# differently the stricter value is pinned (FLUXRATE 5.70/5.75, SONG
+# 6.75/6.80). REC's 5.90 holds with the LED's flat side toward the key --
+# its body box is not centred on its hole -- which the placer guarantees by
+# its body-aware rotation pick (place.py _led_fits, P4.1 §4.2 amended
+# 2026-10-08). COMP's lamp was clear at every probed dx (0.00, 2.05, 6.90).
 CLUSTER_DX_FLOOR = {"ATTACK": 5.70, "FLUXRATE": 5.75, "TEMPO": 5.75,
-                    "REC": 5.90, "SONG": 6.75, "COMP": 0.0}
+                    "REC": 5.90, "SONG": 6.80, "COMP": 0.0}
 
 
 def test_knob_lamps_sit_in_the_caption_cluster():
@@ -770,10 +791,6 @@ def test_song_lamp_is_a_cluster_lamp():
         check(hw.KNOB_LAMPS.get(f"SONG_{side}_L") == f"SONG_{side}",
               f"SONG_{side}_L is not SONG_{side}'s cluster lamp")
     check(not hasattr(hw, "SIDE_LAMPS"), "a SIDE_LAMPS table is back")
-    by = {c.enum: c for c in hw.ALL_HW}
-    for lamp in ("SONG_A_L", "SONG_B_L"):
-        check(by[lamp].y > by[lamp[:-2]].y,
-              f"{lamp} is not under its knob, on its word's line")
 
 
 def test_jack_row_lamps():

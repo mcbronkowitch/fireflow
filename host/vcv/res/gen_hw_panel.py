@@ -414,7 +414,6 @@ KNOB_LAMPS = {
     # point south in the top row.
     "SONG_A_L": "SONG_A", "SONG_B_L": "SONG_B",
 }
-KNOBS_WITH_LAMPS = set(KNOB_LAMPS.values())
 CAPTION_SIZE = 2.2      # same size hw_label prints
 # Which side of its word a lamp stands on, deck A (+1 = right): toward the
 # lamp's own group, never into a neighbour's. Deck B flips the sign. TEMPO is
@@ -425,8 +424,13 @@ LAMP_SIDE = {"ATTACK": +1, "FLUXRATE": -1, "COMP": +1, "SONG": +1,
 # its word's glyph midline: the LED body clears every front body, its pads
 # clear every foreign body and keep PAD_CLEAR to every foreign pad, at some
 # rotation in place.py's LED_ROTS, from |dx| 5.70 (ATTACK; FLUXRATE_A, left),
-# 5.75 (TEMPO; FLUXRATE_B, right), 5.90 (REC key) and 6.75 (SONG; 6.80 on
-# the side it does not take); COMP's lamp is clear at any dx.
+# 5.75 (TEMPO; FLUXRATE_B, right), 5.90 (REC key) and 6.80 (SONG; 6.75 on
+# one side, 6.80 on the other -- the stricter one counts). COMP's lamp
+# (dy 8.808) was clear at every probed dx: 0.00, the old cluster's 2.05 and
+# the placed 6.90, at every rotation. REC's 5.90 holds only with the LED's
+# flat side toward the key (its body box is not centred on its hole); the
+# placer guarantees that by picking a rotation whose body clears every
+# front body (place.py _led_fits, P4.1 §4.2 amended 2026-10-08).
 LED_DX = 6.9            # pot owners
 LED_DX_KEY = 6.0        # the REC key
 
@@ -527,24 +531,28 @@ LBL_MARGIN = 1.5
 
 def _caption_is_clear(c, lx, ly):
     """True when (lx, ly) sits outside c's own footprint and clears every
-    other control's clearance circle by LBL_MARGIN."""
+    other control's clearance circle by LBL_MARGIN. A control on c's own
+    shaft (STAGES shares ATTACK's knob: one hole, one pot) is not a
+    neighbour: it gets the own-knob floor, its radius, like c itself --
+    the same rule test_labels_stay_off_neighbour_footprints holds."""
     if ((lx - c.x) ** 2 + (ly - c.y) ** 2) ** 0.5 < c.r - 1e-9:
         return False
     for o in ALL_HW:
         if o is c:
             continue
-        if ((lx - o.x) ** 2 + (ly - o.y) ** 2) ** 0.5 < o.r + LBL_MARGIN - 1e-9:
+        same_shaft = abs(o.x - c.x) < 1e-9 and abs(o.y - c.y) < 1e-9
+        need = o.r if same_shaft else o.r + LBL_MARGIN
+        if ((lx - o.x) ** 2 + (ly - o.y) ** 2) ** 0.5 < need - 1e-9:
             return False
     return True
 
 
 def hw_label(c):
-    """Caption placement, by rule rather than by named exception."""
+    """Caption placement, by rule rather than by named exception. A lamp
+    owner's word takes the same first candidate -- centred under its knob
+    -- that caption_led_cluster hangs the LED's midline on."""
     if not c.label:
         return (c.x, c.y, "middle", CAPTION_SIZE, HW_LABEL)
-    if c.enum in KNOBS_WITH_LAMPS:
-        cap_x, cap_y, _, _ = caption_led_cluster(c)
-        return (cap_x, cap_y, "middle", CAPTION_SIZE, HW_LABEL)
     dy = CLASS_LBL_DY[hw_class(c.enum)]
     if c.y >= JACK_Y - 0.5:
         dy = JACK_ROW_LBL_DY
