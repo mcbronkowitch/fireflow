@@ -424,21 +424,35 @@ def place_power_header(s, proj, blocked):
 # pots and the module (152.40, 69.75 rot 90): each of those targets then lay
 # on a pot's THT pads or another part's courtyard, and their reasons described
 # a board that is gone, so they were removed and the §4.4 spiral places those
-# parts again. R12's target stayed free and is kept.
+# parts again. R12's target stayed free and was kept, until U_SR1's move
+# below shifted R12's anchor (MUX_EN8 runs from U_SR1 to U_MUX8) and put
+# its target, (165.62, 37.34), on a blocked spot: removed the same day.
+# Later the same day (Task 7c, with U_SM pinned at (152.40, 56.00) rot 270)
+# the spiral again packed U_IN1, U_SR1, U_SR2 and U_SR3 into the strip west
+# of the module (x 114..137): every route run left 7..19 nets in conflict
+# there. probe_sr_prop (7c report) moves each to the first free spot from
+# the centroid of only its loads west of the module shadow, by the IC
+# search's own rules (step 0.5, radius 30, its 100 nF still fits), with the
+# strip kept out: 102 -> 56 back SMD pads in x 104..132.3.
+_SR_PROBE = ("probe_sr_prop 2026-10-08 (Task 7c, U_SM pinned at (152.40, 56.00) rot 270): "
+             "the conflict strip x 114..137 west of the module; moved to the first free spot "
+             "from the centroid of its loads west of the module shadow (%s), strip kept out")
 OVERRIDES = {
-    "U_SR2": (-6.00, 2.50, 90,
-              "place.py 2026-10-08 (Task 7c, 9 mm panel; probe_sr2 in the 7c report): with the "
-              "2026-09-30 IC overrides removed, U_SR2's first fit (116.06, 60.76) abutted "
-              "U_IN1's VCC side and C22 found no spot within 2.0 mm of U_IN1 pad 16; this is "
-              "the first spiral spot from U_SR2's anchor that leaves C22 its decoupler spot"),
+    "U_IN1": (-73.47, 0.41, 90, _SR_PROBE % "4 of its 8 panel-side pads, west anchor (76.93, 61.34)"),
+    "U_SR1": (-37.47, -2.19, 0, _SR_PROBE % "6 of 8, west anchor (106.29, 46.00)"),
+    "U_SR2": (-38.33, 10.97, 270, _SR_PROBE % "6 of 8, west anchor (82.23, 62.73); replaces the "
+              "earlier (-6.00, +2.50) entry that only made room for C22"),
+    "U_SR3": (-31.79, 8.88, 90, _SR_PROBE % "5 of 8, west anchor (108.27, 69.61)"),
+    "C17": (0.00, 1.60, 180,
+            "probe_dec 2026-10-08 (Task 7c): after U_SR1's move, C17 (its 100 nF) at rot 0 left "
+            "pad 2's GND stitch via no spot outside the pot keep-outs (kept under a pot body, "
+            "route_check pot_keepout); the same spot at rot 180, pad 1 still within 2.0 mm of "
+            "U_SR1 pad 16, lets the stitch resolve every plane pad"),
     "C6": (8.50, -7.00, 270,
            "route.py 2026-10-08 (Task 7c, 9 mm panel; probe_c6 in the 7c report): at its first "
            "fit (rot 90) C6.2's GND stitch via found no spot outside RV18's (DETUNE_A) pot "
            "keep-out and was kept under the pot body (route_check pot_keepout); the same spot "
            "turned to rot 270 puts pad 2 on the other end, where the stitch resolves"),
-    "R12": (35.11, -8.74, 0,
-            "reva-routed-bottom.png 2026-09-30 (Task 6a run 1): MUX_EN8 the worst net of the knot "
-            "east of U_SR1; moved out of that corridor next to U_MUX8, the mux it enables"),
 }
 
 # Search step and radius per class (spec §4.4; spike values for ICs,
