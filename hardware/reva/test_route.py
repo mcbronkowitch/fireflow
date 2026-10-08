@@ -345,12 +345,14 @@ def _prep_zone_dup(s, pcb, prefix):
 
 
 def _prep_rules_severity(s, pcb, prefix):
-    """A project file with the five rule values unchanged and clearance
-    switched to "ignore" (probed 2026-10-01: clearance 0 under it, 8 under
-    the saved one), so only the count comparison can see it."""
+    """A project file with the five rule values unchanged and courtyards_overlap
+    switched to "ignore", so only the count comparison can see it. It was
+    clearance until 2026-10-08 (8 items under the saved pro on the old
+    board); the 9 mm plate board has no clearance item, but 11 front
+    courtyard overlaps, the only gated class with items there."""
     with open(os.path.join(HERE, "kicad", "reva.kicad_pro"), encoding="utf-8") as fh:
         body = json.load(fh)
-    body["board"]["design_settings"]["rule_severities"] = {"clearance": "ignore"}
+    body["board"]["design_settings"]["rule_severities"] = {"courtyards_overlap": "ignore"}
     s.rules_pro_bytes = json.dumps(body).encode("utf-8")
 
 
@@ -367,12 +369,15 @@ PROBES = {
     "planes_no_zone": (_mut_no_gnd_zone, None, None, [("planes", "no filled GND zone on In1.Cu")], []),
     "routed_router": (None, _prep_router_failed, ["routed"],
                       [("routed", "router left 3 nets in conflict"), ("routed", "router failed nets: SENSE_2")], []),
-    "routed_count": (None, _drop_header(lambda ln: ln.startswith("[unconnected_items]")), ["routed"],
-                     [("routed", "unconnected pads but")], []),
+    # the routed board has no unconnected item since the 9 mm panel pass
+    # (2026-10-08): the routed sabotage's open connection gives the block
+    # whose header the probe drops
+    "routed_count": (RC.SABOTAGES["routed"], _drop_header(lambda ln: ln.startswith("[unconnected_items]")),
+                     ["routed"], [("routed", "unconnected pads but")], []),
     "drc_count": (None, _drop_header(lambda ln: not ln.startswith("[unconnected_items]")), ["drc"],
                   [("drc", "the DRC report was not read: complete True")], []),
     "rules_count": (None, _prep_rules_severity, ["rules_file"],
-                    [("rules_file", "class clearance: 0 under the committed pro")],
+                    [("rules_file", "class courtyards_overlap: 0 under the committed pro")],
                     [("rules_file", "in reva.kicad_pro, not")]),
     "zones_all": (None, _prep_zone_all, ["audio", "lr"],
                   [("audio", "OUT_L: no copper outside the exemption zones"),
