@@ -14,12 +14,13 @@ lies partly off the grid (the jack row's tip pads, spec §4.2.6) is still
 reached. Victims and aggressors carry pair groups, U_SM's pad groups and the
 jack zones (a victim pad with aggressor pads already within 10 mm) are
 exemption zones, SENSE and audio route in earlier tiers. U_REG's heat
-copper (REG_COPPER) is a 3V3D-owned B.Cu obstacle and, after routing, a
-3V3D zone. The silkscreen pass (silk.py, P4-3 spec §4.3) runs last, after
+copper (reg_copper(), computed from the placed regulator) is a 3V3D-owned
+B.Cu obstacle and, after routing, a 3V3D zone. The silkscreen pass (silk.py, P4-3 spec §4.3) runs last, after
 the zone fill. The rules are judged by route_check.py on the saved board,
 never here."""
 import argparse
 import copy
+import math
 import os
 import shutil
 import sys
@@ -47,33 +48,186 @@ LAYER_NAMES = ("F.Cu", "B.Cu")
 AGGR = "aggressor"
 
 # U_REG's heat copper (Bastian, 2026-10-01; docs/hardware/power-budget.md):
-# a 3V3D area on B.Cu at the regulator's tab, (l, t, r, b) mm in board
-# coordinates. The router keeps every other net's copper (and every via but
-# 3V3D's) off it; after routing it becomes a 3V3D zone, solid to the tab.
-# Probed 2026-10-01 on the placed (stitched) and the routed board: no pad
-# or via but U_REG's tab inside (J_PWR's B-side courtyard overlaps the south
-# end from y 58.98, its pads start at y 61.86); nearest other copper RV10's
-# netless lug 0.615 mm, U_REG.1/.3 0.730 mm, J_PWR.10 0.860 mm, C4 1.045 mm,
-# the nearest stitching via (SM_3V3, C8) 1.201 mm. F.Cu above it is free of
-# pot bodies (RV10's starts at x 68.08, RV9's ends at y 38.90), so other nets
-# cross it there. The pin column (x <= 59.47) stays outside, so +12V still
-# reaches U_REG.3 from the west.
+# a 3V3D area on B.Cu at the regulator's tab. The router keeps every other
+# net's copper (and every via but 3V3D's) off it; after routing it becomes a
+# 3V3D zone, solid to the tab.
+# Until 2026-10-08 the area was two fixed rectangles, (51.9, 39.0, 66.1,
+# 50.8) and (60.2, 50.8, 66.1, 61.0), drawn for U_REG at (61.62, 54.98). The
+# 9 mm panel pass moved J_PWR and with it U_REG, and the rectangles were left
+# on foreign pads 46 mm from the tab. Since 2026-10-08 (Bastian, Task 7c) the
+# area follows the placed regulator: reg_copper() computes it from the board
+# with the same keep-outs the fixed area kept by hand, plus courtyards.
 REG_NET = "3V3D"
-REG_COPPER = ((51.9, 39.0, 66.1, 50.8),     # north of U_REG, west to x 51.9
-              (60.2, 50.8, 66.1, 61.0))     # the tab's column, past its south end
+REG_REF = "U_REG"
+REG_WIN_MM = 15.0       # the area stays inside the box of this half-size around the tab centre
+REG_GRID_MM = 0.2       # the search grid (the router's pitch); a cell overlapping a keep-out is out
 
 
-def reg_outline():
-    """REG_COPPER's union as one outline, [(x, y)] mm."""
+def reg_keepouts(board):
+    """(tab box, pin column box, keep-out boxes, inner box) for U_REG's heat
+    copper, read from the placed board, mm:
+    - every pad on B.Cu that is not U_REG's own 3V3D, netless pads included,
+      grown by RU.CLEARANCE (the fill's own clearance);
+    - every back-side courtyard but U_REG's, and the module shadow;
+    - every via and B.Cu track already on the board (the plane stitching,
+      which runs first), grown by RU.CLEARANCE;
+    - U_REG's pin column: the box of its pins (every pad but the tab) grown
+      by RU.CLEARANCE and run out to the board edge on the side away from
+      the tab, so +12V and GND still reach pins 3 and 1 from outside (the
+      2026-10-01 area kept x <= 59.47 free for the same reason);
+    - the outline inset by RU.EDGE_CLEAR (inner box).
+    The tab is U_REG's largest REG_NET pad on B.Cu."""
+    reg = board.FindFootprintByReference(REG_REF)
+    own = [p for p in reg.Pads() if p.GetNetname() == REG_NET and p.IsOnLayer(pcbnew.B_Cu)]
+    if not own:
+        raise ValueError("%s has no %s pad on B.Cu" % (REG_REF, REG_NET))
+    tab_pad = max(own, key=lambda p: p.GetBoundingBox().GetWidth() * p.GetBoundingBox().GetHeight())
+    tab = PL.box(tab_pad.GetBoundingBox())
+    pins = [PL.box(p.GetBoundingBox()) for p in reg.Pads() if PL.box(p.GetBoundingBox()) != tab]
+    g = PL.grow((min(q[0] for q in pins), min(q[1] for q in pins),
+                 max(q[2] for q in pins), max(q[3] for q in pins)), RU.CLEARANCE)
+    dx = (g[0] + g[2] - tab[0] - tab[2]) / 2.0
+    dy = (g[1] + g[3] - tab[1] - tab[3]) / 2.0
+    big = 1000.0
+    if abs(dx) > abs(dy):
+        column = (g[0] - big, g[1], g[2], g[3]) if dx < 0 else (g[0], g[1], g[2] + big, g[3])
+    else:
+        column = (g[0], g[1] - big, g[2], g[3]) if dy < 0 else (g[0], g[1], g[2], g[3] + big)
+    keep = [column]
+    for fp in board.GetFootprints():
+        ref = fp.GetReference()
+        for p in fp.Pads():
+            if ref == REG_REF and p.GetNetname() == REG_NET:
+                continue
+            if p.IsOnLayer(pcbnew.B_Cu):
+                keep.append(PL.grow(PL.box(p.GetBoundingBox()), RU.CLEARANCE))
+        if fp.IsFlipped() and ref != REG_REF:
+            c = PL.courtyard_box(fp)
+            if c is not None:
+                keep.append(c)
+            if ref == "U_SM":
+                keep.append(P.module_shadow(fp))
+    for t in board.GetTracks():
+        if t.Type() == pcbnew.PCB_VIA_T or t.IsOnLayer(pcbnew.B_Cu):
+            keep.append(PL.grow(PL.box(t.GetBoundingBox()), RU.CLEARANCE))
+    inner = (P.X0 + RU.EDGE_CLEAR, P.Y0 + RU.EDGE_CLEAR, P.X1 - RU.EDGE_CLEAR, P.Y1 - RU.EDGE_CLEAR)
+    return tab, column, keep, inner
+
+
+def reg_copper_rects(tab, keep, inner, win=REG_WIN_MM, grid=REG_GRID_MM):
+    """The heat copper as one or two rectangles, pure geometry (mm boxes):
+    A is the largest rectangle that holds the tab and touches no keep-out;
+    B is the rectangle, free as well, whose union with A is largest among
+    those that overlap A by at least the tab's short side in both
+    directions (a joint no narrower than the tab). Both lie inside `inner`
+    and inside the box of half-size `win` around the tab centre, on a grid
+    of `grid` aligned to the tab's corner; a cell that overlaps a keep-out
+    is out (the keep-outs carry their clearance already). Two overlapping rectangles are one simply connected area.
+    Returns [A] or [A, B]; raises ValueError when a tab cell is not free."""
+    cx, cy = (tab[0] + tab[2]) / 2.0, (tab[1] + tab[3]) / 2.0
+    lo_x, hi_x = max(inner[0], cx - win), min(inner[2], cx + win)
+    lo_y, hi_y = max(inner[1], cy - win), min(inner[3], cy + win)
+    eps = 1e-6
+    i0 = -int(math.floor((tab[0] - lo_x) / grid + eps))
+    j0 = -int(math.floor((tab[1] - lo_y) / grid + eps))
+    nx = int(math.floor((hi_x - tab[0]) / grid + eps)) - i0
+    ny = int(math.floor((hi_y - tab[1]) / grid + eps)) - j0
+
+    def cell(i, j):
+        x, y = tab[0] + (i + i0) * grid, tab[1] + (j + j0) * grid
+        return (x, y, x + grid, y + grid)
+    free = [[True] * nx for _ in range(ny)]
+    for q in keep:
+        a = max(0, int(math.floor((q[0] - tab[0]) / grid)) - i0)
+        bb = min(nx - 1, int(math.ceil((q[2] - tab[0]) / grid)) - i0)
+        c = max(0, int(math.floor((q[1] - tab[1]) / grid)) - j0)
+        d = min(ny - 1, int(math.ceil((q[3] - tab[1]) / grid)) - j0)
+        for j in range(c, d + 1):
+            row = free[j]
+            for i in range(a, bb + 1):
+                if row[i] and PL.overlaps(cell(i, j), q):
+                    row[i] = False
+    ti0, tj0 = -i0, -j0
+    ti1 = ti0 + int(math.ceil((tab[2] - tab[0]) / grid - eps)) - 1
+    tj1 = tj0 + int(math.ceil((tab[3] - tab[1]) / grid - eps)) - 1
+    if not (0 <= ti0 <= ti1 < nx and 0 <= tj0 <= tj1 < ny):
+        raise ValueError("%s's tab is not inside the heat copper window" % REG_REF)
+    pre = []
+    for i in range(nx):
+        s, col = 0, [0]
+        for j in range(ny):
+            s += 0 if free[j][i] else 1
+            col.append(s)
+        pre.append(col)
+
+    def clear(i, t, b):
+        return pre[i][b + 1] - pre[i][t] == 0
+    if not all(clear(i, tj0, tj1) for i in range(ti0, ti1 + 1)):
+        raise ValueError("%s's tab touches a heat copper keep-out" % REG_REF)
+    best_a = None                      # (cells, (i0, j0, i1, j1))
+    t = tj0
+    while t >= 0 and all(clear(i, t, tj1) for i in range(ti0, ti1 + 1)):
+        b = tj1
+        while b < ny and all(clear(i, t, b) for i in range(ti0, ti1 + 1)):
+            l, r = ti0, ti1
+            while l > 0 and clear(l - 1, t, b):
+                l -= 1
+            while r < nx - 1 and clear(r + 1, t, b):
+                r += 1
+            n = (r - l + 1) * (b - t + 1)
+            if best_a is None or n > best_a[0]:
+                best_a = (n, (l, t, r, b))
+            b += 1
+        t -= 1
+    al, at, ar, ab = best_a[1]
+    join = int(math.ceil(min(tab[2] - tab[0], tab[3] - tab[1]) / grid - eps))
+    best_b = None
+    h = [0] * nx
+    for b in range(ny):
+        for i in range(nx):
+            h[i] = h[i] + 1 if free[b][i] else 0
+        for i in range(nx):
+            if h[i] == 0:
+                continue
+            l, r = i, i
+            while l > 0 and h[l - 1] >= h[i]:
+                l -= 1
+            while r < nx - 1 and h[r + 1] >= h[i]:
+                r += 1
+            t = b - h[i] + 1
+            ow = min(r, ar) - max(l, al) + 1
+            oh = min(b, ab) - max(t, at) + 1
+            if ow < join or oh < join:
+                continue
+            union = (r - l + 1) * (b - t + 1) + best_a[0] - ow * oh
+            if union > best_a[0] and (best_b is None or union > best_b[0]):
+                best_b = (union, (l, t, r, b))
+
+    def mm(rc):
+        l, t, r, b = rc
+        return (round(tab[0] + (l + i0) * grid, 4), round(tab[1] + (t + j0) * grid, 4),
+                round(tab[0] + (r + 1 + i0) * grid, 4), round(tab[1] + (b + 1 + j0) * grid, 4))
+    return [mm(best_a[1])] + ([mm(best_b[1])] if best_b else [])
+
+
+def reg_copper(board):
+    """U_REG's heat copper on the placed board: reg_copper_rects over
+    reg_keepouts."""
+    tab, _column, keep, inner = reg_keepouts(board)
+    return reg_copper_rects(tab, keep, inner)
+
+
+def reg_outline(rects):
+    """The heat copper's union as one outline, [(x, y)] mm."""
     u = pcbnew.SHAPE_POLY_SET()
-    for l, t, r, b in REG_COPPER:
+    for l, t, r, b in rects:
         one = pcbnew.SHAPE_POLY_SET()
         one.NewOutline()
         for x, y in ((l, t), (r, t), (r, b), (l, b)):
             one.Append(pcbnew.FromMM(x), pcbnew.FromMM(y))
         u.BooleanAdd(one)
     u.Simplify()
-    assert u.OutlineCount() == 1 and u.HoleCount(0) == 0, "REG_COPPER must be one simply connected area"
+    assert u.OutlineCount() == 1 and u.HoleCount(0) == 0, "the heat copper must be one simply connected area"
     ch = u.COutline(0)
     return [(_mm(ch.CPoint(i).x), _mm(ch.CPoint(i).y)) for i in range(ch.PointCount())]
 
@@ -97,6 +251,7 @@ class Routed:
         self.seconds = 0.0
         self.skip_render = False
         self.silk = None
+        self.reg_copper = []
 
     def reload(self, path):
         new = Routed()
@@ -268,7 +423,7 @@ def _router_input(s, placed):
     # U_REG's heat copper: owned by REG_NET on B.Cu, so REG_NET may enter and
     # every other net keeps its B.Cu copper and its vias off (a via needs
     # every layer free; probed 2026-10-01 on a 10 x 4 mm grid).
-    for rect in REG_COPPER:
+    for rect in s.reg_copper:
         r.add_obstacle(REG_NET, (LAYER_NAMES.index("B.Cu"),), ("rect",) + tuple(rect))
     for net in sorted(terms):
         if len(terms[net]) < 2:
@@ -294,6 +449,7 @@ def build():
     s.stitched, s.unresolved = stitch.stitch_plane_pads(s.board, set(RU.PLANE_NETS), netless_blocks=True,
                                                         tht_keepoff_mm=RU.PLANE_THT_VIA_KEEPOFF,
                                                         via_keepouts=pots)
+    s.reg_copper = reg_copper(s.board)      # after the stitch: its vias and tracks are keep-outs
     r = _router_input(s, placed)
     t0 = time.time()
     s.result = r.run(max_iters=RU.MAX_ITERS, pres0=RU.PRES0, pres_mult=RU.PRES_MULT,
@@ -306,7 +462,7 @@ def build():
             kipcb.add_via(s.board, xy, net)
     # The heat copper as a zone: solid to the tab (no thermal spokes), the
     # board's clearance (the planes keep KiCad's default 0.5 mm).
-    z = kipcb.add_zone(s.board, "B.Cu", REG_NET, reg_outline())
+    z = kipcb.add_zone(s.board, "B.Cu", REG_NET, reg_outline(s.reg_copper))
     z.SetPadConnection(pcbnew.ZONE_CONNECTION_FULL)
     z.SetLocalClearance(pcbnew.FromMM(RU.CLEARANCE))
     kipcb.fill_zones(s.board)

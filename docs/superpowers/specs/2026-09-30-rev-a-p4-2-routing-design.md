@@ -327,6 +327,17 @@ for byte.
     `hardware/reva/route.py` reserves a 3V3D area on B.Cu at U_REG's tab
     (`REG_COPPER`, a 3V3D-owned `add_obstacle` on B.Cu only) and fills it as
     a 3V3D zone after routing; see `docs/hardware/power-budget.md`.
+    *Amended 2026-10-08 (panel 9 mm raster, Task 7c; Bastian):* the area
+    was two fixed rectangles drawn for U_REG at (61.62, 54.98). The panel
+    pass moved J_PWR and U_REG, which left them 46 mm from the tab and on
+    foreign pads. The area now follows the placed regulator:
+    `route.reg_copper()` takes the largest rectangle holding the tab, plus
+    the partner rectangle that overlaps it by at least the tab's short side
+    and enlarges the union most. Both stay within 15 mm of the tab centre
+    and keep off every foreign B.Cu pad (+0.2 mm), every back courtyard, the
+    module shadow, the stitching's vias and B.Cu tracks, and U_REG's pin
+    column, which runs from its pins to the board edge. `route_check`'s
+    200 mm² gate is unchanged.
 
 The router measures nothing it gates. Every rule is judged by `route_check.py`
 on the saved board.

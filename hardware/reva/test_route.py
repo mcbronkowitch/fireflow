@@ -26,6 +26,9 @@ verdict. Re-runs itself under KiCad's Python.
    item; drc_cut also turns rules_file red on the saved report.
 7. Branch probes: the non-vacuity and count branches no sabotage reaches are
    each driven red once, with their own phrase on their own step (PROBES).
+8. U_REG's heat copper rule (route.reg_copper_rects, Task 7c 2026-10-08)
+   gives the hand-computed L on a synthetic field, touches no keep-out and
+   refuses a keep-out on the tab (check_reg_rule).
 
 Counts on a sabotaged board are never asserted: kicad-cli's counts vary from
 run to run where copper crosses (probed 2026-10-01: 9 or 11 clearance items)."""
@@ -198,6 +201,30 @@ def check_sabotage_coverage():
     for name in sorted(RC.SABOTAGES):
         check(bool(RC.WHY.get(name)) and name in RC.TURNS_RED,
               "sabotage %s names its step and its phrase" % name)
+
+
+def check_reg_rule():
+    """route.reg_copper_rects on a hand-computed field (Task 7c, 2026-10-08):
+    tab (0, 0, 2, 4), grid 0.5, half-size 5 (window x -4..6, y -3..7), a pin
+    column left of the tab (x < -0.5 for y -1..5) and a foreign box top
+    right (x >= 3 for y < 1). The largest rectangle holding the tab is
+    (-0.5, -3, 3, 7), 35 mm2; the best partner overlapping it by >= 2 mm
+    both ways is (-0.5, 1, 6, 7), union 53 mm2. No rectangle may touch a
+    keep-out, and a keep-out on the tab is refused."""
+    tab = (0.0, 0.0, 2.0, 4.0)
+    keep = [(-10.0, -1.0, -0.5, 5.0), (3.0, -3.0, 6.0, 1.0)]
+    inner = (-100.0, -100.0, 100.0, 100.0)
+    got = R.reg_copper_rects(tab, keep, inner, win=5.0, grid=0.5)
+    check(got == [(-0.5, -3.0, 3.0, 7.0), (-0.5, 1.0, 6.0, 7.0)],
+          "heat copper rule: the hand-computed L, got %r" % (got,))
+    check(all(not PL.overlaps(r, k) for r in got for k in keep),
+          "heat copper rule: no rectangle overlaps a keep-out")
+    try:
+        R.reg_copper_rects(tab, keep + [(1.0, 1.0, 1.2, 1.2)], inner, win=5.0, grid=0.5)
+        refused = False
+    except ValueError:
+        refused = True
+    check(refused, "heat copper rule: a keep-out on the tab is refused")
 
 
 def check_known_names(jacks):
@@ -450,6 +477,7 @@ def run():
     check_key_names(jacks)
     check_known_names(jacks)
     check_sabotage_coverage()
+    check_reg_rule()
     lap("static checks")
 
     base = R.build()
