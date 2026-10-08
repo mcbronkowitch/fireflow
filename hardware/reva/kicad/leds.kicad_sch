@@ -683,7 +683,7 @@
 		(property "Reference" "D2"
 			(at 107.95 20.32 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
-		(property "Value" "GATE_A_L"
+		(property "Value" "SONG_A_L"
 			(at 107.95 22.86 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
 		(property "Footprint" "LED_THT:LED_D3.0mm"
@@ -698,7 +698,7 @@
 		(property "Source" "Thonk"
 			(at 107.95 26.67 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
-		(property "PanelId" "GATE_A_L"
+		(property "PanelId" "SONG_A_L"
 			(at 107.95 26.67 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(pin "1" (uuid "45a0fab8-736d-5359-9fe6-bd1854edb89e"))
@@ -813,7 +813,7 @@
 		(property "Reference" "D3"
 			(at 165.1 20.32 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
-		(property "Value" "SONG_A_L"
+		(property "Value" "GATE_A_L"
 			(at 165.1 22.86 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
 		(property "Footprint" "LED_THT:LED_D3.0mm"
@@ -828,7 +828,7 @@
 		(property "Source" "Thonk"
 			(at 165.1 26.67 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
-		(property "PanelId" "SONG_A_L"
+		(property "PanelId" "GATE_A_L"
 			(at 165.1 26.67 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(pin "1" (uuid "195193f9-ff83-5148-a6eb-1e626ad6c698"))

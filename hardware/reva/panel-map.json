@@ -22,33 +22,33 @@
    "y_mm": 112.75
   },
   {
-   "id": "GATE_A_L",
+   "id": "SONG_A_L",
    "index": 1,
-   "x_mm": 53.724,
-   "y_mm": 61.408
+   "x_mm": 58.3,
+   "y_mm": 21.158
   },
   {
-   "id": "SONG_A_L",
+   "id": "GATE_A_L",
    "index": 2,
-   "x_mm": 61.5,
-   "y_mm": 14.5
+   "x_mm": 58.3,
+   "y_mm": 61.408
   },
   {
    "id": "FTIME_A_L",
    "index": 3,
-   "x_mm": 74.2,
+   "x_mm": 64.7,
    "y_mm": 81.533
   },
   {
    "id": "LVL_A_L",
    "index": 4,
-   "x_mm": 93.85,
+   "x_mm": 98.7,
    "y_mm": 83.683
   },
   {
    "id": "REC_A_L",
    "index": 5,
-   "x_mm": 115.243,
+   "x_mm": 118.0,
    "y_mm": 20.308
   },
   {
@@ -60,7 +60,7 @@
   {
    "id": "TEMPO_L",
    "index": 7,
-   "x_mm": 134.8,
+   "x_mm": 136.3,
    "y_mm": 61.408
   },
   {
@@ -72,31 +72,31 @@
   {
    "id": "REC_B_L",
    "index": 9,
-   "x_mm": 196.043,
+   "x_mm": 186.8,
    "y_mm": 20.308
   },
   {
    "id": "LVL_B_L",
    "index": 10,
-   "x_mm": 215.05,
+   "x_mm": 206.1,
    "y_mm": 83.683
   },
   {
    "id": "FTIME_B_L",
    "index": 11,
-   "x_mm": 235.8,
+   "x_mm": 240.1,
    "y_mm": 81.533
   },
   {
    "id": "SONG_B_L",
    "index": 12,
-   "x_mm": 243.3,
-   "y_mm": 14.5
+   "x_mm": 246.5,
+   "y_mm": 21.158
   },
   {
    "id": "GATE_B_L",
    "index": 13,
-   "x_mm": 255.724,
+   "x_mm": 246.5,
    "y_mm": 61.408
   },
   {
@@ -367,7 +367,7 @@
    ],
    "mux": 6,
    "sense": "SENSE_2",
-   "x_mm": 132.2,
+   "x_mm": 129.4,
    "y_mm": 14.5
   },
   {
@@ -400,7 +400,7 @@
    ],
    "mux": 6,
    "sense": "SENSE_2",
-   "x_mm": 132.2,
+   "x_mm": 129.4,
    "y_mm": 34.625
   },
   {
@@ -422,7 +422,7 @@
    ],
    "mux": 6,
    "sense": "SENSE_2",
-   "x_mm": 132.2,
+   "x_mm": 129.4,
    "y_mm": 54.75
   },
   {
@@ -466,7 +466,7 @@
    ],
    "mux": 7,
    "sense": "SENSE_2",
-   "x_mm": 132.2,
+   "x_mm": 129.4,
    "y_mm": 74.875
   },
   {
@@ -499,7 +499,7 @@
    ],
    "mux": 7,
    "sense": "SENSE_2",
-   "x_mm": 132.2,
+   "x_mm": 129.4,
    "y_mm": 95.0
   },
   {
@@ -521,7 +521,7 @@
    ],
    "mux": 8,
    "sense": "SENSE_3",
-   "x_mm": 172.6,
+   "x_mm": 175.4,
    "y_mm": 14.5
   },
   {
@@ -537,17 +537,28 @@
   },
   {
    "channel": 3,
+   "id": "MORPH",
+   "ids": [
+    "MORPH"
+   ],
+   "mux": 8,
+   "sense": "SENSE_3",
+   "x_mm": 152.4,
+   "y_mm": 34.625
+  },
+  {
+   "channel": 4,
    "id": "PACE",
    "ids": [
     "PACE"
    ],
    "mux": 8,
    "sense": "SENSE_3",
-   "x_mm": 172.6,
+   "x_mm": 175.4,
    "y_mm": 34.625
   },
   {
-   "channel": 4,
+   "channel": 5,
    "id": "DEPTH_B",
    "ids": [
     "DEPTH_B"
@@ -558,40 +569,18 @@
    "y_mm": 34.625
   },
   {
-   "channel": 5,
-   "id": "DRIFT",
-   "ids": [
-    "DRIFT"
-   ],
-   "mux": 8,
-   "sense": "SENSE_3",
-   "x_mm": 172.6,
-   "y_mm": 74.875
-  },
-  {
    "channel": 6,
-   "id": "PAN_B",
+   "id": "SUB_B",
    "ids": [
-    "PAN_B"
+    "SUB_B"
    ],
    "mux": 8,
    "sense": "SENSE_3",
    "x_mm": 192.8,
-   "y_mm": 74.875
+   "y_mm": 54.75
   },
   {
    "channel": 0,
-   "id": "MORPH",
-   "ids": [
-    "MORPH"
-   ],
-   "mux": 9,
-   "sense": "SENSE_3",
-   "x_mm": 152.4,
-   "y_mm": 34.625
-  },
-  {
-   "channel": 1,
    "id": "REV_SIZE",
    "ids": [
     "REV_SIZE"
@@ -602,29 +591,18 @@
    "y_mm": 54.75
   },
   {
-   "channel": 2,
+   "channel": 1,
    "id": "SHUFFLE",
    "ids": [
     "SHUFFLE"
    ],
    "mux": 9,
    "sense": "SENSE_3",
-   "x_mm": 172.6,
+   "x_mm": 175.4,
    "y_mm": 54.75
   },
   {
-   "channel": 3,
-   "id": "SUB_B",
-   "ids": [
-    "SUB_B"
-   ],
-   "mux": 9,
-   "sense": "SENSE_3",
-   "x_mm": 192.8,
-   "y_mm": 54.75
-  },
-  {
-   "channel": 4,
+   "channel": 2,
    "id": "REV_DECAY",
    "ids": [
     "REV_DECAY"
@@ -632,6 +610,28 @@
    "mux": 9,
    "sense": "SENSE_3",
    "x_mm": 152.4,
+   "y_mm": 74.875
+  },
+  {
+   "channel": 3,
+   "id": "DRIFT",
+   "ids": [
+    "DRIFT"
+   ],
+   "mux": 9,
+   "sense": "SENSE_3",
+   "x_mm": 175.4,
+   "y_mm": 74.875
+  },
+  {
+   "channel": 4,
+   "id": "PAN_B",
+   "ids": [
+    "PAN_B"
+   ],
+   "mux": 9,
+   "sense": "SENSE_3",
+   "x_mm": 192.8,
    "y_mm": 74.875
   },
   {
@@ -653,7 +653,7 @@
    ],
    "mux": 9,
    "sense": "SENSE_3",
-   "x_mm": 172.6,
+   "x_mm": 175.4,
    "y_mm": 95.0
   },
   {

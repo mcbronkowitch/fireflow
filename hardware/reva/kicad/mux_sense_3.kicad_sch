@@ -2053,7 +2053,7 @@
 		(property "Reference" "RV38"
 			(at 262.89 19.05 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
-		(property "Value" "PACE"
+		(property "Value" "MORPH"
 			(at 262.89 21.59 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
 		(property "Footprint" "Potentiometer_THT:Potentiometer_Alpha_RD901F-40-00D_Single_Vertical"
@@ -2068,7 +2068,7 @@
 		(property "Source" "Thonk"
 			(at 262.89 39.37 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
-		(property "PanelId" "PACE"
+		(property "PanelId" "MORPH"
 			(at 262.89 39.37 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(pin "1" (uuid "31722f7c-8f60-59a0-bace-e700456e5e5f"))
@@ -2157,7 +2157,7 @@
 		(property "Reference" "RV39"
 			(at 294.64 19.05 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
-		(property "Value" "DEPTH_B"
+		(property "Value" "PACE"
 			(at 294.64 21.59 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
 		(property "Footprint" "Potentiometer_THT:Potentiometer_Alpha_RD901F-40-00D_Single_Vertical"
@@ -2172,7 +2172,7 @@
 		(property "Source" "Thonk"
 			(at 294.64 39.37 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
-		(property "PanelId" "DEPTH_B"
+		(property "PanelId" "PACE"
 			(at 294.64 39.37 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(pin "1" (uuid "e581a267-f4ef-59be-bd82-c5e37465169e"))
@@ -2261,7 +2261,7 @@
 		(property "Reference" "RV40"
 			(at 326.39 19.05 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
-		(property "Value" "DRIFT"
+		(property "Value" "DEPTH_B"
 			(at 326.39 21.59 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
 		(property "Footprint" "Potentiometer_THT:Potentiometer_Alpha_RD901F-40-00D_Single_Vertical"
@@ -2276,7 +2276,7 @@
 		(property "Source" "Thonk"
 			(at 326.39 39.37 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
-		(property "PanelId" "DRIFT"
+		(property "PanelId" "DEPTH_B"
 			(at 326.39 39.37 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(pin "1" (uuid "e1c4091c-3f9e-5cb2-87a9-cdc56117fe51"))
@@ -2365,7 +2365,7 @@
 		(property "Reference" "RV41"
 			(at 356.87 19.05 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
-		(property "Value" "PAN_B"
+		(property "Value" "SUB_B"
 			(at 356.87 21.59 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
 		(property "Footprint" "Potentiometer_THT:Potentiometer_Alpha_RD901F-40-00D_Single_Vertical"
@@ -2380,7 +2380,7 @@
 		(property "Source" "Thonk"
 			(at 356.87 39.37 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
-		(property "PanelId" "PAN_B"
+		(property "PanelId" "SUB_B"
 			(at 356.87 39.37 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(pin "1" (uuid "1b3b4d6b-c224-59cd-9b61-ec9561167b63"))
@@ -2469,7 +2469,7 @@
 		(property "Reference" "RV42"
 			(at 22.86 83.82 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
-		(property "Value" "MORPH"
+		(property "Value" "REV_SIZE"
 			(at 22.86 86.36 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
 		(property "Footprint" "Potentiometer_THT:Potentiometer_Alpha_RD901F-40-00D_Single_Vertical"
@@ -2484,7 +2484,7 @@
 		(property "Source" "Thonk"
 			(at 22.86 104.14 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
-		(property "PanelId" "MORPH"
+		(property "PanelId" "REV_SIZE"
 			(at 22.86 104.14 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(pin "1" (uuid "0461c03b-baf2-524e-ba70-7d78989be97f"))
@@ -2573,7 +2573,7 @@
 		(property "Reference" "RV43"
 			(at 54.61 83.82 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
-		(property "Value" "REV_SIZE"
+		(property "Value" "SHUFFLE"
 			(at 54.61 86.36 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
 		(property "Footprint" "Potentiometer_THT:Potentiometer_Alpha_RD901F-40-00D_Single_Vertical"
@@ -2588,7 +2588,7 @@
 		(property "Source" "Thonk"
 			(at 54.61 104.14 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
-		(property "PanelId" "REV_SIZE"
+		(property "PanelId" "SHUFFLE"
 			(at 54.61 104.14 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(pin "1" (uuid "96986540-8b24-5c61-84c5-74b5d0159385"))
@@ -2677,7 +2677,7 @@
 		(property "Reference" "RV44"
 			(at 85.09 83.82 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
-		(property "Value" "SHUFFLE"
+		(property "Value" "REV_DECAY"
 			(at 85.09 86.36 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
 		(property "Footprint" "Potentiometer_THT:Potentiometer_Alpha_RD901F-40-00D_Single_Vertical"
@@ -2692,7 +2692,7 @@
 		(property "Source" "Thonk"
 			(at 85.09 104.14 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
-		(property "PanelId" "SHUFFLE"
+		(property "PanelId" "REV_DECAY"
 			(at 85.09 104.14 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(pin "1" (uuid "29e61885-60c5-5cab-be20-3270e2ba2c01"))
@@ -2781,7 +2781,7 @@
 		(property "Reference" "RV45"
 			(at 116.84 83.82 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
-		(property "Value" "SUB_B"
+		(property "Value" "DRIFT"
 			(at 116.84 86.36 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
 		(property "Footprint" "Potentiometer_THT:Potentiometer_Alpha_RD901F-40-00D_Single_Vertical"
@@ -2796,7 +2796,7 @@
 		(property "Source" "Thonk"
 			(at 116.84 104.14 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
-		(property "PanelId" "SUB_B"
+		(property "PanelId" "DRIFT"
 			(at 116.84 104.14 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(pin "1" (uuid "463be5e7-2304-5359-8315-2f93c6ae3c2f"))
@@ -2885,7 +2885,7 @@
 		(property "Reference" "RV46"
 			(at 147.32 83.82 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
-		(property "Value" "REV_DECAY"
+		(property "Value" "PAN_B"
 			(at 147.32 86.36 0)
 			(effects (font (size 1.27 1.27)) (justify left)))
 		(property "Footprint" "Potentiometer_THT:Potentiometer_Alpha_RD901F-40-00D_Single_Vertical"
@@ -2900,7 +2900,7 @@
 		(property "Source" "Thonk"
 			(at 147.32 104.14 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
-		(property "PanelId" "REV_DECAY"
+		(property "PanelId" "PAN_B"
 			(at 147.32 104.14 0)
 			(effects (font (size 1.27 1.27)) (justify left) (hide yes)))
 		(pin "1" (uuid "8371cf98-beaa-54ce-b932-88fd1ccaa181"))
