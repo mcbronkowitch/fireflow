@@ -433,21 +433,27 @@ def place_power_header(s, proj, blocked):
 # there. probe_sr_prop (7c report) moves each to the first free spot from
 # the centroid of only its loads west of the module shadow, by the IC
 # search's own rules (step 0.5, radius 30, its 100 nF still fits), with the
-# strip kept out: 102 -> 56 back SMD pads in x 104..132.3.
+# strip kept out: 102 -> 56 back SMD pads in x 104..132.3. (C17, U_SR1's
+# 100 nF, needed a turn at U_SR1's first new spot so its stitch via cleared a
+# pot body; at U_SR1's re-probed spot below its own search resolves.)
 _SR_PROBE = ("probe_sr_prop 2026-10-08 (Task 7c, U_SM pinned at (152.40, 56.00) rot 270): "
              "the conflict strip x 114..137 west of the module; moved to the first free spot "
              "from the centroid of its loads west of the module shadow (%s), strip kept out")
 OVERRIDES = {
     "U_IN1": (-73.47, 0.41, 90, _SR_PROBE % "4 of its 8 panel-side pads, west anchor (76.93, 61.34)"),
-    "U_SR1": (-37.47, -2.19, 0, _SR_PROBE % "6 of 8, west anchor (106.29, 46.00)"),
+    # U_SR1 re-probed the same day (probe_sr1, 7c report Resume 6): at
+    # (104.29, 46.01) rot 0 its chain airwires crossed U_MUX7's channel
+    # airwires 4 times (SR_DATA twice), and every route run kept SR_DATA x
+    # M7_CH0 in conflict at x 110..116, y 50..57.
+    "U_SR1": (-36.84, -6.23, 90,
+              "probe_sr1 2026-10-08 (Task 7c, U_SM pinned at (152.40, 56.00) rot 270): of the 1359 "
+              "free spots (IC search rules, its 100 nF fits, strip x 114..137 kept out) around its "
+              "west anchor (100.43, 48.96), the nearest whose SR_DATA / SR_CLK / SR_LATCH / "
+              "SR_CHAIN1 airwires cross none of U_MUX7's M7_CH* airwires (4 crossings before, "
+              "SR_DATA 2): (104.93, 41.96) rot 90, 8.32 mm from that anchor"),
     "U_SR2": (-38.33, 10.97, 270, _SR_PROBE % "6 of 8, west anchor (82.23, 62.73); replaces the "
               "earlier (-6.00, +2.50) entry that only made room for C22"),
     "U_SR3": (-31.79, 8.88, 90, _SR_PROBE % "5 of 8, west anchor (108.27, 69.61)"),
-    "C17": (0.00, 1.60, 180,
-            "probe_dec 2026-10-08 (Task 7c): after U_SR1's move, C17 (its 100 nF) at rot 0 left "
-            "pad 2's GND stitch via no spot outside the pot keep-outs (kept under a pot body, "
-            "route_check pot_keepout); the same spot at rot 180, pad 1 still within 2.0 mm of "
-            "U_SR1 pad 16, lets the stitch resolve every plane pad"),
     "C6": (8.50, -7.00, 270,
            "route.py 2026-10-08 (Task 7c, 9 mm panel; probe_c6 in the 7c report): at its first "
            "fit (rot 90) C6.2's GND stitch via found no spot outside RV18's (DETUNE_A) pot "
