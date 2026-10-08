@@ -346,6 +346,11 @@ OVERRIDES = {
               "2026-09-30 IC overrides removed, U_SR2's first fit (116.06, 60.76) abutted "
               "U_IN1's VCC side and C22 found no spot within 2.0 mm of U_IN1 pad 16; this is "
               "the first spiral spot from U_SR2's anchor that leaves C22 its decoupler spot"),
+    "C6": (8.50, -7.00, 270,
+           "route.py 2026-10-08 (Task 7c, 9 mm panel; probe_c6 in the 7c report): at its first "
+           "fit (rot 90) C6.2's GND stitch via found no spot outside RV18's (DETUNE_A) pot "
+           "keep-out and was kept under the pot body (route_check pot_keepout); the same spot "
+           "turned to rot 270 puts pad 2 on the other end, where the stitch resolves"),
     "R12": (35.11, -8.74, 0,
             "reva-routed-bottom.png 2026-09-30 (Task 6a run 1): MUX_EN8 the worst net of the knot "
             "east of U_SR1; moved out of that corridor next to U_MUX8, the mux it enables"),
