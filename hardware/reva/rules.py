@@ -13,8 +13,13 @@ CLEARANCE = 0.2
 EDGE_CLEAR = 0.5
 PITCH = 0.2
 VIA_COST = 8.0
-MAX_ITERS = 30
-PRES0, PRES_MULT, HIST_INC = 0.5, 1.6, 1.0   # router negotiation (spec §4.3), tunable
+# Rounds and negotiation (spec §4.3, tunable). Changed 2026-10-08 (Task 7c,
+# Bastian) after the 9 mm panel pass: HIST_INC 2.0 was the only setting that
+# converged (Task 7c runs ru3/ru4: 0 conflicts; with 1.0, 2..6 left), and
+# with the zone-edge rule it needed 44 rounds (30 rounds left 6 conflicts).
+# Was MAX_ITERS 30, HIST_INC 1.0.
+MAX_ITERS = 60
+PRES0, PRES_MULT, HIST_INC = 0.5, 1.6, 2.0
 PLANE_THT_VIA_KEEPOFF = 1.0   # via copper to plane-net THT pad copper: thermal gap 0.5 + zone clearance 0.5 (spec §4.2.8)
 
 VICTIMS = ("OUT_L", "OUT_R", "IN_L", "IN_R")

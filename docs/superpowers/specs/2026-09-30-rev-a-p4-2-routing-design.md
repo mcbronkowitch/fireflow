@@ -352,8 +352,9 @@ on the saved board.
 | Clearance | 0.2 mm | P4-1 |
 | Copper to edge | 0.5 mm | P4-1, JLC |
 | Grid pitch | 0.2 mm | spike |
-| Via cost, rounds | 8.0, 30 | spike; the only knobs the implementer may tune without Bastian |
-| Negotiation: `pres0`, `pres_mult`, `hist_inc` | 0.5, 1.6, 1.0 | router defaults; tunable too since 2026-09-30 (Bastian, after Task 6's run 2: 25 conflicts after 30 rounds, 898 s), at most 4 measured runs |
+| Via cost, rounds | 8.0, 60 | spike (30 rounds); 60 since 2026-10-08 (Task 7c: with the zone-edge rule the router converged in 44 rounds, 30 left 6 conflicts); the only knobs the implementer may tune without Bastian |
+| Negotiation: `pres0`, `pres_mult`, `hist_inc` | 0.5, 1.6, 2.0 | router defaults (`hist_inc` 1.0); tunable too since 2026-09-30 (Bastian, after Task 6's run 2: 25 conflicts after 30 rounds, 898 s), at most 4 measured runs. `hist_inc` 2.0 since 2026-10-08 (Bastian, Task 7c): after the 9 mm panel pass the only setting that converged |
+| Audio across a zone edge | 3.0 mm | §5.4; the router keeps it since 2026-10-08 (`gen/route.py` `pair_edge`, `rules.EDGE_MM`) |
 | Audio × aggressor | 10.0 mm, same layer | §2.1 |
 | L × R | 2.0 mm, same layer | §2.5 |
 | SENSE length | ≤ 1.3 × MST | §2.6 |
