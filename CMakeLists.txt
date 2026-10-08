@@ -479,7 +479,10 @@ add_test(NAME reva_route_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/hardware/reva/test_route.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-set_tests_properties(reva_route_guard PROPERTIES TIMEOUT 3600)
+# Measured 2026-10-08 (Task 7c, 60 router rounds): 2651 s and 2957 s on
+# full Release runs, against the old 3600; 5400 leaves room so a placement
+# that stops converging fails on its own report, not on the timeout.
+set_tests_properties(reva_route_guard PROPERTIES TIMEOUT 5400)
 
 # The Rev A order package (P4-3): Gerbers, drill, CPL, BOM, assembly sheets,
 # every check proven red, two exports byte-identical.
