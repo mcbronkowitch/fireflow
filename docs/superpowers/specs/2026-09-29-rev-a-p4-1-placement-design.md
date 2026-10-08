@@ -204,6 +204,14 @@ J_PWR.
     spiral from the centre and takes the first spot that passes.
   - **Rotation:** 0 or 180, whichever finds a spot nearer the centre
     (amended 2026-09-29, see below).
+    *Amended 2026-10-08 (panel 9 mm raster, Task 7a/7b):* **0, 90, 180 or
+    270**, whichever finds a spot nearer the centre. 90/270 were left out
+    only because they found nothing on the 2026-09-29 panel (below). On the
+    9 mm raster no 0/180 spot exists anywhere on the board (Task 7a's
+    whole-board scan); with the centre columns re-pitched to 152.4 ± 23.0
+    the module fits at 90/270 on the centre line. The USB clearance rule
+    below is rotation-agnostic, and the shadow check accepts the turned
+    box (40.18 × 68.17).
   - **USB clearance** (amended 2026-09-29 while planning): no part taller than
     3 mm within 35 mm of the module shadow, on any side. Only J_PWR is that
     tall on the back. The USB-C plug enters parallel to the board at module

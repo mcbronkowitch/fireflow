@@ -226,8 +226,10 @@ def check_module(s, pcb_path, prefix):
     if shadow is None:
         return False, "U_SM has no silkscreen shapes on its own side for a shadow", []
     w, h = shadow[2] - shadow[0], shadow[3] - shadow[1]
-    if abs(w - SHADOW_MM[0]) > SHADOW_TOL_MM or abs(h - SHADOW_MM[1]) > SHADOW_TOL_MM:
-        return False, "U_SM's shadow is %.2f x %.2f mm, spec §4.3 says %.2f x %.2f (+-%.1f)" % (
+    # Upright (rotation 0/180) or turned (90/270): spec §4.3, amended 2026-10-08.
+    if not any(abs(w - a) <= SHADOW_TOL_MM and abs(h - b) <= SHADOW_TOL_MM
+               for a, b in (SHADOW_MM, SHADOW_MM[::-1])):
+        return False, "U_SM's shadow is %.2f x %.2f mm, spec §4.3 says %.2f x %.2f, upright or turned (+-%.1f)" % (
             w, h, SHADOW_MM[0], SHADOW_MM[1], SHADOW_TOL_MM), []
     bad = []
     if max(abs(a - b) for a, b in zip(shadow, s.shadow)) > 1e-3:

@@ -169,6 +169,7 @@ def place_panel(s, proj):
 
 SM_SHADOW_MM = (68.17, 40.18)   # spec §4.3: x -34.09..34.08, y -20.09..20.09 (the coupon's SM_SHADOW)
 SM_SHADOW_TOL = 0.1
+SM_ROTS = (0, 90, 180, 270)     # spec §4.3, amended 2026-10-08 (was 0 / 180)
 _TEXT_CLASSES = ("PCB_TEXT", "PCB_TEXTBOX", "PCB_FIELD")
 
 
@@ -176,7 +177,9 @@ def module_shadow(fp):
     """The module's shadow: the box of the silkscreen SHAPES on the part's own
     side, text excluded (probed 2026-09-29: the footprint's "INSTALL ON THIS
     SIDE" PCB_TEXT alone reaches 9 mm past the module outline). Raises
-    ValueError naming the part when the box is not SM_SHADOW_MM."""
+    ValueError naming the part when the box is not SM_SHADOW_MM, upright
+    (rotation 0/180) or turned (90/270, w and h swapped; spec §4.3 amendment
+    2026-10-08)."""
     layer = pcbnew.B_SilkS if fp.IsFlipped() else pcbnew.F_SilkS
     boxes = [PL.box(g.GetBoundingBox()) for g in fp.GraphicalItems()
              if g.GetLayer() == layer and g.GetClass() not in _TEXT_CLASSES]
@@ -185,10 +188,17 @@ def module_shadow(fp):
     b = (min(b[0] for b in boxes), min(b[1] for b in boxes),
          max(b[2] for b in boxes), max(b[3] for b in boxes))
     w, h = b[2] - b[0], b[3] - b[1]
-    if abs(w - SM_SHADOW_MM[0]) > SM_SHADOW_TOL or abs(h - SM_SHADOW_MM[1]) > SM_SHADOW_TOL:
-        raise ValueError("%s: shadow is %.2f x %.2f mm, spec §4.3 says %.2f x %.2f"
+    if not shadow_shape_ok(w, h, SM_SHADOW_MM, SM_SHADOW_TOL):
+        raise ValueError("%s: shadow is %.2f x %.2f mm, spec §4.3 says %.2f x %.2f (or turned)"
                          % (fp.GetReference(), w, h, SM_SHADOW_MM[0], SM_SHADOW_MM[1]))
     return b
+
+
+def shadow_shape_ok(w, h, want, tol):
+    """True when a w x h box is the module shadow `want`, upright or turned
+    by 90 degrees."""
+    return any(abs(w - a) <= tol and abs(h - b) <= tol
+               for a, b in (want, (want[1], want[0])))
 
 
 def _tht_clear_of_front(fp, bodies, pads):
@@ -218,17 +228,18 @@ def _tht_blocked(s):
 
 
 def place_module(s, proj):
-    """U_SM on the back, rotation 0 or 180, the spiral spot nearest the board
+    """U_SM on the back, any of SM_ROTS, the spiral spot nearest the board
     centre whose pins miss every front body and whose shadow (its silkscreen
-    box) stays EDGE_INSET inside the outline (spec §4.3; probed free spots
-    at (151.0, 64.2) rot 0 and (154.0, 64.2) rot 180)."""
+    box) stays EDGE_INSET inside the outline (spec §4.3). Rotations 90/270
+    were admitted 2026-10-08 (§4.3 amendment): the 9 mm raster leaves no
+    0/180 spot, and the USB clearance rule is rotation-agnostic."""
     part = {p.ref: p for p in proj.parts()}["U_SM"]
     cx, cy = (X0 + X1) / 2.0, (Y0 + Y1) / 2.0
     fp = kipcb.add_part(s.board, part, cx, cy, 0, side="B")
     bodies, pads = _front_obstacles(s.board, s.front, None)
     inner = PL.grow(outline_box(), -EDGE_INSET)
     best = None
-    for rot in (0, 180):
+    for rot in SM_ROTS:
         for x, y in PL.spiral(cx, cy, 0.5, 60.0):
             fp.SetOrientationDegrees(rot)
             fp.SetPosition(kipcb._pt(x, y))
