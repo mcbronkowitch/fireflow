@@ -181,6 +181,13 @@ def test_cells_are_the_source():
             check(row in (2, 4) and k == 0, f"big cap {name} off the centre line or row")
     check(abs(hw.deck_col_x(1) - 11.0) < 1e-9 and abs(hw.deck_col_x(6) - 112.0) < 1e-9,
           "deck columns drifted from 11.00 .. 112.00")
+    # The centre runs on its own 23.0 mm pitch (spec §3, amended 2026-10-08):
+    # what gives the Patch Submodule a spot on the board. Written here, not
+    # read from hw.CENTRE_PITCH, so a generator edit cannot move it unseen.
+    want = {-1: 129.4, 0: 152.4, 1: 175.4}
+    check(all(abs(hw.centre_col_x(k) - x) < 1e-9 for k, x in want.items()),
+          f"centre columns drifted from 129.40 / 152.40 / 175.40: "
+          f"{[round(hw.centre_col_x(k), 3) for k in (-1, 0, 1)]}")
 
 
 def test_fields_keep_box_gap():
@@ -247,11 +254,10 @@ def test_mirror_symmetry():
     # machine. Covers every hand-written mirror (JACK_POS, LIGHT_POS, the
     # HW_ONLY loop), not only the DECK_POS-derived HW_PARAMS: those are
     # equally "the instrument's identity" and were equally unchecked.
+    # Cluster lamps included: since 2026-10-08 deck B's stand mirrored too.
     items = hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS + hw.HW_LIGHTS + hw.HW_ONLY
     pairs = 0
     for enum, a, twin, b in _mirror_pairs(items):
-        if a.enum in hw.KNOB_LAMPS:
-            continue
         check(abs((hw.W - a.x) - b.x) < 1e-6,
               f"{enum}/{twin}: x does not mirror ({a.x:.2f} vs {b.x:.2f})")
         check(abs(a.y - b.y) < 1e-6,
@@ -269,7 +275,9 @@ def test_caption_mirror_symmetry():
     # landing there would have one twin step toward the axis and the
     # other step off the panel edge, with nothing catching it (spec
     # 2026-08-10 §6 fix-2). Covers every hand-written mirror, not only
-    # HW_PARAMS -- same widening as test_mirror_symmetry above.
+    # HW_PARAMS -- same widening as test_mirror_symmetry above. Cluster
+    # captions are no exception since 2026-10-08: centred under their knob,
+    # they mirror like every other word.
     items = hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS + hw.HW_LIGHTS + hw.HW_ONLY
     pairs = 0
     for enum, a, twin, b in _mirror_pairs(items):
@@ -277,18 +285,6 @@ def test_caption_mirror_symmetry():
             continue
         lxa, lya, anchor_a = hw.hw_label(a)[:3]
         lxb, lyb, anchor_b = hw.hw_label(b)[:3]
-        if a.enum in hw.KNOBS_WITH_LAMPS:
-            # Same reading order on both decks: word then LED, so the caption
-            # shifts the same way locally instead of optically mirroring.
-            check(abs((lxa - a.x) - (lxb - b.x)) < 1e-6,
-                  f"{enum}/{twin}: cluster caption offset differs "
-                  f"({lxa - a.x:.2f} vs {lxb - b.x:.2f})")
-            check(abs(lya - lyb) < 1e-6,
-                  f"{enum}/{twin}: caption y does not match ({lya:.2f} vs {lyb:.2f})")
-            check(anchor_a == anchor_b == "middle",
-                  f"{enum}/{twin}: cluster captions are not middle-anchored")
-            pairs += 1
-            continue
         check(abs((hw.W - lxa) - lxb) < 1e-6,
               f"{enum}/{twin}: caption x does not mirror ({lxa:.2f} vs {lxb:.2f})")
         check(abs(lya - lyb) < 1e-6,
@@ -360,6 +356,13 @@ def test_labels_stay_off_neighbour_footprints():
     # OTHER control's footprint by LBL_MARGIN. Bare non-overlap is not a
     # margin: at 16 mm row spacing the default offset lands 8.1 mm from an
     # 8.0 mm knob and would pass a zero-margin test with 0.1 mm to spare.
+    #
+    # A control on the caption owner's own shaft is not a neighbour: STAGES
+    # shares ATTACK's knob (one hole, one pot), so ATTACK's word is held to
+    # the own-knob floor against it -- the radius, as
+    # test_captions_stay_off_their_own_knob holds every word -- not radius +
+    # LBL_MARGIN. Every small knob's centred word sits 7.45 from its shaft;
+    # ATTACK's does too since its cluster word is centred (2026-10-08).
     for c in hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS + hw.HW_ONLY:
         if not c.label:
             continue
@@ -368,9 +371,11 @@ def test_labels_stay_off_neighbour_footprints():
             if other is c:
                 continue
             d = ((lx - other.x) ** 2 + (ly - other.y) ** 2) ** 0.5
-            check(d >= other.r + LBL_MARGIN - 1e-6,
+            same_shaft = abs(other.x - c.x) < 1e-9 and abs(other.y - c.y) < 1e-9
+            need = other.r if same_shaft else other.r + LBL_MARGIN
+            check(d >= need - 1e-6,
                   f"caption {c.enum} at ({lx:.1f},{ly:.1f}) is {d:.2f} from "
-                  f"{other.enum} (needs {other.r + LBL_MARGIN:.2f})")
+                  f"{other.enum} (needs {need:.2f})")
 
 
 def test_captions_stay_off_their_own_knob():
@@ -684,57 +689,63 @@ def test_led_inventory_after_the_panel_pass():
           "FTIME_A_L is not FLUXRATE_A's cluster lamp")
 
 
-def test_knob_lamps_sit_in_the_caption_cluster():
-    """Knob-owned lamps sit in a word-then-LED block centred on the knob.
+# Deck A side of each knob lamp, +1 = right of its word (spec §5, amended
+# 2026-10-08): toward the lamp's own group. Deck B mirrors. Written here, not
+# read from hw.LAMP_SIDE, so a flipped lamp cannot pass by flipping the table.
+CLUSTER_SIDE = {"ATTACK": +1, "FLUXRATE": -1, "COMP": +1, "SONG": +1,
+                "REC": +1, "TEMPO": +1}
+# The board-probed |dx| from which each lamp's LED clears every front part
+# on the Rev A board (2026-10-08, see LED_DX in the generator): the floor
+# LED_DX / LED_DX_KEY may not go under.
+CLUSTER_DX_FLOOR = {"ATTACK": 5.70, "FLUXRATE": 5.75, "TEMPO": 5.75,
+                    "REC": 5.90, "SONG": 6.75, "COMP": 0.0}
 
-    Replaces the satellite (anchor radius + 1.5 mm) rule for those lamps.
+
+def test_knob_lamps_sit_in_the_caption_cluster():
+    """Knob-owned lamps (spec 2026-10-07 §5, amended 2026-10-08): the word is
+    centred under its knob, the LED stands on the word's glyph midline,
+    LED_DX (LED_DX_KEY for the REC key) beside the knob's x, on the side of
+    its own group -- deck B mirrored -- and inside its owner's field.
+
     A lamp typed to a clear-but-wrong side of the knob still passes the
     overlap guard; this checks the cluster itself. REC's lamp joined the
-    cluster on 2026-10-07; SONG's left it for a side lamp (SIDE_LAMPS, see
-    test_song_lamp_stands_beside_its_knob). CLK_L and RST_L stay on the
+    cluster on 2026-10-07, SONG's on 2026-10-08. CLK_L and RST_L stay on the
     satellite rule and SHIFTBTN_L/MODBTN_L stand between key and jack -- see
     test_jack_row_lamps."""
     by = {c.enum: c for c in hw.ALL_HW}
     checked = 0
-    led_r = hw.BODY_R["L"]
     for lamp, knob_enum in hw.KNOB_LAMPS.items():
         if lamp not in by or knob_enum not in by:
             check(False, f"{lamp} or its knob {knob_enum} is missing")
             continue
         k, l = by[knob_enum], by[lamp]
-        cap_x, cap_y, led_x, led_y = hw.caption_led_cluster(k)
-        check(abs(l.x - led_x) < 1e-6 and abs(l.y - led_y) < 1e-6,
-              f"{lamp} is at ({l.x:.2f},{l.y:.2f}), not the cluster "
-              f"({led_x:.2f},{led_y:.2f})")
-        lx, ly = hw.hw_label(k)[:2]
-        check(abs(lx - cap_x) < 1e-6 and abs(ly - cap_y) < 1e-6,
-              f"{knob_enum} caption is at ({lx:.2f},{ly:.2f}), not the "
-              f"cluster word ({cap_x:.2f},{cap_y:.2f})")
-        w = len(k.label) * (hw.CAPTION_SIZE * hw.FONT_ADVANCE)
-        x0 = cap_x - w / 2.0
-        x1 = l.x + led_r
-        gap = (l.x - led_r) - (cap_x + w / 2.0)
-        if gap > hw.LED_CAPTION_GAP + 1e-6:
-            # The LED slid outward to keep the acrylic web to its owner's
-            # hole: allowed, but only by the smallest amount that does it.
-            web = (((l.x - k.x) ** 2 + (l.y - k.y) ** 2) ** 0.5
-                   - hw.HOLE_D[hw.hw_class(knob_enum)] / 2 - hw.HOLE_D["L"] / 2)
-            check(hw.MIN_WEB - 1e-9 <= web < hw.MIN_WEB + 0.01,
-                  f"{lamp} slid out to gap {gap:.2f} but its web is "
-                  f"{web:.4f}, not the smallest that holds MIN_WEB")
-        else:
-            check(abs(gap - hw.LED_CAPTION_GAP) < 1e-6,
-                  f"{lamp} caption-to-LED gap is {gap:.2f}, not {hw.LED_CAPTION_GAP}")
-            check(abs((x0 + x1) / 2.0 - k.x) < 1e-6,
-                  f"{lamp} cluster is not centred on {knob_enum}")
-        check(l.x > cap_x, f"{lamp} is not after the {knob_enum} word")
-        mid = cap_y - (hw.CAPTION_SIZE * hw.FONT_CAP) / 2.0
+        lx, ly, anchor = hw.hw_label(k)[:3]
+        check(abs(lx - k.x) < 1e-6 and anchor == "middle",
+              f"{knob_enum} word at x {lx:.2f} ({anchor}) is not centred on its knob ({k.x:.2f})")
+        want_y = k.y + hw.CLASS_LBL_DY[hw.hw_class(knob_enum)]
+        check(abs(ly - want_y) < 1e-6,
+              f"{knob_enum} word baseline {ly:.3f} is not the class offset ({want_y:.3f})")
+        stem = knob_enum[:-2] if knob_enum.endswith(("_A", "_B")) else knob_enum
+        if stem not in CLUSTER_SIDE:
+            check(False, f"{lamp}: the guard has no side for {stem}")
+            continue
+        side = CLUSTER_SIDE[stem] * (-1 if knob_enum.endswith("_B") else 1)
+        key = hw.hw_class(knob_enum) == "P"
+        dx = hw.LED_DX_KEY if key else hw.LED_DX
+        check(abs(l.x - (k.x + side * dx)) < 1e-6,
+              f"{lamp} at x {l.x:.3f}, want {k.x + side * dx:.3f} "
+              f"({'right' if side > 0 else 'left'} of {knob_enum}, dx {dx})")
+        check(dx >= CLUSTER_DX_FLOOR[stem] - 1e-9,
+              f"{lamp}: dx {dx} is under the board-probed {CLUSTER_DX_FLOOR[stem]}")
+        mid = ly - (hw.CAPTION_SIZE * hw.FONT_CAP) / 2.0
         check(abs(l.y - mid) < 1e-6,
               f"{lamp} y={l.y:.3f} is not on the {knob_enum} glyph midline "
               f"({mid:.3f})")
+        b = hw.box_of(l)
+        check(b is not None and b is hw.box_of(k),
+              f"{lamp} does not stand in {knob_enum}'s own field")
         checked += 1
-    check(checked == len(hw.KNOB_LAMPS),
-          f"expected {len(hw.KNOB_LAMPS)} clustered lamps, checked {checked}")
+    check(checked == 11, f"expected 11 clustered lamps, checked {checked}")
 
 
 def test_every_lamp_keeps_the_acrylic_web_to_its_owner():
@@ -742,7 +753,7 @@ def test_every_lamp_keeps_the_acrylic_web_to_its_owner():
     keeps MIN_WEB (P1). hw_cut_guard measures the same web on the cut file;
     this catches it at the generator, before any cut is written."""
     by = {c.enum: c for c in hw.ALL_HW}
-    for lamp, owner in hw.LAMP_OWNER.items():
+    for lamp, owner in hw.KNOB_LAMPS.items():
         l, k = by[lamp], by[owner]
         d = ((l.x - k.x) ** 2 + (l.y - k.y) ** 2) ** 0.5
         web = d - hw.HOLE_D[hw.hw_class(owner)] / 2 - hw.HOLE_D["L"] / 2
@@ -751,15 +762,18 @@ def test_every_lamp_keeps_the_acrylic_web_to_its_owner():
               f"(MIN_WEB {hw.MIN_WEB})")
 
 
-def test_song_lamp_stands_beside_its_knob():
-    """Spec 2026-10-07 §5.1: inboard, on the knob's line, half a pitch out."""
+def test_song_lamp_is_a_cluster_lamp():
+    """Spec 2026-10-07 §5.1, replaced 2026-10-08: SONG's lamp left its side
+    spot beside the knob and joined the caption clusters -- one rule for
+    every knob lamp, no second table of side lamps."""
+    for side in "AB":
+        check(hw.KNOB_LAMPS.get(f"SONG_{side}_L") == f"SONG_{side}",
+              f"SONG_{side}_L is not SONG_{side}'s cluster lamp")
+    check(not hasattr(hw, "SIDE_LAMPS"), "a SIDE_LAMPS table is back")
     by = {c.enum: c for c in hw.ALL_HW}
-    for lamp, knob in hw.SIDE_LAMPS.items():
-        l, k = by[lamp], by[knob]
-        want = k.x + (hw.COL_PITCH / 2 if k.x < hw.CX else -hw.COL_PITCH / 2)
-        check(abs(l.x - want) < 1e-9 and abs(l.y - k.y) < 1e-9,
-              f"{lamp} at ({l.x:.2f},{l.y:.2f}), want ({want:.2f},{k.y:.2f})")
-    check("SONG_A" not in hw.KNOBS_WITH_LAMPS, "SONG is still a cluster lamp")
+    for lamp in ("SONG_A_L", "SONG_B_L"):
+        check(by[lamp].y > by[lamp[:-2]].y,
+              f"{lamp} is not under its knob, on its word's line")
 
 
 def test_jack_row_lamps():

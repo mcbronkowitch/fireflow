@@ -21,7 +21,7 @@ where the index used to.
 Shares all parameter identity with gen_panel.py (import); defines only
 geometry. Run from host/vcv/:  python3 res/gen_hw_panel.py
 """
-import os, copy, math
+import os, copy
 import itertools
 import gen_panel as gp
 import hw_fields
@@ -286,14 +286,23 @@ X_COLOR, X_FILT, X_TIMB, X_LVL = 79.0, 90.5, 102.0, 113.5
 
 # ---------------------------------------------------------------------------
 #  The 9 mm raster (spec docs/superpowers/specs/2026-10-07-panel-nine-mm-
-#  raster-design.md §3). One pitch for all fifteen columns -- six per deck,
-#  three in the centre -- centred on 152.4; 7 x 20.2 + 6.0 puts deck A's outer
-#  big cap 5.0 mm from the nominal edge. Rows run 14.5 .. 95.0. Every gap the
-#  grip test asked for (>= 9 mm between caps) is >= 10.27 mm here, measured.
-#  Big caps stand in rows 2 and 4 only, never in deck column 6, never side by
-#  side: two adjacent big caps would need 21.0 mm.
+#  raster-design.md §3). Fifteen columns -- six per deck, three in the
+#  centre -- mirror-symmetric about 152.4. The deck columns run on one
+#  20.2 mm pitch: 7 x 20.2 + 6.0 puts deck A's outer big cap 5.0 mm from the
+#  nominal edge. The centre has its own, wider pitch (CENTRE_PITCH below).
+#  Rows run 14.5 .. 95.0. Every gap the grip test asked for (>= 9 mm between
+#  caps) is measured by test_nine_mm_between_caps. Big caps stand in rows 2
+#  and 4 only, never in deck column 6, never side by side: two adjacent big
+#  caps would need 21.0 mm.
 # ---------------------------------------------------------------------------
 COL_PITCH = 20.2
+# The outer centre columns stand at CX +- 23.0 (Bastian, 2026-10-08, after
+# Task 7a): on the uniform 20.2 mm pitch the Patch Submodule (U_SM, back side,
+# THT sockets whose pins reach the front) had no legal spot anywhere on the
+# board. Measured with the board placer's own tests at 23.0: U_SM fits at
+# rotation 90/270 with its centre at x 152.00 .. 152.80 (on the centre line),
+# never at 0/180; deck column 6 to the outer centre column is 17.4 mm c-c.
+CENTRE_PITCH = 23.0
 ROW_Y = (14.500, 34.625, 54.750, 74.875, 95.000)
 ROW_PITCH = ROW_Y[1] - ROW_Y[0]
 
@@ -305,7 +314,14 @@ def deck_col_x(col):
 
 def centre_col_x(k):
     """Centre column k = -1, 0, +1."""
-    return CX + k * COL_PITCH
+    return CX + k * CENTRE_PITCH
+
+
+# Every column's x, left to right: what "neighbouring columns" means for the
+# field joins (§7), across both pitches.
+COLUMN_X = tuple(sorted([deck_col_x(c) for c in range(1, 7)]
+                        + [centre_col_x(k) for k in (-1, 0, 1)]
+                        + [W - deck_col_x(c) for c in range(1, 7)]))
 
 
 # Deck A (deck B mirrored): stem -> (row, column). ATTACK and STAGES share a
@@ -378,10 +394,11 @@ JACK_POS = {"PITCH_A": 56.00, "GATE_A": 67.50,
             "MOD1_B": W - X_COLOR, "MOD2_B": W - X_FILT,
             "MOD3_B": W - X_TIMB, "MOD4_B": W - X_LVL}
 
-# Knob-owned lamps: the caption and the LED are one block under the knob,
-# word then air then LED, centred on the knob x. Same reading order on both
-# decks -- not an optical [LED][word] mirror. The jack-row keys, the CLOCK
-# jack lamps stay as satellites or between key and jack (LIGHT_POS below).
+# Knob-owned lamps (spec 2026-10-07 §5, amended 2026-10-08): the caption
+# stays centred under its knob, and the LED stands beside the word, on the
+# word's glyph midline, LED_DX from the knob's x toward the lamp's own group
+# (LAMP_SIDE). Deck B is deck A mirrored. The jack-row keys and the CLOCK /
+# RESET lamps stay as satellites or between key and jack (LIGHT_POS below).
 KNOB_LAMPS = {
     "LVL_A_L": "COMP_A",   "LVL_B_L": "COMP_B",
     # FTIME flashes once per FLUX time period: timing, not modulation (spec
@@ -392,47 +409,44 @@ KNOB_LAMPS = {
     # REC's lamp joined the cluster on 2026-10-07: beside the key it reached
     # 0.25 mm out of CAPTURE's cell (spec §5).
     "REC_A_L": "REC_A", "REC_B_L": "REC_B",
+    # SONG's lamp joined on 2026-10-08 (it stood beside the knob before, spec
+    # §5.1 then): at LED_DX beside its word it clears its own pot, whose pins
+    # point south in the top row.
+    "SONG_A_L": "SONG_A", "SONG_B_L": "SONG_B",
 }
-# SONG's lamp stands BESIDE its knob, inboard, on the knob's line: the top
-# row's pots have their pins south, where a cluster LED would land, and the
-# row band leaves no room to drop it (spec §5.1).
-SIDE_LAMPS = {"SONG_A_L": "SONG_A", "SONG_B_L": "SONG_B"}
-LAMP_OWNER = {**KNOB_LAMPS, **SIDE_LAMPS}
 KNOBS_WITH_LAMPS = set(KNOB_LAMPS.values())
-LED_CAPTION_GAP = 0.8   # mm of air between the word's ink and the LED body
 CAPTION_SIZE = 2.2      # same size hw_label prints
+# Which side of its word a lamp stands on, deck A (+1 = right): toward the
+# lamp's own group, never into a neighbour's. Deck B flips the sign. TEMPO is
+# in the centre and has no deck partner.
+LAMP_SIDE = {"ATTACK": +1, "FLUXRATE": -1, "COMP": +1, "SONG": +1,
+             "REC": +1, "TEMPO": +1}
+# LED centre to knob centre in x. Board-probed on 2026-10-08 with the LED on
+# its word's glyph midline: the LED body clears every front body, its pads
+# clear every foreign body and keep PAD_CLEAR to every foreign pad, at some
+# rotation in place.py's LED_ROTS, from |dx| 5.70 (ATTACK; FLUXRATE_A, left),
+# 5.75 (TEMPO; FLUXRATE_B, right), 5.90 (REC key) and 6.75 (SONG; 6.80 on
+# the side it does not take); COMP's lamp is clear at any dx.
+LED_DX = 6.9            # pot owners
+LED_DX_KEY = 6.0        # the REC key
 
 
 def caption_led_cluster(knob):
     """(cap_x, cap_y, led_x, led_y) for a knob-owned lamp.
 
-    LED centre sits on the caption's glyph midline. The body then hangs
-    ~0.7 mm below the baseline, and the group field counts it as its
-    owner's ink (spec 2026-10-07 §7).
-
-    The LED slides outward (larger x, along that midline) when the centred
-    position would leave less than MIN_WEB of acrylic between its hole and its
-    owner's hole (spec 2026-10-07; P1's MIN_WEB). The caption and the LED's y
-    stay put -- lowering either would eat the VOICE/FLUX field gap. The slide
-    is the smallest that restores the web, solved from the hole diameters and
-    the fixed dy, so a lamp that already holds MIN_WEB does not move.
+    The word is centred under the knob, as every caption is. The LED centre
+    sits on the word's glyph midline -- its body then hangs ~0.7 mm below the
+    baseline, and the group field counts it as its owner's ink (spec
+    2026-10-07 §7) -- LED_DX (LED_DX_KEY for a key) beside the knob's x, on
+    the LAMP_SIDE of its group; deck B mirrored.
     """
-    w = len(knob.label) * (CAPTION_SIZE * FONT_ADVANCE)
-    led_r = BODY_R["L"]
-    total = w + LED_CAPTION_GAP + 2 * led_r
-    x0 = knob.x - total / 2.0
-    cap_x = x0 + w / 2.0
+    stem = knob.enum[:-2] if knob.enum.endswith(("_A", "_B")) else knob.enum
+    side = LAMP_SIDE[stem] * (-1 if knob.enum.endswith("_B") else 1)
+    dx = LED_DX_KEY if hw_class(knob.enum) == "P" else LED_DX
+    cap_x = knob.x
     cap_y = knob.y + CLASS_LBL_DY[hw_class(knob.enum)]
-    led_x = x0 + w + LED_CAPTION_GAP + led_r
     led_y = cap_y - (CAPTION_SIZE * FONT_CAP) / 2.0
-    # The hole list rounds every centre to 0.001 mm (gen_hw_cut.py), which can
-    # cost a web of exactly MIN_WEB up to ~0.0015 mm -- so aim 0.002 mm over.
-    need = (HOLE_D[hw_class(knob.enum)] / 2.0 + MIN_WEB + HOLE_D["L"] / 2.0
-            + 0.002)
-    dy = led_y - knob.y
-    if abs(dy) < need:
-        led_x = max(led_x, knob.x + math.sqrt(need * need - dy * dy))
-    return cap_x, cap_y, led_x, led_y
+    return cap_x, cap_y, knob.x + side * dx, led_y
 
 # Stay-put lamps only. Knob-owned entries are filled from caption_led_cluster
 # after HW_PARAMS exists -- do not hand-edit those back in here.
@@ -481,10 +495,6 @@ HW_PARAMS = HW_PARAMS + [place(gp.MODBTN_CTL)]
 _by_param = {c.enum: c for c in HW_PARAMS}
 for lamp, knob_enum in KNOB_LAMPS.items():
     LIGHT_POS[lamp] = caption_led_cluster(_by_param[knob_enum])[2:]
-for lamp, knob_enum in SIDE_LAMPS.items():
-    k = _by_param[knob_enum]
-    inboard = COL_PITCH / 2.0 if k.x < CX else -COL_PITCH / 2.0
-    LIGHT_POS[lamp] = (k.x + inboard, k.y)
 HW_INPUTS  = [place(c) for c in gp.INPUTS] + [place(c) for c in gp.HW_MOD_INPUTS]
 HW_OUTPUTS = [place(c) for c in gp.OUTPUTS]
 _SKIP_HW_LIGHTS = {"FLOW_A_L", "FLOW_B_L"}
@@ -582,6 +592,37 @@ def body_r(c):
 
 FIELD_MARGIN = 1.45                 # spec §7: the worst pair allows 1.4825
 CELL_HALF = (COL_PITCH - BOX_GAP) / 2.0
+CENTRE_CELL_HALF = (CENTRE_PITCH - BOX_GAP) / 2.0
+
+
+def _cell_half(c, side):
+    """Half-width of c's column cell on `side` (-1 left, +1 right), spec §7
+    as amended 2026-10-08. Deck columns: CELL_HALF both ways. Between the
+    centre columns: CENTRE_CELL_HALF. The outer centre columns' OUTWARD side
+    (toward the deck) has no column-cell minimum -- ink + FIELD_MARGIN only --
+    because deck column 6 already stands 17.4 mm away there, not 23.0."""
+    d = c.x - CX
+    if abs(d) < 1e-6:
+        return CENTRE_CELL_HALF
+    if abs(abs(d) - CENTRE_PITCH) < 1e-6:
+        inward = (d > 0) == (side < 0)
+        return CENTRE_CELL_HALF if inward else 0.0
+    return CELL_HALF
+
+
+def _next_column_x(x):
+    """The x of the column right of the column at x, or None at the edge."""
+    for i, cx in enumerate(COLUMN_X[:-1]):
+        if abs(cx - x) < 1e-6:
+            return COLUMN_X[i + 1]
+    return None
+
+
+def _adjacent_columns(xa, xb):
+    """True when xa and xb are neighbouring columns, whatever the pitch."""
+    lo, hi = min(xa, xb), max(xa, xb)
+    nxt = _next_column_x(lo)
+    return nxt is not None and abs(nxt - hi) < 1e-6
 
 # The jack row keeps its own frames (no legends since 2026-08-30).
 JACK_ROW_X0, JACK_ROW_CUTS = 28.00, (50.25, 73.25)
@@ -634,7 +675,7 @@ def _ink(c):
         tx0, tx1, ty0, ty1 = text_run(lx, ly, size, 0.0, anchor, c.label)
         x0, x1, y0, y1 = min(x0, tx0), max(x1, tx1), min(y0, ty0), max(y1, ty1)
     lr = BODY_R["L"]
-    for lamp, owner in LAMP_OWNER.items():
+    for lamp, owner in KNOB_LAMPS.items():
         if owner == c.enum:
             lx, ly = LIGHT_POS[lamp]
             x0, x1 = min(x0, lx - lr), max(x1, lx + lr)
@@ -649,7 +690,8 @@ def _knob_field_rects(members):
     rows = {}
     for c in members:
         x0, x1, y0, y1 = _ink(c)
-        cell = [min(x0 - FIELD_MARGIN, c.x - CELL_HALF), max(x1 + FIELD_MARGIN, c.x + CELL_HALF),
+        cell = [min(x0 - FIELD_MARGIN, c.x - _cell_half(c, -1)),
+                max(x1 + FIELD_MARGIN, c.x + _cell_half(c, +1)),
                 y0 - FIELD_MARGIN, y1 + FIELD_MARGIN]
         rows.setdefault(round(c.y, 6), []).append((c, cell))
     cells = []
@@ -661,7 +703,7 @@ def _knob_field_rects(members):
             cells.append((c, cell))
     rects = [tuple(cell) for _c, cell in cells]
     for (a, ra), (b, rb) in itertools.combinations(cells, 2):
-        if abs(a.y - b.y) < 1e-6 and abs(abs(a.x - b.x) - COL_PITCH) < 1e-6:
+        if abs(a.y - b.y) < 1e-6 and _adjacent_columns(a.x, b.x):
             lo, hi = (ra, rb) if a.x < b.x else (rb, ra)
             if lo[1] < hi[0]:
                 rects.append((lo[1], hi[0], ra[2], ra[3]))
@@ -679,9 +721,12 @@ def _knob_field_rects(members):
         o = at.get(k, cell)
         at[k] = (min(o[0], cell[0]), max(o[1], cell[1]), cell[2], cell[3])
     for (x, y), ul in at.items():
-        ur = at.get((round(x + COL_PITCH, 6), y))
+        nx = _next_column_x(x)
+        if nx is None:
+            continue
+        ur = at.get((round(nx, 6), y))
         dl = at.get((x, round(y + ROW_PITCH, 6)))
-        dr = at.get((round(x + COL_PITCH, 6), round(y + ROW_PITCH, 6)))
+        dr = at.get((round(nx, 6), round(y + ROW_PITCH, 6)))
         if ur and dl and dr:
             hx0, hx1 = min(ul[1], dl[1]), max(ur[0], dr[0])
             if hx0 < hx1 and ul[3] < dl[2]:
