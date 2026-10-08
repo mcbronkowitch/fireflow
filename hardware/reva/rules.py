@@ -2,6 +2,7 @@
 build.py read these values. The checks (place_check.py, route_check.py) keep
 their own copies on purpose: a threshold is not re-derived from the thing it
 guards."""
+import assign
 
 SIGNAL_W = 0.25
 SUPPLY_W = 0.5
@@ -17,7 +18,11 @@ PRES0, PRES_MULT, HIST_INC = 0.5, 1.6, 1.0   # router negotiation (spec §4.3), 
 PLANE_THT_VIA_KEEPOFF = 1.0   # via copper to plane-net THT pad copper: thermal gap 0.5 + zone clearance 0.5 (spec §4.2.8)
 
 VICTIMS = ("OUT_L", "OUT_R", "IN_L", "IN_R")
-AGGRESSORS = tuple(["LED%d" % n for n in range(19)] + ["LED%d_A" % n for n in range(19)]
+# One LEDn / LEDn_A pair per panel LED (blocks.leds): the LED count comes from
+# the hole list, the panel's source. It was a literal 19 until the 9 mm panel
+# pass (2026-10-08) left 15 LEDs and LED15..LED18 named nets the board lacks.
+N_LEDS = sum(len(h.get("ids", [h["id"]])) for h in assign.load_holes() if h["kind"] == "led")
+AGGRESSORS = tuple(["LED%d" % n for n in range(N_LEDS)] + ["LED%d_A" % n for n in range(N_LEDS)]
                    + ["SR_CLK", "SR_DATA", "SR_LATCH", "SR_DIN",
                       "SD_CK", "SD_CMD", "SD_D0", "SD_D1", "SD_D2", "SD_D3"])
 AUDIO_MM = 10.0

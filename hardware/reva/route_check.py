@@ -14,6 +14,7 @@ import tempfile
 
 import pcbnew
 
+import assign
 import check_kit as CK
 import place as P
 from gen import ksexp
@@ -268,7 +269,12 @@ ZONE_MARGIN_MM = 2.54      # spec §4.2.2: a zone is its box grown by one pin pi
 PF_PER_MM = 0.1            # estimate, not measured (spec §3)
 MODULE_REF = "U_SM"
 VICTIMS = ("OUT_L", "OUT_R", "IN_L", "IN_R")                       # spec §2.4
-AGGRESSORS = tuple(["LED%d" % n for n in range(19)] + ["LED%d_A" % n for n in range(19)]
+# One LEDn / LEDn_A pair per panel LED, counted from the hole list (the
+# panel's source, not the board this step measures: a board that lost an LED
+# net still reads as "absent"). A literal 19 until the 9 mm panel pass
+# (2026-10-08) left 15 LEDs and the step measured nothing.
+N_LEDS = sum(len(h.get("ids", [h["id"]])) for h in assign.load_holes() if h["kind"] == "led")
+AGGRESSORS = tuple(["LED%d" % n for n in range(N_LEDS)] + ["LED%d_A" % n for n in range(N_LEDS)]
                    + ["SR_CLK", "SR_DATA", "SR_LATCH", "SR_DIN",
                       "SD_CK", "SD_CMD", "SD_D0", "SD_D1", "SD_D2", "SD_D3"])   # spec §2.3
 LR = (("OUT_L", "OUT_R"), ("IN_L", "IN_R"))
