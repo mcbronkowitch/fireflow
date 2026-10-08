@@ -6,10 +6,10 @@ exit code is the verdict. Re-runs itself under KiCad's Python.
 2. The fresh build is green (known panel violations listed).
 3. An unsabotaged reload is green in every step, and every sabotage turns its
    named step red. Every gated step has a sabotage and a `_missing` one.
-4. KNOWN_PANEL names only jack-row parts (the 18 jacks, hole y 114.0), the
-   SONG clusters and, by the owner's decision (Bastian, 2026-09-29), the two
-   LED/pot pairs GATE_A_L/SOURCE_A and LVL_B_L/PAN_B, each pair only with its
-   own partner, until the panel pass. Every name in every key is checked.
+4. KNOWN_PANEL is empty: the 9 mm panel pass (spec 2026-10-07 §1, Task 7c
+   2026-10-08) removed every jack-row, SONG and admitted-pair entry; a
+   non-empty entry needs Bastian's decision. The key-name rule
+   (check_kit.key_allowed) is still exercised on a fixture.
 5. The DRC report parser reads every recorded line shape, and the drc
    sabotage's finding names the sabotaged decoupler (not an empty key).
 6. The thresholds (outline, edge clearance, USB distance, shadow size) are
@@ -42,7 +42,6 @@ except ImportError:
 
 import io                    # noqa: E402
 import contextlib            # noqa: E402
-import assign                # noqa: E402
 import check_kit as CK       # noqa: E402
 import place as P           # noqa: E402
 import place_check as PC     # noqa: E402
@@ -52,7 +51,9 @@ KIPY = sys.executable
 ROOT = None                  # scratch directory of this run, removed at the end
 
 # The pairs the owner admitted until the panel pass (2026-09-29): a key naming
-# one of a pair may name nothing but that pair.
+# one of a pair may name nothing but that pair. KNOWN_PANEL is empty since the
+# 9 mm panel pass (2026-10-08); the pairs stay as check_key_names's fixture for
+# check_kit.key_allowed, which test_route.py still uses.
 PAIRS = ({"GATE_A_L", "SOURCE_A"}, {"LVL_B_L", "PAN_B"})
 UNGATED_STEPS = ("report", "render")
 
@@ -204,19 +205,9 @@ def run():
     # No committed-board comparison here: the committed board is routed since
     # P4-2 and guarded by reva_route_guard (test_route.py).
 
-    # The jack row: the 18 jacks, hole y 114.0. SD, the two keys and the four
-    # lamps on that row are not jacks and are not admitted.
-    jack_ids = {h["id"] for h in assign.load_holes()
-                if h["kind"] == "jack" and abs(h["y_mm"] - 114.0) < 1e-6}
-    check(len(jack_ids) == 18, "the jack row is the 18 jacks at y 114.0 (%d)" % len(jack_ids))
-    allowed = jack_ids | {"SONG_A", "SONG_B", "SONG_A_L", "SONG_B_L"} | set().union(*PAIRS)
-    n_keys = 0
-    for chk, keys in sorted(PC.KNOWN_PANEL.items()):
-        for k in sorted(keys):
-            n_keys += 1
-            check(CK.key_allowed(k, allowed, PAIRS, CLASS_WORDS),
-                  "KNOWN_PANEL[%s] %r names only jack-row parts, SONG parts or an admitted pair" % (chk, k))
-    check(n_keys > 0, "KNOWN_PANEL was examined (%d keys)" % n_keys)
+    n_keys = sum(len(v) for v in PC.KNOWN_PANEL.values())
+    check(n_keys == 0, "KNOWN_PANEL is empty after the panel pass (spec 2026-10-07 §1): %r"
+          % {k: sorted(v) for k, v in PC.KNOWN_PANEL.items() if v})
 
     check_key_names()
     check_parser()

@@ -27,52 +27,11 @@ SHADOW_TOL_MM = 0.1                        # spec §4.3
 OUTLINE_TOL_MM = 1e-3
 _TEXT_CLASSES = ("PCB_TEXT", "PCB_TEXTBOX", "PCB_FIELD")   # not part of a shadow (spec §4.3)
 
-# Filled from the first full run of Task 3/4/6, restricted to the jack row, the
-# SONG clusters and, by the owner's decision (Bastian, 2026-09-29), the
-# GATE_A_L/SOURCE_A and LVL_B_L/PAN_B pairs (spec §5.3); test_place.py
-# asserts exactly that set, name by name.
-KNOWN_PANEL = {
-    "edge": {
-        "CLOCK", "GATE_A", "GATE_B", "IN_L", "IN_R", "MOD1_A", "MOD1_B", "MOD2_A",
-        "MOD2_B", "MOD3_A", "MOD3_B", "MOD4_A", "MOD4_B", "OUT_L", "OUT_R",
-        "PITCH_A", "PITCH_B", "RESET",
-    },
-    "front": {
-        "body SONG_A/SONG_A_L",
-        "body SONG_B/SONG_B_L",
-        "pad SONG_A_L/SONG_A",
-        "pad SONG_B_L/SONG_B",
-        # LED legs overlap SOURCE_A's / PAN_B's pins in every LED rotation.
-        # SOURCE_A: no SOURCE_A rotation leaves both GATE_A_L and SRC_A_L a
-        # legal rotation (rot 270 blocks GATE_A_L, the others block SRC_A_L).
-        # PAN_B: its rotations are the T18 cap marker's (rot 0/180, 20 deg
-        # steps) and, after the panel pass, the jack row's (rot 90). Waits for
-        # the panel pass (Bastian, 2026-09-29).
-        "rotation GATE_A_L",
-        "rotation LVL_B_L",
-        "rotation SONG_A_L",
-        "rotation SONG_B_L",
-    },
-    "drc": {
-        # the jack row: pad T past the 0.5 mm edge clearance, as in "edge"
-        "copper_edge_clearance CLOCK", "copper_edge_clearance GATE_A",
-        "copper_edge_clearance GATE_B", "copper_edge_clearance IN_L",
-        "copper_edge_clearance IN_R", "copper_edge_clearance MOD1_A",
-        "copper_edge_clearance MOD1_B", "copper_edge_clearance MOD2_A",
-        "copper_edge_clearance MOD2_B", "copper_edge_clearance MOD3_A",
-        "copper_edge_clearance MOD3_B", "copper_edge_clearance MOD4_A",
-        "copper_edge_clearance MOD4_B", "copper_edge_clearance OUT_L",
-        "copper_edge_clearance OUT_R", "copper_edge_clearance PITCH_A",
-        "copper_edge_clearance PITCH_B", "copper_edge_clearance RESET",
-        # the SONG lamps sit on their pot's pins (same overlap as "front")
-        "shorting_items SONG_A/SONG_A_L", "shorting_items SONG_B/SONG_B_L",
-        # GATE_A_L/SOURCE_A and LVL_B_L/PAN_B: LED legs on the pot's pins in
-        # every LED rotation (see "front" above); the pairs wait for the
-        # panel pass by the owner's decision (Bastian, 2026-09-29)
-        "clearance GATE_A_L/SOURCE_A", "shorting_items GATE_A_L/SOURCE_A",
-        "shorting_items LVL_B_L/PAN_B",
-    },
-}
+# Emptied by the 9 mm panel pass (spec 2026-10-07 §1; Task 7c, 2026-10-08):
+# the jack row, the SONG clusters and the GATE_A_L/SOURCE_A and LVL_B_L/PAN_B
+# pairs no longer fail. A non-empty entry needs Bastian's decision;
+# test_place.py asserts the emptiness.
+KNOWN_PANEL = {"edge": set(), "front": set(), "drc": set()}
 
 
 def _fp(board, ref):
@@ -190,7 +149,7 @@ def check_front(s, pcb_path, prefix):
             else:
                 found["pad %s/%s" % (kx, ky)] = "pads %s of %s inside %s's body" % (",".join(hits), kx, ky)
     for ref in sorted(s.no_rotation):
-        found["rotation %s" % _key(s, ref)] = "no LED rotation keeps its legs clear"
+        found["rotation %s" % _key(s, ref)] = "no LED rotation keeps its legs and body clear"
     for r in P.back_tht_refs(s):
         fp = _fp(s.board, r)
         for y in refs:
@@ -553,12 +512,15 @@ def _sab_decoupling_missing(s):
 
 def _sab_drc(s):
     """A GND track 0.1 mm beside a decoupler's rail pad: a near miss, not a
-    touch (a touch is renamed to the pad's net on save, probed 2026-09-29)."""
+    touch (a touch is renamed to the pad's net on save, probed 2026-09-29).
+    The track spans the pad's own height only: on the 9 mm panel board
+    (2026-10-08) the old 1 mm overhang reached C10's IC's VCC pad, the track
+    was saved as SM_3V3 and the DRC found nothing."""
     fp = _fp(s.board, sorted(s.decouplers)[0])
     bb = [p for p in fp.Pads() if str(p.GetNumber()) == "1"][0].GetBoundingBox()
     x = pcbnew.ToMM(bb.GetRight()) + 0.1 + 0.125
     kipcb.add_track(s.board, "B.Cu", 0.25, "GND",
-                    [(x, pcbnew.ToMM(bb.GetTop()) - 1.0), (x, pcbnew.ToMM(bb.GetBottom()) + 1.0)])
+                    [(x, pcbnew.ToMM(bb.GetTop())), (x, pcbnew.ToMM(bb.GetBottom()))])
 
 
 def _sab_drc_missing(s):
@@ -574,15 +536,18 @@ def _sab_drc_empty(s):
 
 
 def _sab_module_usb(s):
-    """J_PWR moved 1 mm straight toward the module shadow: it sits about
-    0.5 mm from the 35 mm rule, so the rule fails and nothing else does."""
+    """J_PWR moved straight toward the module shadow until it sits 0.5 mm
+    inside the 35 mm rule. Until 2026-10-08 it moved a fixed 1 mm (J_PWR
+    sat about 35.5 mm away); the 9 mm panel board puts it 101.0 mm away,
+    where 1 mm proved nothing."""
     jp = _fp(s.board, "J_PWR")
     c = PL.courtyard_box(jp)
     sh = s.shadow
     dx = max(sh[0] - c[2], c[0] - sh[2], 0.0) * (1.0 if sh[0] >= c[2] else -1.0)
     dy = max(sh[1] - c[3], c[1] - sh[3], 0.0) * (1.0 if sh[1] >= c[3] else -1.0)
     n = math.hypot(dx, dy)
-    jp.Move(kipcb._pt(dx / n, dy / n))
+    d = n - (USB_CLEAR_MM - 0.5)
+    jp.Move(kipcb._pt(d * dx / n, d * dy / n))
 
 
 def _sab_edge_outline(s):
