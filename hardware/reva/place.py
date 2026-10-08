@@ -113,6 +113,14 @@ def _front_obstacles(board, refs, skip):
 
 
 def _led_fits(fp, bodies, pads):
+    """The LED's pads miss every foreign body and keep PAD_CLEAR to every
+    foreign pad, and its own body box overlaps no foreign body (P4.1 §4.2,
+    amended 2026-10-08). The body test is what turns a lamp beside its owner
+    so its flat side faces the owner: LED_D3.0mm's body box is not centred
+    on its hole (x -1.55 .. +1.95 at rotation 0), and the pads-only pick put
+    deck B's mirrored REC lamp on its key."""
+    if any(PL.overlaps(PL.body_box(fp), o) for o in bodies):
+        return False
     for _n, b in PL.pad_boxes(fp):
         if any(PL.overlaps(b, o) for o in bodies):
             return False
@@ -123,7 +131,8 @@ def _led_fits(fp, bodies, pads):
 
 def place_panel(s, proj):
     """Every panel part on its hole (spec §4.2); LEDs last, each at the first
-    rotation whose pads miss every foreign body and keep PAD_CLEAR."""
+    rotation whose pads miss every foreign body and keep PAD_CLEAR and whose
+    body overlaps no foreign body (_led_fits)."""
     by_id = _hole_index()
     rows = []
     for part in proj.parts():

@@ -175,6 +175,13 @@ ones), so P4-1 generates one.
   - LED: the first of 0, 90, 180, 270 whose pads avoid every foreign body box
     and keep the pad clearance. If no rotation passes, the check fails; see
     §5.3 for the known cases.
+    *Amended 2026-10-08 (panel 9 mm raster, Task 7b):* the rotation must also
+    keep the LED's own body box off every foreign body box. LED_D3.0mm's
+    body box is not centred on its hole (x −1.55 .. +1.95 mm at rotation 0),
+    so a lamp beside its owner clears only with its flat side toward it; the
+    pads-only pick took rotation 0 on both decks and put deck B's mirrored
+    REC lamp on its key (0.295 × 0.487 mm). With the body test it takes 180
+    there; no other LED changes rotation.
 - **SD socket (J_SD):** on the front, through hole, centred on the `SD`
   slot's centre. Its footprint comes from `sd_footprint.py`, which writes a
   `.kicad_mod`. *Amended 2026-09-29 while planning:* the source is the

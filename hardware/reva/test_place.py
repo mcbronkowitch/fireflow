@@ -16,6 +16,8 @@ exit code is the verdict. Re-runs itself under KiCad's Python.
    place_check.py's own constants, and the sabotages module_usb, edge_outline
    and drc_empty (a report with no unconnected_items) are each red for their
    own stated reason.
+7. On a panel-only board every LED has a rotation, and no LED's body box
+   overlaps another front body (P4.1 §4.2, amended 2026-10-08).
 
 The committed hardware/reva/kicad/reva.kicad_pcb is the routed board since
 P4-2; reva_route_guard (test_route.py) compares it with a fresh route.py run,
@@ -159,6 +161,28 @@ def check_sabotage_coverage():
               "gated step %s has a %s_missing sabotage" % (n, n))
 
 
+def check_led_rule():
+    """P4.1 §4.2 (amended 2026-10-08): place_panel turns every LED so that its
+    pads AND its own body box clear every other front part. Run on a
+    panel-only board, so it reports even when the back side cannot be placed.
+    Without the body test deck B's REC lamp sits on its key at rotation 0."""
+    import build as RB
+    from gen import kipcb
+    from gen import place as PL
+    s = P.Placed()
+    s.board = kipcb.new_board(P.X1 - P.X0, P.Y1 - P.Y0, P.LAYERS, origin=(P.X0, P.Y0))
+    P.place_panel(s, RB.project())
+    fps = {r: s.board.FindFootprintByReference(r) for r in s.front}
+    leds = [r for r in s.front if P._hole_index()[s.ids[r]]["kind"] == "led"]
+    check(len(leds) == 15, "the LED rule examined the 15 panel LEDs (%d)" % len(leds))
+    check(not s.no_rotation, "every LED found a rotation (none: %s)" % sorted(s.no_rotation))
+    for r in leds:
+        lb = PL.body_box(fps[r])
+        hit = [s.ids[q] for q in s.front if q != r and PL.overlaps(lb, PL.body_box(fps[q]))]
+        check(not hit, "%s (rot %.0f): its body overlaps no front body (hits: %s)"
+              % (s.ids[r], fps[r].GetOrientationDegrees(), hit))
+
+
 def main():
     global ROOT
     ROOT = tempfile.mkdtemp(prefix="reva_place_guard_")
@@ -197,6 +221,7 @@ def run():
     check_key_names()
     check_parser()
     check_sabotage_coverage()
+    check_led_rule()
 
     base = P.build()
     d0 = scratch("base_")
