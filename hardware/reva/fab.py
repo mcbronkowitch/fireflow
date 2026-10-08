@@ -193,15 +193,48 @@ _CLASSES = (("Potentiometer", "pot"), ("PJ398", "jack"), ("LED", "led"), ("SW_Pu
             ("TestPoint", "probe"), ("D_SMA", "diode"), ("R_0", "res"), ("C_0", "cap"),
             ("CP_", "cap"))
 BACK_BIG = frozenset({"U_SM", "J_PWR"})     # carry their name inside their outline
-# The back sheet's enlarged window, in the back view's mm (x mirrored). At
-# SHEET_SCALE three leaders around J_PWR run under another part -- C5's under
-# D_P12, C3's under J_PWR and U_SR3, C1's under C_LDO_T -- so C5's line seems
-# to end on D_P12; C2, C3 and C5 have no silk reference (silk.NO_ROOM), the
-# sheet is their only name. The window labels them again at DETAIL_SCALE.
-# x0 = 214 keeps R23 (ends at 213.5) out: a part cut by the frame gets its
-# label on the frame line.
-BACK_DETAIL = (214.0, 50.0, 250.0, 78.0)
+# The back sheet's enlarged window around the power block, in the back view's
+# mm (x mirrored). At SHEET_SCALE the leaders between J_PWR, U_REG and their
+# small parts run under other parts (2026-10-02: C5's under D_P12, C3's under
+# J_PWR and U_SR3), and the parts in silk.NO_ROOM have no silk reference, so
+# the sheet is their only name; the window labels them again at
+# DETAIL_SCALE. Until 2026-10-08 the window was fixed at (214, 50, 250, 78);
+# the 9 mm panel pass moved J_PWR and U_REG out of it, so it is now derived
+# from the placed board (back_detail): the box of the DETAIL_FOCUS parts
+# grown by DETAIL_MARGIN_MM, then grown again over every part it would cut
+# (a part cut by the frame gets its label on the frame line).
+DETAIL_FOCUS = ("J_PWR", "U_REG")
+DETAIL_MARGIN_MM = 3.0
 DETAIL_SCALE = 15.0
+
+
+def back_detail(back):
+    """The back sheet's detail window from the mirrored back parts: the box
+    of DETAIL_FOCUS grown by DETAIL_MARGIN_MM, grown over every part it cuts
+    until none is cut, clamped to the outline. Raises ValueError when a
+    focus part is missing."""
+    focus = [p for p in back if p["ref"] in DETAIL_FOCUS]
+    if sorted(p["ref"] for p in focus) != sorted(DETAIL_FOCUS):
+        raise ValueError("back_detail: %s not all on the back sheet" % ", ".join(DETAIL_FOCUS))
+    box = [min(p["x0"] for p in focus) - DETAIL_MARGIN_MM, min(p["y0"] for p in focus) - DETAIL_MARGIN_MM,
+           max(p["x1"] for p in focus) + DETAIL_MARGIN_MM, max(p["y1"] for p in focus) + DETAIL_MARGIN_MM]
+    grown = True
+    while grown:
+        grown = False
+        for p in back:
+            hit = p["x0"] < box[2] and p["x1"] > box[0] and p["y0"] < box[3] and p["y1"] > box[1]
+            inside = p["x0"] >= box[0] and p["x1"] <= box[2] and p["y0"] >= box[1] and p["y1"] <= box[3]
+            if hit and not inside and p["ref"] not in BACK_BIG - set(DETAIL_FOCUS):
+                box = [min(box[0], p["x0"]), min(box[1], p["y0"]), max(box[2], p["x1"]), max(box[3], p["y1"])]
+                grown = True
+    return (max(box[0], X0), max(box[1], Y0), min(box[2], X1), min(box[3], Y1))
+
+
+def detail_misses(detail, back):
+    """The DETAIL_FOCUS parts that do not lie wholly inside `detail`."""
+    return [p["ref"] for p in back if p["ref"] in DETAIL_FOCUS
+            and not (p["x0"] >= detail[0] and p["x1"] <= detail[2]
+                     and p["y0"] >= detail[1] and p["y1"] <= detail[3])]
 
 
 def classify(value, footprint):
@@ -345,11 +378,22 @@ def _mark_tht_pins(out, v, part):
 def write_sheets(s):
     """reva-assembly-front.svg (panel parts by panel id) and
     reva-assembly-back.svg (seen from the back, by reference, DNP dashed);
-    s.sheets = {name: (parts on the sheet, View.check() problems)}."""
+    s.sheets = {name: (parts on the sheet, View.check() problems)}. The back
+    sheet's detail window is back_detail() (s.detail_off moves it away: the
+    assembly_detail sabotage), and a DETAIL_FOCUS part outside it is a
+    problem."""
+    import silk as SK
     parts, _size = A.read_board(s.board_path, classify)
     front = [dict(p, ref=p["value"]) for p in parts if p["side"] == "F"]   # panel ids
     back = [_mirror(p) for p in parts if p["side"] == "B"]
     hand_tht = next((_mirror(p) for p in parts if p["ref"] == BACK_HAND_THT), None)
+    back_window = back_detail(back)
+    if getattr(s, "detail_off", False):
+        # the assembly_detail sabotage: the window moved by its own width
+        # toward the board centre, clear of the parts it was derived from
+        w = back_window[2] - back_window[0]
+        step = w if (back_window[0] + back_window[2]) / 2.0 < (X0 + X1) / 2.0 else -w
+        back_window = (back_window[0] + step, back_window[1], back_window[2] + step, back_window[3])
     s.sheets = {}
     w, h = (X1 - X0) * SHEET_SCALE, (Y1 - Y0) * SHEET_SCALE
     # the note and legend sit below the label margin, where no label can stand
@@ -359,7 +403,7 @@ def write_sheets(s):
              "FRONT: panel parts, labelled with their panel id; LED cathode marked",
              "red square = LED cathode: pad 1 of LED_D3.0mm, the flat side of the body; "
              "dot = pad 1 of the other parts"),
-            ("back", back, BACK_BIG, BACK_DETAIL,
+            ("back", back, BACK_BIG, back_window,
              "BACK, seen from the back: JLC fits the SMD parts; hand-solder U_SM's sockets, J_PWR "
              "and J_SD's pins",
              "red square = J_PWR pin 1, -12 V (the stripe of the ribbon); red rings = J_SD's pins "
@@ -383,6 +427,7 @@ def write_sheets(s):
                         margin=SHEET_MARGIN, big=big, style=STYLE)
             dv.place_labels()
             problems += ["detail: %s" % p for p in dv.check()]
+            problems += ["detail window misses %s" % r for r in detail_misses(detail, sheet_parts)]
         views = [v] + ([dv] if dv else [])
         tht = hand_tht if name == "back" else None
         for view in views:
@@ -416,12 +461,16 @@ def write_sheets(s):
                 out.append('<path d="M %g %g L %g %g M %g %g L %g %g" fill="none" stroke="%s" '
                            'stroke-width="2.2"/>'
                            % (ax, ay + sy * 18, ax, ay, ax, ay, ax + sx * 18, ay, A.ALERT))
+            silent = sorted(q["ref"] for q in dv.here if q["ref"] in SK.NO_ROOM)
             out.append('<text x="%d" y="%d" font-size="14" fill="%s">DETAIL (red corners above), '
-                       'x %g..%g mm of this view = board x %g..%g mm, y %g..%g mm: J_PWR\'s '
-                       'neighbours, among them C2, C3 and C5, which carry no reference on the '
-                       'board silk</text>'
-                       % (SHEET_MARGIN, dy - SHEET_MARGIN - 10, A.INK, detail[0], detail[2],
-                          X0 + X1 - detail[2], X0 + X1 - detail[0], detail[1], detail[3]))
+                       'x %g..%g mm of this view = board x %g..%g mm, y %g..%g mm: the power '
+                       'block around %s%s</text>'
+                       % (SHEET_MARGIN, dy - SHEET_MARGIN - 10, A.INK, round(detail[0], 2),
+                          round(detail[2], 2), round(X0 + X1 - detail[2], 2),
+                          round(X0 + X1 - detail[0], 2), round(detail[1], 2), round(detail[3], 2),
+                          " and ".join(DETAIL_FOCUS),
+                          ("; %s carry no reference on the board silk" % ", ".join(silent))
+                          if silent else ""))
         out.append("</svg>")
         with open(os.path.join(s.out, "reva-assembly-%s.svg" % name), "w",
                   encoding="utf-8", newline="\n") as fh:

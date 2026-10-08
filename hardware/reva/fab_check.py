@@ -400,6 +400,13 @@ def _sab_assembly_missing(s):
     s.assembly_missing = True
 
 
+def _sab_assembly_detail(s):
+    """The back sheet's detail window moved off the power block it is
+    derived from (fab.write_sheets reads the flag): what the fixed
+    2026-10-02 window became after the 9 mm panel pass moved J_PWR."""
+    s.detail_off = True
+
+
 SABOTAGES = {"gerber_set": _sab_gerber_set, "gerber_set_zip": _sab_gerber_set_zip,
              "gerber_set_missing": _sab_gerber_set_missing,
              "drill": _sab_drill, "drill_missing": _sab_drill_missing,
@@ -408,17 +415,18 @@ SABOTAGES = {"gerber_set": _sab_gerber_set, "gerber_set_zip": _sab_gerber_set_zi
              "rot_table": _sab_rot_table, "rot_sign": _sab_rot_sign,
              "rot_table_missing": _sab_rot_table_missing,
              "bom_lcsc": _sab_bom_lcsc, "bom_lcsc_missing": _sab_bom_lcsc_missing,
-             "assembly": _sab_assembly, "assembly_missing": _sab_assembly_missing}
+             "assembly": _sab_assembly, "assembly_missing": _sab_assembly_missing,
+             "assembly_detail": _sab_assembly_detail}
 # the assembly flags must be set before export() draws the sheets
 BOARD_SABOTAGES = {"cpl_dnp", "rot_table", "rot_sign", "bom_lcsc",
-                   "assembly", "assembly_missing"}
+                   "assembly", "assembly_missing", "assembly_detail"}
 TURNS_RED = {"gerber_set": "gerber_set", "gerber_set_zip": "gerber_set", "gerber_set_missing": "gerber_set",
              "drill": "drill", "drill_missing": "drill",
              "cpl": "cpl", "cpl_shift": "cpl", "cpl_outside": "cpl", "cpl_rot": "cpl", "cpl_dnp": "cpl",
              "cpl_missing": "cpl",
              "rot_table": "rot_table", "rot_sign": "rot_table", "rot_table_missing": "rot_table",
              "bom_lcsc": "bom_lcsc", "bom_lcsc_missing": "bom_lcsc",
-             "assembly": "assembly", "assembly_missing": "assembly"}
+             "assembly": "assembly", "assembly_missing": "assembly", "assembly_detail": "assembly"}
 WHY = {"gerber_set": "missing layer F.Paste", "gerber_set_zip": "zip lacks reva-PTH.drl",
        "gerber_set_missing": GERBER_EMPTY,
        "drill": "PTH holes: file", "drill_missing": DRILL_EMPTY,
@@ -432,7 +440,8 @@ WHY = {"gerber_set": "missing layer F.Paste", "gerber_set_zip": "zip lacks reva-
        "rot_table_missing": ROT_EMPTY,
        "bom_lcsc": "C2: BOM says", "bom_lcsc_missing": BOM_EMPTY,
        # gen.assembly.View.check()'s own words for an overlap, on the back sheet
-       "assembly": "back sheet: two labels overlap", "assembly_missing": ASSEMBLY_EMPTY}
+       "assembly": "back sheet: two labels overlap", "assembly_missing": ASSEMBLY_EMPTY,
+       "assembly_detail": "back sheet: detail window misses J_PWR"}
 
 
 def sabotage(s, name):
