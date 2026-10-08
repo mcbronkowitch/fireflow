@@ -1286,33 +1286,38 @@ def _sab_drc_cut(s):
     s.drc_cut = True
 
 
-def _longest(board, net):
-    t = max((t for t in board.GetTracks() if t.Type() == pcbnew.PCB_TRACE_T and t.GetNetname() == net),
-            key=lambda t: (t.GetLength(), -t.GetStart().x, -t.GetStart().y))
-    return t, (_mm(t.GetStart().x), _mm(t.GetStart().y)), (_mm(t.GetEnd().x), _mm(t.GetEnd().y))
-
-
 def _beside(s, net, along, offsets):
     """A `net` track laid beside `along`'s longest track, on its layer, at
     the first of `offsets` (mm, signed) where it keeps SAB_DRC_KEEP_MM from
     all copper of other nets on the layer. A track laid onto foreign copper
     takes that net on save (2026-10-01: after U_REG's copper area moved the
     routing, LED0 at +3 mm beside OUT_L landed on a MOD4_A track and was
-    saved as MOD4_A, so audio stayed green)."""
+    saved as MOD4_A, so audio stayed green). The longest track first; when
+    none of the offsets is clear there, the next longest outside every
+    exemption zone (2026-10-08: on the 9 mm plate board OUT_L's longest
+    track had no clear offset)."""
     from gen import kipcb
-    t, (x1, y1), (x2, y2) = _longest(s.board, along)
-    layer = t.GetLayerName()
-    others = _foreign(s.board, layer, net, set())
-    L = math.hypot(x2 - x1, y2 - y1)
-    for off in offsets:
-        nx, ny = -(y2 - y1) / L * off, (x2 - x1) / L * off
-        pts = [(x1 + nx, y1 + ny), (x2 + nx, y2 + ny)]
-        seg = (net, "track", tuple(pts), 0.125)
-        if all(_dist(seg, it) >= SAB_DRC_KEEP_MM for it in others):
-            kipcb.add_track(s.board, layer, 0.25, net, pts)
-            s.beside = (net, along, off)
-            return
-    raise SystemExit("sabotage: no clear place for %s beside %s at %s mm" % (net, along, offsets))
+    _mz, _jz, rects = _all_zones(s, s.board)
+    tracks = sorted((t for t in s.board.GetTracks() if t.Type() == pcbnew.PCB_TRACE_T and t.GetNetname() == along),
+                    key=lambda t: (-t.GetLength(), t.GetStart().x, t.GetStart().y))
+    for i, t in enumerate(tracks):
+        (x1, y1), (x2, y2) = (_mm(t.GetStart().x), _mm(t.GetStart().y)), (_mm(t.GetEnd().x), _mm(t.GetEnd().y))
+        if i and any(l <= (x1 + x2) / 2 <= r and tp <= (y1 + y2) / 2 <= b for l, tp, r, b in rects):
+            continue
+        layer = t.GetLayerName()
+        others = _foreign(s.board, layer, net, set())
+        L = math.hypot(x2 - x1, y2 - y1)
+        if L <= 0:
+            continue
+        for off in offsets:
+            nx, ny = -(y2 - y1) / L * off, (x2 - x1) / L * off
+            pts = [(x1 + nx, y1 + ny), (x2 + nx, y2 + ny)]
+            seg = (net, "track", tuple(pts), 0.125)
+            if all(_dist(seg, it) >= SAB_DRC_KEEP_MM for it in others):
+                kipcb.add_track(s.board, layer, 0.25, net, pts)
+                s.beside = (net, along, off)
+                return
+    raise SystemExit("sabotage: no clear place for %s beside any %s track at %s mm" % (net, along, offsets))
 
 
 def _sab_audio(s):
