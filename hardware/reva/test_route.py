@@ -29,6 +29,8 @@ verdict. Re-runs itself under KiCad's Python.
 8. U_REG's heat copper rule (route.reg_copper_rects, Task 7c 2026-10-08)
    gives the hand-computed L on a synthetic field, touches no keep-out and
    refuses a keep-out on the tab (check_reg_rule).
+9. The router's AUDIO_MM / EDGE_MM (rules.py) equal route_check's own copies
+   (check_rule_copies).
 
 Counts on a sabotaged board are never asserted: kicad-cli's counts vary from
 run to run where copper crosses (probed 2026-10-01: 9 or 11 clearance items)."""
@@ -207,6 +209,17 @@ def check_sabotage_coverage():
     for name in sorted(RC.SABOTAGES):
         check(bool(RC.WHY.get(name)) and name in RC.TURNS_RED,
               "sabotage %s names its step and its phrase" % name)
+
+
+def check_rule_copies():
+    """The router's audio distances (rules.py) and the check's own copies
+    (route_check.py; a check keeps its thresholds on purpose) are the same
+    values: compared, never derived one from the other (Task 7c review,
+    2026-10-08)."""
+    import rules as RU
+    for name in ("AUDIO_MM", "EDGE_MM"):
+        a, b = getattr(RU, name, None), getattr(RC, name, None)
+        check(a is not None and a == b, "rules.%s %r equals route_check.%s %r" % (name, a, name, b))
 
 
 def check_reg_rule():
@@ -489,6 +502,7 @@ def run():
     check_known_names(jacks)
     check_sabotage_coverage()
     check_reg_rule()
+    check_rule_copies()
     lap("static checks")
 
     base = R.build()
