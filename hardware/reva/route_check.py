@@ -40,6 +40,17 @@ KNOWN_PANEL = {
     "silk": set(),  # silk text entries the panel pass must clear; expected none (P4-3 spec §5.1)
 }
 
+# Release sign-off (P4-3 spec §4.4.6, amended 2026-10-08): a KNOWN_PANEL entry
+# that is deliberate design, not an open defect. It changes nothing in this
+# file's gating; fab.release_blockers() counts only entries without one.
+# (check, key) -> {"by", "date", "why"}, all three non-empty.
+SIGNED_OFF = {
+    ("audio", "IN_L/SHIFTBTN_L"): {"by": "Bastian", "date": "2026-10-08",
+                                   "why": "spec 2026-10-07 §5.3: SHIFTBTN's lamp sits between key and jack"},
+    ("audio", "MODBTN_L/OUT_R"): {"by": "Bastian", "date": "2026-10-08",
+                                  "why": "spec 2026-10-07 §5.3: MODBTN's lamp sits between key and jack"},
+}
+
 GATED_DRC = ("courtyards_overlap", "pth_inside_courtyard", "shorting_items", "clearance",
              "hole_clearance", "hole_to_hole", "copper_edge_clearance", "items_not_allowed",
              "tracks_crossing", "track_dangling", "via_dangling", "track_width",

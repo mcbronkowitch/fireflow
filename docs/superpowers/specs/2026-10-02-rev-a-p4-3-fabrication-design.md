@@ -353,6 +353,19 @@ Rev A gets two sheets, `reva-assembly-front.svg` and
   unverified rotation, and otherwise writes the package to
   `hardware/reva/fab/`: `gerbers/`, `reva-gerbers.zip`, `bom-jlc.csv`,
   `cpl-jlc.csv`, both assembly sheets, both renders.
+- *Amended 2026-10-08 (Task 7c, Bastian): release sign-off.* A known-list
+  entry that is deliberate design, not an open defect, carries a sign-off
+  next to its list: `SIGNED_OFF[(check, key)] = {"by", "date", "why"}` in
+  `place_check.py` / `route_check.py`, in the style of `BOTTOM_SIGN`'s
+  `verified`.
+  - "Open" means a known entry without a complete sign-off. Only those block
+    `--release` and count in `order_ready`.
+  - A sign-off whose entry is no longer listed also blocks, so it cannot go
+    stale.
+  - The checks' own gating is unchanged: a signed-off entry is still a known
+    item there.
+  - First use: the two audio jack zones IN_L/SHIFTBTN_L and MODBTN_L/OUT_R
+    (spec 2026-10-07 §5.3: the lamp sits between key and jack).
 
 ### 4.5 Line endings
 

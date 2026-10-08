@@ -32,6 +32,9 @@ _TEXT_CLASSES = ("PCB_TEXT", "PCB_TEXTBOX", "PCB_FIELD")   # not part of a shado
 # pairs no longer fail. A non-empty entry needs Bastian's decision;
 # test_place.py asserts the emptiness.
 KNOWN_PANEL = {"edge": set(), "front": set(), "drc": set()}
+# Release sign-offs for deliberate KNOWN_PANEL entries (P4-3 spec §4.4.6,
+# amended 2026-10-08; see route_check.SIGNED_OFF): none here.
+SIGNED_OFF = {}
 
 
 def _fp(board, ref):

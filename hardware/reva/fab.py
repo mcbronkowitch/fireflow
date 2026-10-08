@@ -491,15 +491,40 @@ def export(s, renders=True):
                 raise RuntimeError("render %s failed rc=%s: %s" % (side, rc, msg[-300:]))
 
 
-def release_blockers(place_known=None, route_known=None, rot_fix=None, bottom_sign=None):
+SIGN_FIELDS = ("by", "date", "why")
+
+
+def signed(entry):
+    """True when a sign-off entry carries every SIGN_FIELDS value."""
+    return isinstance(entry, dict) and all(str(entry.get(f) or "").strip() for f in SIGN_FIELDS)
+
+
+def _known_blockers(tag, known, signs):
+    """One line per KNOWN_PANEL entry without a complete sign-off, and one
+    per sign-off whose entry is not listed (a sign-off may not go stale)."""
+    out = ["%s KNOWN_PANEL[%s]: %s" % (tag, k, e) for k, v in sorted(known.items()) for e in sorted(v)
+           if not signed(signs.get((k, e)))]
+    out += ["%s SIGNED_OFF[%s]: %s signed off but not listed" % (tag, k, e) for k, e in sorted(signs)
+            if e not in known.get(k, set())]
+    return out
+
+
+def release_blockers(place_known=None, route_known=None, rot_fix=None, bottom_sign=None,
+                     place_signed=None, route_signed=None):
+    """The open items --release refuses on (P4-3 spec §4.4.6): every known
+    entry WITHOUT a release sign-off (amended 2026-10-08: a signed-off entry
+    is deliberate design and does not block; route_check still gates it as
+    known), every unverified rotation, an unverified BOTTOM_SIGN."""
     import place_check as PC
     import route_check as RC
     pk = PC.KNOWN_PANEL if place_known is None else place_known
     rk = RC.KNOWN_PANEL if route_known is None else route_known
+    ps = PC.SIGNED_OFF if place_signed is None else place_signed
+    rs = RC.SIGNED_OFF if route_signed is None else route_signed
     rf = ROT_FIX if rot_fix is None else rot_fix
     bs = BOTTOM_SIGN if bottom_sign is None else bottom_sign
-    out = ["place_check KNOWN_PANEL[%s]: %s" % (k, e) for k, v in sorted(pk.items()) for e in sorted(v)]
-    out += ["route_check KNOWN_PANEL[%s]: %s" % (k, e) for k, v in sorted(rk.items()) for e in sorted(v)]
+    out = _known_blockers("place_check", pk, ps)
+    out += _known_blockers("route_check", rk, rs)
     out += ["ROT_FIX %s unverified" % k for k, v in sorted(rf.items()) if not v.get("verified")]
     if not rf:
         out.append("ROT_FIX is empty")
@@ -527,6 +552,13 @@ def main(argv=None):
     print("order_ready: %s" % ("yes" if not blockers else "no, %d open items" % len(blockers)))
     for b in blockers:
         print("        " + b)
+    import place_check as PC
+    import route_check as RC
+    for tag, mod in (("place_check", PC), ("route_check", RC)):
+        for (k, e), sg in sorted(mod.SIGNED_OFF.items()):
+            if signed(sg) and e in mod.KNOWN_PANEL.get(k, set()):
+                print("        signed off, not open: %s KNOWN_PANEL[%s]: %s (%s, %s: %s)"
+                      % (tag, k, e, sg["by"], sg["date"], sg["why"]))
     # spec §4.4.6: informational only, the assembly sheet covers them; not a
     # blocker and not in the open-item count (release_blockers() stays clean)
     import silk as SK
