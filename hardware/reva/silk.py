@@ -46,13 +46,10 @@ ANGLES = (0, 90)
 
 # Back references (and footprint texts, "<ref>:text") with no free spot,
 # measured by the first run (P4-3 Task 4); each entry says what blocked it.
-NO_ROOM = {
-    # the three caps between J_PWR's outline and the D_P12/D_N12 pair
-    "C2": "every ring to 3.5 mm meets a pad or silk: J_PWR's outline N, C3 E, C5 S, RV15's lugs W",
-    "C3": "every ring to 3.5 mm meets a pad or silk: J_PWR's outline N, U_SR3's pads E, D_P12 S, C2/C5 W",
-    "C5": "every ring to 3.5 mm meets a pad or silk: C2 N, C3 and D_P12's outline E, D_P12 S, "
-          "RV15's lugs and D_N12 W",
-}
+# Empty since the 9 mm panel pass (Task 7c, 2026-10-08): C2, C3 and C5, the
+# caps that had sat between J_PWR's outline and D_P12/D_N12, all found a
+# spot on the new board (route_check no_room: "0 hidden").
+NO_ROOM = {}
 
 
 class Report:
