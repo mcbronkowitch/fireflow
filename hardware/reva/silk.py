@@ -51,11 +51,19 @@ ANGLES = (0, 90)
 # the shift registers moved, three other references found no free spot in
 # every route run (route_check no_room); the assembly sheet still names them
 # (Bastian, 2026-10-08).
-_PANEL_PASS = "no free back-side spot after the 9 mm panel pass (Task 7c, 2026-10-08); the assembly sheet names it"
+# The blockers per side were probed on the routed board (probe_noroom, Task 7c
+# report): the owners each side's candidates hit, on every ring to 3.5 mm.
 NO_ROOM = {
-    "C_SENSE3": _PANEL_PASS,
-    "R25": _PANEL_PASS,
-    "U_SR5": _PANEL_PASS,
+    # beside U_SM's header C, under PACE
+    "C_SENSE3": "every ring to 3.5 mm meets a pad or silk: RV39's (PACE) lugs and U_SM's outline N, "
+                "U_MUX8 E, RV39's lugs and U_SM's outline S (TP4), U_SM's outline W "
+                "(9 mm panel pass, Task 7c, 2026-10-08; the assembly sheet names it)",
+    # between U_SR5, R1 and TEMPO, at the module's west edge
+    "R25": "every ring to 3.5 mm meets a pad or silk: R1 N, RV27's (TEMPO) lugs E, U_SR5 S, TP11 W "
+           "(9 mm panel pass, Task 7c, 2026-10-08; the assembly sheet names it)",
+    "U_SR5": "every ring to 3.5 mm meets a pad or silk: TP11, TP13 and RV27's (TEMPO) lugs N, "
+             "D8 (TEMPO_L) and U_SM's outline E, RV31's (COUPLE) lugs S, TP9 and TP12 W "
+             "(9 mm panel pass, Task 7c, 2026-10-08; the assembly sheet names it)",
 }
 
 
