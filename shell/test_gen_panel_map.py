@@ -29,8 +29,16 @@ ROWS = [line for line in TEXT.splitlines() if "// row " in line]
 # --- live ---------------------------------------------------------------
 check("committed header equals the generator's output",
       g.check_text(g.read_committed(), TEXT))
-check("70 pot rows", len(ROWS) == 70)
+check("73 pot rows", len(ROWS) == 73)
 check("35 rows send a parameter", sum("spky::P_" in r for r in ROWS) == 35)
+# A reserved pot is scanned like any other and sends nothing (spec 2026-10-07
+# section 4): target -1 in the code part of the row, reason "reserved:" after it.
+check("3 reserved rows send nothing",
+      sum("reserved:" in r.split("//")[1] and ", -1, " in r.split("//")[0]
+          for r in ROWS) == 3)
+check("the reserved rows are ROOT_A, ROOT_B and REV_MOD",
+      sorted(r.split("//")[1].split()[2] for r in ROWS
+             if "reserved:" in r.split("//")[1]) == ["REV_MOD", "ROOT_A", "ROOT_B"])
 check("every SAFE ParamId appears in the header",
       all("spky::%s," % pid in TEXT for pid, _ in BASE["safe"].values()))
 check("a CRLF checkout is not stale",
@@ -72,7 +80,17 @@ def duplicate_channel(inp):
 sabotage("pot unclassified", lambda i: i["safe"].pop("RATE_A"),
          "unclassified: RATE_A")
 sabotage("pot in both lists", lambda i: i["unmapped"].__setitem__("RATE_A", "x"),
-         "both SAFE and UNMAPPED: RATE_A")
+         "in two of SAFE, UNMAPPED, RESERVED: RATE_A")
+sabotage("reserved pot also SAFE",
+         lambda i: i["safe"].__setitem__("ROOT_A", ("P_RATE_A", "x")),
+         "in two of SAFE, UNMAPPED, RESERVED: ROOT_A")
+sabotage("reserved pot also UNMAPPED",
+         lambda i: i["unmapped"].__setitem__("REV_MOD", "x"),
+         "in two of SAFE, UNMAPPED, RESERVED: REV_MOD")
+sabotage("reserved pot dropped from the list",
+         lambda i: i["reserved"].pop("ROOT_B"), "unclassified: ROOT_B")
+sabotage("reserved name that is no pot",
+         lambda i: i["reserved"].__setitem__("NOPE", "x"), "not a pot: NOPE")
 sabotage("unknown ParamId",
          lambda i: i["safe"].__setitem__("RATE_A", ("P_RATE_Q", "x")),
          "no ParamId P_RATE_Q")
@@ -90,7 +108,7 @@ sabotage("an unaccounted mux input",
          lambda i: i["panel_map"]["spare"].pop(0),
          "79 of 80 mux inputs")
 sabotage("LED field not contiguous", swap_led_with_spare,
-         "LED0..LED18 not contiguous")
+         "LED0..LED14 not contiguous")
 sabotage("sense pins off the ADC run", swap_d8_d9,
          "SENSE_2 on D8 is ADC index 11, expected 10")
 sabotage("mux list out of order",

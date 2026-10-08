@@ -230,13 +230,13 @@ TEST_CASE("mux plan: sense_live refuses what does not exist") {
 namespace {
 // A Rev A-shaped profile written out by hand from P2 sections 3 and 4: ten
 // 8-channel muxes, 3/3/2/2 on four sense pins, a 40-bit chain with three
-// address lines, ten enables and nineteen LEDs. Task 3 holds the generated
+// address lines, ten enables and fifteen LEDs. Task 3 holds the generated
 // kRevaChain to these same numbers.
 constexpr shell::ChainProfile kRevaShape{
     4, shell::kSenseAdcBase, 10,
     {8, 8, 8, 8, 8, 8, 8, 8, 8, 8},
     {0, 0, 0, 1, 1, 1, 2, 2, 3, 3},
-    40, 0, 3, 13, 19, -1, 3, true};
+    40, 0, 3, 13, 15, -1, 3, true};
 
 const std::vector<shell::ChainProfile> kParallelProfiles
     = {kRevaShape, shell::kCouponPlayChain};
@@ -363,11 +363,11 @@ TEST_CASE("chain word: Rev A's address cannot reach the enable field") {
     CHECK(((w >> 3) & 0x3FFu) == 0u);
 }
 
-TEST_CASE("chain word: a 40-bit word puts LEDs at 13..31 and nothing above") {
+TEST_CASE("chain word: a 40-bit word puts LEDs at 13..27 and nothing above") {
     const uint64_t lit = shell::chain_word(kRevaShape, shell::StepPattern{0, 0}, 0xFFFFFFFFu);
-    CHECK(((lit >> 13) & 0x7FFFFu) == 0x7FFFFu);
+    CHECK(((lit >> 13) & 0x7FFFu) == 0x7FFFu);
     CHECK((lit & 0x1FFFu) == 0u);
-    CHECK((lit >> 32) == 0u);
+    CHECK((lit >> 28) == 0u);
     const uint64_t off = shell::chain_word(kRevaShape, shell::step_pattern(kRevaShape, -1), 0u);
     CHECK(off == (uint64_t{0x3FF} << 3));
 }
