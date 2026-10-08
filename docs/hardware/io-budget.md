@@ -118,19 +118,28 @@ und das reservierte `SHIFTBTN`.
 >
 > | Zahl | Was sie zählt | Woher |
 > |---:|---|---|
-> | **21** | `LightId`s insgesamt, alle jeden Block geschrieben | `gen_panel.LIGHTS` (4) + `HW_ONLY_LIGHTS` (17) |
-> | **19** | Lampen auf der **Hardwareplatte** | `gen_hw_panel.py` druckt `lights=19` |
+> | **17** | `LightId`s insgesamt, alle jeden Block geschrieben | `gen_panel.LIGHTS` (4) + `HW_ONLY_LIGHTS` (13) |
+> | **15** | Lampen auf der **Hardwareplatte** | `gen_hw_panel.py` druckt `lights=15` |
 > | **4** | Lampen auf dem **Rack**-Panel | `count_panel_controls.py` druckt `lights 4` |
 >
-> Die 19 sind die 21 ohne `FLOW_A_L`/`FLOW_B_L`, die `_SKIP_HW_LIGHTS` auf der
-> Hardwareplatte bewusst weglässt. **Für die 595-Kette zählen die 19** — sie
-> trägt physische Lampen, keine `LightId`s (§3).
+> Die 15 sind die 17 ohne `FLOW_A_L`/`FLOW_B_L`, die `_SKIP_HW_LIGHTS` auf der
+> Hardwareplatte bewusst weglässt. **Für die 595-Kette zählen die 15** — sie
+> trägt physische Lampen, keine `LightId`s (§3). *Stand 2026-10-08: die
+> 9-mm-Korrektur (Spec 2026-10-07 §5) hat die Platte von 19 auf 15 Lampen
+> gebracht; die Zahlen 21 und 19 stammten aus der Zeit davor.*
 
 Der Bestand: 8 der bisherigen 10 blieben, `CAP_A_L`/`CAP_B_L` sind mit der
 Capture-Sequenz gelöscht (die gibt es seit 2026-07-14 nicht mehr, siehe
-`docs/roadmap.md`), und 13 sind neu. Drei der Lampen auf der Platte sind
-absichtlich dunkel — `SYNC_L` und die zwei Pad-Lampen `MODBTN_L`/`SHIFTBTN_L`
-—, aber jeden Block *geschrieben*, nicht übersprungen; ein Gate prüft das. Das
+`docs/roadmap.md`), und 13 sind neu. *(Stand 2026-10-08, 15 Lampen auf der
+Platte, Spec 2026-10-07 §5: `SYNC_L` heißt jetzt `CLK_L` und soll jeden Impuls
+an der CLOCK-Buchse blitzen; neu sind `RST_L`, `FTIME_A_L`/`FTIME_B_L`. Die
+zwei Pad-Lampen `SHIFTBTN_L` und `MODBTN_L` stehen zwischen ihrer Taste und
+ihrer Buchse und **tragen je zwei Aufgaben**: `SHIFTBTN_L` zeigt gerastetes
+SHIFT, sonst den Eingangspegel; `MODBTN_L` zeigt MODs Doppelpuls, sonst den
+Master-Limiter, den vorher `CEIL_L` zeigte, das damit entfällt.)* Von diesen
+ist heute im Code nur `MODBTN_L` belegt; `CLK_L`, `RST_L`, `FTIME_*_L` und `SHIFTBTN_L`
+sind vorerst dunkel — ihre Bedeutung ist P6b (`led_law.hpp`, `fill()`) —, aber
+jeden Block *geschrieben*, nicht übersprungen; ein Gate prüft das. Das
 gilt auch für `FLOW_A_L`/`FLOW_B_L`, die geschrieben werden, obwohl die
 Hardwareplatte sie nicht zeichnet. `TEMPO_L` tickt den Transport-Beat
 (Metronom-Puls, `kTempoPulse` der Beat-Phase). Herleitung, Platzierung und die offene
@@ -429,7 +438,22 @@ Kanal.
 > of 15; nine 8:1 chips would carry it with 2 spare. The sweep length does not
 > change (32 / 24 steps). Counted by `tools/scan_budget.py`, whose guard goes
 > red when the plate moves — [`scan-budget.md`](scan-budget.md) §5. The table
-> below is left as it was written; its mux row reads 70 / 10 today.
+> below is left as it was written; its mux row read 70 / 10 on that day
+> (today's count is in the note below).
+
+> **Nachtrag 2026-10-08: die 9-mm-Korrektur hat den Bedarf auf 73 Positionen
+> gebracht.** Die Platte hat jetzt **73 Poti-Positionen** (drei reservierte
+> Potis `ROOT_A`, `ROOT_B`, `REV_MOD` zählen mit: sie schicken nichts, werden
+> aber über einen Mux-Kanal gelesen), statt der 70 des Addendums oben.
+> `tools/scan_budget.py` druckt für 73: fünf 16:1-Chips mit 32 Schritten oder
+> **zehn** 8:1-Chips mit 24 Schritten (48 ms pro Sweep bei einem Schritt pro
+> Block). Rev A baut die zehn 8:1-Chips; zusammen mit den zwei
+> Kalibrierkanälen `CAL_GND` und `CAL_3V3` sind das **75 von 80 Eingängen, 5
+> frei** (`hardware/reva/panel-map.json`) — nicht mehr „neun 8:1-Chips mit 2
+> frei“. Die 595-Zeile der Tabelle unten zählt noch 19 LEDs; es sind 15
+> (`panel-map.json`), und ihre fünf Enables sind seit P2 zehn (ein Enable je
+> Mux, `shell/mux_plan.h`); die Adress- und Enable-Spalte ist hier nicht neu
+> gerechnet.
 
 | Ressource | Kapazität | Bedarf | Rest |
 |---|---:|---:|---:|

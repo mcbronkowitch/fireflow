@@ -35,6 +35,12 @@ Thonk cart, 207 items, read back before checkout:
 Green Micro Knobs: Thonk had 23 in stock, so part A's 22 small knobs have one
 spare instead of the spec's two.
 
+**Correction cut (not ordered yet).** Checklist items 1 and 2 failed, so the
+plate is cut again from the 9 mm panel pass's file: `FireflowHW-cut.svg` as of
+commit `815dbe3a` (the last commit that changed it; 304.4 × 128.5 mm, 115
+holes, as `gen_hw_cut.py` prints). Bastian orders it at Formulor, then repeats
+items 1, 2 and 4 on it; item 3 passed on the first plate.
+
 ## Measurements (spec §6)
 
 | Date | What | Result |
@@ -42,7 +48,7 @@ spare instead of the spec's two.
 | | Alpha support lugs in the coupon's RD901F slots | |
 | | Pot bushing thread and length vs 3 mm acrylic / 2 mm aluminium | |
 | | Jack thread vs 3 mm (the keys have no thread or nut; they sit on the board and are not tested on the acrylic) | |
-| | Jack nut outer diameter (does it cover the `SYNC_L` / `CEIL_L` LED holes at 6.7 mm?) | |
+| | Jack nut outer diameter (does it cover the `CLK_L` LED hole at 6.7 mm, or the combined `SHIFTBTN_L` / `MODBTN_L` holes, 9.50 mm from their jack?) | |
 | | Panel-to-board height, pot and jack seated on a board | |
 | | Alpha anti-rotation tab: present? where? | |
 | | Actual plate width of a bought 60 HP blank, if one is at hand (the cut assumes 304.4 mm) | |
@@ -52,9 +58,9 @@ spare instead of the spec's two.
 
 | # | Check | Result | Fix (position / size / legend) |
 |---|---|---|---|
-| 1 | Pinch two neighbouring knobs at once, every group | | |
-| 2 | Turn each knob without brushing a neighbour's cap | | |
-| 3 | All 18 jacks patched with real cables: what gets covered | | |
+| 1 | Pinch two neighbouring knobs at once, every group | **Failed** (2026-10-07): the small caps stand 5.3 mm apart edge to edge, measured from the generator (spec 2026-10-07 §2) | The 9 mm panel pass: every control on a 20.2 mm raster, no two caps closer than 9 mm (smallest gap 9.70 mm in the current generator). Spec [`2026-10-07-panel-nine-mm-raster-design.md`](../superpowers/specs/2026-10-07-panel-nine-mm-raster-design.md), plan [`2026-10-07-panel-nine-mm-raster.md`](../superpowers/plans/2026-10-07-panel-nine-mm-raster.md) |
+| 2 | Turn each knob without brushing a neighbour's cap | **Failed** (2026-10-07): same cause as 1 | Same pass |
+| 3 | All 18 jacks patched with real cables: what gets covered | **Passed** (2026-10-07): "patching was fine" (Bastian) | none |
 | 4 | Every legend readable from playing distance, through the print | | |
 | 5 | All four keys: reach, accidental presses | moved to the first Rev A board — the keys sit on the board, not in the acrylic | |
 

@@ -3230,6 +3230,18 @@ Two engine directions sit ahead of M5k with no design at all: **FEED** and
 were never built. Each needs its own brainstorming round before it can have a
 spec, which is why neither counts as a designed round above.
 
+### Reserved knobs become parameters ⬜ (needs its own spec)
+
+The 9 mm panel pass (M6, 2026-10-08) put three knobs on the plate and the board
+that send nothing yet. Split `P_ROOT` into `ROOT_A` / `ROOT_B`: today it is one
+global parameter and the VCV host never sets it, so both decks always play in C,
+while the engine's `quant().set_root()` is already per deck. Give WOBL
+(`P_REV_MOD`, the reverb's tail-delay LFO depth) a knob that boots at 0.15, the
+host constant it has today, so the sound does not move, and update the reverb
+entry of [`docs/by-ear-decisions.md`](by-ear-decisions.md), which still says not
+to give WOBL a knob (Bastian reversed that on 2026-10-07). Needs its own spec: it
+touches both panels and the factory init. Spec 2026-10-07 §4 has the reasoning.
+
 ### `test_panel.py`'s init snapshot guard does not assert its converse ⬜ (small, own task)
 
 Found while adding PULL to the panel (2026-08-22), **pre-existing and not caused
@@ -4100,6 +4112,46 @@ the coupon has nothing else open.
 **Next:** part 2 — the 70-pot table, the four keys on the 165 and the 19
 LEDs on the 595 — waits for the control PCB's pin map, which should give one
 spare channel to AGND and one to the rail (spec §8).
+
+**2026-10-08 — the grip test failed on spacing, and the 9 mm panel pass re-placed every control; the board and the firmware table follow it.**
+The acrylic plate arrived and Bastian ran
+[`docs/hardware/grip-test.md`](hardware/grip-test.md) on 2026-10-07: checklist
+items 1 and 2 **failed** (the small caps stood 5.3 mm apart edge to edge), item
+3, patching, passed. Spec
+`docs/superpowers/specs/2026-10-07-panel-nine-mm-raster-design.md`, plan
+`docs/superpowers/plans/2026-10-07-panel-nine-mm-raster.md`; code on branch
+`feat/panel-nine-mm-raster`, `63e526e0`..`cf41b33b`.
+- **Panel.** Every control stands on a raster of 20.2 mm columns (deck) and
+  20.125 mm rows; the centre column runs on its own 23.0 mm pitch, which is
+  what gives the Patch Submodule a spot (decided by Bastian on 2026-10-08).
+  The smallest cap-edge gap is **9.70 mm** (the generator's cap radii, 6.0 /
+  3.85 / 3.0), against 5.3 mm before. 73 knob positions (70 before): three are
+  reserved, `ROOT_A`, `ROOT_B` and `REV_MOD` (caption WOBL), each a hole, a pot
+  and a mux channel but no parameter yet. The lamps are **15** (19 before) and
+  show timing, not modulation; the knob lamps sit beside their centred caption
+  word, and `SHIFTBTN_L` / `MODBTN_L` stand between their key and jack with two
+  jobs each. The jack row rose to y = 112.75. `gen_hw_panel.py` prints
+  `params=75 inputs=12 outputs=6 lights=15 panel=60HP`.
+- **Correction cut.** `FireflowHW-cut.svg` as of `815dbe3a`, 115 holes on
+  304.4 × 128.5 mm. Not ordered.
+- **Board.** Rev A follows the plate: 73 pots plus two calibration channels use
+  75 of the 80 inputs on ten 8:1 chips, 5 spare. U_SM is pinned at
+  (152.40, 56.00) rotation 270, J_PWR sits in the bottom-left corner, the
+  shift registers moved west, and the router ran with `HIST_INC` 2.0 and 60
+  rounds and learned `route_check`'s 3.0 mm audio rule across a zone edge.
+  U_REG's heat copper is 381.6 mm², worst-case Tj 75.8 °C at Ta 50 °C
+  ([`power-budget.md`](hardware/power-budget.md)). `fab.py` reports
+  `order_ready: yes`; the two audio-zone pairs `IN_L/SHIFTBTN_L` and
+  `MODBTN_L/OUT_R` are signed off by Bastian (2026-10-08, spec §5.3) and are
+  the only `KNOWN_PANEL` entries left. `fab.py --release` has **not** run.
+- **Firmware table.** `shell/generated_panel_map.h` has 73 rows; 35 send a
+  parameter, 38 send nothing, `ROOT_A`, `ROOT_B` and `REV_MOD` among them
+  (reason `reserved:`).
+
+**Next:** Bastian orders the correction cut and repeats grip-test items 1, 2
+and 4 on it, then the freeze tag. Before the board is ordered, repeat the JLC
+placement-preview rotation check (parts moved and turned since 2026-10-03),
+then run `fab.py --release`.
 
 **2026-10-02 — P6a panel scan over Rev A's pin map: built; coupon session 2026-10-03 passed 3 of 4 checks, D8/D9 deferred to P7.**
 Spec `docs/superpowers/specs/2026-10-02-rev-a-p6a-panel-scan-design.md`,
