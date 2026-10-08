@@ -359,6 +359,7 @@ def _router_input(s, placed):
                   RU.PITCH, len(LAYER_NAMES), RU.CLEARANCE, RU.VIA_D / 2.0, RU.VIA_COST)
     for v in RU.VICTIMS:
         r.pair_clearance(v, AGGR, RU.AUDIO_MM)
+        r.pair_edge(v, AGGR, RU.EDGE_MM)        # spec §5.4, across a zone edge (2026-10-08)
     for a, bb in RU.LR_PAIRS:
         r.pair_clearance(a, bb, RU.LR_MM)
     for z in s.zones:

@@ -26,6 +26,11 @@ AGGRESSORS = tuple(["LED%d" % n for n in range(N_LEDS)] + ["LED%d_A" % n for n i
                    + ["SR_CLK", "SR_DATA", "SR_LATCH", "SR_DIN",
                       "SD_CK", "SD_CMD", "SD_D0", "SD_D1", "SD_D2", "SD_D3"])
 AUDIO_MM = 10.0
+# Across an exemption zone's edge (P4-2 spec §5.4): audio copper inside a zone
+# keeps this from the other group's copper outside it. route_check has
+# enforced it since P4-2 (its own EDGE_MM); the router learned it 2026-10-08
+# (Task 7c), when the pinned module put OUT_R and the SD pins side by side.
+EDGE_MM = 3.0
 LR_PAIRS = (("OUT_L", "OUT_R"), ("IN_L", "IN_R"))
 LR_MM = 2.0
 SENSE = ("SENSE_0", "SENSE_1", "SENSE_2", "SENSE_3")

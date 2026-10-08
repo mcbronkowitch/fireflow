@@ -41,6 +41,13 @@ half-width + 2s, s for the via class), vias as discs on every layer. Copper
 inside a `pair_exempt` rect marks nothing, and no cell inside one is ever
 marked.
 
+Across a rect's edge (`pair_edge(A, B, mm)`, added 2026-10-08 for Rev A,
+P4-2 spec §5.4): routed copper of one group inside a rect marks the cells
+outside every rect within `mm`, and copper outside marks the cells inside
+within `mm`, both for the other group. Static copper inside a rect (a pad)
+is exempt: it marks nothing, and its own cells are never marked for its
+group. Off unless called.
+
 Via-only obstacles (`add_obstacle(..., via_only=True)`): rasterised into the
 via class alone, with the via radius + clearance + s reach, so vias keep their
 copper edge at least `clearance` off the shape while tracks pass over it.
@@ -171,6 +178,58 @@ def _clip_outside(a, b, rects):
             for u0, u1 in out if u1 - u0 > 1e-9]
 
 
+def _clip_inside(a, b, rects):
+    """The parts of segment a-b inside some rect, as [(p, q)]: the
+    complement of `_clip_outside` on the segment."""
+    spans = []
+    (ax, ay), (bx, by) = a, b
+    dx, dy = bx - ax, by - ay
+    for l, t, r, btm in rects:
+        t0, t1 = 0.0, 1.0
+        ok = True
+        for p, q in ((-dx, ax - l), (dx, r - ax), (-dy, ay - t), (dy, btm - ay)):
+            if p == 0:
+                if q < 0:
+                    ok = False
+                    break
+                continue
+            u = q / p
+            if p < 0:
+                t0 = max(t0, u)
+            else:
+                t1 = min(t1, u)
+        if ok and t0 < t1:
+            spans.append((t0, t1))
+    spans.sort()
+    merged = []
+    for s0, s1 in spans:
+        if merged and s0 <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], s1)
+        else:
+            merged.append([s0, s1])
+    return [((ax + u0 * dx, ay + u0 * dy), (ax + u1 * dx, ay + u1 * dy))
+            for u0, u1 in merged if u1 - u0 > 1e-9]
+
+
+def _subtract_spans(spans, mask):
+    """Sorted disjoint index spans minus sorted disjoint mask spans."""
+    out, j = [], 0
+    for s0, s1 in spans:
+        cur = s0
+        while j < len(mask) and mask[j][1] <= cur:
+            j += 1
+        k = j
+        while k < len(mask) and mask[k][0] < s1:
+            m0, m1 = mask[k]
+            if m0 > cur:
+                out.append((cur, m0))
+            cur = max(cur, m1)
+            k += 1
+        if cur < s1:
+            out.append((cur, s1))
+    return out
+
+
 def _inside_any(x, y, rects):
     return any(l <= x <= r and t <= y <= b for l, t, r, b in rects)
 
@@ -299,6 +358,7 @@ class Router:
         self._ogroups = []         # per obstacle: explicit group or None
         self._pairs = []           # (group_a, group_b, mm)
         self._exempt = []          # (left, top, right, bottom)
+        self._edges = []           # (group_a, group_b, mm): across an exemption rect's edge
         self._cur_pair = None
         self._tiers = {}           # net -> priority tier
         self._cur_tier = 0
@@ -327,6 +387,16 @@ class Router:
 
     def pair_exempt(self, rect):
         self._exempt.append(tuple(float(v) for v in rect))
+
+    def pair_edge(self, group_a, group_b, mm):
+        """Across an exemption rect's edge (Rev A P4-2 spec §5.4, added
+        2026-10-08): routed copper of one group inside a rect keeps `mm` from
+        the other group's copper outside every rect, and copper outside keeps
+        `mm` from the other group's routed copper inside. Static copper inside
+        a rect (a pad) stays exempt: it marks nothing, and its own cells are
+        never marked for its group. Hard like a pair clearance. Off unless
+        called."""
+        self._edges.append((group_a, group_b, float(mm)))
 
     # --- grid ----------------------------------------------------------------
     def _idx(self, layer, ix, iy):
@@ -368,10 +438,12 @@ class Router:
                     elif cur == FREE:
                         arr[i] = nid
 
-    def _mark_rows(self, rows, layers, shape, radius, span):
+    def _mark_rows(self, rows, layers, shape, radius, span, where="outside"):
         """Add to `rows` ({row base index: [[ix_lo, ix_hi], ...]}, one row per
         layer) every cell of the shape's bbox grown by `radius` whose centre
-        has `_shape_dist < radius` and lies outside every exemption rect.
+        has `_shape_dist < radius` and lies outside every exemption rect
+        (`where` "outside", the default), inside one ("inside", pair_edge),
+        or anywhere (None).
 
         That is the per-cell test over the bbox, enumerated row by row: the
         analytic `span` bounds each row's run, the cells within _BAND of its
@@ -422,20 +494,31 @@ class Router:
                         run[-1][1] = ix + 1
                     else:
                         run.append([ix, ix + 1])
-            for el, et, er, eb in exempt:
-                if run and et <= y <= eb:
-                    p, q = bisect_left(xs, el), bisect_right(xs, er)
-                    if p < q:
-                        cut = []
+            if where == "outside":
+                for el, et, er, eb in exempt:
+                    if run and et <= y <= eb:
+                        p, q = bisect_left(xs, el), bisect_right(xs, er)
+                        if p < q:
+                            cut = []
+                            for s0, s1 in run:
+                                if s1 <= p or s0 >= q:
+                                    cut.append([s0, s1])
+                                    continue
+                                if s0 < p:
+                                    cut.append([s0, p])
+                                if s1 > q:
+                                    cut.append([q, s1])
+                            run = cut
+            elif where == "inside":
+                keep = []
+                for el, et, er, eb in exempt:
+                    if run and et <= y <= eb:
+                        p, q = bisect_left(xs, el), bisect_right(xs, er)
                         for s0, s1 in run:
-                            if s1 <= p or s0 >= q:
-                                cut.append([s0, s1])
-                                continue
-                            if s0 < p:
-                                cut.append([s0, p])
-                            if s1 > q:
-                                cut.append([q, s1])
-                        run = cut
+                            a0, a1 = max(s0, p), min(s1, q)
+                            if a0 < a1:
+                                keep.append([a0, a1])
+                run = keep
             if run:
                 for layer in layers:
                     rows.setdefault(layer * plane + iy * nx, []).extend(run)
@@ -651,7 +734,7 @@ class Router:
     def _route_net(self, k, pres):
         name, hw, terms = self._nets[k]
         nid, c = k + 1, self._class_of[k]
-        g = self._net_group[k] if self._pairs else None
+        g = self._net_group[k] if (self._pairs or self._edges) else None
         self._cur_pair = ((self._pstat[g], self._pocc[g]) if g in getattr(self, "_pstat", {}) else None)
         self._cur_tier = self._tier_of[k]
         found = [self._terminal_cells(x, y, ls, nid, c, sh)
@@ -718,7 +801,7 @@ class Router:
                     for i in m:
                         occ[i] += 1
         self._marks[k], self._paths[k] = marks, paths
-        g = self._net_group[k] if self._pairs else None
+        g = self._net_group[k] if (self._pairs or self._edges) else None
         pm = []
         srcs = self._pair_src.get(g, ()) if g is not None else ()
         if srcs:
@@ -742,6 +825,34 @@ class Router:
                             self._capsule_cells(rows, range(self.layers), (x, y), (x, y),
                                                 self.via_radius + mm + hw2 + self.s)
                         spans = built[(mm, c2)] = _merge_rows(rows)
+                    occ = self._pocc[tgt][c2]
+                    for s0, s1 in spans:
+                        occ[s0:s1] = array("H", map(_PLUS1, occ[s0:s1]))
+                    pm.append((tgt, c2, spans))
+        esrcs = self._edge_src.get(g, ()) if g is not None else ()
+        if esrcs:
+            # pair_edge: copper outside every rect marks the cells inside the
+            # rects within reach, copper inside a rect marks the cells outside
+            runs = self._runs(paths)
+            outside = [(layer, p, q) for layer, a, b in runs for p, q in _clip_outside(a, b, self._exempt)]
+            inside = [(layer, p, q) for layer, a, b in runs for p, q in _clip_inside(a, b, self._exempt)]
+            vxy = [self._xy(ix, iy) for ix, iy in self._vias_of(paths)]
+            v_out = [xy for xy in vxy if not _inside_any(xy[0], xy[1], self._exempt)]
+            v_in = [xy for xy in vxy if _inside_any(xy[0], xy[1], self._exempt)]
+            for tgt, mm in esrcs:
+                for c2, hw2 in enumerate(self._classes):
+                    extra = self.s if c2 == self._via_c else 2 * self.s
+                    rows = {}
+                    for items, vias, where in ((outside, v_out, "inside"), (inside, v_in, "outside")):
+                        for layer, p, q in items:
+                            self._mark_rows(rows, (layer,), ("seg", p[0], p[1], q[0], q[1], 0.0),
+                                            hw + mm + hw2 + extra, _capsule_span(p[0], p[1], q[0], q[1]),
+                                            where=where)
+                        for x, y in vias:
+                            self._mark_rows(rows, range(self.layers), ("seg", x, y, x, y, 0.0),
+                                            self.via_radius + mm + hw2 + self.s,
+                                            _capsule_span(x, y, x, y), where=where)
+                    spans = _subtract_spans(_merge_rows(rows), self._padmask.get(tgt, ()))
                     occ = self._pocc[tgt][c2]
                     for s0, s1 in spans:
                         occ[s0:s1] = array("H", map(_PLUS1, occ[s0:s1]))
@@ -873,9 +984,27 @@ class Router:
         for ga, gb, mm in self._pairs:
             self._pair_src.setdefault(ga, []).append((gb, mm))
             self._pair_src.setdefault(gb, []).append((ga, mm))
-        targets = sorted({g for lst in self._pair_src.values() for g, _mm in lst})
+        self._edge_src = {}            # pair_edge: source group -> [(target group, mm)]
+        for ga, gb, mm in self._edges:
+            self._edge_src.setdefault(ga, []).append((gb, mm))
+            self._edge_src.setdefault(gb, []).append((ga, mm))
+        targets = sorted({g for lst in list(self._pair_src.values()) + list(self._edge_src.values())
+                          for g, _mm in lst})
         self._pstat = {g: [array("b", [0]) * cells for _ in self._classes] for g in targets}
         self._pocc = {g: [array("H", [0]) * cells for _ in self._classes] for g in targets}
+        # pair_edge: the cells of a group's static copper inside a rect (its
+        # pads there) are exempt and never marked for that group
+        self._padmask = {}
+        if self._edges:
+            masks = {}
+            for (net, layers, shape), og in zip(self._obstacles, self._ogroups):
+                g = og if og is not None else self._groups.get(net)
+                if g not in self._edge_src:
+                    continue
+                l, t, r, btm = _shape_box(shape)
+                if _inside_any((l + r) / 2.0, (t + btm) / 2.0, self._exempt):
+                    self._mark_rows(masks.setdefault(g, {}), layers, shape, self.s, _shape_span(shape), where=None)
+            self._padmask = {g: _merge_rows(rows) for g, rows in masks.items()}
         for (net, layers, shape), og in zip(self._obstacles, self._ogroups):
             g = og if og is not None else self._groups.get(net)
             built = {}                 # per (mm, class), as in _commit
@@ -887,6 +1016,21 @@ class Router:
                     arr = self._pstat[tgt][c]
                     for s0, s1 in spans:
                         arr[s0:s1] = array("b", [1]) * (s1 - s0)
+            # pair_edge: static copper outside every rect marks the cells
+            # inside the rects within reach (static copper inside is exempt)
+            esrc = self._edge_src.get(g, ())
+            if esrc:
+                l, t, r, btm = _shape_box(shape)
+                if not _inside_any((l + r) / 2.0, (t + btm) / 2.0, self._exempt):
+                    for tgt, mm in esrc:
+                        for c, hw in enumerate(self._classes):
+                            rows = {}
+                            self._mark_rows(rows, layers, shape, hw + mm + self.s, _shape_span(shape),
+                                            where="inside")
+                            spans = _subtract_spans(_merge_rows(rows), self._padmask.get(tgt, ()))
+                            arr = self._pstat[tgt][c]
+                            for s0, s1 in spans:
+                                arr[s0:s1] = array("b", [1]) * (s1 - s0)
         n = len(self._nets)
         self._marks, self._paths, self._tcells = [None] * n, [[] for _ in range(n)], [[] for _ in range(n)]
         self._tfallback = [[] for _ in range(n)]
