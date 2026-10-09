@@ -1,8 +1,10 @@
 #pragma once
 // An Instrument stand-in for control/control_law.h: logs every setter call
 // (name, deck, value) and answers the five getters the law reads.
+#include <cmath>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 #include "instrument.h"
 

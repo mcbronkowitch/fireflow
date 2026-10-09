@@ -59,9 +59,10 @@ TEST_CASE("law: ENGINE remap, test tone only on the sampler slot") {
 }
 
 TEST_CASE("law: DETUNE squared, skipped on FEED; SPREAD raw on FEED") {
-    // The init patch boots both decks on FEED (ENGINE = 5). DETUNE's branch
-    // reads engine_id() BEFORE this tick's set_engine, so each tick sees the
-    // engine the previous tick set.
+    // The init patch boots deck A on FEED (ENGINE_A = 5) and deck B on WAVE;
+    // Rec itself starts both on SYNTH. DETUNE's branch reads engine_id()
+    // BEFORE this tick's set_engine, so each tick sees the engine the
+    // previous tick set.
     Rig r;
     r.k[ENGINE_A] = 0.f; r.k[ENGINE_B] = 0.f; r.tick();   // both decks now SYNTH
     // 0.6, not 0.5: raw (0.6), squared (0.36) and the LANE_SIZE base a deck
@@ -156,10 +157,24 @@ TEST_CASE("law: BBD edge fires once per genuine entry, never on restore") {
 
 TEST_CASE("law: SONG rung change re-rolls, the first tick after restore does not") {
     Rig r;
-    r.tick();
+    // A non-init rung on the very first tick: the seed must adopt it. (At the
+    // init value 0 a seed that failed to adopt would be silent too, because
+    // SongRungState::rung also starts at 0.) DRIFT's init 0 sits in the
+    // settle zone, so the same first tick also pins DRIFT's seed.
+    r.k[SONG_B] = 10.f; r.tick();
     CHECK(r.inst.count("new_phrase") == 0);
-    r.k[SONG_B] = r.k[SONG_B] < 6.f ? 10.f : 2.f; r.tick();
+    CHECK(r.inst.count("settle") == 0);
+    r.k[SONG_B] = 2.f; r.tick();
     CHECK(r.inst.last("new_phrase", 1) == 1.f);
+}
+
+TEST_CASE("law: on_restore re-arms song and drift too") {
+    Rig r;
+    r.k[DRIFT] = 0.5f; r.tick();                    // DRIFT out of the zone
+    r.k[SONG_B] = 10.f; r.k[DRIFT] = 0.01f;         // both change across the restore
+    r.law.on_restore(); r.tick();
+    CHECK(r.inst.count("new_phrase") == 0);
+    CHECK(r.inst.count("settle") == 0);
 }
 
 TEST_CASE("law: on_reset re-arms song and drift but not the BBD edge") {
@@ -191,15 +206,27 @@ TEST_CASE("law: REC starts only on a sampler deck and reports it once") {
 }
 
 TEST_CASE("law: autoload hook sits between excitation and sampler options") {
-    struct H { int at = -1; Rec* rec;
-               void after_engine(int p, int, Rec&) { if (p == 0) at = int(rec->calls.size()); } };
+    struct H { int at = -1; int eng = -1; Rec* rec;
+               void after_engine(int p, int e, Rec&) {
+                   if (p == 0) { at = int(rec->calls.size()); eng = e; } } };
     control::ControlLawT<Rec, H> law; Rec inst; float k[NUM_PARAMS];
     for (int i = 0; i < NUM_PARAMS; ++i) k[i] = kInitParamDefaults[i];
+    // Deck A on SAMPLER with REC up, so sampler_record logs and the whole
+    // chain set_engine -> excitation -> hook -> sampler options -> REC is
+    // visible in one tick.
+    k[ENGINE_A] = 1.f; k[REC_A] = 1.f;
     law.on_restore();
-    H h{-1, &inst}; control::Options opt;
+    H h{-1, -1, &inst}; control::Options opt;
     law.tick(k, opt, inst, h);
+    CHECK(inst.index("set_engine", 0) >= 0);
+    CHECK(inst.index("set_engine", 0) < inst.index("set_excitation_sources", 0));
     CHECK(h.at == inst.index("set_excitation_sources", 0) + 1);
     CHECK(h.at == inst.index("sampler_speed_mode", 0));
+    CHECK(inst.index("sampler_feedback", 0) >= 0);
+    CHECK(inst.index("sampler_feedback", 0) < inst.index("sampler_record", 0));
+    // the hook gets the ENGINE knob's slot (1 = Sampler), not the EngineId
+    CHECK(h.eng == 1);
+    CHECK(int(spky::ENGINE_SAMPLER) != 1);
 }
 
 TEST_CASE("law: deck B's appended ids land on part 1") {
@@ -215,6 +242,32 @@ TEST_CASE("law: deck B's appended ids land on part 1") {
     CHECK(r.inst.last("set_target_base/" + std::to_string(int(spky::LANE_MOTION)), 1)
           == doctest::Approx(0.2f));
     CHECK(r.inst.last("set_voice_filt", 0) != doctest::Approx(-0.4f));
+}
+
+TEST_CASE("law: deck B's FLUXFB, STAGES and REC land on part 1, not part 0") {
+    const std::string fb = "set_fx_target_base/" + std::to_string(int(spky::FXT_FLUX_FB));
+    const std::string pitch = "set_target_base/" + std::to_string(int(spky::LANE_PITCH));
+    {   // FLUXFB: init A 0.427, B 0.791
+        Rig r;
+        r.k[FLUXFB_B] = 0.3f; r.tick();
+        CHECK(r.inst.last(fb, 1) == doctest::Approx(0.3f));
+        CHECK(r.inst.last(fb, 0) == doctest::Approx(kInitParamDefaults[FLUXFB_A]));
+    }
+    {   // STAGES is the LANE_PITCH base on a BBD deck; init A 1.0, B 0.0
+        Rig r;
+        r.k[ENGINE_A] = 4.f; r.k[ENGINE_B] = 4.f; r.k[STAGES_B] = 0.25f; r.tick();
+        CHECK(r.inst.last(pitch, 1) == doctest::Approx(0.25f));
+        CHECK(r.inst.last(pitch, 0) == doctest::Approx(1.f));
+    }
+    {   // REC: both decks SAMPLER, only deck B's latch up
+        Rig r;
+        r.k[ENGINE_A] = 1.f; r.k[ENGINE_B] = 1.f; r.k[REC_A] = 0.f; r.k[REC_B] = 1.f;
+        const control::Events ev = r.tick();
+        CHECK(r.inst.last("sampler_record", 1) == 1.f);
+        CHECK(r.inst.index("sampler_record", 0) == -1);
+        CHECK(ev.rec_started[1]);
+        CHECK_FALSE(ev.rec_started[0]);
+    }
 }
 
 TEST_CASE("law: DeckOptions{} is a fresh VCV deck") {
