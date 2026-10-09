@@ -9,7 +9,8 @@ Reads the committed board (route.py owns it) and writes to hardware/reva/out/fab
 reva-gerbers.zip, cpl-jlc.csv, bom-jlc.csv (P3's, copied), renders. Runs
 fab_check. --write copies renders and assembly sheets to docs/hardware/fab/
 when green. --release writes the package to hardware/reva/fab/ and refuses
-while a known list is open or a rotation is unverified (release_blockers()).
+while a known entry has no sign-off or a rotation is unverified
+(release_blockers(); P4-3 spec §4.4.6).
 """
 import argparse
 import csv

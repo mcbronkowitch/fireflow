@@ -75,11 +75,13 @@ NOTCH_R = 0.4                     # the bite's own corners -- minimal on purpose
 NOTCH_PAD = 1.0                   # air each side of the legend's ink
 NOTCH_DEPTH = 1.10                # clears the baseline (LEGEND_DY 0.75) by 0.35
 # The number that constrains the three above is how much frame is left to the
-# RIGHT of the longest legend in the narrowest box. Measured, not assumed:
-# ENG, a 16.50 mm frame, has 5.25 mm to spare before the notch would reach
-# its rounded corner; every other frame has more (LEVEL 11.90, then up). So
-# LEGEND_INSET + NOTCH_PAD may grow by 5.2 mm between them before the guard
-# in test_hw_panel.py starts refusing a plate.
+# RIGHT of the longest legend in the tightest box. Measured on the 9 mm raster
+# plate (2026-10-09), as the guard measures it, against the frame's bounding
+# box: CAPTURE, a 17.55 mm frame, has 1.00 mm to spare before the notch would
+# reach its rounded corner; then ENG, the narrowest frame at 17.20 mm, with
+# 6.45 mm, then ROOM 7.80, and every other frame has more (LEVEL 23.75, then
+# up). So LEGEND_INSET + NOTCH_PAD may grow by 1.0 mm between them before the
+# guard in test_hw_panel.py starts refusing a plate.
 
 # Real hardware bodies, not the finger-clearance radius the layout is spaced
 # on. The fields are drawn against THESE. They are the real parts (spec

@@ -1069,6 +1069,56 @@ def test_legends_are_not_buried_by_rack_widgets():
                   f"{c.enum}'s Rack widget")
 
 
+def _rect_circle_margin(x0, x1, y0, y1, cx, cy, r):
+    """Clear distance between a circle and a rectangle, mm (negative when
+    they overlap)."""
+    dx = max(x0 - cx, 0.0, cx - x1)
+    dy = max(y0 - cy, 0.0, cy - y1)
+    return (dx * dx + dy * dy) ** 0.5 - r
+
+
+def test_captions_and_lamps_are_not_under_rack_widgets():
+    """The legend guard above reads hw.TEXTS only. Every control's own
+    caption and every lamp are checked here the same way: Rack draws a widget
+    for each param, port and light, at RACK_R, and what lies under it is
+    hidden although the SVG preview shows it clear (review focus 1 of the
+    2026-10-07 plan). Captions against every widget, their own included
+    (HW_ONLY rows draw no widget but do print a caption); lamps against every
+    widget but their own. The tightest margin is printed by main()."""
+    widgets = hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS + hw.HW_LIGHTS
+    captions = lamps = 0
+    tightest = None
+    for c in hw.ALL_HW:
+        cap = None
+        if c.label:
+            lx, ly, anchor, size, _ = hw.hw_label(c)
+            cap = hw.text_run(lx, ly, size, 0.0, anchor, c.label)
+            captions += 1
+        is_lamp = hw.hw_class(c.enum) == "L"
+        lamps += is_lamp
+        for w in widgets:
+            r = hw.RACK_R[hw.hw_class(w.enum)]
+            if cap is not None:
+                m = _rect_circle_margin(*cap, w.x, w.y, r)
+                if tightest is None or m < tightest[0]:
+                    tightest = (m, f"caption {c.enum}", w.enum)
+                check(m > 1e-6,
+                      f"the caption of {c.enum} ({c.label!r}) is under "
+                      f"{w.enum}'s Rack widget ({m:.3f} mm)")
+            if is_lamp and w is not c:
+                m = ((c.x - w.x) ** 2 + (c.y - w.y) ** 2) ** 0.5 - r - hw.RACK_R["L"]
+                if tightest is None or m < tightest[0]:
+                    tightest = (m, f"lamp {c.enum}", w.enum)
+                check(m > 1e-6,
+                      f"lamp {c.enum} is under {w.enum}'s Rack widget "
+                      f"({m:.3f} mm)")
+    # Not vacuous: a plate with no captions or no lamps would pass trivially.
+    check(captions > 0 and lamps > 0,
+          f"checked {captions} captions and {lamps} lamps -- the loop did not "
+          f"see the plate")
+    test_captions_and_lamps_are_not_under_rack_widgets.stats = (captions, lamps, tightest)
+
+
 def test_bodies_and_captions_sit_inside_their_frame():
     """The fields are drawn against the real cap radii of spec 2026-10-07 §2
     (12 mm and 7.7 mm caps, 6 mm keys, 6.2 mm jacks), not the
@@ -1183,6 +1233,11 @@ def main():
         n = getattr(fn, "pairs_checked", None)
         if n is not None:
             print(f"{fn.__name__}: checked {n} mirror pairs")
+    stats = getattr(test_captions_and_lamps_are_not_under_rack_widgets, "stats", None)
+    if stats is not None:
+        n_cap, n_lamp, (margin, what, widget) = stats
+        print(f"test_captions_and_lamps_are_not_under_rack_widgets: {n_cap} captions, "
+              f"{n_lamp} lamps; tightest margin {margin:+.3f} mm ({what} / {widget}'s widget)")
     if FAILS:
         print(f"FAIL ({len(FAILS)}):")
         for f in FAILS:

@@ -1297,7 +1297,7 @@ struct Fireflow : Module {
         outputs[GATE_A].setVoltage(inst.gate(0) ? 10.f : 0.f);
         outputs[GATE_B].setVoltage(inst.gate(1) ? 10.f : 0.f);
 
-        // One law, one call, every LightId --host/vcv/src/led_law.hpp. Quantised
+        // One law, one call, every LightId -- host/vcv/src/led_law.hpp. Quantised
         // to kLedSteps AND run through the same perceptual gamma even here:
         // that is what the mux scan gives the hardware for free, and a Rack
         // module that breathes more finely, or more linearly, than the panel
