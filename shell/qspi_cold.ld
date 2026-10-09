@@ -1,7 +1,9 @@
 /* Boot-only code executes in place from QSPI (spec 2026-10-09-rev-a-p6b1
    section 5), to make room in SRAM_EXEC. shell/qspi_placement.py reads the
-   linked image and refuses it if anything on the audio path, the engine-switch
-   path or the control tick landed here, or, by name, anything of rule 2 below.
+   linked image after every link and refuses it if a name from its hot or
+   pre-QSPI lists landed here, or if its call graph shows a hot, pre-QSPI or
+   address-taken function reaching anything here (rules 1 and 2 below; rule 3
+   is checked by hand when an entry is added).
 
    WHAT MAY GO HERE. A function qualifies only if all three hold, judged on the
    call graph of the linked image (arm-none-eabi-objdump -d), not on its name:

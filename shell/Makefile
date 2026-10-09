@@ -426,6 +426,7 @@ $(BUILD_DIR)/mux_plan.o: override OPT := -Os
 LDFLAGS += -Wl,-T,qspi_cold.ld
 $(BUILD_DIR)/$(TARGET).elf: qspi_cold.ld
 NM := $(CP:objcopy=nm)
+OBJDUMP := $(CP:objcopy=objdump)
 
 # --- generierte Schalter-Header ------------------------------------------
 # Als echte Header und mit echter Abhaengigkeitskante, nicht als blankes
@@ -496,13 +497,14 @@ FORCE:
 #                      0x90040000 and is copied to SRAM by the Daisy
 #                      bootloader.
 #   shell-qspi.bin  -- the bank and the boot-only code behind it (see below).
-#                      Since 2026-10-09 it changes with the code and must be
-#                      flashed whenever its md5 changed, before the SRAM image.
-# Code placed in .qspiflash_text (spec 2026-10-09-rev-a-p6b1 section 5) sits in
-# front of the wavetable bank at 0x90100000, so the two travel as one image:
-# whenever cold code changes, shell-qspi.bin changes and must be flashed again.
-# .qspi_cold (qspi_cold.ld) sits behind the bank at 0x90110000 and travels in
-# the same image; the bank itself keeps 0x90100000.
+#                      Since 2026-10-09 it changes with the code: always flash
+#                      both images, QSPI first.
+# .qspiflash_text (alt_sram.lds) sits in FRONT of the wavetable bank and is
+# empty, and must stay empty: anything placed there shifts the bank off
+# 0x90100000, where bench/, bench/audition and qspi_programmer expect it.
+# Cold code goes to .qspi_cold (qspi_cold.ld), BEHIND the bank at 0x90110000.
+# All three travel as one image, shell-qspi.bin, which pairs with the
+# shell-sram.bin of the same build: always flash both, QSPI first.
 QSPI_SECTIONS = .qspiflash_text .qspiflash_data .qspi_cold
 
 # FORCE an allen drei Ableitungen, und das ist kein Schluderfix. Make hat auf
@@ -517,12 +519,15 @@ QSPI_SECTIONS = .qspiflash_text .qspiflash_data .qspi_cold
 images: $(BUILD_DIR)/$(TARGET)-sram.bin $(BUILD_DIR)/$(TARGET)-qspi.bin
 
 # The QSPI placement guard (qspi_placement.py): refuses an ELF with hot code in
-# QSPI, or code that runs before the QSPI is memory-mapped. Both images depend
-# on it, so a refused link yields no fresh image; the
-# old ones are deleted too, so nothing stale is left to flash.
+# QSPI, or code that runs before the QSPI is memory-mapped -- by name on the
+# nm listing, and by call graph on the disassembly and the ELF's stored words
+# (nothing hot, pre-QSPI or address-taken may reach QSPI code). Both images
+# depend on it, so a refused link yields no fresh image; the old ones are
+# deleted too, so nothing stale is left to flash.
 $(BUILD_DIR)/$(TARGET).nm: $(BUILD_DIR)/$(TARGET).elf FORCE
 	$(NM) -C -S $< > $@
-	python qspi_placement.py $@ || (rm -f $@ $(BUILD_DIR)/$(TARGET)-sram.bin $(BUILD_DIR)/$(TARGET)-qspi.bin && exit 1)
+	$(OBJDUMP) -d -C --no-show-raw-insn $< > $(BUILD_DIR)/$(TARGET).dis
+	python qspi_placement.py $@ $(BUILD_DIR)/$(TARGET).dis $< || (rm -f $@ $(BUILD_DIR)/$(TARGET)-sram.bin $(BUILD_DIR)/$(TARGET)-qspi.bin && exit 1)
 
 $(BUILD_DIR)/$(TARGET)-sram.elf: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).nm FORCE
 	$(CP) $(foreach s,$(QSPI_SECTIONS),--remove-section=$(s)) $< $@

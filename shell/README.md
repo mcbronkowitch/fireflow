@@ -79,6 +79,7 @@ Das Submodule hat **keine SWD-Pins**. Alles geht über DFU (USB), es gibt
 keinen Debug-Probe-Weg und keinen Semihosting-Weg auf diesem Board.
 
 ```bash
+dfu-util -a 0 -s 0x90100000 -D build/shell-qspi.bin
 dfu-util -a 0 -s 0x90040000:leave -D build/shell-sram.bin
 ```
 
@@ -88,22 +89,24 @@ nicht selbst in den Bootloader zurück — die Bench tut das, weil sie
 wiederholt geflasht wird, der Shell soll laufen. Jedes Neuflashen kostet
 also die zwei Tastendrücke.
 
-`shell-qspi.bin` carries the wavetable bank (`.qspiflash_data`, at
-`0x90100000`) **and** the boot-only code that executes in place from QSPI
-(`.qspi_cold`, at `0x90110000`; the list and its rules are in `qspi_cold.ld`,
-the link-time guard is `qspi_placement.py`). The SRAM image calls into that
-code at fixed addresses, so the two images are a pair: whenever its md5
-changed, `shell-qspi.bin` is flashed again, before the SRAM image. The bank
-keeps `0x90100000`, where `bench/` and `bench/audition` expect it; coming back
-from a bench or audition session, flash `shell-qspi.bin` again all the same
-before the shell runs. A fresh Submodule needs it once; it goes over DFU as
-well, not over a probe:
+**Always flash both images, QSPI first**, as above. `shell-qspi.bin` carries
+the wavetable bank (`.qspiflash_data`, at `0x90100000`) **and** the boot-only
+code that executes in place from QSPI (`.qspi_cold`, at `0x90110000`; the list
+and its rules are in `qspi_cold.ld`, the link-time guard is
+`qspi_placement.py`). The SRAM image calls into that code at fixed addresses,
+so the two images of one build are a pair. **A mismatched pair** -- a new
+`shell-sram.bin` over an older shell's or the bench's QSPI contents -- jumps
+into whatever lies at those addresses during boot: it hard-faults or hangs
+before USB comes up, so the board stays dark and no serial port appears. The
+cure is flashing the matching `shell-qspi.bin` (DFU buttons again), then the
+SRAM image.
 
-```bash
-dfu-util -a 0 -s 0x90100000 -D build/shell-qspi.bin
-# then (bootloader again)
-dfu-util -a 0 -s 0x90040000:leave -D build/shell-sram.bin
-```
+The QSPI command has no `:leave`, so the bootloader stays in DFU mode and the
+SRAM command follows directly; only if dfu-util then reports no DFU device,
+press RESET, then BOOT within two seconds, and run the SRAM command. The bank
+keeps `0x90100000`, where `bench/` and `bench/audition` expect it; coming back
+from a bench or audition session, flash both images again before the shell
+runs.
 
 ## Der Selbsttest, und warum es ihn gibt
 
