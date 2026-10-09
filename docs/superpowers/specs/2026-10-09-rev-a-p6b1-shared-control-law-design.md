@@ -245,6 +245,19 @@ existing cycle counter (`shell/cycles.h`).
 costs more than 1 point averaged, blocks A–G are spread across blocks. The
 measured figure and the rule's outcome go into the roadmap's M6 entry.
 
+**Outcome (2026-10-09).** Measured on the coupon with `SHELL_PLAY_LAW`: the
+first build cost about 90 000 cycles per tick (9.4 points). After the
+unchanged-value early-outs in the six retiming setters and `pow` by repeated
+squaring it cost 29 500; with the law-side sent-value cache, 15 800 at `-Os`;
+at `-O2`, **11 800 cycles per tick, peak 13 900** (1.23 and 1.45 points).
+That is over the 9600 budget, and the rule above would put the tick on every
+second block. **Deviation (Ruling 14, approved by Bastian):** it stays one tick
+per block. By ear: clicks at 90 000, 29 500 and 15 800, none at 11 800. **Plan
+B**, not built: a two-block split (deck A and the globals in one block, deck B,
+the depth loop and the tail in the other). **Trigger:** clicks, or `cyc_max`
+above 2.9 points on the Rev A board with the full panel. The roadmap's M6 entry
+of 2026-10-09 carries the full table.
+
 ## 7. Tests
 
 ### 7.1 `tests/test_control_law.cpp`

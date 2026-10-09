@@ -1550,3 +1550,35 @@ the next function.
 **Consequence:** `tick()` needs no `dt`, and the firmware may tick once per
 block. Scope: the init patch with one knob swept. The source reading covers the
 setters for other states; the probe does not.
+
+**Measured later the same day: the six retiming setters stay out of the law's
+sent-value cache.** `set_rate`, `set_smooth`, `set_step`, `set_sync`, `set_tide`
+and `set_tempo_bpm` early-out in the engine on an unchanged value, but the
+early-out still calls `ModLane::refresh_slew()`, which rebuilds a lane's slew
+only if the lane's `_ev_rate` (it drifts under GROW/RENEW wraps and SETTLE,
+and no setter writes it) differs bitwise from the value the last rebuild
+read. That refresh is observable **only at division 16 (VCV)** and only with
+RANGE > 0 (the init patch parks RANGE at 0, which flattens the PITCH lane),
+SMOOTH > 0 and `_ev_rate` drifting mid-block (a fast STEP clock under GROW):
+the PITCH lane's per-sample `_slew` reads the push that lands mid-block, and
+the lane values differed in 1462 comparisons while the audio stayed identical
+(the quantizer absorbs it). **At division 96 `Center::update` rebuilds every
+lane through `set_rate_scale` at the top of each block and masks it.** So a law
+cache that swallowed those pushes turned the real-Instrument gate red at
+division 16 only (engine scenario 457 506 sample diffs, DRIFT scenario 20 718
+lane diffs) and stayed green at division 96, which is why the cache exempts
+them (`set_drift` too, by reasoning: `Center::settle()` writes
+`_drift_target` behind its setter). Everything else the law sends is cached
+and measured bit-identical, cache on against off, 7 scenarios x 20 s x both
+divisions.
+
+**What the law costs on the board (measured 2026-10-09, coupon, init patch,
+`SHELL_PLAY_LAW`, cycles per tick of a 960 000-cycle block):** about 90 000
+before any fix (the six retiming setters called `ModLane::_update_slew` 110
+times a tick, each a double `pow(1-k, 96)` through newlib), 29 500 with the
+unchanged-value early-outs and `pow` by repeated squaring, 15 800 with the
+law-side cache at `-Os`, **11 800 at `-O2` (peak 13 900)**. Where the 29 500
+went (a scratch board image, cold tick about 30 500, warm second tick about
+27 100): deck A 12 100, deck B 10 700, the depth loop 2 300, the tail (centre,
+reverb, tempo) 5 000, framing about 500; the setter rows (`set_rate` ..
+`set_pan`, libm `powf`/`expf`) were about 60 %.

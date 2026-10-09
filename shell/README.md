@@ -49,7 +49,7 @@ PATH="/c/Program Files/DaisyToolchain/bin:/c/Program Files/Git/usr/bin:$PATH"
 cd shell && make -j8 images
 ```
 
-**Never use libDaisys `make program-dfu` or `all` for this firmware**: they
+**Never use libDaisy's `make program-dfu` or `all` for this firmware**: they
 build and flash the flat, unguarded `shell.bin`. Use `images` and the two
 `dfu-util` commands below.
 
@@ -281,7 +281,11 @@ cost in DWT cycles, the last block's tick and the worst since the first
 second (the first 500 blocks are left out of the maximum, which reads 0
 until then, so a cold-cache boot tick cannot pin it) (spec
 2026-10-09-rev-a-p6b1 §6: above 9600 cycles, one point, the tick moves to
-every second block).
+every second block). **Measured on the coupon, init patch, `-O2`
+(2026-10-09): `cyc_last` 11 800, `cyc_max` 13 900** (1.23 and 1.45 points),
+over the 9600 budget; the tick stays once per block by decision (spec §6,
+"Outcome"). Plan B is the two-block split, triggered by clicks or by
+`cyc_max` above 2.9 points on the Rev A board with the full panel.
 
 **Coupon session** (spec §7) on the coupon play image:
 1. All three pots reach both stops; at rest their printed values do not change.
@@ -306,7 +310,7 @@ depths included, and the law is re-armed as for a patch restore. Rev A's
 ATTACK rows carry STAGES as an alternate id (`ControlEntry::alt`, from
 `panel-map.json`'s `ids`), written while the deck is on the BBD
 (`knob_target()`). The law
-builds with `-Os` (`control_tick.o`, like `mux_plan.o`): at `-O3` the Rev A
+builds with `-O2` (`control_tick.o`; it was `-Os` first, like `mux_plan.o`): at `-O3` the Rev A
 image kept 2.7 KB of `SRAM_EXEC` free, under the spec's 8 KB floor; with
 `-Os` it keeps 10 088 B. The generated tables in `control/params.hpp` being
 `inline` and linked once brought that to 11 584 B; the ATTACK alternate and
@@ -316,7 +320,8 @@ squaring in `ModLane::_update_slew`, which took newlib's double `pow` out of
 the image (it had no other caller), 19 592 B are free (2026-10-09). The
 law's sent-value cache (a setter is called only when its value changed) and
 two reorderings in `mv()` and the depth loop then cost 1 704 B, leaving
-17 888 B (2026-10-09).
+17 888 B (2026-10-09). `-O2` for the law instead of `-Os` cost 960 B more
+and took the tick from 15 800 to 11 800 cycles: 16 928 B free (2026-10-09).
 
 **Known divergences from VCV (P6b-1)** — spec §8:
 
