@@ -523,11 +523,10 @@ images: $(BUILD_DIR)/$(TARGET)-sram.bin $(BUILD_DIR)/$(TARGET)-qspi.bin
 # nm listing, and by call graph on the disassembly and the ELF's stored words
 # (nothing hot, pre-QSPI or address-taken may reach QSPI code). Both images
 # depend on it, so a refused link yields no fresh image; the old ones are
-# deleted too, so nothing stale is left to flash.
+# deleted too, so nothing stale is left to flash. One shell line on purpose: a
+# failing nm or objdump takes the same deleting branch as a refusal.
 $(BUILD_DIR)/$(TARGET).nm: $(BUILD_DIR)/$(TARGET).elf FORCE
-	$(NM) -C -S $< > $@
-	$(OBJDUMP) -d -C --no-show-raw-insn $< > $(BUILD_DIR)/$(TARGET).dis
-	python qspi_placement.py $@ $(BUILD_DIR)/$(TARGET).dis $< || (rm -f $@ $(BUILD_DIR)/$(TARGET)-sram.bin $(BUILD_DIR)/$(TARGET)-qspi.bin && exit 1)
+	( $(NM) -C -S $< > $@ && $(OBJDUMP) -d -C --no-show-raw-insn $< > $(BUILD_DIR)/$(TARGET).dis && python qspi_placement.py $@ $(BUILD_DIR)/$(TARGET).dis $< ) || (rm -f $@ $(BUILD_DIR)/$(TARGET).dis $(BUILD_DIR)/$(TARGET)-sram.bin $(BUILD_DIR)/$(TARGET)-qspi.bin && exit 1)
 
 $(BUILD_DIR)/$(TARGET)-sram.elf: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).nm FORCE
 	$(CP) $(foreach s,$(QSPI_SECTIONS),--remove-section=$(s)) $< $@

@@ -105,4 +105,85 @@ check("graph: a family function boot reaches is still hot if a root does",
 check("graph: a pointer to cold code is refused",
       reached(BOOT_CALL, [(0x24010000, 0x90110041)])
       == ["daisy::I2CHandle::Init(daisy::I2CHandle::Config const&)"])
+
+# The gate must not fail open: a graph it cannot trust is a refusal, not a
+# pass. The canned image gets its vector table (Reset_Handler, SysTick_Handler)
+# and the literal that registers the audio callback.
+NM2 = NM + "24000010 00000004 T Reset_Handler\n24000020 00000004 T SysTick_Handler\n"
+TRUSTED = [(0x24000004, 0x24000011), (0x2400003c, 0x24000021), (0x24000234, 0x24000101)]
+def problems(dis=BOOT_CALL, words=None, nm=NM2):
+    w = list(VENEER_WORD) + TRUSTED if words is None else words
+    return q.graph_problems(nm, dis, w)
+check("sane: the canned image is trusted", problems() == [])
+check("sane: an empty disassembly is refused", problems(dis="") != [])
+check("sane: no vector table is refused",
+      problems(words=list(VENEER_WORD) + TRUSTED[2:]) != [])
+check("sane: an unregistered audio callback is refused",
+      problems(words=list(VENEER_WORD) + TRUSTED[:2]) != [])
+check("sane: a veneer that resolves to nothing is refused", problems(words=TRUSTED) != [])
+check("sane: a branch into QSPI outside any function is refused",
+      problems(dis=BOOT_CALL + "24000220:\tbl\t90120000 <somewhere>\n") != [])
+check("sane: a stored code address in QSPI outside any function is refused",
+      problems(words=list(VENEER_WORD) + TRUSTED + [(0x24010000, 0x90120001)]) != [])
+# Two kinds of stored words that are not code pointers: a switch's jump table
+# inside its own function (GPIO::Init has one), and the wavetable bank's
+# samples, QSPI data that may happen to look like a QSPI code address.
+check("sane: a jump table inside a cold function is not a pointer",
+      problems(words=list(VENEER_WORD) + TRUSTED + [(0x90110030, 0x90110011)]) == []
+      and reached(BOOT_CALL, [(0x90110030, 0x90110011)]) == [])
+check("sane: bank samples are not code pointers",
+      problems(words=list(VENEER_WORD) + TRUSTED + [(0x90100698, 0x904e8ff5)]) == [])
+check("sane: a branch into QSPI from code no symbol owns is refused",
+      problems(dis=BOOT_CALL + "24020000:\tbl\t90110000 <spky::AmbientReverb::init(float)>\n") != [])
+check("sane: a code symbol without size in QSPI is refused",
+      problems(nm=NM2 + "90120000 T cold_asm\n") != [])
+check("sane: a linker boundary symbol in QSPI is not",
+      problems(nm=NM2 + "90100000 T _sqspiflash_text\n90100000 T __qspiflash_text_start\n") == [])
+# A code symbol without a size (memchr, __aeabi_uldivmod) owns the bytes up to
+# the next symbol, so its calls are edges, not dropped.
+check("graph: a size-less function's calls are followed",
+      sorted(v[0] for v in q.graph_violations(
+          NM2 + "24000700 T memchr_like\n",
+          BOOT_CALL + "24000704:\tbl\t90110040 <daisy::I2CHandle::Init(daisy::I2CHandle::Config const&)>\n",
+          list(VENEER_WORD) + TRUSTED + [(0x24010010, 0x24000701)]))
+      == ["daisy::I2CHandle::Init(daisy::I2CHandle::Config const&)"])
+
+# elf_words on a hand-built ELF: every word of an allocated data section, only
+# the $d stretch of a code section, nothing of a NOBITS section.
+def tiny_elf():
+    import struct
+    names = b"\0$t\0$d\0"
+    isr = struct.pack("<II", 0x24000011, 0x24000021)
+    text = struct.pack("<IIII", 0xdeadbeef, 0x24000101, 0x24000101, 0x90110001)
+    sym = (b"\0" * 16
+           + struct.pack("<IIIBBH", 1, 0x24000100, 0, 0, 0, 2)    # $t
+           + struct.pack("<IIIBBH", 4, 0x24000108, 0, 0, 0, 2))   # $d
+    body = isr + text + sym + names
+    off_isr, off_text = 52, 52 + len(isr)
+    off_sym = off_text + len(text)
+    off_str = off_sym + len(sym)
+    shoff = 52 + len(body)
+    sh = [(0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+          (0, 1, 3, 0x24000000, off_isr, len(isr), 0, 0, 4, 0),      # .isr_vector WA
+          (0, 1, 6, 0x24000100, off_text, len(text), 0, 0, 4, 0),    # .text AX
+          (0, 8, 3, 0x24001000, 0, 16, 0, 0, 4, 0),                  # .bss NOBITS
+          (0, 2, 0, 0, off_sym, len(sym), 5, 1, 4, 16),              # .symtab
+          (0, 3, 0, 0, off_str, len(names), 0, 0, 1, 0)]             # .strtab
+    hdr = bytearray(52)
+    hdr[0:4] = b"\x7fELF"
+    struct.pack_into("<I", hdr, 0x20, shoff)
+    struct.pack_into("<HHH", hdr, 0x2E, 40, len(sh), 0)
+    return bytes(hdr) + body + b"".join(struct.pack("<IIIIIIIIII", *s) for s in sh)
+check("elf_words: data sections whole, code sections by $d, no NOBITS",
+      q.elf_words(tiny_elf()) == [(0x24000000, 0x24000011), (0x24000004, 0x24000021),
+                                  (0x24000108, 0x24000101), (0x2400010c, 0x90110001)])
+
+# The command line needs all three inputs: a name-only run would skip the graph.
+import subprocess, tempfile
+with tempfile.NamedTemporaryFile("w", suffix=".nm", delete=False) as f:
+    f.write(NM2)
+rc = subprocess.run([sys.executable, os.path.join(here, "qspi_placement.py"), f.name],
+                    capture_output=True).returncode
+os.unlink(f.name)
+check("cli: the nm file alone is refused", rc == 1)
 sys.exit(1 if FAILS else 0)

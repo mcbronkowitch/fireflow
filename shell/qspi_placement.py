@@ -23,7 +23,15 @@ Two checks, both run by shell/Makefile after every link:
    whose literal word is their branch target: that word is an edge, not a
    stored address.
 
-usage: qspi_placement.py <nm -C -S output> [<objdump -d output> <elf>]
+usage: qspi_placement.py <nm -C -S output> <objdump -d output> <elf>
+
+All three inputs are required, and the graph has to look like a real
+image (call edges, the vector table, the audio callback's registration,
+every veneer resolved, no code in QSPI that no symbol owns) or the image
+is refused: the gate does not fail open. A code symbol without a size
+(memchr, __aeabi_uldivmod) owns the bytes up to the next symbol. Two kinds
+of stored word are not code pointers: a jump table pointing inside its own
+function, and QSPI data outside any function (the wavetable bank's samples).
 """
 import bisect, collections, fnmatch, re, struct, sys
 
@@ -114,17 +122,41 @@ def violations(nm_text):
 _INSN = re.compile(r"^\s*([0-9a-f]+):\s+([a-z][a-z0-9.]*)\s+(.*)$")
 _TARGET = re.compile(r"(?:^|[\s,])([0-9a-f]+) <")
 
-def graph_violations(nm_text, dis_text, words):
-    """[(cold function, [root, ..., cold function])] for every QSPI function a
-    root reaches. `words`: (address, value) of every stored word that may be a
-    code address (see elf_words)."""
-    funcs = sorted((a & ~1, s, n) for a, s, n in _code_symbols(nm_text) if s)
+# Linker-script boundary symbols (_sqspiflash_text, __qspiflash_text_start):
+# code-typed and size-less, but not code.
+_BOUNDARY = re.compile(r"^(_[se]\w+|__\w+_(start|end))$")
+
+def _analyse(nm_text, dis_text, words):
+    """(violations, problems). violations: [(cold function, [root, ..., cold
+    function])] for every QSPI function a root reaches. problems: reasons the
+    graph itself cannot be trusted; each one refuses the image as well."""
+    problems = []
+    syms = _code_symbols(nm_text)
+    sized = {a & ~1 for a, s, _ in syms if s}
+    all_starts = sorted({a & ~1 for a, _, _ in syms})
+    funcs = []
+    for a, s, n in syms:
+        a &= ~1
+        if s:
+            funcs.append((a, s, n))
+            continue
+        if a in sized or _BOUNDARY.match(n):
+            continue                            # an alias, or a linker symbol
+        if QSPI_LO <= a < QSPI_HI:
+            problems.append("code symbol without a size in QSPI: " + n)
+        # memchr, __aeabi_uldivmod: own the bytes up to the next symbol
+        later = all_starts[bisect.bisect_right(all_starts, a):]
+        funcs.append((a, min(later[0] - a if later else 2, 0x1000), n))
+    funcs.sort()
     starts = [f[0] for f in funcs]
     by_start = {f[0]: i for i, f in enumerate(funcs)}
 
     def owner(addr):
         i = bisect.bisect_right(starts, addr) - 1
         return i if i >= 0 and addr < funcs[i][0] + funcs[i][1] else None
+
+    def in_qspi(addr):
+        return QSPI_LO <= addr < QSPI_HI
 
     veneer = [f[2].endswith("_veneer") for f in funcs]
     edges = collections.defaultdict(set)
@@ -135,20 +167,51 @@ def graph_violations(nm_text, dis_text, words):
         t = _TARGET.search(m.group(3))
         if not t:
             continue
-        src, dst = owner(int(m.group(1), 16)), owner(int(t.group(1), 16))
+        pc, target = int(m.group(1), 16), int(t.group(1), 16)
+        src, dst = owner(pc), owner(target)
+        if dst is None and in_qspi(target):
+            problems.append("branch at 0x%08x into QSPI outside any function: 0x%08x"
+                            % (pc, target))
+        elif src is None and in_qspi(target):
+            problems.append("branch into QSPI from code no symbol owns: 0x%08x" % pc)
         if src is not None and dst is not None and src != dst:
             edges[src].add(dst)
+    if not edges:
+        problems.append("no call edges in the disassembly")
 
     taken = {}
     for addr, value in words:
-        tgt = by_start.get(value & ~1) if value & 1 else None
-        if tgt is None:
+        if not value & 1:
             continue
         src = owner(addr)
+        tgt = by_start.get(value & ~1)
+        if tgt is None and in_qspi(value & ~1):
+            tgt = owner(value & ~1)             # into a function: count it as taken
+            if tgt is not None and tgt == src:
+                continue                        # a jump table inside its own function
+            if tgt is None:
+                if src is None and in_qspi(addr):
+                    continue                    # QSPI data (the wavetable bank), not code
+                problems.append("code address 0x%08x stored at 0x%08x points into QSPI "
+                                "outside any function" % (value, addr))
+                continue
+        if tgt is None:
+            continue
         if src is not None and veneer[src]:
             edges[src].add(tgt)                 # the veneer's branch target
         else:
             taken.setdefault(tgt, "address stored at 0x%08x" % addr)
+
+    for i, f in enumerate(funcs):
+        if veneer[i] and not edges.get(i):
+            problems.append("veneer does not resolve to a function: " + f[2])
+    names = {f[2]: i for i, f in enumerate(funcs)}
+    for handler in ("Reset_Handler", "SysTick_Handler"):
+        if names.get(handler) not in taken:
+            problems.append("vector table not found: %s is not stored anywhere" % handler)
+    for i, f in enumerate(funcs):
+        if f[2].startswith("AudioCallback(") and i not in taken:
+            problems.append("the audio callback's registration was not found: " + f[2])
 
     def reach(start):
         parent = {r: None for r in start}
@@ -181,7 +244,7 @@ def graph_violations(nm_text, dis_text, words):
     parent = reach(list(roots))
     bad = []
     for i in sorted(parent):
-        if QSPI_LO <= funcs[i][0] < QSPI_HI and not veneer[i]:
+        if in_qspi(funcs[i][0]) and not veneer[i]:
             path, f = [], i
             while f is not None:
                 path.append(funcs[f][2])
@@ -191,7 +254,19 @@ def graph_violations(nm_text, dis_text, words):
             if why != path[0]:
                 path[0] = "%s [%s]" % (path[0], why)
             bad.append((funcs[i][2], path))
-    return bad
+    return bad, problems
+
+def graph_violations(nm_text, dis_text, words):
+    """[(cold function, [root, ..., cold function])] for every QSPI function a
+    root reaches. `words`: (address, value) of every stored word that may be a
+    code address (see elf_words)."""
+    return _analyse(nm_text, dis_text, words)[0]
+
+def graph_problems(nm_text, dis_text, words):
+    """Reasons the call graph cannot be trusted: no edges, no vector table, an
+    unregistered audio callback, an unresolved veneer, code in QSPI that no
+    symbol owns. Each one refuses the image: the gate must not fail open."""
+    return _analyse(nm_text, dis_text, words)[1]
 
 def _root_of(parent, i):
     while parent[i] is not None:
@@ -235,16 +310,21 @@ def elf_words(data):
     return out
 
 if __name__ == "__main__":
+    if len(sys.argv) != 4:
+        print("usage: qspi_placement.py <nm -C -S output> <objdump -d output> <elf>"
+              " -- all three: the name check alone would skip the call graph",
+              file=sys.stderr)
+        sys.exit(1)
     nm_text = open(sys.argv[1], encoding="utf-8").read()
+    dis_text = open(sys.argv[2], encoding="utf-8", errors="replace").read()
+    words = elf_words(open(sys.argv[3], "rb").read())
     bad = violations(nm_text)
     for b in bad:
         print("QSPI placement: " + _reason(b) + ": " + b)
-    reached = []
-    if len(sys.argv) >= 4:
-        dis_text = open(sys.argv[2], encoding="utf-8", errors="replace").read()
-        words = elf_words(open(sys.argv[3], "rb").read())
-        reached = graph_violations(nm_text, dis_text, words)
-        for name, path in reached:
-            print("QSPI placement: reached from hot or pre-QSPI code: " + name)
-            print("    " + " -> ".join(path))
-    sys.exit(1 if bad or reached else 0)
+    reached, problems = _analyse(nm_text, dis_text, words)
+    for p in problems:
+        print("QSPI placement: cannot trust the call graph: " + p)
+    for name, path in reached:
+        print("QSPI placement: reached from hot or pre-QSPI code: " + name)
+        print("    " + " -> ".join(path))
+    sys.exit(1 if bad or reached or problems else 0)
