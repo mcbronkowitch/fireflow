@@ -14,6 +14,33 @@ split in two (Bastian, 2026-10-09). This is the first:
 **Inputs:** P6a spec §2 (why 35 of 70 pots had no target), the pushParams map
 below (§2, read at `450eed36`), the shell build of 2026-10-09 (§5).
 
+> **Amended 2026-10-09 while planning** (plan
+> `docs/superpowers/plans/2026-10-09-rev-a-p6b1-shared-control-law.md`).
+> Where this note and the sections below disagree, this note wins.
+>
+> 1. **`control/params.hpp` is emitted beside, not instead of,**
+>    `generated_panel.hpp` and `init_patch.hpp`, in its own namespace `ffctl`.
+>    `host/vcv/res/test_panel.py` reads those two files and `Fireflow.cpp` at
+>    94 places; moving their content would rewrite that guard for no gain. One
+>    generator writes both from one `PARAMS` list, and
+>    `tests/test_control_params.cpp` holds the copies together (§3.1).
+> 2. **REC stays in the law.** REC_A/B are knob-vector params, so the latch
+>    moves with the rest and returns `Events::rec_started[p]`; VCV clears
+>    `smp[p].path`/`factoryLoaded` on it. The factory autoload cannot follow
+>    as an event: it sits between `set_excitation_sources` and the sampler
+>    options inside the deck loop, so the law takes a second template
+>    parameter `Hooks` with `after_engine(p, eng, inst)` called at exactly
+>    that spot. The firmware passes `NoHooks` (§3.2, §4.1).
+> 3. **QSPI code moves the bank.** `.qspiflash_text` is linked at
+>    `0x90100000`, in front of the wavetable bank, so code there shifts the
+>    bank: `shell-qspi.bin` then carries both and is flashed again whenever
+>    its md5 changes. Whether the MPU allows execution there is the first
+>    probe. The placement guard runs at link time inside `make images` (a
+>    violating image cannot be built); its checker script is host-tested in
+>    ctest (§5).
+> 4. **The tick-rate probe runs after the extraction,** not before it: it
+>    ticks the extracted law itself at 16 and 96 samples (§4.3).
+
 ## 1. Goal, done, and what stays out
 
 **Goal.** At equal knob positions the Rev A board and `FireflowHW` in Rack run
