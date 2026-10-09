@@ -59,7 +59,7 @@ tut:
 | Artefakt | Inhalt | Ziel |
 |---|---|---|
 | `build/shell-sram.bin` | alles außer der Wavetable-Bank | DFU nach `0x90040000` |
-| `build/shell-qspi.bin` | nur die Bank | `0x90100000`, liegt schon dort |
+| `build/shell-qspi.bin` | cold code **and** the bank | `0x90100000`; flash whenever its md5 changed |
 
 Belegung beim ersten grünen Build (2026-08-08, `-O2`):
 
@@ -88,11 +88,17 @@ nicht selbst in den Bootloader zurück — die Bench tut das, weil sie
 wiederholt geflasht wird, der Shell soll laufen. Jedes Neuflashen kostet
 also die zwei Tastendrücke.
 
-Die Wavetable-Bank in QSPI muss normalerweise **nicht** mitgeschrieben
-werden: sie liegt seit dem 7. August auf dem Board, und `shell-qspi.bin` ist
-byte-identisch zu `bench-qspi.bin`. Wer ein frisches Submodule bespielt,
-schreibt sie einmal nach `0x90100000` — ebenfalls über DFU, nicht über einen
-Probe.
+`shell-qspi.bin` carries the cold code (`.qspiflash_text`) **and** the wavetable
+bank (`.qspiflash_data`) as one image, the code sitting in front of the bank at
+`0x90100000`. Whenever cold code changes, its md5 changes and it must be
+flashed again, before the SRAM image. A fresh Submodule needs it once; it goes
+over DFU as well, not over a probe:
+
+```bash
+dfu-util -a 0 -s 0x90100000 -D build/shell-qspi.bin
+# then (bootloader again)
+dfu-util -a 0 -s 0x90040000:leave -D build/shell-sram.bin
+```
 
 ## Der Selbsttest, und warum es ihn gibt
 

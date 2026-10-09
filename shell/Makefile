@@ -488,7 +488,10 @@ FORCE:
 #   shell-qspi.bin  -- nur die Bank. Liegt seit dem 7. August auf dem Board
 #                      und muss normalerweise NICHT neu geschrieben werden;
 #                      das Ziel existiert, damit man es vergleichen kann.
-QSPI_SECTION = .qspiflash_data
+# Code placed in .qspiflash_text (spec 2026-10-09-rev-a-p6b1 section 5) sits in
+# front of the wavetable bank at 0x90100000, so the two travel as one image:
+# whenever cold code changes, shell-qspi.bin changes and must be flashed again.
+QSPI_SECTIONS = .qspiflash_text .qspiflash_data
 
 # FORCE an allen drei Ableitungen, und das ist kein Schluderfix. Make hat auf
 # diesem Rechner Sekundenaufloesung und vergleicht mit "echt neuer": werden
@@ -502,10 +505,10 @@ QSPI_SECTION = .qspiflash_data
 images: $(BUILD_DIR)/$(TARGET)-sram.bin $(BUILD_DIR)/$(TARGET)-qspi.bin
 
 $(BUILD_DIR)/$(TARGET)-sram.elf: $(BUILD_DIR)/$(TARGET).elf FORCE
-	$(CP) --remove-section=$(QSPI_SECTION) $< $@
+	$(CP) $(foreach s,$(QSPI_SECTIONS),--remove-section=$(s)) $< $@
 
 $(BUILD_DIR)/$(TARGET)-sram.bin: $(BUILD_DIR)/$(TARGET)-sram.elf FORCE
 	$(CP) -O binary -S $< $@
 
 $(BUILD_DIR)/$(TARGET)-qspi.bin: $(BUILD_DIR)/$(TARGET).elf FORCE
-	$(CP) -O binary --only-section=$(QSPI_SECTION) $< $@
+	$(CP) -O binary $(foreach s,$(QSPI_SECTIONS),--only-section=$(s)) $< $@
