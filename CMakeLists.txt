@@ -194,6 +194,7 @@ add_executable(spky_tests
     tests/test_param_table.cpp
     tests/test_param_impact.cpp
     tests/test_smooth_law.cpp
+    tests/test_skip_unchanged.cpp
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)
 target_include_directories(spky_tests PRIVATE host ${CMAKE_SOURCE_DIR})

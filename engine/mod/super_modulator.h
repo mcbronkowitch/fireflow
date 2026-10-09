@@ -6,6 +6,7 @@
 #include "mod/divisions.h"
 #include "mod/lane_len.h"
 #include "mod/rhythm_view.h"
+#include "util/math.h"
 
 namespace spky {
 
@@ -15,13 +16,34 @@ class SuperModulator {
 public:
     void init(float sample_rate, uint32_t seed_base);
 
-    void set_tempo_bpm(float bpm)  { _bpm = bpm; _update_rate(); }
+    // Unchanged-value early-outs (2026-10-09, task 9a of the shared control
+    // law): every host pushes these on every control tick, and each full pass
+    // rebuilds all five lanes' slews -- 85 % of a law tick in the desktop
+    // probe, and on the coupon the tick was 9x over its budget. Skipping is exact because every input the retiming
+    // chain reads has its own setter that recomputes on change (_bpm, _pace,
+    // _rate_norm, _synced, _tide_norm, _step_on/_deck_steps here; the
+    // COUPLE/DRIFT scales through set_rate_scale), except the lanes' _ev_rate,
+    // which refresh_slew() owes. _update_rate has run since init(), so these
+    // three need no "never set" guard; the tide and step paths do (below).
+    void set_tempo_bpm(float bpm)  {
+        if (_skip_unchanged && same_bits(bpm, _bpm)) { _refresh_slews(); return; }
+        _bpm = bpm; _update_rate();
+    }
     // The global modulation time-stretch. Multiplies _base_hz in BOTH branches
     // of _update_rate -- synced via division_hz, free via free_hz -- because
     // free mode never reads _bpm and would otherwise ignore PACE entirely.
-    void set_pace(float mult)      { _pace = mult; _update_rate(); }
-    void set_rate(float norm)      { _rate_norm = norm; _update_rate(); }
-    void set_synced(bool on)       { _synced = on; _update_tide(); _update_rate(); }
+    void set_pace(float mult)      {
+        if (_skip_unchanged && same_bits(mult, _pace)) { _refresh_slews(); return; }
+        _pace = mult; _update_rate();
+    }
+    void set_rate(float norm)      {
+        if (_skip_unchanged && same_bits(norm, _rate_norm)) { _refresh_slews(); return; }
+        _rate_norm = norm; _update_rate();
+    }
+    void set_synced(bool on)       {
+        if (_skip_unchanged && _tide_applied && on == _synced) { _refresh_slews(); return; }
+        _synced = on; _update_tide(); _update_rate();
+    }
     void set_tide(float norm);     // 0..1 texture-lane rate scale; 0.5 = neutral
     float tide_mult() const { return _tide_mult; }
     // Der zuletzt gesetzte RATE-Knopfwert, 0..1. Kein Testsonderweg, sondern
@@ -54,6 +76,15 @@ public:
 #ifdef SPKY_TESTING
     uint32_t song_position_for_test() const {
         return _lanes[LANE_PITCH].song_position();
+    }
+    uint32_t lane_slew_updates_for_test(int i) const {
+        return _lanes[i].slew_update_count_for_test();
+    }
+    // false restores the full path in every setter, lanes included: the
+    // reference side of the early-outs' bit-identity gate.
+    void set_skip_unchanged_for_test(bool on) {
+        _skip_unchanged = on;
+        for (auto& l : _lanes) l.set_skip_unchanged_for_test(on);
     }
     uint8_t active_pattern_for_test() const {
         return active_pattern();
@@ -221,6 +252,20 @@ private:
     void _apply_rate();
     void _update_tide();
     void _apply_steps();
+    void _refresh_slews() { for (auto& l : _lanes) l.refresh_slew(); }
+
+    // "Never set" guards for the early-outs: init() runs _update_rate but
+    // neither _update_tide nor _apply_steps, so until each has run once the
+    // stored _synced/_tide_norm and _step_on/_deck_steps are defaults that
+    // _tide_mult and the lanes were never derived from. Cleared by init(), so
+    // the first push after a (re-)init always takes the full path.
+    bool _tide_applied  = false;   // _update_tide() has run since init()
+    bool _steps_applied = false;   // _apply_steps() has run since init()
+#ifdef SPKY_TESTING
+    bool _skip_unchanged = true;
+#else
+    static constexpr bool _skip_unchanged = true;
+#endif
 
     std::array<ModLane, LANE_COUNT> _lanes;
     std::array<float, LANE_COUNT>   _out {};

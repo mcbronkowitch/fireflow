@@ -348,8 +348,17 @@ void ModLane::_advance_song() {
 }
 
 void ModLane::set_smooth(float s) {
-    _smooth = clampf(s, 0.f, 1.f);
+    const float c = clampf(s, 0.f, 1.f);
+    // Hosts push every knob on every control tick. _update_slew's other
+    // inputs each recompute on their own change, so an unchanged SMOOTH
+    // only owes the _ev_rate refresh (refresh_slew, lane.h).
+    if (_skip_unchanged && same_bits(c, _smooth)) { refresh_slew(); return; }
+    _smooth = c;
     _update_slew();
+}
+
+void ModLane::refresh_slew() {
+    if (!same_bits(_ev_rate, _slew_ev_rate)) _update_slew();
 }
 
 void ModLane::set_fixed_slew(bool on) {
@@ -358,6 +367,10 @@ void ModLane::set_fixed_slew(bool on) {
 }
 
 void ModLane::_update_slew() {
+#ifdef SPKY_TESTING
+    ++_slew_updates;
+#endif
+    _slew_ev_rate = _ev_rate;   // what refresh_slew() compares against
     // SMOOTH is a fraction of the lane's own INTERVAL, not a wall-clock time.
     // The old law was `0.00002 * pow(25000, _smooth)` -- absolute seconds
     // against cycles spanning four decades, so the knob's reach was whatever
@@ -377,7 +390,9 @@ void ModLane::_update_slew() {
         // it as one would rebuild both slews on every sample of every settle.
         // tau is therefore computed from the _ev_rate standing at the last
         // real parameter change, which is the resting value the lane returns
-        // to anyway.
+        // to anyway -- or, on a host that pushes every knob every control
+        // tick, at the last push: the unchanged-value early-outs keep that
+        // per-push refresh through refresh_slew() (lane.h).
         const double denom = _phase_inc * (1.0 + double(_ev_rate));
         double interval = 0.0;                 // in SAMPLES
         if (denom > 0.0) {

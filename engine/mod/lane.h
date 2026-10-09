@@ -43,6 +43,15 @@ public:
     void set_shuffle(float amount) { _shuffle_target = shuffle_amount(amount); }
     void set_fixed_slew(bool on);     // panel switch 3 middle position
     void set_smooth(float s);         // 0..1
+    // The skip path of the unchanged-value early-outs (set_smooth here, the
+    // retiming setters in SuperModulator). With every setter input unchanged,
+    // the one thing a full re-push still refreshed was the slew pair's view
+    // of _ev_rate: _update_slew reads it, and it moves at wraps (GROW, RENEW)
+    // and during SETTLE without a recompute of its own. Hosts that push every
+    // control tick (VCV, the firmware) therefore rebuilt both slews from the
+    // current _ev_rate on every tick. This keeps exactly that, bit for bit,
+    // for one compare when nothing drifted.
+    void refresh_slew();
     void set_range(float r);          // 0..1
     void set_variation(float v);      // -1..+1: renew / loop (0) / grow
 
@@ -91,6 +100,13 @@ public:
     // (spec 2026-08-12 modulation-pace, Task 7). Incremented in process()'s
     // wrap loop, lane.cpp.
     uint32_t wrap_count_for_test() const { return _wraps; }
+    // How often _update_slew() has run: the observable for the
+    // unchanged-value early-outs (a repeated identical push must not
+    // recompute, a changed one must).
+    uint32_t slew_update_count_for_test() const { return _slew_updates; }
+    // false = every setter takes its full path again, as before the
+    // early-outs existed: the reference side of the bit-identity gate.
+    void set_skip_unchanged_for_test(bool on) { _skip_unchanged = on; }
     float last_out_for_test() const { return _last_out; }
     // kFlowSlewFrac itself stays private (it's an implementation constant of
     // _update_slew's top selection, not part of the public control surface);
@@ -374,6 +390,10 @@ private:
     bool  _frozen = false;
 #ifdef SPKY_TESTING
     uint32_t _wraps = 0;   // real wrap count; see wrap_count_for_test() above
+    uint32_t _slew_updates = 0;     // see slew_update_count_for_test()
+    bool     _skip_unchanged = true;
+#else
+    static constexpr bool _skip_unchanged = true;
 #endif
     int   _note_age  = 0;    // steps since the current note fired
     int   _note_hold = 0;    // composed note length (capped at the next note)
@@ -390,6 +410,7 @@ private:
     float _ev_phase = 0.f;   // EVOLVE random-walk offsets: shape / phase / rate (Task 7)
     float _ev_shape = 0.f;
     float _ev_rate  = 0.f;
+    float _slew_ev_rate = 0.f;   // the _ev_rate _update_slew last read; see refresh_slew()
 
     // M4 center hooks
     float _shape_offset = 0.f;   // DRIFT shape tap (set per control tick)
