@@ -92,9 +92,9 @@ TEST_CASE("law: COUPLE zone split and DRIFT settle edge") {
     r.k[COUPLE] = 0.25f; r.tick();
     CHECK(r.inst.last("set_sync") == 0.f);
     CHECK(r.inst.last("set_couple") == doctest::Approx(0.5f));
-    r.k[COUPLE] = 0.75f; r.tick();
+    r.k[COUPLE] = 0.9f; r.tick();
     CHECK(r.inst.last("set_sync") == 1.f);
-    CHECK(r.inst.last("set_couple") == doctest::Approx(0.5f));
+    CHECK(r.inst.last("set_couple") == doctest::Approx(0.8f));
     r.k[DRIFT] = 0.5f; r.tick();
     CHECK(r.inst.count("settle") == 0);
     r.k[DRIFT] = 0.01f; r.tick();

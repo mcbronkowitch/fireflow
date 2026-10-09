@@ -68,8 +68,10 @@ TEST_CASE("skip-unchanged: each retiming setter rebuilds the slews on a change o
         check_setter(in, [&](float v) { in.set_tempo_bpm(v); }, 90.f, 133.f, 2);
     }
     SUBCASE("set_pace") {
-        // Instrument::set_pace had its own guard already; this is the
-        // SuperModulator one, reached through set_tempo_bpm's _apply_tempo.
+        // Instrument::set_pace early-outs on an unchanged value before it
+        // reaches SuperModulator::set_pace, so this subcase never exercises
+        // the SuperModulator guard. That one is gated through the
+        // set_tempo_bpm subcase above (its _apply_tempo calls it on every push).
         check_setter(in, [&](float v) { in.set_pace(v); }, 0.2f, 0.7f, 2);
     }
     SUBCASE("set_step compares both arguments") {
