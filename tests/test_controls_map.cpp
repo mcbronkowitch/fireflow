@@ -5,6 +5,7 @@
 // 2026-09-28-coupon-panel-scan-design.md sections 3 and 5, and
 // 2026-10-09-rev-a-p6b1-shared-control-law-design.md section 4.2.
 #include <doctest/doctest.h>
+#include <memory>
 #include <set>
 #include <utility>
 #include "../shell/controls.h"
@@ -120,8 +121,9 @@ TEST_CASE("controls: the first tick after on_restore with init knobs fires nothi
     // later (an engine switch completes inside process()), and only then
     // could the BBD edge or a REC start show. So the firmware's boot is run
     // on: process, tick, as the audio callback does, until the switch is long
-    // done. With a BBD deck in the init patch this goes red on block 2
-    // (measured 2026-10-09).
+    // done. With a recording Sampler deck in the init patch this goes red
+    // (measured 2026-10-09). A BBD deck went red too until the law held the
+    // edge across a restore; the two LiveRig cases below pin that.
     float il[96] = {}, ir[96] = {}, ol[96], orr[96];
     int fired = 0;
     for (int b = 0; b < 32; ++b) {
@@ -130,6 +132,56 @@ TEST_CASE("controls: the first tick after on_restore with init knobs fires nothi
         fired += e.bbd_edge[0] + e.bbd_edge[1] + e.rec_started[0] + e.rec_started[1];
     }
     CHECK(fired == 0);
+}
+
+namespace {
+// A real Instrument and law run as the hosts run them: process one block,
+// then tick. Engine switches land inside process(), blocks after the tick
+// that asks for them -- the lag a recorder instrument does not have.
+struct LiveRig {
+    std::unique_ptr<spky::Instrument> inst = std::make_unique<spky::Instrument>();
+    control::ControlLaw law;
+    float k[ffctl::NUM_PARAMS];
+    float il[96] = {}, ir[96] = {}, ol[96], orr[96];
+    LiveRig() {
+        inst->init(48000.f);
+        for (int i = 0; i < ffctl::NUM_PARAMS; ++i) k[i] = ffctl::kInitParamDefaults[i];
+        law.on_restore();
+    }
+    int run(int blocks) {   // BBD edges on deck A over the run
+        int edges = 0;
+        for (int b = 0; b < blocks; ++b) {
+            inst->process(il, ir, ol, orr, 96);
+            edges += law.tick(k, control::Options{}, *inst).bbd_edge[0];
+        }
+        return edges;
+    }
+};
+} // namespace
+
+TEST_CASE("controls: a restore onto BBD over a live non-BBD deck fires no edge") {
+    // Rack, 2026-10-09: loading a patch whose deck A is on BBD while deck A
+    // runs SYNTH dropped its FLUX to 0 -- the edge fired when the restored
+    // engine landed, a few blocks after on_restore() had re-armed it.
+    LiveRig r;
+    r.k[ffctl::ENGINE_A] = 0.f;
+    REQUIRE(r.run(32) == 0);
+    REQUIRE(r.inst->engine_id(spky::PART_A) == spky::ENGINE_SYNTH);
+    r.k[ffctl::ENGINE_A] = 4.f;                 // the loaded patch
+    r.law.on_restore();
+    CHECK(r.run(32) == 0);
+    REQUIRE(r.inst->engine_id(spky::PART_A) == spky::ENGINE_BBD);
+    // and the detector is armed again afterwards: a player turn still fires
+    r.k[ffctl::ENGINE_A] = 0.f; CHECK(r.run(32) == 0);
+    r.k[ffctl::ENGINE_A] = 4.f; CHECK(r.run(32) == 1);
+}
+
+TEST_CASE("controls: a player turn onto BBD fires the edge exactly once") {
+    LiveRig r;
+    r.k[ffctl::ENGINE_A] = 0.f;
+    REQUIRE(r.run(32) == 0);
+    r.k[ffctl::ENGINE_A] = 4.f;
+    CHECK(r.run(32) == 1);
 }
 
 namespace {

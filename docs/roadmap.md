@@ -4173,13 +4173,16 @@ on branch `feat/p6b1-control-law` (base `042b78b6`).
   edge the hardware's FLUX stays at its pot value; a Sampler deck is silent;
   no CLOCK, RESET or CV on the hardware; turning ENGINE does not copy the
   ATTACK/STAGES pot's position into the newly shown parameter.
+- **Fixed the same day: BBD edge on a restore.** Restoring onto the BBD over a
+  live non-BBD deck fired the BBD edge a few blocks later (the engine switch
+  lands inside `process()`), with or without `on_restore()` — pre-existing VCV
+  behaviour, moved verbatim (Ruling 10), confirmed in Rack by check 6 below.
+  The law now re-arms the edge detector every tick after `on_restore()` until
+  the deck runs the engine its ENG knob asks for (`_bbdRestoring` in
+  `control/control_law.h`); two real-Instrument tests in
+  `tests/test_controls_map.cpp` pin the restore (no edge) and the player turn
+  (exactly one edge), the first proven red before the fix.
 - **Open.**
-  - **BBD edge on a restore.** Restoring onto the BBD over a live non-BBD deck
-    fires the BBD edge on the second block (the engine switch lands inside
-    `process()`), with or without `on_restore()`. Pre-existing VCV behaviour,
-    moved verbatim, outside P6b-1 (Ruling 10); the firmware boot is safe. To
-    check in Rack: load a BBD patch over a running non-BBD deck. Does FLUX drop
-    to 0? Confirmed in Rack, see the result below.
   - **`-ffast-math` never reaches the firmware.** The firmware Makefile sets
     `C_USR_FLAGS`, libDaisy reads `C_USER_FLAGS`. Found by the cost probe;
     a separate task, not fixed here.
@@ -4188,8 +4191,8 @@ on branch `feat/p6b1-control-law` (base `042b78b6`).
     drone on the Sampler, ENG to BBD drops FLUX and turns on excite-other-deck,
     the SONG detent re-rolls, save/reload without a re-roll or a settle glide.
     Check 6 confirms the pre-existing bug above: loading a patch with a BBD deck
-    over a running SYNTH deck drops that deck's FLUX to 0 (Ruling 10). Open; a
-    follow-up task exists.
+    over a running SYNTH deck drops that deck's FLUX to 0 (Ruling 10) — fixed
+    the same day, see above; Rack re-check pending.
 - **Next:** P6b-2 (MOD, key functions, LED law).
 
 **2026-10-08 — the grip test failed on spacing, and the 9 mm panel pass re-placed every control; the board and the firmware table follow it.**
