@@ -98,8 +98,12 @@ public:
     // first tick after either sends exactly what a law without the cache sends.
     void on_reset()   { for (auto& s : _songRung) s.rearm(); _driftSettled.rearm();
                         on_instrument_init(); }
-    // A patch restore (VCV's live dataFromJson, the firmware's boot): all three.
-    void on_restore() { for (auto& b : _bbdEdge) b.rearm(); on_reset(); }
+    // A patch restore (VCV's live dataFromJson, the firmware's boot): all three,
+    // the BBD edge held until the restored engine has landed (_bbdRestoring).
+    void on_restore() {
+        for (int p = 0; p < spky::PART_COUNT; ++p) { _bbdEdge[p].rearm(); _bbdRestoring[p] = true; }
+        on_reset();
+    }
     // The instrument was (re-)initialised: Instrument::init() put every value
     // the law ever sent back to its default, so the next tick must send them
     // all again. VCV's sample-rate change calls this (Fireflow.cpp reinit());
@@ -135,14 +139,18 @@ private:
     // genuine player-driven transition and never fight a player who
     // deliberately turns them back on afterward. on_restore() re-arms it, so
     // a RESTORE (fresh add, whole-patch load, Ctrl+D duplicate, the firmware's
-    // boot) adopts whatever ENG it finds as the baseline and fires nothing
-    // when the instrument already runs that engine. Known exception, open
-    // item (Ruling 10, measured): an engine switch lands inside process()
-    // blocks after the tick that asks for it, so a restore onto BBD over a
-    // live non-BBD deck fires the edge on block 2 with or without the
-    // re-arm. Full reasoning, and why this is its own unit-tested type
-    // rather than inline bools, lives in bbd_edge_state.hpp.
+    // boot) adopts the ENG it restores as the baseline and fires nothing.
+    // Full reasoning, and why this is its own unit-tested type rather than
+    // inline bools, lives in bbd_edge_state.hpp.
     spkyvcv::BbdEdgeState _bbdEdge[spky::PART_COUNT];
+    // An engine switch lands inside process() blocks after the tick that asks
+    // for it (measured, Ruling 10 of the P6b-1 work). A restore onto BBD over
+    // a live non-BBD deck therefore reaches the detector first as "still not
+    // BBD" and a few blocks later as "BBD" -- a transition it would fire on,
+    // which dropped FLUX to 0 on a patch load in Rack (2026-10-09). So after
+    // on_restore() the detector is re-seeded every tick until the deck runs
+    // the engine its ENG knob asks for; only then does it watch for edges.
+    bool _bbdRestoring[spky::PART_COUNT] = {};
     // MOD latch layer state for one control tick: the lane outputs and the two
     // masters, sampled once at the top of this law's tick so every mv() read in the
     // same tick sees the same modulation frame (spec 2026-08-22 §3b).
@@ -684,11 +692,13 @@ private:
                 inst.set_target_base(p, spky::LANE_PITCH,
                     prm(p ? STAGES_B : STAGES_A));
 
+            if (_bbdRestoring[p]) {
+                if (inst.engine_id(p) == id) _bbdRestoring[p] = false;
+                _bbdEdge[p].rearm();
+            }
             if (_bbdEdge[p].tick(bbdPart)) {
-                // Entry into BBD, in practice a player-driven one (see
-                // bbd_edge_state.hpp: a restore is re-armed and adopts its ENG
-                // as the baseline; the one known exception is noted at
-                // _bbdEdge above).
+                // Entry into BBD, a player-driven one: a restore is re-armed
+                // and held until its engine has landed (_bbdRestoring above).
                 //
                 // FLUX defaults disengaged (spec 5.11). The BBD's output is
                 // already six poles at 3600 Hz plus a loss pole breathing under

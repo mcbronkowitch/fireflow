@@ -942,15 +942,13 @@ struct Fireflow : Module {
             // and DRIFT position this JSON just set as a fresh baseline, not
             // a transition: no SONG re-roll from a rung that merely differs
             // from the module's previous one, no settle() from a DRIFT that
-            // merely sits in the zone. For the BBD edge the guarantee is the
-            // same, with one KNOWN EXCEPTION (measured, Ruling 10): an engine
+            // merely sits in the zone. The BBD edge is the same: an engine
             // switch lands inside process() blocks after the tick that asks
-            // for it, so a preset saved on BBD and loaded over a deck that
-            // is live on a different engine fires the "entering BBD" edge on
-            // block 2 despite the re-arm and clobbers that preset's saved
-            // FLUX/exciteOtherDeck. The re-arm does stop it when the deck
-            // already runs the restored engine. Open item, not fixed by
-            // this branch. The fresh-add path (curSr == 0.f, the else branch
+            // for it, so the law holds the edge re-armed until the restored
+            // engine has landed -- a preset saved on BBD and loaded over a
+            // deck live on another engine keeps its saved FLUX and
+            // exciteOtherDeck (control_law.h, _bbdRestoring; this used to
+            // drop FLUX to 0, fixed 2026-10-09). The fresh-add path (curSr == 0.f, the else branch
             // below) needs no re-arm: no tick has run yet, so the first-tick
             // baseline already applies.
             law.on_restore();
