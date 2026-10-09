@@ -13,8 +13,9 @@ using namespace spky;
 // makes: a cutoff pushed at every control tick, a resonance pushed at every
 // control tick that almost never moves, and drive nailed to zero.
 //
-// This is a desktop test and desktop builds do not use -ffast-math. On the
-// firmware (-ffast-math -funroll-loops) dropping the `- drive_*band^3` term
+// This is a desktop test and desktop builds do not use -ffast-math. Under
+// -ffast-math -funroll-loops (which the firmware's Makefiles once named but
+// never passed, see shell/Makefile) dropping the `- drive_*band^3` term
 // lets the compiler contract the band update differently, and the two do drift
 // -- measured at 2.1e-6 absolute worst case over 1.9 M samples, i.e. about
 // -113 dBFS. That is a rounding difference, not a behavioural one, and the

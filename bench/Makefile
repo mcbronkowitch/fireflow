@@ -22,7 +22,8 @@ LDSCRIPT = ../alt_sram.lds
 # shared with the shipping firmware on purpose (see its own comment); nothing
 # else from src/ is compiled in here.
 C_INCLUDES = -I. -I../src/ -I../engine/ -I../third_party/ -I../lib/DaisySP/Source/
-C_USR_FLAGS = -ffast-math -funroll-loops
+# No -ffast-math / -funroll-loops, deliberately: see the comment at the same
+# place in shell/Makefile (the old C_USR_FLAGS line was never read by libDaisy).
 
 GIT_HASH = $(shell git -C .. rev-parse --short HEAD)
 

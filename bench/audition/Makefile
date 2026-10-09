@@ -15,7 +15,7 @@ C_INCLUDES = \
 	-I../../engine \
 	-I../../third_party \
 	-I../../lib/DaisySP/Source
-C_USR_FLAGS = -ffast-math -funroll-loops
+# No -ffast-math / -funroll-loops, deliberately: see shell/Makefile.
 
 CPP_SOURCES = \
 	main.cpp \

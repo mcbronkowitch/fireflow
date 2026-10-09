@@ -33,7 +33,13 @@ LDSCRIPT = ../alt_sram.lds
 # ../src/ ist fuer genau einen Header drauf: hw/board.h -- derselbe, den die
 # Bench einbindet, und der einzige geteilte Code zwischen beiden Baeumen.
 C_INCLUDES = -I. -I../ -I../src/ -I../engine/ -I../third_party/ -I../lib/DaisySP/Source/
-C_USR_FLAGS = -ffast-math -funroll-loops
+# No -ffast-math / -funroll-loops. A line `C_USR_FLAGS = -ffast-math
+# -funroll-loops` stood here from the start, but libDaisy reads C_USER_FLAGS,
+# so it never reached the compiler; the 2026-07-30 -O3 round found that and
+# kept it that way (spec 2026-07-30-o3-lto-benchmark-design.md section 2), and
+# every CPU figure in docs/bench/ is measured without the two flags. Turning
+# them on is a measured round of its own: -ffinite-math-only can fold away the
+# engine's isfinite/NaN guards.
 
 # Dieses Board und nur dieses. Ein blankes -D ist hier zulaessig, obwohl die
 # Bench fuer denselben Schalter einen generierten Header baut: dort ist

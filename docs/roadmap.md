@@ -4182,10 +4182,16 @@ on branch `feat/p6b1-control-law` (base `042b78b6`).
   `control/control_law.h`); two real-Instrument tests in
   `tests/test_controls_map.cpp` pin the restore (no edge) and the player turn
   (exactly one edge), the first proven red before the fix.
-- **Open.**
-  - **`-ffast-math` never reaches the firmware.** The firmware Makefile sets
-    `C_USR_FLAGS`, libDaisy reads `C_USER_FLAGS`. Found by the cost probe;
-    a separate task, not fixed here.
+- **Not new: `-ffast-math` never reaches the firmware.** The cost probe
+  re-found that the Makefiles set `C_USR_FLAGS` while libDaisy reads
+  `C_USER_FLAGS`. Known and deliberately kept since the 2026-07-30 `-O3`
+  round (above); every `docs/bench/` figure is measured without the two
+  flags. The dead lines are now removed from `shell/`, `bench/` and
+  `bench/audition/` with a comment saying why, and two comments that claimed
+  the firmware builds with `-ffast-math` (`engine/util/fast_tanh.h`,
+  `tests/test_svf_lp.cpp`) are corrected. Activating it would be a measured
+  round of its own (`-ffinite-math-only` can fold away isfinite/NaN guards).
+- **Results.**
   - **Rack result (Task 10, Bastian, 2026-10-09).** Checks 1-5 pass on
     `FireflowHW` and `Fireflow`: init sound, all six engines and the factory
     drone on the Sampler, ENG to BBD drops FLUX and turns on excite-other-deck,
