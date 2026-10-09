@@ -164,6 +164,11 @@ private:
         if (mi < 0) return v;
         const ModTarget& t = kModLayer[mi];
         if (t.kind != MODK_HOST) return v;
+        // The depth before the terms: a face at noon is the knob, exactly --
+        // modded() returns `knob` untouched for depth 0 -- and both terms are
+        // pure, so building them first for a face at noon only spent cycles.
+        const float depth = spkymod::depth_of(prm(t.depthId));
+        if (depth == 0.f) return v;
         // t.part == 2 marks a center-column target: both decks mixed, so both
         // masters down means the center is still. Both readings are built the
         // same way -- the sum of two staircases is itself a staircase (spec
@@ -196,7 +201,7 @@ private:
             ? spkymod::mirror_term(_modMaster[0], _laneOutStepped[0][t.slot])
             : spkymod::lane_term(_modMaster[t.part],
                                  _laneOutStepped[t.part][t.slot]);
-        return spkymod::modded(v, spkymod::depth_of(prm(t.depthId)),
+        return spkymod::modded(v, depth,
                                term, stepTerm,
                                ffctl::kParamRange[soundId].lo, ffctl::kParamRange[soundId].hi);
     }
@@ -615,6 +620,10 @@ private:
         // lanes, so no modMaster factor appears here -- that is the whole
         // reason these six faces do NOT take the host-computed path.
         for (const auto& t : kModLayer) {
+            // The kind before depth_of: 38 of the 50 rows are host-computed
+            // faces whose depth mv() reads, and computing it here for them
+            // was dead work (out of line at -Os, so the compiler kept it).
+            if (t.kind != MODK_TDEPTH && t.kind != MODK_FXDEPTH) continue;
             // Through depth_of, not raw: noon needs its dead zone here too,
             // and a negative depth is what tells Part to read the lane's S&H
             // twin (spec 2026-08-22 mod-sh-split §4).
