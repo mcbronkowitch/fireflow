@@ -64,6 +64,10 @@ volatile uint32_t g_sweeps = 0;
 float             g_knobs[ffctl::NUM_PARAMS];
 volatile uint32_t g_law_cycles_max = 0;
 volatile uint32_t g_law_cycles_last = 0;
+// The worst case ignores the first second (500 blocks): a cold-cache first
+// tick or an interrupt during boot would otherwise pin it for good.
+constexpr uint32_t kLawWarmupBlocks = 500;
+uint32_t           g_law_blocks = 0;
 
 } // namespace
 
@@ -115,7 +119,9 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
         {
             g_value[idx] = v;               // reserved rows are reported too
             if(e->param < 0) continue;      // ... and send nothing
-            g_knobs[e->param] = knob_from_pot(e->param, v);
+            // ATTACK writes STAGES while its deck is on the BBD (knob_target).
+            const int id = knob_target(*e, g_knobs);
+            g_knobs[id] = knob_from_pot(id, v);
         }
     }
 
@@ -125,7 +131,10 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
     control_tick(g_knobs, inst);
     const uint32_t dc = cycles_now() - c0;
     g_law_cycles_last = dc;
-    if(dc > g_law_cycles_max) g_law_cycles_max = dc;
+    if(g_law_blocks < kLawWarmupBlocks)
+        ++g_law_blocks;
+    else if(dc > g_law_cycles_max)
+        g_law_cycles_max = dc;
 
     if(step == kSteps - 1)
     {
@@ -202,7 +211,8 @@ void run_panel_scan_report(bench::Board& hw)
                      static_cast<int>(g_keys.presses[3]));
 #endif
         // The shared control law's cost per block, in DWT cycles: the last
-        // tick and the worst since boot (spec 2026-10-09-rev-a-p6b1 section 6:
+        // tick and the worst after the first second, 0 until then (spec
+        // 2026-10-09-rev-a-p6b1 section 6:
         // above 9600 cycles, one point, it moves to every second block).
         hw.PrintLine("SHELL_PLAY_LAW cyc_last=%d cyc_max=%d",
                      static_cast<int>(g_law_cycles_last),

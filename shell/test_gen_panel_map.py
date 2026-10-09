@@ -48,6 +48,14 @@ check("the reserved rows are ROOT_A, ROOT_B and REV_MOD",
       sorted(r.split("//")[1].split()[2] for r in ROWS
              if "reserved:" in r.split("//")[1]) == ["REV_MOD", "ROOT_A", "ROOT_B"])
 check("no row sends an engine ParamId any more", "spky::" not in TEXT)
+# Findings r1 item 1: the ATTACK pots carry STAGES as their BBD alternate, and
+# nothing else carries an alternate (a row's code part has five fields then).
+ALTS = sorted((r.split("//")[1].split()[2], r.split("//")[0].split("ffctl::")[2].split("}")[0])
+              for r in ROWS if r.split("//")[0].count("ffctl::") == 2)
+check("exactly the two ATTACK rows carry STAGES as their alternate",
+      ALTS == [("ATTACK_A", "STAGES_A"), ("ATTACK_B", "STAGES_B")])
+check("the header validates every id at compile time",
+      "static_assert(entries_valid(kRevaControls," in TEXT)
 check("no stale Fireflow.cpp line citation", "Fireflow.cpp" not in TEXT)
 check("a CRLF checkout is not stale",
       g.check_text(TEXT.replace("\n", "\r\n"), TEXT))
@@ -89,6 +97,22 @@ sabotage("pot with no ffctl id",
          lambda i: i["params"].discard("RATE_A"), "RATE_A: no ffctl id")
 sabotage("reserved pot given an id",
          lambda i: i["reserved"].pop("ROOT_A"), "ROOT_A: no ffctl id")
+sabotage("alternate with no ffctl id",
+         lambda i: i["params"].discard("STAGES_A"),
+         "ATTACK_A: alternate STAGES_A has no ffctl id")
+
+
+def second_id(name, extra):
+    def mutate(inp):
+        pot = next(p for p in inp["panel_map"]["pots"] if p["id"] == name)
+        pot["ids"] = [name, extra]
+    return mutate
+
+
+sabotage("a second id on a pot the firmware has no rule for",
+         second_id("RATE_A", "SHAPE_A"), "RATE_A: shares its position with SHAPE_A")
+sabotage("the other deck's STAGES as an alternate",
+         second_id("ATTACK_A", "STAGES_B"), "ATTACK_A: shares its position with STAGES_B")
 sabotage("reserved pot dropped from the list",
          lambda i: i["reserved"].pop("ROOT_B"), "ROOT_B: no ffctl id")
 sabotage("reserved name that is no pot",

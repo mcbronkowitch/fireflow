@@ -20,7 +20,8 @@ inline constexpr ChainProfile kRevaChain{
 
 // One row per pot in (mux, channel) order; SHELL_PLAY_V prints the values
 // in this order. param -1: scanned and reported, sent nowhere (spec 2.3);
-// every other row writes its control-law knob (P6b-1 spec 4.2).
+// every other row writes its control-law knob (P6b-1 spec 4.2), the ATTACK
+// rows STAGES instead while their deck is on the BBD (knob_target()).
 inline constexpr ControlEntry kRevaControls[] = {
     {0, 0, ffctl::ENGINE_A, 0},  // row 0 ENGINE_A -- ENGINE_A
     {0, 1, ffctl::STEPS_A, 0},  // row 1 STEPS_A -- STEPS_A
@@ -32,7 +33,7 @@ inline constexpr ControlEntry kRevaControls[] = {
     {0, 7, ffctl::SOURCE_A, 0},  // row 7 SOURCE_A -- SOURCE_A
     {1, 0, ffctl::SMOOTH_A, 0},  // row 8 SMOOTH_A -- SMOOTH_A
     {1, 1, ffctl::RANGE_A, 0},  // row 9 RANGE_A -- RANGE_A
-    {1, 2, ffctl::ATTACK_A, 0},  // row 10 ATTACK_A -- ATTACK_A
+    {1, 2, ffctl::ATTACK_A, 0, ffctl::STAGES_A},  // row 10 ATTACK_A -- ATTACK_A / STAGES_A on the BBD
     {1, 3, ffctl::DECAY_A, 0},  // row 11 DECAY_A -- DECAY_A
     {2, 0, ffctl::COLOR_A, 0},  // row 12 COLOR_A -- COLOR_A
     {2, 1, ffctl::TUNE_A, 0},  // row 13 TUNE_A -- TUNE_A
@@ -56,7 +57,7 @@ inline constexpr ControlEntry kRevaControls[] = {
     {4, 3, ffctl::DENSITY_B, 1},  // row 31 DENSITY_B -- DENSITY_B
     {4, 4, ffctl::RES_B, 1},  // row 32 RES_B -- RES_B
     {4, 5, ffctl::DECAY_B, 1},  // row 33 DECAY_B -- DECAY_B
-    {4, 6, ffctl::ATTACK_B, 1},  // row 34 ATTACK_B -- ATTACK_B
+    {4, 6, ffctl::ATTACK_B, 1, ffctl::STAGES_B},  // row 34 ATTACK_B -- ATTACK_B / STAGES_B on the BBD
     {4, 7, ffctl::COMP_B, 1},  // row 35 COMP_B -- COMP_B
     {5, 0, ffctl::FLUXRATE_B, 1},  // row 36 FLUXRATE_B -- FLUXRATE_B
     {5, 1, ffctl::FLUX_B, 1},  // row 37 FLUX_B -- FLUX_B
@@ -96,6 +97,9 @@ inline constexpr ControlEntry kRevaControls[] = {
     {9, 6, -1, 3},  // row 71 REV_MOD -- reserved: reverb tail wobble (WOBL), follow-up to spec 2026-10-07 section 4
     {9, 7, ffctl::REV_MIX_B, 3},  // row 72 REV_MIX_B -- REV_MIX_B
 };
+static_assert(entries_valid(kRevaControls,
+                            sizeof(kRevaControls) / sizeof(kRevaControls[0])),
+              "kRevaControls: an id outside the knob vector");
 inline constexpr ControlTable kRevaTable{
     kRevaControls,
     static_cast<int>(sizeof(kRevaControls) / sizeof(kRevaControls[0]))};

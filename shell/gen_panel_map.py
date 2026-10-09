@@ -47,6 +47,13 @@ CAL_IDS = ("CAL_GND", "CAL_3V3")
 #
 # Spec 2026-10-07 section 4: pots on the board with no parameter yet. They are
 # read like every pot and send nothing until the follow-up spec gives them one.
+# One pot, two FireflowHW controls at its position: Fireflow.cpp's ctlVisible()
+# shows STAGES ("BBD Bend") where the deck's ENGINE is the BBD and ATTACK on
+# every other engine. That is the only such rule the firmware knows
+# (shell::knob_target()), so a panel-map "ids" list may name a second id only
+# from here, and only for its own deck.
+ALT_ON_BBD = {"ATTACK_A": "STAGES_A", "ATTACK_B": "STAGES_B"}
+
 RESERVED = {
     "ROOT_A": "per-deck scale root, follow-up to spec 2026-10-07 section 4",
     "ROOT_B": "per-deck scale root, follow-up to spec 2026-10-07 section 4",
@@ -195,9 +202,21 @@ def build(panel_map, tables, params, hw_ids, reserved):
     rows = []
     for p in sorted(pots, key=lambda r: (r["mux"], r["channel"])):
         if p["id"] in reserved:
-            rows.append((p, "-1", "reserved: " + reserved[p["id"]]))
-        else:
-            rows.append((p, "ffctl::" + p["id"], p["id"]))
+            rows.append((p, "-1", None, "reserved: " + reserved[p["id"]]))
+            continue
+        ids = p.get("ids", [p["id"]])
+        if ids[0] != p["id"]:
+            raise GenError("%s: ids list starts with %s" % (p["id"], ids[0]))
+        alt = None
+        if len(ids) > 1:
+            if len(ids) > 2 or ALT_ON_BBD.get(p["id"]) != ids[1]:
+                raise GenError("%s: shares its position with %s; the firmware knows "
+                               "only %s" % (p["id"], ", ".join(ids[1:]), ALT_ON_BBD))
+            if ids[1] not in params:
+                raise GenError("%s: alternate %s has no ffctl id" % (p["id"], ids[1]))
+            alt = ids[1]
+        rows.append((p, "ffctl::" + p["id"], alt,
+                     p["id"] + (" / %s on the BBD" % alt if alt else "")))
 
     return _render(rows, len(senses), n_mux, sense_of_mux, len(flat), addr_shift,
                    len(tables["mux_s"]), enable_shift, led_shift, len(leds),
@@ -234,12 +253,17 @@ def _render(rows, n_sense, n_mux, sense_of_mux, chain_bits, addr_shift, addr_bit
     w("")
     w("// One row per pot in (mux, channel) order; SHELL_PLAY_V prints the values")
     w("// in this order. param -1: scanned and reported, sent nowhere (spec 2.3);")
-    w("// every other row writes its control-law knob (P6b-1 spec 4.2).")
+    w("// every other row writes its control-law knob (P6b-1 spec 4.2), the ATTACK")
+    w("// rows STAGES instead while their deck is on the BBD (knob_target()).")
     w("inline constexpr ControlEntry kRevaControls[] = {")
-    for i, (p, target, note) in enumerate(rows):
-        w("    {%d, %d, %s, %d},  // row %d %s -- %s"
-          % (p["mux"], p["channel"], target, sense_of_mux[p["mux"]], i, p["id"], note))
+    for i, (p, target, alt, note) in enumerate(rows):
+        w("    {%d, %d, %s, %d%s},  // row %d %s -- %s"
+          % (p["mux"], p["channel"], target, sense_of_mux[p["mux"]],
+             ", ffctl::" + alt if alt else "", i, p["id"], note))
     w("};")
+    w("static_assert(entries_valid(kRevaControls,")
+    w("                            sizeof(kRevaControls) / sizeof(kRevaControls[0])),")
+    w('              "kRevaControls: an id outside the knob vector");')
     w("inline constexpr ControlTable kRevaTable{")
     w("    kRevaControls,")
     w("    static_cast<int>(sizeof(kRevaControls) / sizeof(kRevaControls[0]))};")

@@ -26,6 +26,10 @@ struct ControlEntry
     int ch;          // channel on that chip
     int param;       // ffctl::ParamId, or -1: scanned and reported, sent nowhere
     int sense = -1;  // the sense pin the schematic wires the group to, -1 = not recorded
+    // The id FireflowHW draws at the same position instead of `param` while
+    // the deck's ENGINE knob sits on the BBD (ATTACK -> STAGES), -1 = none.
+    // A per-deck id: its deck is `param`'s (see knob_target()).
+    int alt = -1;
 };
 
 struct ControlTable
@@ -44,6 +48,23 @@ inline constexpr ControlTable kCouponTable{
     kCouponControls,
     static_cast<int>(sizeof(kCouponControls) / sizeof(kCouponControls[0]))};
 
+// True when every row's ids index the knob vector: param and alt each -1 or a
+// ffctl::ParamId, and an alt only on a sending row of a deck's own block
+// (ids below 2 * PART_STRIDE), which knob_target() reads the deck from.
+constexpr bool entries_valid(const ControlEntry* e, int n)
+{
+    for(int i = 0; i < n; ++i)
+    {
+        if(e[i].param < -1 || e[i].param >= ffctl::NUM_PARAMS) return false;
+        if(e[i].alt < -1 || e[i].alt >= ffctl::NUM_PARAMS) return false;
+        if(e[i].alt >= 0 && (e[i].param < 0 || e[i].param >= 2 * ffctl::PART_STRIDE))
+            return false;
+    }
+    return true;
+}
+static_assert(entries_valid(kCouponControls, kCouponTable.count),
+              "kCouponControls: an id outside the knob vector");
+
 // The entry for (group, ch), or nullptr. A channel that is not in the table
 // changes nothing: a half-seated chip produces indices nobody planned, and
 // guessing would hand a foreign knob's voltage to a parameter.
@@ -54,5 +75,16 @@ const ControlEntry* find_control(const ControlTable& t, int group, int ch);
 // for no parameter. This is the only thing the firmware does to a pot before
 // the shared control law sees it (spec 2026-10-09-rev-a-p6b1 section 4.2).
 float knob_from_pot(int param, float v);
+
+// The ENGINE knob's BBD position: FireflowHW's isBbdSelected() (host/vcv/src/
+// Fireflow.cpp) is `round(ENGINE) == 4`, and the law maps 4 to ENGINE_BBD.
+// tests/test_controls_map.cpp holds this against the law, slot by slot.
+inline constexpr int kEngineSlotBbd = 4;
+
+// The id a pot writes right now: `alt` while the row's deck has its ENGINE
+// knob on the BBD (FireflowHW's ctlVisible() shows STAGES there, ATTACK on
+// every other engine), else `param`. The id not chosen keeps its last value,
+// as two separate Rack params do.
+int knob_target(const ControlEntry& e, const float* knobs);
 
 } // namespace shell

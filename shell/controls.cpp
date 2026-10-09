@@ -21,4 +21,11 @@ float knob_from_pot(int param, float v)
     return r.snap ? std::round(x) : x;
 }
 
+int knob_target(const ControlEntry& e, const float* knobs)
+{
+    if(e.alt < 0) return e.param;
+    const int engine = e.param < ffctl::PART_STRIDE ? ffctl::ENGINE_A : ffctl::ENGINE_B;
+    return static_cast<int>(std::round(knobs[engine])) == kEngineSlotBbd ? e.alt : e.param;
+}
+
 } // namespace shell

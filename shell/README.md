@@ -273,7 +273,9 @@ the generated header's comments; values ×1000, −1000 = never emitted: no vali
 never succeeded) and one
 `SHELL_PLAY` summary line with key mask and press counts. Both images then
 print `SHELL_PLAY_LAW cyc_last=<n> cyc_max=<n>`: the shared control law's
-cost in DWT cycles, the last block's tick and the worst since boot (spec
+cost in DWT cycles, the last block's tick and the worst since the first
+second (the first 500 blocks are left out of the maximum, which reads 0
+until then, so a cold-cache boot tick cannot pin it) (spec
 2026-10-09-rev-a-p6b1 §6: above 9600 cycles, one point, the tick moves to
 every second block).
 
@@ -296,10 +298,14 @@ vector (`knob_from_pot()`, rounded for a parameter Rack snaps), and once per
 audio block `control_tick()` runs the whole vector through
 `control::ControlLaw` — the law `FireflowHW` runs in Rack — so every pot
 drives what its VCV twin drives. At boot the vector is the init patch,
-depths included, and the law is re-armed as for a patch restore. The law
+depths included, and the law is re-armed as for a patch restore. Rev A's
+ATTACK rows carry STAGES as an alternate id (`ControlEntry::alt`, from
+`panel-map.json`'s `ids`), written while the deck is on the BBD
+(`knob_target()`). The law
 builds with `-Os` (`control_tick.o`, like `mux_plan.o`): at `-O3` the Rev A
 image kept 2.7 KB of `SRAM_EXEC` free, under the spec's 8 KB floor; with
-`-Os` it keeps 10 088 B (2026-10-09).
+`-Os` it keeps 10 088 B, and 11 208 B since the generated tables in
+`control/params.hpp` are `inline` and linked once (2026-10-09).
 
 **Known divergences from VCV (P6b-1)** — spec §8:
 
@@ -309,6 +315,11 @@ image kept 2.7 KB of `SRAM_EXEC` free, under the spec's 8 KB floor; with
   turned back.
 - A Sampler deck is silent: no factory sample, no REC yet.
 - No CLOCK, RESET or CV on the hardware.
+- The ATTACK pot is two Rack knobs at one position: it writes STAGES
+  ("BBD Bend") while its deck's ENGINE is on the BBD and ATTACK otherwise,
+  as FireflowHW shows them. Turning ENGINE does not copy the pot's position
+  into the newly shown parameter: that one keeps its last value until the
+  pot moves, where Rack shows the other knob at its own value.
 
 ## Where the work stands, and where it goes next
 

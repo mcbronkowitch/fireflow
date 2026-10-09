@@ -180,3 +180,63 @@ TEST_CASE("controls: on_restore over a live law makes the restored knobs a basel
     CHECK(inst.phrases == 0);
     CHECK(inst.settles == 0);
 }
+
+TEST_CASE("controls: the Rev A table carries STAGES for exactly the two ATTACK rows") {
+    std::set<std::pair<int, int>> alts;
+    for(int i = 0; i < shell::kRevaTable.count; ++i)
+        if(shell::kRevaTable.entries[i].alt >= 0)
+            alts.insert({shell::kRevaTable.entries[i].param, shell::kRevaTable.entries[i].alt});
+    const std::set<std::pair<int, int>> want = {{ffctl::ATTACK_A, ffctl::STAGES_A},
+                                                {ffctl::ATTACK_B, ffctl::STAGES_B}};
+    CHECK(alts == want);
+    for(int i = 0; i < shell::kCouponTable.count; ++i)
+        CHECK(shell::kCouponTable.entries[i].alt == -1);
+}
+
+namespace {
+const shell::ControlEntry* attack_row(int param) {
+    for(int i = 0; i < shell::kRevaTable.count; ++i)
+        if(shell::kRevaTable.entries[i].param == param) return &shell::kRevaTable.entries[i];
+    return nullptr;
+}
+} // namespace
+
+TEST_CASE("controls: an ATTACK pot writes what FireflowHW shows -- STAGES on the BBD only") {
+    // Every ENGINE slot on each deck, the other deck held on the opposite
+    // choice, so a pot reading the wrong deck's ENGINE goes red. The slot is
+    // held against the law: the slot that makes the law put the deck on
+    // ENGINE_BBD is exactly the slot that picks STAGES.
+    for(int deck = 0; deck < 2; ++deck)
+    {
+        const int attack = deck ? ffctl::ATTACK_B : ffctl::ATTACK_A;
+        const int stages = deck ? ffctl::STAGES_B : ffctl::STAGES_A;
+        const int engine = deck ? ffctl::ENGINE_B : ffctl::ENGINE_A;
+        const int other  = deck ? ffctl::ENGINE_A : ffctl::ENGINE_B;
+        const shell::ControlEntry* e = attack_row(attack);
+        REQUIRE(e != nullptr);
+        for(int slot = 0; slot <= 5; ++slot)
+        {
+            CAPTURE(deck);
+            CAPTURE(slot);
+            float k[ffctl::NUM_PARAMS];
+            for(int i = 0; i < ffctl::NUM_PARAMS; ++i) k[i] = ffctl::kInitParamDefaults[i];
+            k[engine] = static_cast<float>(slot);
+            k[other]  = slot == 4 ? 0.f : 4.f;
+            spky::Instrument inst; inst.init(48000.f);
+            control::ControlLaw law; law.on_restore();
+            float il[96] = {}, ir[96] = {}, ol[96], orr[96];
+            for(int b = 0; b < 32; ++b) {
+                law.tick(k, control::Options{}, inst);
+                inst.process(il, ir, ol, orr, 96);
+            }
+            const bool on_bbd = inst.engine_id(deck ? spky::PART_B : spky::PART_A) == spky::ENGINE_BBD;
+            CHECK(on_bbd == (slot == 4));
+            CHECK(shell::knob_target(*e, k) == (on_bbd ? stages : attack));
+        }
+    }
+    // A row without an alternate always writes its own id.
+    float k[ffctl::NUM_PARAMS];
+    for(int i = 0; i < ffctl::NUM_PARAMS; ++i) k[i] = ffctl::kInitParamDefaults[i];
+    k[ffctl::ENGINE_A] = 4.f;
+    CHECK(shell::knob_target(shell::kCouponControls[0], k) == ffctl::RATE_A);
+}

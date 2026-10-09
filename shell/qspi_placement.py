@@ -43,7 +43,7 @@ HOT_PATTERNS = [
     "spky::Instrument::set_*", "spky::Instrument::process*",
     "control::*", "spkymod::*", "spkyvcv::*",
     "shell::panel_scan_tick*", "shell::MuxScan::*", "shell::key_update*", "shell::pot_filter*",
-    "shell::control_tick*", "shell::knob_from_pot*",
+    "shell::control_tick*", "shell::knob_from_pot*", "shell::knob_target*",
     "*IRQHandler*", "*Callback*", "daisy::AudioHandle::*", "daisy::SaiHandle::*",
     "daisy::DmaHandle*", "HAL_DMA_*", "HAL_SAI_*",
     # Exception handlers and the HAL tick: SysTick is live from HAL_Init on and
