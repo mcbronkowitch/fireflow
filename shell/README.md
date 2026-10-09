@@ -58,8 +58,8 @@ tut:
 
 | Artefakt | Inhalt | Ziel |
 |---|---|---|
-| `build/shell-sram.bin` | alles außer der Wavetable-Bank | DFU nach `0x90040000` |
-| `build/shell-qspi.bin` | cold code **and** the bank | `0x90100000`; flash whenever its md5 changed |
+| `build/shell-sram.bin` | everything except the bank and the boot-only code | DFU nach `0x90040000` |
+| `build/shell-qspi.bin` | the bank, then the boot-only code | `0x90100000`; flash whenever its md5 changed |
 
 Belegung beim ersten grünen Build (2026-08-08, `-O2`):
 
@@ -88,11 +88,16 @@ nicht selbst in den Bootloader zurück — die Bench tut das, weil sie
 wiederholt geflasht wird, der Shell soll laufen. Jedes Neuflashen kostet
 also die zwei Tastendrücke.
 
-`shell-qspi.bin` carries the cold code (`.qspiflash_text`) **and** the wavetable
-bank (`.qspiflash_data`) as one image, the code sitting in front of the bank at
-`0x90100000`. Whenever cold code changes, its md5 changes and it must be
-flashed again, before the SRAM image. A fresh Submodule needs it once; it goes
-over DFU as well, not over a probe:
+`shell-qspi.bin` carries the wavetable bank (`.qspiflash_data`, at
+`0x90100000`) **and** the boot-only code that executes in place from QSPI
+(`.qspi_cold`, at `0x90110000`; the list and its rules are in `qspi_cold.ld`,
+the link-time guard is `qspi_placement.py`). The SRAM image calls into that
+code at fixed addresses, so the two images are a pair: whenever its md5
+changed, `shell-qspi.bin` is flashed again, before the SRAM image. The bank
+keeps `0x90100000`, where `bench/` and `bench/audition` expect it; coming back
+from a bench or audition session, flash `shell-qspi.bin` again all the same
+before the shell runs. A fresh Submodule needs it once; it goes over DFU as
+well, not over a probe:
 
 ```bash
 dfu-util -a 0 -s 0x90100000 -D build/shell-qspi.bin

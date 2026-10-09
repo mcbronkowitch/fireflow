@@ -417,6 +417,16 @@ include $(SYSTEM_FILES_DIR)/Makefile
 # line would name the target "/mux_plan.o" and silently do nothing.
 $(BUILD_DIR)/mux_plan.o: override OPT := -Os
 
+# Boot-only code executes in place from QSPI (spec 2026-10-09-rev-a-p6b1
+# section 5); the list and the rules for what may go on it are in
+# qspi_cold.ld. As -Wl,-T and not as a second plain -T: gcc puts -Wl options
+# ahead of the -T$(LDSCRIPT) in LDFLAGS, and the fragment has to be read first
+# for its names to win over the main script's *(.text*). The edge makes an
+# edit to the list relink.
+LDFLAGS += -Wl,-T,qspi_cold.ld
+$(BUILD_DIR)/$(TARGET).elf: qspi_cold.ld
+NM := $(CP:objcopy=nm)
+
 # --- generierte Schalter-Header ------------------------------------------
 # Als echte Header und mit echter Abhaengigkeitskante, nicht als blankes
 # -D. Die Begruendung steht in write_shell_selftest.py; es ist dieselbe
@@ -482,16 +492,18 @@ FORCE:
 # Adresse gezielt. Stattdessen zwei Artefakte aus derselben gelinkten ELF,
 # genau wie bench/qspi_tools.py es fuer die Bench macht:
 #
-#   shell-sram.bin  -- alles ausser der Wavetable-Bank, geht per DFU nach
-#                      0x90040000 und wird vom Daisy-Bootloader nach SRAM
-#                      kopiert.
-#   shell-qspi.bin  -- nur die Bank. Liegt seit dem 7. August auf dem Board
-#                      und muss normalerweise NICHT neu geschrieben werden;
-#                      das Ziel existiert, damit man es vergleichen kann.
+#   shell-sram.bin  -- everything but QSPI_SECTIONS below; goes over DFU to
+#                      0x90040000 and is copied to SRAM by the Daisy
+#                      bootloader.
+#   shell-qspi.bin  -- the bank and the boot-only code behind it (see below).
+#                      Since 2026-10-09 it changes with the code and must be
+#                      flashed whenever its md5 changed, before the SRAM image.
 # Code placed in .qspiflash_text (spec 2026-10-09-rev-a-p6b1 section 5) sits in
 # front of the wavetable bank at 0x90100000, so the two travel as one image:
 # whenever cold code changes, shell-qspi.bin changes and must be flashed again.
-QSPI_SECTIONS = .qspiflash_text .qspiflash_data
+# .qspi_cold (qspi_cold.ld) sits behind the bank at 0x90110000 and travels in
+# the same image; the bank itself keeps 0x90100000.
+QSPI_SECTIONS = .qspiflash_text .qspiflash_data .qspi_cold
 
 # FORCE an allen drei Ableitungen, und das ist kein Schluderfix. Make hat auf
 # diesem Rechner Sekundenaufloesung und vergleicht mit "echt neuer": werden
@@ -504,11 +516,19 @@ QSPI_SECTIONS = .qspiflash_text .qspiflash_data
 .PHONY: images
 images: $(BUILD_DIR)/$(TARGET)-sram.bin $(BUILD_DIR)/$(TARGET)-qspi.bin
 
-$(BUILD_DIR)/$(TARGET)-sram.elf: $(BUILD_DIR)/$(TARGET).elf FORCE
+# The QSPI placement guard (qspi_placement.py): refuses an ELF with hot code in
+# QSPI, or code that runs before the QSPI is memory-mapped. Both images depend
+# on it, so a refused link yields no fresh image; the
+# old ones are deleted too, so nothing stale is left to flash.
+$(BUILD_DIR)/$(TARGET).nm: $(BUILD_DIR)/$(TARGET).elf FORCE
+	$(NM) -C -S $< > $@
+	python qspi_placement.py $@ || (rm -f $@ $(BUILD_DIR)/$(TARGET)-sram.bin $(BUILD_DIR)/$(TARGET)-qspi.bin && exit 1)
+
+$(BUILD_DIR)/$(TARGET)-sram.elf: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).nm FORCE
 	$(CP) $(foreach s,$(QSPI_SECTIONS),--remove-section=$(s)) $< $@
 
 $(BUILD_DIR)/$(TARGET)-sram.bin: $(BUILD_DIR)/$(TARGET)-sram.elf FORCE
 	$(CP) -O binary -S $< $@
 
-$(BUILD_DIR)/$(TARGET)-qspi.bin: $(BUILD_DIR)/$(TARGET).elf FORCE
+$(BUILD_DIR)/$(TARGET)-qspi.bin: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).nm FORCE
 	$(CP) -O binary $(foreach s,$(QSPI_SECTIONS),--only-section=$(s)) $< $@
