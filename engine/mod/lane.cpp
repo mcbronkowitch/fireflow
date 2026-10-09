@@ -38,6 +38,19 @@ static ProcessWindowEnd process_window_end(
     return {phase, wraps};
 }
 
+// x^n for an unsigned n by square-and-multiply: exact repeated squaring, so
+// for kTickInterval = 96 it is x^64 * x^32 in seven multiplies. Used by
+// _update_slew's tick twin in place of std::pow (see there).
+static inline double pow_uint(double x, unsigned n) {
+    double r = 1.0;
+    while (n) {
+        if (n & 1u) r *= x;
+        x *= x;
+        n >>= 1u;
+    }
+    return r;
+}
+
 // Positive modulo: _follow_offset can be negative after a backwards SPOT
 // nudge, and C++'s % keeps the sign of the dividend.
 static int slot_of(int32_t pos, int slots) {
@@ -458,10 +471,17 @@ void ModLane::_update_slew() {
     // The per-sample _slew above is NOT affected: k itself is perfectly
     // representable, and it was measured tracking the analytic settling curve
     // at these same tau values. Only this half of the pair needs the precision.
+    //
+    // The power is an integer one, by repeated squaring (pow_uint, above) and
+    // not std::pow: the firmware build calls the latter as newlib's software
+    // double pow, once per slew rebuild (2026-10-09). Still in double. Against
+    // std::pow over k in [1e-9, 1] the stored float coefficient differs by at
+    // most 1 ulp, in 0.47 % of points (relative error of 1 - x^96 <= 1.05e-8
+    // down to k = 1e-10).
     double k = 1.0 / (double(t) * double(_sr));
     if (k > 1.0) k = 1.0;
     _slew_tick.set_coef(static_cast<float>(
-        1.0 - std::pow(1.0 - k, static_cast<double>(kTickInterval))));
+        1.0 - pow_uint(1.0 - k, static_cast<unsigned>(kTickInterval))));
 }
 
 void ModLane::kick(float dphase, float dshape) {
