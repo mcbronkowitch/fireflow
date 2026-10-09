@@ -4253,6 +4253,9 @@ items 1 and 2 **failed** (the small caps stood 5.3 mm apart edge to edge), item
 2 and 4 on it, then the freeze tag; the board order uses the released
 package in `hardware/reva/fab/`. The hand-soldered parts of `bom-hand.csv` are
 on hand (Bastian, 2026-10-09) except `J_SD`, the Yamaichi microSD socket.
+The three reserved pots (`ROOT_A`, `ROOT_B`, WOBL) still send nothing; making
+them parameters is its own round with its own spec, see "Reserved knobs become
+parameters" under "Planned".
 - **Firmware image (2026-10-09).** The Rev A playing image
   (`SHELL_PANEL_SCAN=1`) did not compile after the pass: `panel_scan.cpp`
   asserted `kTable.count % 10 == 0` for its ten-a-line `SHELL_PLAY_V`
