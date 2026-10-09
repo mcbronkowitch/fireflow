@@ -32,7 +32,7 @@ LDSCRIPT = ../alt_sram.lds
 # overdrive.h", "Utility/dsp.h"), also muss das Verzeichnis auf den Pfad.
 # ../src/ ist fuer genau einen Header drauf: hw/board.h -- derselbe, den die
 # Bench einbindet, und der einzige geteilte Code zwischen beiden Baeumen.
-C_INCLUDES = -I. -I../src/ -I../engine/ -I../third_party/ -I../lib/DaisySP/Source/
+C_INCLUDES = -I. -I../ -I../src/ -I../engine/ -I../third_party/ -I../lib/DaisySP/Source/
 C_USR_FLAGS = -ffast-math -funroll-loops
 
 # Dieses Board und nur dieses. Ein blankes -D ist hier zulaessig, obwohl die

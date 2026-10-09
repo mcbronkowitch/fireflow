@@ -15,11 +15,11 @@
 #include "init_patch.hpp"       // sampler.vcvm snapshot + non-param init state
 #include "form_song_migration.hpp"
 #include "link_migration.hpp"
-#include "bbd_edge_state.hpp"   // ENG->BBD edge detector (dependency-free, unit-tested)
-#include "song_rung_state.hpp"  // SONG rung tracker (dependency-free, unit-tested)
-#include "drift_settle_state.hpp"  // DRIFT left-stop edge detector (dependency-free, unit-tested)
+#include "control/bbd_edge_state.hpp"  // ENG->BBD edge detector (dependency-free, unit-tested)
+#include "control/song_rung_state.hpp"  // SONG rung tracker (dependency-free, unit-tested)
+#include "control/drift_settle_state.hpp"  // DRIFT left-stop edge detector (dependency-free, unit-tested)
 #include "led_law.hpp"           // the panel's LED display law (Rack-free, unit-tested)
-#include "mod_layer.hpp"         // the MOD latch layer's host-computed math (Rack-free, unit-tested)
+#include "control/mod_layer.hpp"         // the MOD latch layer's host-computed math (Rack-free, unit-tested)
 
 // The portable engine core -- exactly the same headers the desktop render host
 // and (later) the Daisy firmware use. No hardware type crosses this boundary.

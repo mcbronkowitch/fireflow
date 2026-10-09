@@ -1,5 +1,5 @@
 #include <doctest/doctest.h>
-#include "vcv/src/mod_layer.hpp"
+#include "control/mod_layer.hpp"
 #include "vcv/src/generated_panel.hpp"
 #include "mod/lane_id.h"
 #include "fx/part_fx.h"
