@@ -21,6 +21,15 @@ def check(cond, msg):
     if not cond:
         FAILS.append(msg)
 
+def host_source():
+    """What Rack runs: Fireflow.cpp plus the control law it calls (spec
+    2026-10-09-rev-a-p6b1). Source scrapes that used to read pushParams
+    read both, so a moved line is still found where it now lives."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    parts = [os.path.join(here, "..", "src", "Fireflow.cpp"),
+             os.path.join(here, "..", "..", "..", "control", "control_law.h")]
+    return "\n".join(open(p, encoding="utf-8").read() for p in parts)
+
 
 def approx(a, b, tol=0.02):
     return abs(a - b) <= tol
@@ -188,7 +197,7 @@ def test_hw_mod_inputs_are_appended_ids_not_42hp_widgets():
     check("{MOD1_A," not in kinput, "MOD jacks leaked into the 42 HP kInputCtls")
     check("MOD1" not in g.svg(), "MOD jacks leaked onto the 42 HP plate")
     here = os.path.dirname(os.path.abspath(__file__))
-    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp"), encoding="utf-8").read()
+    cpp = host_source()
     check("kHwModInputCtls" in cpp, "Fireflow.cpp does not config the HW MOD inputs")
 
 
@@ -230,7 +239,7 @@ def test_time_knob_replaces_div_and_mult():
     rate = [c for c in gp.PARAMS if c.enum == "FLUXRATE_A"][0]
     check(rate.label == "TIME", f"FLUXRATE_A still prints {rate.label!r}")
     here = os.path.dirname(os.path.abspath(__file__))
-    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    cpp = host_source()
     check("spky::FXT_FLUX_TIME, 0.5f" in cpp,
           "the flux-time modulation base is not pinned to neutral")
     check("FLUXTIME_A" not in cpp, "Fireflow.cpp still references FLUXTIME_A")
@@ -797,8 +806,7 @@ def test_both_panels_use_the_house_port():
     once the knobs stopped being stock (2026-08-30). FfPort replaces it at
     the same footprint, so cable ends land where they always did."""
     here = os.path.dirname(os.path.abspath(__file__))
-    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp"),
-               encoding="utf-8").read()
+    cpp = host_source()
     check("PJ301MPort" not in cpp, "a stock PJ301MPort is still built")
     for needle, label in (("createInputCentered<FfPort>", "inputs"),
                           ("createOutputCentered<FfPort>", "outputs")):
@@ -813,8 +821,7 @@ def test_both_panels_use_the_house_pad():
     VCVLatch sitting on an 8 mm printed square. FfPad covers its own bed and
     joins the knob/jack family (2026-08-30)."""
     here = os.path.dirname(os.path.abspath(__file__))
-    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp"),
-               encoding="utf-8").read()
+    cpp = host_source()
     for stock in ("VCVLatch", "VCVButton"):
         check(stock not in cpp, f"a stock {stock} is still built")
     check(re.search(r"struct\s+EngineCycleLatch\s*:\s*FfPadLatch", cpp),
@@ -832,8 +839,7 @@ def test_both_panels_use_the_house_light():
     kLightAccent (2026-08-30). REC stays red -- record-is-red is a device
     convention, not Rack's, and that LED reports real writing."""
     here = os.path.dirname(os.path.abspath(__file__))
-    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp"),
-               encoding="utf-8").read()
+    cpp = host_source()
     for stock in ("YellowLight", "RedLight", "MediumLight", "SmallLight"):
         check(stock not in cpp, f"a stock {stock} is still built")
     check(cpp.count("SamplerOnly<FfLight>") == 2,
@@ -1039,9 +1045,7 @@ def test_song_control_contract():
               f"{song.enum} caption/tip is {song.label!r}/{song.tip!r}, want SONG")
 
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
-              encoding="utf-8") as f:
-        cpp = f.read()
+    cpp = host_source()
     check('configSwitch(c.id, 0.f, 4.f, init, "Form",' not in cpp,
           "FORM must no longer be its own Rack switch")
     song_words = """
@@ -1102,7 +1106,7 @@ def test_song_knob_swallows_form_and_new():
     for dead in ("FORM_A", "FORM_B", "NEWPHRASE_A", "NEWPHRASE_B"):
         check(dead not in names, f"{dead} still exists")
     here = os.path.dirname(os.path.abspath(__file__))
-    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    cpp = host_source()
     check("song_ladder.h" in cpp, "the host does not include the ladder")
     # Debouncing itself lives in song_rung_state.hpp (spky::hyst_step under
     # the hood, dependency-free, unit-tested by test_song_rung_state.cpp) --
@@ -1436,9 +1440,7 @@ def test_config_wires_tip_not_label():
     guard reads the actual C++ source so that regression fails the suite
     instead of waiting for a human to notice (spec 2026-07-18, Task 6 review)."""
     here = os.path.dirname(os.path.abspath(__file__))
-    cpp_path = os.path.join(here, "..", "src", "Fireflow.cpp")
-    with open(cpp_path) as f:
-        cpp = f.read()
+    cpp = host_source()
     check("const std::string lbl = c.tip;" in cpp,
           "parameter configuration is not wired to c.tip")
     check("configInput(c.id, c.tip)" in cpp,
@@ -1461,7 +1463,7 @@ def test_grit_is_one_bipolar_knob():
     check(all(row[0] != "GRITMODE" for row in gp.DYNAMIC_CAPTIONS),
           "GRITMODE still has a dynamic caption")
     here = os.path.dirname(os.path.abspath(__file__))
-    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    cpp = host_source()
     check("spky::GritMode::Reduce" in cpp and "spky::GritMode::Drive" in cpp,
           "the host no longer names both grit modes")
     check("kGritDead" in cpp, "no dead zone around grit zero")
@@ -1475,7 +1477,7 @@ def test_couple_knob_carries_both_worlds():
     names = {c.enum for c in gp.PARAMS}
     check("SYNC" not in names, "the SYNC switch still exists")
     here = os.path.dirname(os.path.abspath(__file__))
-    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    cpp = host_source()
     check("kCoupleZoneSplit" in cpp, "no zone split constant in the host")
     check("inst.set_sync(" in cpp, "the host never sets sync any more")
     check("params[SYNC]" not in cpp, "Fireflow.cpp still reads a SYNC param")
@@ -1506,9 +1508,7 @@ def test_grit_dead_zone_and_mix_formula_agree_across_host_and_bench():
     remove it.
     """
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
-              encoding="utf-8") as f:
-        host_cpp = f.read()
+    host_cpp = host_source()
     bench_path = os.path.join(here, "..", "..", "..", "bench", "audition",
                                "init_patch.cpp")
     with open(bench_path, encoding="utf-8") as f:
@@ -1554,7 +1554,7 @@ def test_detune_is_a_panel_control_with_a_square_taper():
     check(det.label != "", "DETUNE_A still has the menu-only empty label")
     check((det.x, det.y) != (0.0, 0.0), "DETUNE_A still sits at the menu origin")
     here = os.path.dirname(os.path.abspath(__file__))
-    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    cpp = host_source()
     check("detKnob * detKnob" in cpp, "the detune taper is not quadratic")
 
 
@@ -1572,9 +1572,7 @@ def test_detune_taper_agrees_across_host_and_bench():
     in either file's prose comments (checked so this cannot false-match a
     comment describing the taper rather than implementing it)."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
-              encoding="utf-8") as f:
-        host_cpp = f.read()
+    host_cpp = host_source()
     bench_path = os.path.join(here, "..", "..", "..", "bench", "audition",
                                "init_patch.cpp")
     with open(bench_path, encoding="utf-8") as f:
@@ -1624,7 +1622,12 @@ def engine_cycle_wiring_issues(cpp, makefile, led_law):
     latch = cpp_scope(cpp, "struct EngineCycleLatch : FfPadLatch")
     shades = cpp_scope(cpp, "static const NVGcolor kEngineShades[]")
     config = cpp_scope(cpp, "void configControls()")
-    push = cpp_scope(cpp, "void pushParams()")
+    push = cpp_scope(cpp, "Events _tick(")
+    # The factory autoload stayed in VCV when pushParams moved to
+    # control/control_law.h (spec 2026-10-09-rev-a-p6b1 §4.1): the law calls
+    # hooks.after_engine() where the autoload used to sit, and VcvHooks holds
+    # the autoload itself.
+    hooks = cpp_scope(cpp, "struct VcvHooks {")
     process = cpp_scope(cpp, "void process(const ProcessArgs& args) override")
     ring = cpp_scope(cpp, "struct SpkyRing : Widget")
     widget = cpp_scope(cpp, "FireflowWidget(Fireflow* module)")
@@ -1636,7 +1639,8 @@ def engine_cycle_wiring_issues(cpp, makefile, led_law):
 
     for label, block in (("latch", latch), ("shade table", shades),
                          ("config", config),
-                         ("parameter push", push), ("process", process),
+                         ("parameter push", push), ("factory hook", hooks),
+                         ("process", process),
                          ("sampler ring", ring), ("widget", widget),
                          ("REC LED", rec_fill)):
         if block is None:
@@ -1731,16 +1735,19 @@ const spky::EngineId id =
     eng == 3 ? spky::ENGINE_BODY :
     eng == 4 ? spky::ENGINE_BBD :
     eng == 5 ? spky::ENGINE_FEED :
-    smp[p].testTone ? spky::ENGINE_TEST_TONE : spky::ENGINE_SAMPLER;
+    opt.deck[p].test_tone ? spky::ENGINE_TEST_TONE : spky::ENGINE_SAMPLER;
 inst.set_engine(p, id);"""
     if push_n.count(compact_cpp(dispatch)) != 1:
         issues.append("ENG dispatch must exactly preserve Synth/Sampler/Wave/Body/BBD/Feed/test-tone states")
-    factory = "if(eng==1&&!smp[p].testTone&&inst.sampler_empty(p)&&!factoryTried[p]){"
-    if push_n.count(factory) != 1:
+    hooks_n = compact_cpp(hooks)
+    factory = "if(eng==1&&!m->smp[p].testTone&&inst.sampler_empty(p)&&!m->factoryTried[p]){"
+    if hooks_n.count(factory) != 1:
         issues.append("factory autoload must be restricted to ENG state 1")
+    if push_n.count("hooks.after_engine(p,eng,inst);") != 1:
+        issues.append("the control law must hand ENG to the host's factory hook exactly once")
 
     sampler_id = "inst.engine_id(p)==spky::ENGINE_SAMPLER"
-    want_rec = ("constboolwantRec=params[p?REC_B:REC_A].getValue()>0.5f&&" +
+    want_rec = ("constboolwantRec=prm(p?REC_B:REC_A)>0.5f&&" +
                 sampler_id + ";")
     sampler_part = "constboolsamplerPart=" + sampler_id + ";"
     if push_n.count(want_rec) != 1:
@@ -1754,7 +1761,7 @@ inst.set_engine(p, id);"""
             issues.append("a sampler-only pushParams control escaped samplerPart gating")
             break
     new_punch = """
-if (songRung[p].tick(songNorm, spky::kSongLadderCount)) {
+if (_songRung[p].tick(songNorm, spky::kSongLadderCount)) {
     inst.new_phrase(p);          // turn the knob, get a new melody
     // Fires once per rung detent; inherited the retired NEW
     // pad's Sampler punch. Whether every detent should punch, or
@@ -1766,7 +1773,8 @@ if (songRung[p].tick(songNorm, spky::kSongLadderCount)) {
         issues.append("SONG's rung change must rebuild A/B and additionally punch the Sampler")
     if "triggerTrig" in push or "trigger_manual" in push:
         issues.append("removed TRIG behavior remains in pushParams")
-    if any(bad in push_n for bad in ("eng>0", "eng!=0", "eng>=1", "eng==1||eng==2")):
+    if any(bad in push_n + hooks_n
+           for bad in ("eng>0", "eng!=0", "eng>=1", "eng==1||eng==2")):
         issues.append("pushParams has a boolean ENG alternative that can route Wave as Sampler")
 
     rec_fill_n = compact_cpp(rec_fill)
@@ -1800,8 +1808,7 @@ def test_engine_cycle_host_wiring():
     """ENG keeps its saved 0/1 meanings and exposes Wave at 2 without any
     boolean sampler routing that would mistake Wave for Sampler."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
+    cpp = host_source()
     with open(os.path.join(here, "..", "Makefile")) as f:
         makefile = f.read()
     with open(os.path.join(here, "..", "src", "led_law.hpp")) as f:
@@ -1814,8 +1821,7 @@ def test_engine_cycle_host_wiring():
 def test_engine_cycle_guard_rejects_representative_regressions():
     """The source guard must fail when a scoped ENG behavior regresses."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
+    cpp = host_source()
     with open(os.path.join(here, "..", "Makefile")) as f:
         makefile = f.read()
     with open(os.path.join(here, "..", "src", "led_law.hpp")) as f:
@@ -1828,8 +1834,8 @@ def test_engine_cycle_guard_rejects_representative_regressions():
          "state >= 0 && state <= kShadeCount", "latch"),
         ("nvgRGBA(230, 140, 255, 140),  // BBD: violet",
          "nvgRGBA(230, 140, 255, 141),  // BBD: violet", "shade values"),
-        ("if (eng == 1 && !smp[p].testTone",
-         "if (eng > 0 && !smp[p].testTone", "factory"),
+        ("if (eng == 1 && !m->smp[p].testTone",
+         "if (eng > 0 && !m->smp[p].testTone", "factory"),
         ("const bool samplerPart = inst.engine_id(p) == spky::ENGINE_SAMPLER;",
          "const bool samplerPart = eng > 0;", "sampler"),
         ("if (samplerPart) inst.sampler_punch(p);",
@@ -1867,9 +1873,8 @@ def test_variation_is_gated_off_the_sampler():
     SCAN on it. Variation parks at LOOP there -- the same shape as the
     LANE_SIZE gate that parks at 0.5f off the Sampler."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
-    push = cpp_scope(cpp, "void pushParams()")
+    cpp = host_source()
+    push = cpp_scope(cpp, "Events _tick(")
     check(push is not None, "pushParams scope is missing")
     if push is None:
         return
@@ -1899,7 +1904,7 @@ def source_detune_wiring_issues(cpp):
     touched either side."""
     issues = []
     config = cpp_scope(cpp, "void configControls()")
-    push = cpp_scope(cpp, "void pushParams()")
+    push = cpp_scope(cpp, "Events _tick(")
     # appendContextMenu is a two-line delegator now (the menu body was
     # lifted into the free function appendFireflowMenu so both widgets can
     # share it) -- anchor on the function that actually holds the content,
@@ -1979,8 +1984,7 @@ def test_source_detune_host_wiring():
     """SOURCE owns LANE_SOURCE on every engine; DETUNE is a strided panel
     control that reaches the engine through the squared taper."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
+    cpp = host_source()
     for issue in source_detune_wiring_issues(cpp):
         check(False, issue)
 
@@ -1990,8 +1994,7 @@ def test_source_detune_guard_rejects_representative_regressions():
     detune taper that regressed to linear or to the old menu-only shape, not
     merely recognize today's source."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
+    cpp = host_source()
     mutations = [
         ("pp(SOURCE_A, p)", "pp(DETUNE_A, p)", "SOURCE lane"),
         ("const float detKnob = mvp(DETUNE_A, p);\n"
@@ -2091,13 +2094,13 @@ def strided_accessor_issues(cpp):
     # Carve out those two definitions -- the only legitimate uses -- before
     # scanning the rest of the file for the same `* PART_STRIDE` spelling.
     exclude = []
-    for anchor in ("inline float pp(int baseA, int part)",
-                   "inline float mvp(int baseA, int part)"):
+    for anchor in ("float pp(int baseA, int part) const",
+                   "float mvp(int baseA, int part) const"):
         scope = cpp_scope(body, anchor)
         if scope is not None:
             start = body.find(anchor)
             exclude.append((start, start + len(scope)))
-    for m in re.finditer(r"\*\s*PART_STRIDE|PART_STRIDE\s*\*", body):
+    for m in re.finditer(r"\*\s*(?:ffctl::)?PART_STRIDE|PART_STRIDE\s*\*", body):
         pos = m.start()
         if any(s <= pos < e for s, e in exclude):
             continue      # pp()'s or mvp()'s own definition
@@ -2114,8 +2117,7 @@ def test_appended_params_are_never_read_through_the_part_stride():
     and no call site hand-builds a `* PART_STRIDE` offset instead of calling
     one of those accessors (fix round 2)."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
+    cpp = host_source()
     for issue in strided_accessor_issues(cpp):
         check(False, issue)
 
@@ -2129,15 +2131,14 @@ def test_strided_accessor_guard_rejects_representative_regressions():
     accessor call -- the identical hazard in the spelling the accessor-name
     scan cannot see (fix round 2)."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
+    cpp = host_source()
     mutations = [
-        ("params[p ? DEPTH_B : DEPTH_A].getValue()",
+        ("prm(p ? DEPTH_B : DEPTH_A)",
          "pp(DEPTH_A, p)", "DPTH read through the stride"),
-        ("params[p ? STAGES_B : STAGES_A].getValue()",
+        ("prm(p ? STAGES_B : STAGES_A)",
          "pp(STAGES_A, p)", "STAGES read through the stride"),
-        ("params[p ? DEPTH_B : DEPTH_A].getValue()",
-         "params[DEPTH_A + p * PART_STRIDE].getValue()",
+        ("prm(p ? DEPTH_B : DEPTH_A)",
+         "prm(DEPTH_A + p * PART_STRIDE)",
          "DPTH read via a hand-built stride offset"),
     ]
     for before, after, label in mutations:
@@ -2157,7 +2158,7 @@ def feed_host_wiring_issues(cpp):
     compiled-in 0.5 with no way to reach DEPTH's ends.
     """
     issues = []
-    push = cpp_scope(cpp, "void pushParams()")
+    push = cpp_scope(cpp, "Events _tick(")
     if push is None:
         return ["FEED wiring: parameter push scope is missing"]
     push_n = compact_cpp(push)
@@ -2185,7 +2186,7 @@ def feed_host_wiring_issues(cpp):
     # see strided_accessor_issues above). This needle now pins the SHAPE of the
     # read as well as its presence, and the deck-B id is part of that shape.
     if ("inst.set_target_base(p,spky::LANE_MOTION,"
-            "params[p?DEPTH_B:DEPTH_A].getValue());") not in push_n:
+            "prm(p?DEPTH_B:DEPTH_A));") not in push_n:
         issues.append("DPTH must write LANE_MOTION's base on EVERY engine, on "
                       "BOTH decks -- each engine reads that lane as something "
                       "(width, drift, scatter, feedback, FM index); a "
@@ -2193,7 +2194,7 @@ def feed_host_wiring_issues(cpp):
                       "unreachable, and pp() on this APPENDED id is what made "
                       "deck B read another param entirely")
     if "feedPart?pp(DEPTH_A,p)" in push_n or \
-       "feedPart?params[p?DEPTH_B:DEPTH_A].getValue()" in push_n:
+       "feedPart?prm(p?DEPTH_B:DEPTH_A)" in push_n:
         issues.append("the FEED-only ternary on LANE_MOTION's base is back")
     return issues
 
@@ -2262,8 +2263,7 @@ def test_feed_shipped_defaults_are_the_engine_constants():
 def test_feed_host_wiring():
     """The FEED deck's three lane/engine re-points are present and correctly shaped."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
+    cpp = host_source()
     for issue in feed_host_wiring_issues(cpp):
         check(False, issue)
 
@@ -2271,8 +2271,7 @@ def test_feed_host_wiring():
 def test_feed_host_wiring_guard_rejects_representative_regressions():
     """Each of the four ways the FEED wiring can be reverted is caught."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
+    cpp = host_source()
     mutations = [
         ("} else if (feedPart) {\n"
          "                inst.set_target_base(p, spky::LANE_SIZE,   mvp(DETUNE_A, p));\n",
@@ -2280,13 +2279,13 @@ def test_feed_host_wiring_guard_rejects_representative_regressions():
          "                inst.set_target_base(p, spky::LANE_SIZE,   mvp(DETUNE_A, p));\n",
          "SPREAD re-point removed"),
         ("            inst.set_target_base(p, spky::LANE_MOTION,\n"
-         "                                 params[p ? DEPTH_B : DEPTH_A].getValue());",
+         "                                 prm(p ? DEPTH_B : DEPTH_A));",
          "",
          "LANE_MOTION base write removed"),
         ("            inst.set_target_base(p, spky::LANE_MOTION,\n"
-         "                                 params[p ? DEPTH_B : DEPTH_A].getValue());",
+         "                                 prm(p ? DEPTH_B : DEPTH_A));",
          "            inst.set_target_base(p, spky::LANE_MOTION,\n"
-         "                                 feedPart ? params[p ? DEPTH_B : DEPTH_A].getValue()\n"
+         "                                 feedPart ? prm(p ? DEPTH_B : DEPTH_A)\n"
          "                                          : 0.5f);",
          "the FEED-only ternary restored"),
         ("            if (inst.engine_id(p) != spky::ENGINE_FEED) {",
@@ -2313,7 +2312,7 @@ def flux_time_wiring_issues(cpp):
     issues = []
     quantity = cpp_scope(cpp, "struct FluxRateQuantity : ParamQuantity")
     config = cpp_scope(cpp, "void configControls()")
-    push = cpp_scope(cpp, "void pushParams()")
+    push = cpp_scope(cpp, "Events _tick(")
     if "struct FluxTimeQuantity" in cpp:
         issues.append("FluxTimeQuantity must be retired along with the MULT knob")
     if "FLUXTIME_A" in cpp or "FLUXTIME_B" in cpp:
@@ -2342,7 +2341,7 @@ else if (c.id == FLUXRATE_A || c.id == FLUXRATE_B)
                       "(range, initParamDefault-sourced default, or lbl)")
     expected_rate_push = """
 inst.set_flux_rate(p, (int)std::lround(
-    params[p ? FLUXRATE_B : FLUXRATE_A].getValue()));
+    prm(p ? FLUXRATE_B : FLUXRATE_A)));
 """
     if push is None or compact_cpp(expected_rate_push) not in compact_cpp(push):
         issues.append("TIME does not push its raw index to set_flux_rate")
@@ -2354,7 +2353,7 @@ inst.set_fx_target_base(p, spky::FXT_FLUX_TIME, 0.5f);
     pitch = """
 if (bbdPart)
     inst.set_target_base(p, spky::LANE_PITCH,
-        params[p ? STAGES_B : STAGES_A].getValue());
+        prm(p ? STAGES_B : STAGES_A));
 """
     push_n = compact_cpp(push) if push else ""
     if push is None or push_n.count(compact_cpp(pitch)) != 1:
@@ -2369,8 +2368,7 @@ if (bbdPart)
 def test_flux_time_host_wiring():
     """TIME reads its raw detent index and FXT_FLUX_TIME stays pinned neutral."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
+    cpp = host_source()
     for issue in flux_time_wiring_issues(cpp):
         check(False, issue)
 
@@ -2378,11 +2376,10 @@ def test_flux_time_host_wiring():
 def test_flux_time_guard_rejects_representative_regressions():
     """The TIME guard rejects realistic deck, target, index, and default bugs."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
+    cpp = host_source()
     mutations = [
-        ("params[p ? FLUXRATE_B : FLUXRATE_A].getValue()",
-         "params[p ? FLUXRATE_A : FLUXRATE_A].getValue()", "deck B id"),
+        ("prm(p ? FLUXRATE_B : FLUXRATE_A)",
+         "prm(p ? FLUXRATE_A : FLUXRATE_A)", "deck B id"),
         ("spky::FXT_FLUX_TIME, 0.5f", "spky::FXT_FLUX_FB, 0.5f", "FX target"),
         ("int k = spky::kFluxRateOffset + (int)std::lround(getValue());",
          "int k = spky::kFluxRateOffset + spky::flux_division_index(getValue());",
@@ -2456,8 +2453,7 @@ def caption_wiring_issues(cpp):
 
 def test_caption_host_wiring():
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
+    cpp = host_source()
     for issue in caption_wiring_issues(cpp):
         check(False, issue)
 
@@ -2504,8 +2500,7 @@ def dynamic_flag_issues(cpp):
 
 def test_dynamic_lookup_stays_inside_the_param_id_space():
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
+    cpp = host_source()
     for issue in dynamic_flag_issues(cpp):
         check(False, issue)
 
@@ -2514,8 +2509,7 @@ def test_dynamic_flag_guard_rejects_representative_regressions():
     """The dynamic-flag guard rejects reverting to unconditional resolution,
     not merely recognizing today's source."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
+    cpp = host_source()
     mutations = [
         ("captions(kInputCtls,  sizeof(kInputCtls)  / sizeof(kInputCtls[0]),  false);",
          "captions(kInputCtls,  sizeof(kInputCtls)  / sizeof(kInputCtls[0]),  true);",
@@ -2538,8 +2532,7 @@ def test_dynamic_flag_guard_rejects_representative_regressions():
 
 def test_caption_guard_rejects_representative_regressions():
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
+    cpp = host_source()
     mutations = [
         ("for (const auto& d : kDynCaptions)", "for (const auto& d : kParamCtls)",
          "table binding"),
@@ -2651,9 +2644,7 @@ struct SlotVisible : W {
 def test_attack_pitch_host_wiring():
     """The shared VOICE slot, caption, and menu follow rounded Rack ENG state."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
-              encoding="utf-8") as f:
-        cpp = f.read()
+    cpp = host_source()
     for issue in attack_pitch_wiring_issues(cpp):
         check(False, issue)
 
@@ -2661,9 +2652,7 @@ def test_attack_pitch_host_wiring():
 def test_attack_pitch_guard_rejects_representative_regressions():
     """The shared VOICE guard rejects state, deck, visibility, and menu bugs."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
-              encoding="utf-8") as f:
-        cpp = f.read()
+    cpp = host_source()
     mutations = [
         ("static int roundedEngineState(Fireflow* module, int engineId)",
          "static int roundedEngineState(const Fireflow* module, int engineId)",
@@ -2720,16 +2709,14 @@ def rec_visibility_issues(cpp):
 
 def test_rec_visibility_host_wiring():
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
+    cpp = host_source()
     for issue in rec_visibility_issues(cpp):
         check(False, issue)
 
 
 def test_rec_visibility_guard_rejects_representative_regressions():
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
+    cpp = host_source()
     mutations = [
         ("case REC_B: return samplerDeck(m, ENGINE_B);",
          "case REC_B: return samplerDeck(m, ENGINE_A);",
@@ -2793,16 +2780,14 @@ struct SamplerOnly : W {
 
 def test_rec_light_visibility_host_wiring():
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
+    cpp = host_source()
     for issue in rec_light_visibility_issues(cpp):
         check(False, issue)
 
 
 def test_rec_light_visibility_guard_rejects_representative_regressions():
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
+    cpp = host_source()
     mutations = [
         ("led->engineId = (c.id == REC_A_L) ? ENGINE_A : ENGINE_B;",
          "led->engineId = (c.id == REC_A_L) ? ENGINE_A : ENGINE_A;",
@@ -2823,8 +2808,7 @@ def test_sampler_deck_predicate_is_single_source_of_truth():
     edit can silently desync (the ablation-verdict-discipline lesson: an
     unmeasured duplicate is how a residue gets mislabeled)."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
+    cpp = host_source()
     check(cpp.count("static bool samplerDeck(Fireflow* m, int engineId)") == 1,
           "samplerDeck must have exactly one definition")
     matches = re.findall(r"roundedEngineState\([^)]*\)\s*==\s*1", cpp)
@@ -2841,12 +2825,10 @@ def test_shuffle_host_wiring():
     control update, before either deck can enter STEP and latch that
     control-tick's groove value. The init value lives in init_patch.hpp."""
     here = os.path.dirname(os.path.abspath(__file__))
-    cpp_path = os.path.join(here, "..", "src", "Fireflow.cpp")
-    with open(cpp_path) as f:
-        cpp = f.read()
-    check("inst.set_shuffle(params[SHUFFLE].getValue());" in cpp,
+    cpp = host_source()
+    check("inst.set_shuffle(prm(SHUFFLE));" in cpp,
           "Rack SHUFFLE param is not wired to Instrument::set_shuffle")
-    shuffle_push = cpp.index("inst.set_shuffle(params[SHUFFLE].getValue());")
+    shuffle_push = cpp.index("inst.set_shuffle(prm(SHUFFLE));")
     first_step_push = cpp.index("inst.set_step(")
     check(shuffle_push < first_step_push,
           "Rack must push shared SHUFFLE before either FLOW->STEP transition")
@@ -3000,9 +2982,7 @@ def test_sampler_preset_init_snapshot():
     check("kInitLastBasis" not in header,
           "obsolete remembered-form init state remains")
 
-    cpp_path = os.path.join(here, "..", "src", "Fireflow.cpp")
-    with open(cpp_path) as f:
-        cpp = f.read()
+    cpp = host_source()
     check('#include "init_patch.hpp"' in cpp,
           "Fireflow.cpp does not include the init snapshot")
     check("const float init = initParamDefault(c.id);" in cpp,
@@ -3233,16 +3213,14 @@ def test_header_carries_text_anchor():
     check("unsigned char anchor; const char* str;" in h,
           "PanelTxt has no anchor column")
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
+    cpp = host_source()
     check("alignOf(t.anchor)" in cpp,
           "the kPanelTexts draw loop ignores the anchor column")
 
 
 def test_vcv_tape_memory_is_heap_backed_stereo_storage():
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
+    cpp = host_source()
     check('std::vector<float> echoMem[spky::PART_COUNT][2];' in cpp,
           "VCV tape memory is not heap-backed stereo storage")
     check('float echo[spky::PART_COUNT][spky::Flux::kMaxSamples]' not in cpp,
@@ -3259,8 +3237,7 @@ def test_steps_knob_carries_the_mode():
     steps = [c for c in gp.PARAMS if c.enum == "STEPS_A"]
     check(len(steps) == 1 and steps[0].kind == gp.KNOBI,
           "STEPS_A missing or no longer an integer knob")
-    cpp = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            "..", "src", "Fireflow.cpp")).read()
+    cpp = host_source()
     # The range now lives in the generated table (control/params.hpp), which
     # configControls() reads; check both ends of that hand-off.
     check(gp.param_range(steps[0]) == ("0.f", "16.f", True),
@@ -3322,7 +3299,7 @@ def test_comp_knob_is_level_then_compressor():
     comp = [c for c in gp.PARAMS if c.enum == "COMP_A"][0]
     check(comp.label == "LVL", f"COMP_A still prints {comp.label!r}")
     here = os.path.dirname(os.path.abspath(__file__))
-    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    cpp = host_source()
     check("kLvlCompSplit" in cpp, "no zone split constant in the host")
     check("inst.set_part_level(" in cpp, "the host never sets a part level")
 
@@ -3347,9 +3324,7 @@ def test_lvl_comp_split_and_formulas_agree_across_host_and_bench():
     dead-zone guard above, same pattern).
     """
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
-              encoding="utf-8") as f:
-        host_cpp = f.read()
+    host_cpp = host_source()
     bench_path = os.path.join(here, "..", "..", "..", "bench", "audition",
                                "init_patch.cpp")
     with open(bench_path, encoding="utf-8") as f:
@@ -3407,16 +3382,17 @@ def test_comp_zone_makeup_rises_evenly_across_its_travel():
     """
     here = os.path.dirname(os.path.abspath(__file__))
 
-    def one(path, pattern, label):
-        with open(path, encoding="utf-8") as f:
-            matches = re.findall(pattern, f.read())
+    def one(source, pattern, label):
+        matches = re.findall(pattern, source)
         check(len(matches) == 1,
               f"{label}: expected exactly one match for {pattern!r}, "
               f"found {len(matches)} ({matches!r})")
         return float(matches[0].rstrip("f")) if len(matches) == 1 else None
 
-    host = os.path.join(here, "..", "src", "Fireflow.cpp")
-    comp = os.path.join(here, "..", "..", "..", "engine", "fx", "comp.cpp")
+    host = host_source()
+    with open(os.path.join(here, "..", "..", "..", "engine", "fx", "comp.cpp"),
+              encoding="utf-8") as f:
+        comp = f.read()
 
     split = one(host, r"kLvlCompSplit\s*=\s*([\d.]+f?)", "Fireflow.cpp")
     top = one(host, r"kCompTop\s*=\s*([\d.]+f?)", "Fireflow.cpp")
@@ -3478,9 +3454,7 @@ def test_couple_zone_split_and_formula_agree_across_host_and_bench():
     dead-zone and LVL/COMP guards above, same pattern).
     """
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
-              encoding="utf-8") as f:
-        host_cpp = f.read()
+    host_cpp = host_source()
     bench_path = os.path.join(here, "..", "..", "..", "bench", "audition",
                                "init_patch.cpp")
     with open(bench_path, encoding="utf-8") as f:
@@ -3524,7 +3498,7 @@ def test_drift_knob_settles_at_its_left_stop():
     check("SETTLE" not in {c.enum for c in gp.PARAMS},
           "the SETL pad still exists")
     here = os.path.dirname(os.path.abspath(__file__))
-    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    cpp = host_source()
     check("kDriftSettleZone" in cpp, "no settle zone constant in the host")
     check("driftSettled" in cpp, "settle is not edge-triggered")
     check("params[SETTLE]" not in cpp, "Fireflow.cpp still reads a SETTLE param")
@@ -3555,9 +3529,7 @@ def test_drift_settle_zone_and_formula_agree_across_host_and_bench():
     bench/audition/init_patch.cpp's comment at the DRIFT block).
     """
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
-              encoding="utf-8") as f:
-        host_cpp = f.read()
+    host_cpp = host_source()
     bench_path = os.path.join(here, "..", "..", "..", "bench", "audition",
                                "init_patch.cpp")
     with open(bench_path, encoding="utf-8") as f:
@@ -3602,7 +3574,7 @@ def test_fixed_values_and_dead_controls():
         check(dead not in names, f"{dead} still exists")
     check(gp.HIDDEN_PARAMS == [], "HIDDEN_PARAMS is not empty")
     here = os.path.dirname(os.path.abspath(__file__))
-    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    cpp = host_source()
     check("set_master_drive(0.40f)" in cpp, "PUSH is not pinned to 0.40")
     check("DriveQuantity" not in cpp, "the dead Drive quantity is still here")
     check("inst.spot()" not in cpp, "SPOT is still wired in the host")
@@ -3630,9 +3602,7 @@ def test_fixed_values_agree_across_host_and_bench():
     dead-zone, LVL/COMP, COUPLE and DRIFT guards above, same pattern).
     """
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
-              encoding="utf-8") as f:
-        host_cpp = f.read()
+    host_cpp = host_source()
     bench_path = os.path.join(here, "..", "..", "..", "bench", "audition",
                                "init_patch.cpp")
     with open(bench_path, encoding="utf-8") as f:
