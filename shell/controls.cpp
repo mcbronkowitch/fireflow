@@ -1,5 +1,7 @@
 #include "controls.h"
 
+#include <cmath>
+
 namespace shell {
 
 const ControlEntry* find_control(const ControlTable& t, int group, int ch)
@@ -10,20 +12,13 @@ const ControlEntry* find_control(const ControlTable& t, int group, int ch)
     return nullptr;
 }
 
-float control_value(int param, float v)
+float knob_from_pot(int param, float v)
 {
-    if(param < 0 || param >= spky::P_COUNT) return 0.0f;
-    const spky::ParamInfo& pi = spky::kParams[param];
-    return pi.lo + v * (pi.hi - pi.lo);
-}
-
-bool apply_control(const ControlEntry& e, float v, spky::Instrument& inst)
-{
-    if(e.param < 0 || e.param >= spky::P_COUNT) return false;
-    // No clamp here: v arrives clamped from scan_value's span_normalize(),
-    // and apply_param() clamps to the table range once more.
-    spky::apply_param(inst, e.param, control_value(e.param, v));
-    return true;
+    if(param < 0 || param >= ffctl::NUM_PARAMS) return 0.0f;
+    // No clamp here: v arrives clamped from scan_value's span_normalize().
+    const ffctl::ParamRange& r = ffctl::kParamRange[param];
+    const float x = r.lo + v * (r.hi - r.lo);
+    return r.snap ? std::round(x) : x;
 }
 
 } // namespace shell

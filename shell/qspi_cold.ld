@@ -68,6 +68,7 @@ SECTIONS
     *(.text._ZL30adc_use_measured_sampling_time*)
     *(.text._ZN5shell6fx_memEv)
     *(.text._ZN5shell15panel_scan_initEv)
+    *(.text._ZN5shell12control_bootEPf)
 
     /* The board's peripherals as DaisyPatchSM::Init() brings them up AFTER
        its QSPI init: ADC, DAC, codec over I2C, gate inputs, analog controls. */

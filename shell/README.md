@@ -250,13 +250,13 @@ like-for-like with the 2026-08-23 bench numbers.
 
 **The table is generated.** `python shell/gen_panel_map.py` writes
 `shell/generated_panel_map.h` from `hardware/reva/panel-map.json`,
-`hardware/reva/blocks.py` and `engine/param_table.h`. Never edit the header;
-`shell_panel_map_guard` regenerates and compares it. The 73 rows split 35
-safe (they send a parameter — those whose VCV law is exactly `apply_param()`'s,
-spec §2), 35 unmapped (scanned and printed, they wait for P6b's shared control
-layer) and 3 reserved (`ROOT_A`, `ROOT_B`, `REV_MOD`: pots on the plate that
-send nothing and have no engine target yet).
-A pot added to the panel stops the generator until it is classified.
+`hardware/reva/blocks.py` and `control/params.hpp`. Never edit the header;
+`shell_panel_map_guard` regenerates and compares it. Since P6b-1 the 73 rows
+split 70 that send the shared control law's id of their own name (the
+`FireflowHW` control at that position) and 3 reserved (`ROOT_A`, `ROOT_B`,
+`REV_MOD`: pots on the plate that send nothing and have no parameter yet).
+P6a's "safe"/"unmapped" split is retired. A pot added to the panel with no
+`control/params.hpp` id stops the generator until it gets one or is reserved.
 
 **Keys and LEDs.** Every step reads the 165 in the same pass as the write;
 keys debounce over three reads (6 ms). LED bits only ever travel in the latch
@@ -271,7 +271,11 @@ measured a valid one, no knob reaches the engine.
 last line carries three (row order and names are in
 the generated header's comments; values ×1000, −1000 = never emitted: no valid span yet, i.e. calibration
 never succeeded) and one
-`SHELL_PLAY` summary line with key mask and press counts.
+`SHELL_PLAY` summary line with key mask and press counts. Both images then
+print `SHELL_PLAY_LAW cyc_last=<n> cyc_max=<n>`: the shared control law's
+cost in DWT cycles, the last block's tick and the worst since boot (spec
+2026-10-09-rev-a-p6b1 §6: above 9600 cycles, one point, the tick moves to
+every second block).
 
 **Coupon session** (spec §7) on the coupon play image:
 1. All three pots reach both stops; at rest their printed values do not change.
@@ -281,6 +285,30 @@ never succeeded) and one
    `adc11` reads near `zero`, `adc12` near `rail`. Swap the jumpers: they
    swap. (The coupon's test points carry its netlist's old D8/D9 names; P2 §2
    corrected them.)
+
+## The shared control law (P6b-1)
+
+Spec: `docs/superpowers/specs/2026-10-09-rev-a-p6b1-shared-control-law-design.md`.
+
+The playing images no longer hand a pot to an engine setter. A pot that
+emits writes `lo + v·(hi − lo)` of its parameter's VCV range into a knob
+vector (`knob_from_pot()`, rounded for a parameter Rack snaps), and once per
+audio block `control_tick()` runs the whole vector through
+`control::ControlLaw` — the law `FireflowHW` runs in Rack — so every pot
+drives what its VCV twin drives. At boot the vector is the init patch,
+depths included, and the law is re-armed as for a patch restore. The law
+builds with `-Os` (`control_tick.o`, like `mux_plan.o`): at `-O3` the Rev A
+image kept 2.7 KB of `SRAM_EXEC` free, under the spec's 8 KB floor; with
+`-Os` it keeps 10 088 B (2026-10-09).
+
+**Known divergences from VCV (P6b-1)** — spec §8:
+
+- Depths are the init patch's and cannot be edited (P6b-2).
+- After a BBD edge the hardware's FLUX stays at its pot value; VCV's knob
+  drops to zero. The law's events are ignored: a physical pot cannot be
+  turned back.
+- A Sampler deck is silent: no factory sample, no REC yet.
+- No CLOCK, RESET or CV on the hardware.
 
 ## Where the work stands, and where it goes next
 

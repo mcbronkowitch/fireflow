@@ -8,8 +8,10 @@
 #include <atomic>
 #include <cstdio>
 
+#include "control_tick.h"
 #include "controls.h"
 #include "coupon_expect.h"
+#include "cycles.h"
 #include "keys.h"
 #include "mux_scan.h"
 #include "scan_value.h"
@@ -55,6 +57,14 @@ uint16_t g_cal_rail = 0;
 #endif
 volatile uint32_t g_sweeps = 0;
 
+// The knob vector the shared control law reads (spec 2026-10-09-rev-a-p6b1
+// section 4.2): every parameter in VCV's units, booted from the init patch --
+// depths included, which P6b-1 does not let the panel edit yet. The law
+// itself lives in control_tick.cpp.
+float             g_knobs[ffctl::NUM_PARAMS];
+volatile uint32_t g_law_cycles_max = 0;
+volatile uint32_t g_law_cycles_last = 0;
+
 } // namespace
 
 void panel_scan_init()
@@ -63,6 +73,11 @@ void panel_scan_init()
     g_scan.set_walk_leds(false);
     g_scan.set_read_keys(true);
     for(int c = 0; c < kChannels; ++c) g_value[c] = -1.0f;
+    // The firmware's boot is a patch restore of the init patch (spec 4.1).
+    control_boot(g_knobs);
+    // The DWT counter the law's cycle report reads; libDaisy never starts it,
+    // and without this it reads zero forever (cycles.h).
+    cycles_init();
 }
 
 void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
@@ -98,10 +113,19 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
         float v;
         if(pot_filter(g_filter[idx], raw, g_span, kPotHysteresis, &v))
         {
-            apply_control(*e, v, inst);   // refuses a row without a parameter
-            g_value[idx] = v;
+            g_value[idx] = v;               // reserved rows are reported too
+            if(e->param < 0) continue;      // ... and send nothing
+            g_knobs[e->param] = knob_from_pot(e->param, v);
         }
     }
+
+    // Once per block, the whole vector (spec section 4.2). Events are not
+    // applied: a physical FLUX pot cannot be turned back (spec section 8).
+    const uint32_t c0 = cycles_now();
+    control_tick(g_knobs, inst);
+    const uint32_t dc = cycles_now() - c0;
+    g_law_cycles_last = dc;
+    if(dc > g_law_cycles_max) g_law_cycles_max = dc;
 
     if(step == kSteps - 1)
     {
@@ -177,6 +201,12 @@ void run_panel_scan_report(bench::Board& hw)
                      static_cast<int>(g_keys.presses[2]),
                      static_cast<int>(g_keys.presses[3]));
 #endif
+        // The shared control law's cost per block, in DWT cycles: the last
+        // tick and the worst since boot (spec 2026-10-09-rev-a-p6b1 section 6:
+        // above 9600 cycles, one point, it moves to every second block).
+        hw.PrintLine("SHELL_PLAY_LAW cyc_last=%d cyc_max=%d",
+                     static_cast<int>(g_law_cycles_last),
+                     static_cast<int>(g_law_cycles_max));
         hw.Delay(500);
     }
 }

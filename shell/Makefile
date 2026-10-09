@@ -367,6 +367,7 @@ CPP_SOURCES = \
 	scan_check.cpp \
 	scan_value.cpp \
 	controls.cpp \
+	control_tick.cpp \
 	keys.cpp \
 	panel_scan.cpp \
 	mux_scan.cpp \
@@ -417,6 +418,13 @@ include $(SYSTEM_FILES_DIR)/Makefile
 # line would name the target "/mux_plan.o" and silently do nothing.
 $(BUILD_DIR)/mux_plan.o: override OPT := -Os
 
+# The second exception: the shared control law (control/control_law.h), which
+# control_tick.cpp alone instantiates. At -O3 it cost the Rev A image 14.3 KB
+# of SRAM_EXEC and left 2.7 KB free, under the 8 KB floor of spec
+# 2026-10-09-rev-a-p6b1 section 5; the spec names -Os as the fallback. It
+# runs once per block, not per sample, and SHELL_PLAY_LAW reports its cycles.
+$(BUILD_DIR)/control_tick.o: override OPT := -Os
+
 # Boot-only code executes in place from QSPI (spec 2026-10-09-rev-a-p6b1
 # section 5); the list and the rules for what may go on it are in
 # qspi_cold.ld. As -Wl,-T and not as a second plain -T: gcc puts -Wl options
@@ -438,7 +446,7 @@ OBJDUMP := $(CP:objcopy=objdump)
 # Fehler zurueck, und er sieht wie eine Messung aus.
 C_INCLUDES += -I$(BUILD_DIR)
 
-SWITCH_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/probe_adc.o $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/scan_check.o $(BUILD_DIR)/panel_scan.o
+SWITCH_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/probe_adc.o $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/scan_check.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o
 
 # ZUR PARSE-ZEIT, nicht als Regel, und das ist der Kern der Reparatur vom
 # 2026-08-23. Als Regel mit FORCE hat es ZWEIMAL nicht gehalten:
@@ -483,6 +491,7 @@ $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/wait_probe.o: $(BUILD_DIR)/shell_pot_ro
 $(BUILD_DIR)/pot_report.o: $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/scan_check.o: $(BUILD_DIR)/shell_scan_check.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h
+$(BUILD_DIR)/control_tick.o: $(BUILD_DIR)/shell_panel_scan.h
 
 .PHONY: FORCE
 FORCE:
