@@ -313,7 +313,10 @@ image kept 2.7 KB of `SRAM_EXEC` free, under the spec's 8 KB floor; with
 the `cyc_max` warm-up then cost 376 B, leaving 11 208 B (2026-10-09).
 After the retiming setters' unchanged-value early-outs and the repeated
 squaring in `ModLane::_update_slew`, which took newlib's double `pow` out of
-the image (it had no other caller), 19 592 B are free (2026-10-09).
+the image (it had no other caller), 19 592 B are free (2026-10-09). The
+law's sent-value cache (a setter is called only when its value changed) and
+two reorderings in `mv()` and the depth loop then cost 1 704 B, leaving
+17 888 B (2026-10-09).
 
 **Known divergences from VCV (P6b-1)** — spec §8:
 

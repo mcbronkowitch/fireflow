@@ -613,6 +613,10 @@ struct Fireflow : Module {
         fxmem.sampler_frames = frames;
 
         inst.init(sr, fxmem);
+        // init() put every value the law ever sent back to its default; the
+        // law's sent-value cache must forget them, or the next tick would
+        // skip them as unchanged (control_law.h). Re-arms no edge detector.
+        law.on_instrument_init();
 
         for (int p = 0; p < spky::PART_COUNT; ++p)
             if (!snapL[p].empty())

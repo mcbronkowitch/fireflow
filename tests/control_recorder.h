@@ -2,6 +2,7 @@
 // An Instrument stand-in for control/control_law.h: logs every setter call
 // (name, deck, value) and answers the five getters the law reads.
 #include <cmath>
+#include <cstring>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -9,9 +10,22 @@
 #include "instrument.h"
 
 struct Rec {
-    struct Call { std::string fn; int p; float v; };
+    struct Call {
+        std::string fn; int p; float v;
+        bool operator==(const Call& o) const {
+            return fn == o.fn && p == o.p && std::memcmp(&v, &o.v, sizeof v) == 0;
+        }
+    };
+    // `calls` is what the test clears per tick; `history` is never cleared.
     std::vector<Call> calls;
+    std::vector<Call> history;
     spky::EngineId eng[2] = {spky::ENGINE_SYNTH, spky::ENGINE_SYNTH};
+    // deferEngine: set_engine only records the request and engine_id() keeps
+    // reporting the old engine until land_engines() -- the way
+    // spky::Instrument swaps inside a later process().
+    bool deferEngine = false;
+    spky::EngineId asked[2] = {spky::ENGINE_SYNTH, spky::ENGINE_SYNTH};
+    void land_engines() { eng[0] = asked[0]; eng[1] = asked[1]; }
     bool  recording[2] = {};
     bool  empty[2] = {true, true};
     float lane[2][spky::LANE_COUNT] = {};
@@ -20,10 +34,16 @@ struct Rec {
     template <class T> static float f(T v) {
         if constexpr (std::is_enum_v<T>) return float(int(v)); else return float(v);
     }
-    void log(std::string fn, int p, float v) { calls.push_back({std::move(fn), p, v}); }
-    // last value a setter got for deck p (p = -1: global), NaN if never called
+    void log(std::string fn, int p, float v) {
+        calls.push_back({fn, p, v});
+        history.push_back({std::move(fn), p, v});
+    }
+    // The value a setter last got for deck p (p = -1: global), NaN if never
+    // called -- what the instrument holds. Searches the whole history, not
+    // just this tick: the law's sent-value cache does not repeat a value the
+    // instrument already has.
     float last(const std::string& fn, int p = -1) const {
-        for (auto it = calls.rbegin(); it != calls.rend(); ++it)
+        for (auto it = history.rbegin(); it != history.rend(); ++it)
             if (it->fn == fn && it->p == p) return it->v;
         return std::nanf("");
     }
@@ -67,7 +87,11 @@ struct Rec {
 #undef REC_G
 #undef REC_P
 #undef REC_PS
-    void set_engine(int p, spky::EngineId id) { eng[p] = id; log("set_engine", p, f(id)); }
+    void set_engine(int p, spky::EngineId id) {
+        asked[p] = id;
+        if (!deferEngine) eng[p] = id;
+        log("set_engine", p, f(id));
+    }
     void sampler_record(int p, bool on) { recording[p] = on; log("sampler_record", p, on); }
     void set_step(int p, bool on, int steps) { log("set_step", p, on ? float(steps) : -1.f); }
     void set_excitation_sources(int p, bool a, bool b, bool c) {

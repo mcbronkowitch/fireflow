@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <type_traits>
 #include "instrument.h"
 #include "mod/song_ladder.h"
@@ -68,6 +70,19 @@ struct Events {
 // the excitation bus, where VCV's factory autoload used to sit.
 struct NoHooks { template <class Inst> void after_engine(int, int, Inst&) {} };
 
+// The law's sent-value cache indexes its per-deck depth slots by a kModLayer
+// row's part and slot: every engine-backed row must name a deck and a slot
+// inside its group (ControlLawT::DeckSlot).
+constexpr bool engine_rows_fit_cache() {
+    for (const auto& t : ffctl::kModLayer) {
+        if (t.kind == ffctl::MODK_HOST) continue;
+        if (t.part >= spky::PART_COUNT) return false;
+        if (t.slot >= (t.kind == ffctl::MODK_TDEPTH ? int(spky::LANE_COUNT)
+                                                    : int(spky::FXT_COUNT))) return false;
+    }
+    return true;
+}
+
 template <class Inst, class Hooks = NoHooks>
 class ControlLawT {
 public:
@@ -75,12 +90,29 @@ public:
         for (int i = 0; i < ffctl::NUM_PARAMS; ++i) _modIdxBySound[i] = -1;
         for (size_t i = 0; i < sizeof(ffctl::kModLayer) / sizeof(ffctl::kModLayer[0]); ++i)
             _modIdxBySound[ffctl::kModLayer[i].soundId] = (int)i;
+        on_instrument_init();
     }
     // VCV's onReset: song rung + drift settle. NOT the BBD edge -- onReset
     // never re-armed it, and folding the two entry points would change VCV.
-    void on_reset()   { for (auto& s : _songRung) s.rearm(); _driftSettled.rearm(); }
+    // Both entry points also forget every value sent (see _sentBits), so the
+    // first tick after either sends exactly what a law without the cache sends.
+    void on_reset()   { for (auto& s : _songRung) s.rearm(); _driftSettled.rearm();
+                        on_instrument_init(); }
     // A patch restore (VCV's live dataFromJson, the firmware's boot): all three.
     void on_restore() { for (auto& b : _bbdEdge) b.rearm(); on_reset(); }
+    // The instrument was (re-)initialised: Instrument::init() put every value
+    // the law ever sent back to its default, so the next tick must send them
+    // all again. VCV's sample-rate change calls this (Fireflow.cpp reinit());
+    // on_reset()/on_restore() do it too. Re-arms none of the edge detectors.
+    void on_instrument_init() {
+        for (bool& v : _sentValid) v = false;
+        for (int p = 0; p < spky::PART_COUNT; ++p) { _engAsked[p] = -1; _engRunning[p] = -1; }
+    }
+#ifdef SPKY_TESTING
+    // false: every setter is called on every tick, as before the cache --
+    // the reference side of the cache's bit-identity gates.
+    void set_cache_enabled_for_test(bool on) { _cacheOn = on; }
+#endif
 
     // knobs: all ffctl::NUM_PARAMS values in parameter units, exactly what
     // VCV's params[] holds.
@@ -134,6 +166,194 @@ private:
     // zone must adopt as a baseline instead of firing settle() on load. See
     // drift_settle_state.hpp.
     spkyvcv::DriftSettleState _driftSettled;
+
+    // ---- The sent-value cache --------------------------------------------
+    // Every host used to push every setter on every control tick. On the
+    // coupon that was ~30 000 cycles per tick against a 9 600 budget, most of
+    // it libm (powf/expf/sinf/cosf) inside setters handed the value they
+    // already held. The law now remembers the bits it last sent per setter,
+    // per deck and per lane/FX slot, and skips the call when they are
+    // identical. Compared as bits, like the engine's own same_bits early-outs
+    // (engine/util/math.h): -0 and +0 differ, a NaN equals itself. The cache
+    // sits in Out below, between the tick body and the instrument, so the
+    // body still reads as the full push it always was, in the same order; a
+    // cold cache (the first tick after any of the forget points) sends
+    // exactly that full push.
+    //
+    // Exact because every cached setter is an idempotent store with no other
+    // writer behind the law's back: a repeat call changes nothing. What stays
+    // uncached, and why:
+    //   - The events: settle, new_phrase, sampler_punch, sampler_record. They
+    //     act per call and are already edge-gated here.
+    //   - set_rate, set_smooth, set_step, set_sync, set_tide, set_tempo_bpm:
+    //     their engine early-outs still call ModLane::refresh_slew() on an
+    //     unchanged value (a lane's _ev_rate walks without a recompute). At a
+    //     96-sample tick Center::update masks a missing refresh; at VCV's 16
+    //     it does not, so the law keeps calling them.
+    //   - set_drift: Center::settle() writes the drift target behind the
+    //     setter. The law fires settle() only on the tick its pushed value
+    //     drops to 0, but any other settle() caller would strand the target.
+    //   - Getters, and the host hook.
+    // Forgotten (sent again) on: on_reset(), on_restore(), on_instrument_init();
+    // and per deck whenever that deck's engine changes -- the one this tick
+    // asks for, or the one engine_id() reports (a switch lands inside
+    // process(), blocks after the tick that asks for it). Part keeps every
+    // value across a swap itself (voice setters fan out to all engines,
+    // _base/_active/_tdepth and the FX rows are Part state, _engine_swap
+    // re-pushes flow/hold/gate/cycle), so this is belt and braces.
+    enum GlobalSlot : int {
+        G_SHUFFLE, G_MORPH, G_COUPLE, G_CHOKE, G_PULL,
+        G_REV_SIZE, G_REV_DECAY, G_REV_TONE, G_REV_DIFF,
+        G_MASTER_DRIVE, G_REV_SMEAR, G_REV_MOD, G_SCALE, G_PACE,
+        G_COUNT
+    };
+    // One slot per instrument FIELD, not per call site: LANE_SIZE's base is
+    // written from three branches, and a per-site key would let a branch
+    // that comes back skip a value another branch has overwritten since.
+    enum DeckSlot : int {
+        D_SHAPE, D_DENSITY, D_RANGE, D_DEPTH, D_TUNE,
+        D_ATTACK, D_DECAY, D_RESONANCE, D_FILT, D_COLOR, D_SUB, D_DETUNE,
+        D_FLUX_MIX, D_FLUX_RATE, D_LINK, D_LEVEL, D_COMP, D_PAN,
+        D_ENGINE, D_EXCITE, D_SPEED_MODE, D_REVERSE, D_FEEDBACK, D_OVERLAP,
+        D_VARIATION, D_SCAN, D_GRIT_MODE, D_GRIT_MIX, D_FORM, D_SONG, D_REV_MIX,
+        // The slotted setters, one entry per lane / FX target / FX block.
+        D_FX_ON,
+        D_TBASE    = D_FX_ON + 2,                    // FxBlock::Flux, ::Grit
+        D_TACTIVE  = D_TBASE + spky::LANE_COUNT,
+        D_TDEPTH   = D_TACTIVE + spky::LANE_COUNT,
+        D_FXBASE   = D_TDEPTH + spky::LANE_COUNT,
+        D_FXDEPTH  = D_FXBASE + spky::FXT_COUNT,
+        D_FXACTIVE = D_FXDEPTH + spky::FXT_COUNT,
+        D_COUNT    = D_FXACTIVE + spky::FXT_COUNT
+    };
+    static_assert(int(spky::FxBlock::Grit) == 1, "D_FX_ON holds two FX blocks");
+    static_assert(engine_rows_fit_cache(), "an engine-backed kModLayer row is outside the cache");
+    static constexpr int kSlots = G_COUNT + spky::PART_COUNT * D_COUNT;
+    uint32_t _sentBits[kSlots];
+    bool     _sentValid[kSlots];
+    // The engine each deck asked for on the previous tick, and the one it
+    // reported running at the end of it; -1 = none yet.
+    int      _engAsked[spky::PART_COUNT];
+    int      _engRunning[spky::PART_COUNT];
+#ifdef SPKY_TESTING
+    bool _cacheOn = true;
+#else
+    static constexpr bool _cacheOn = true;
+#endif
+
+    static uint32_t bits_of(float v) { uint32_t b; std::memcpy(&b, &v, sizeof b); return b; }
+    static uint32_t bits_of(int v)   { return static_cast<uint32_t>(v); }
+    static uint32_t bits_of(bool v)  { return v ? 1u : 0u; }
+    // true = send: the value differs from the last one sent at this slot, or
+    // nothing was sent there since the cache was last forgotten.
+    bool fresh(int slot, uint32_t b) {
+        if (_cacheOn && _sentValid[slot] && _sentBits[slot] == b) return false;
+        _sentValid[slot] = true;
+        _sentBits[slot]  = b;
+        return true;
+    }
+    template <class T> bool glob(int g, T v) { return fresh(g, bits_of(v)); }
+    template <class T> bool deck(int p, int d, T v) {
+        return fresh(G_COUNT + p * D_COUNT + d, bits_of(v));
+    }
+    void forget_deck(int p) {
+        for (int d = 0; d < D_COUNT; ++d) _sentValid[G_COUNT + p * D_COUNT + d] = false;
+    }
+
+    // What the tick body calls `inst`: the instrument behind the cache. Every
+    // setter the body calls is listed here, cached or straight through, and
+    // nothing else -- a setter the body starts calling without a line here
+    // does not compile. The host hook gets the real instrument (the
+    // conversion below), so VCV's factory autoload is untouched.
+    struct Out {
+        ControlLawT& law;
+        Inst&        to;
+        operator Inst&() const { return to; }
+
+        // getters
+        float lane_output(int p, int s) const         { return to.lane_output(p, s); }
+        float lane_output_stepped(int p, int s) const { return to.lane_output_stepped(p, s); }
+        spky::EngineId engine_id(int p) const         { return to.engine_id(p); }
+        bool  sampler_is_recording(int p) const       { return to.sampler_is_recording(p); }
+
+        // events, never cached (the law edge-gates them itself)
+        void settle()                       { to.settle(); }
+        void new_phrase(int p)              { to.new_phrase(p); }
+        void sampler_punch(int p)           { to.sampler_punch(p); }
+        void sampler_record(int p, bool on) { to.sampler_record(p, on); }
+
+        // uncached setters (see the cache comment above for why)
+        void set_rate(int p, float v)             { to.set_rate(p, v); }
+        void set_smooth(int p, float v)           { to.set_smooth(p, v); }
+        void set_step(int p, bool on, int steps)  { to.set_step(p, on, steps); }
+        void set_sync(bool on)                    { to.set_sync(on); }
+        void set_tide(float v)                    { to.set_tide(v); }
+        void set_tempo_bpm(float v)               { to.set_tempo_bpm(v); }
+        void set_drift(float v)                   { to.set_drift(v); }
+
+        // cached, global
+        void set_shuffle(float v)          { if (law.glob(G_SHUFFLE, v))      to.set_shuffle(v); }
+        void set_morph(float v)            { if (law.glob(G_MORPH, v))        to.set_morph(v); }
+        void set_couple(float v)           { if (law.glob(G_COUPLE, v))       to.set_couple(v); }
+        void set_choke(float v)            { if (law.glob(G_CHOKE, v))        to.set_choke(v); }
+        void set_pull(float v)             { if (law.glob(G_PULL, v))         to.set_pull(v); }
+        void set_reverb_size(float v)      { if (law.glob(G_REV_SIZE, v))     to.set_reverb_size(v); }
+        void set_reverb_decay(float v)     { if (law.glob(G_REV_DECAY, v))    to.set_reverb_decay(v); }
+        void set_reverb_tone(float v)      { if (law.glob(G_REV_TONE, v))     to.set_reverb_tone(v); }
+        void set_reverb_diffusion(float v) { if (law.glob(G_REV_DIFF, v))     to.set_reverb_diffusion(v); }
+        void set_master_drive(float v)     { if (law.glob(G_MASTER_DRIVE, v)) to.set_master_drive(v); }
+        void set_reverb_smear(float v)     { if (law.glob(G_REV_SMEAR, v))    to.set_reverb_smear(v); }
+        void set_reverb_mod(float v)       { if (law.glob(G_REV_MOD, v))      to.set_reverb_mod(v); }
+        void set_scale(int v)              { if (law.glob(G_SCALE, v))        to.set_scale(v); }
+        void set_pace(float v)             { if (law.glob(G_PACE, v))         to.set_pace(v); }
+
+        // cached, per deck
+        void set_shape(int p, float v)           { if (law.deck(p, D_SHAPE, v))     to.set_shape(p, v); }
+        void set_density(int p, float v)         { if (law.deck(p, D_DENSITY, v))   to.set_density(p, v); }
+        void set_range(int p, float v)           { if (law.deck(p, D_RANGE, v))     to.set_range(p, v); }
+        void set_depth(int p, float v)           { if (law.deck(p, D_DEPTH, v))     to.set_depth(p, v); }
+        void set_tune(int p, float v)            { if (law.deck(p, D_TUNE, v))      to.set_tune(p, v); }
+        void set_voice_attack(int p, float v)    { if (law.deck(p, D_ATTACK, v))    to.set_voice_attack(p, v); }
+        void set_voice_decay(int p, float v)     { if (law.deck(p, D_DECAY, v))     to.set_voice_decay(p, v); }
+        void set_voice_resonance(int p, float v) { if (law.deck(p, D_RESONANCE, v)) to.set_voice_resonance(p, v); }
+        void set_voice_filt(int p, float v)      { if (law.deck(p, D_FILT, v))      to.set_voice_filt(p, v); }
+        void set_color(int p, float v)           { if (law.deck(p, D_COLOR, v))     to.set_color(p, v); }
+        void set_voice_sub(int p, float v)       { if (law.deck(p, D_SUB, v))       to.set_voice_sub(p, v); }
+        void set_voice_detune(int p, float v)    { if (law.deck(p, D_DETUNE, v))    to.set_voice_detune(p, v); }
+        void set_flux_mix(int p, float v)        { if (law.deck(p, D_FLUX_MIX, v))  to.set_flux_mix(p, v); }
+        void set_flux_rate(int p, int v)         { if (law.deck(p, D_FLUX_RATE, v)) to.set_flux_rate(p, v); }
+        void set_link(int p, float v)            { if (law.deck(p, D_LINK, v))      to.set_link(p, v); }
+        void set_part_level(int p, float v)      { if (law.deck(p, D_LEVEL, v))     to.set_part_level(p, v); }
+        void set_comp(int p, float v)            { if (law.deck(p, D_COMP, v))      to.set_comp(p, v); }
+        void set_pan(int p, float v)             { if (law.deck(p, D_PAN, v))       to.set_pan(p, v); }
+        void set_engine(int p, spky::EngineId e) { if (law.deck(p, D_ENGINE, int(e))) to.set_engine(p, e); }
+        void set_excitation_sources(int p, bool tape, bool other, bool in) {
+            if (law.deck(p, D_EXCITE, int(tape) | int(other) << 1 | int(in) << 2))
+                to.set_excitation_sources(p, tape, other, in);
+        }
+        void sampler_speed_mode(int p, bool v)   { if (law.deck(p, D_SPEED_MODE, v)) to.sampler_speed_mode(p, v); }
+        void sampler_reverse(int p, bool v)      { if (law.deck(p, D_REVERSE, v))    to.sampler_reverse(p, v); }
+        void sampler_feedback(int p, float v)    { if (law.deck(p, D_FEEDBACK, v))   to.sampler_feedback(p, v); }
+        void sampler_overlap(int p, float v)     { if (law.deck(p, D_OVERLAP, v))    to.sampler_overlap(p, v); }
+        void set_variation(int p, float v)       { if (law.deck(p, D_VARIATION, v))  to.set_variation(p, v); }
+        void sampler_scan(int p, float v)        { if (law.deck(p, D_SCAN, v))       to.sampler_scan(p, v); }
+        void set_grit_mode(int p, spky::GritMode m) {
+            if (law.deck(p, D_GRIT_MODE, int(m))) to.set_grit_mode(p, m);
+        }
+        void set_grit_mix(int p, float v)        { if (law.deck(p, D_GRIT_MIX, v))   to.set_grit_mix(p, v); }
+        void set_form(int p, int v)              { if (law.deck(p, D_FORM, v))       to.set_form(p, v); }
+        void set_song(int p, int v)              { if (law.deck(p, D_SONG, v))       to.set_song(p, v); }
+        void set_reverb_mix(int p, float v)      { if (law.deck(p, D_REV_MIX, v))    to.set_reverb_mix(p, v); }
+        void set_fx_on(int p, spky::FxBlock b, bool on) {
+            if (law.deck(p, D_FX_ON + int(b), on)) to.set_fx_on(p, b, on);
+        }
+        void set_target_base(int p, int s, float v)   { if (law.deck(p, D_TBASE + s, v))   to.set_target_base(p, s, v); }
+        void set_target_active(int p, int s, bool on) { if (law.deck(p, D_TACTIVE + s, on)) to.set_target_active(p, s, on); }
+        void set_target_depth(int p, int s, float v)  { if (law.deck(p, D_TDEPTH + s, v))  to.set_target_depth(p, s, v); }
+        void set_fx_target_base(int p, int i, float v)   { if (law.deck(p, D_FXBASE + i, v))    to.set_fx_target_base(p, i, v); }
+        void set_fx_target_depth(int p, int i, float v)  { if (law.deck(p, D_FXDEPTH + i, v))   to.set_fx_target_depth(p, i, v); }
+        void set_fx_target_active(int p, int i, bool on) { if (law.deck(p, D_FXACTIVE + i, on)) to.set_fx_target_active(p, i, on); }
+    };
 
     float prm(int id) const { return _k[id]; }
     // Read a per-part param: baseId is the PART A enum, part in {0,1}.
@@ -212,10 +432,11 @@ private:
     float mvp(int baseA, int part) const { return mv(baseA + part * ffctl::PART_STRIDE); }
 
     template <class H>
-    Events _tick(const float* knobs, const Options& opt, Inst& inst, H& hooks) {
+    Events _tick(const float* knobs, const Options& opt, Inst& target, H& hooks) {
         using namespace ffctl;
         _k = knobs;
         Events ev;
+        Out inst{*this, target};   // every call below goes through the cache
         // Sample the modulation frame once per control tick (spec 2026-08-22
         // §3b), before any mv() read: one frozen frame per tick means deck A's
         // first knob and deck B's last knob see the same lane positions, and
@@ -233,6 +454,17 @@ private:
         // decks latch the value from this same control update.
         inst.set_shuffle(prm(SHUFFLE));
         for (int p = 0; p < 2; ++p) {
+            // An engine change forgets this deck's sent values (see the cache
+            // comment): the ENG knob's slot and the test-tone option are all
+            // that pick the engine this tick asks for (the dispatch further
+            // down), and engine_id() moves when the switch actually lands.
+            {
+                const int asked = static_cast<int>(std::round(pp(ENGINE_A, p))) * 2
+                                  + (opt.deck[p].test_tone ? 1 : 0);
+                const int running = static_cast<int>(inst.engine_id(p));
+                if (asked != _engAsked[p] || running != _engRunning[p]) forget_deck(p);
+                _engAsked[p] = asked;
+            }
             inst.set_rate(p, mvp(RATE_A, p));
             inst.set_shape(p, mvp(SHAPE_A, p));
             inst.set_density(p, mvp(DENSITY_A, p));
@@ -606,6 +838,11 @@ private:
             const spky::SongRung& r = spky::song_ladder_at(_songRung[p].rung);
             inst.set_form(p, r.form);
             inst.set_song(p, r.song);
+            // What the next tick compares against: the engine running once
+            // this tick's pushes are in -- the new one at once on the test
+            // recorder, the old one on spky::Instrument until the swap inside
+            // a later process(), which the next tick's check then catches.
+            _engRunning[p] = static_cast<int>(inst.engine_id(p));
         }
 
         // Engine-backed mod depths (spec 2026-08-22 §3a): TIMB/DPTH/FILT write

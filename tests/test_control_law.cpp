@@ -1,5 +1,8 @@
 #include <doctest/doctest.h>
+#include <algorithm>
 #include <cmath>
+#include <string>
+#include <vector>
 #include "control/control_law.h"
 #include "control_recorder.h"
 #include "vcv/src/sampler_ui.hpp"
@@ -72,10 +75,16 @@ TEST_CASE("law: DETUNE squared, skipped on FEED; SPREAD raw on FEED") {
     r.k[DETUNE_A] = 0.6f; r.tick();
     CHECK(r.inst.last("set_voice_detune", 0) == doctest::Approx(0.36f));
     r.k[ENGINE_A] = 5.f; r.tick();                        // A becomes FEED
+    // Both DETUNE knobs move on the tick A reads FEED: the law's sent-value
+    // cache does not repeat an unchanged value, so only a changed one shows
+    // which deck the FEED gate lets through. 0.7 keeps raw, squared and the
+    // else-branch 0.5 apart for the SPREAD check, as 0.6 did above.
+    r.k[DETUNE_A] = 0.7f; r.k[DETUNE_B] = 0.5f;
     r.tick();                                             // A reads FEED now
     CHECK(r.inst.count("set_voice_detune") == 1);         // deck B only
+    CHECK(r.inst.last("set_voice_detune", 1) == doctest::Approx(0.25f));
     CHECK(r.inst.last("set_target_base/" + std::to_string(int(spky::LANE_SIZE)), 0)
-          == doctest::Approx(0.6f));
+          == doctest::Approx(0.7f));
 }
 
 TEST_CASE("law: COUPLE zone split and DRIFT settle edge") {
@@ -283,4 +292,135 @@ TEST_CASE("law: DeckOptions{} is a fresh VCV deck") {
     CHECK(d.excite_tape == s.exciteTape);
     CHECK(d.excite_other_deck == s.exciteOtherDeck);
     CHECK(d.excite_audio_in == s.exciteAudioIn);
+}
+
+// ---- the sent-value cache ---------------------------------------------------
+namespace {
+// "fn/p" for every call of the tick, in order: p = -1 for a global setter.
+std::vector<std::string> names(const Rec& r) {
+    std::vector<std::string> out;
+    for (auto& c : r.calls) out.push_back(c.fn + "@" + std::to_string(c.p));
+    return out;
+}
+std::vector<Rec::Call> deck_calls(const Rec& r, int p) {
+    std::vector<Rec::Call> out;
+    for (auto& c : r.calls) if (c.p == p) out.push_back(c);
+    return out;
+}
+std::vector<std::string> deck_names(const Rec& r, int p) {
+    std::vector<std::string> out;
+    for (auto& c : r.calls) if (c.p == p) out.push_back(c.fn);
+    return out;
+}
+// What an unchanged tick still sends: the setters the cache never skips.
+const std::vector<std::string> kUncachedDeck = {"set_rate", "set_smooth", "set_step"};
+const std::vector<std::string> kUncachedTick = {
+    "set_rate@0", "set_smooth@0", "set_step@0",
+    "set_rate@1", "set_smooth@1", "set_step@1",
+    "set_sync@-1", "set_drift@-1", "set_tide@-1", "set_tempo_bpm@-1"};
+// A law with its cache switched off: today's full push, the reference.
+struct RefRig : Rig { RefRig() { law.set_cache_enabled_for_test(false); } };
+} // namespace
+
+TEST_CASE("law cache: a repeated tick sends only the uncached setters") {
+    Rig r;
+    r.tick();
+    const size_t cold = r.inst.calls.size();
+    CHECK(cold > 100);
+    r.tick();
+    CHECK(names(r.inst) == kUncachedTick);
+    r.tick();
+    CHECK(names(r.inst) == kUncachedTick);
+}
+
+TEST_CASE("law cache: a changed knob sends exactly its own setter") {
+    Rig r;
+    r.tick(); r.tick();
+    r.k[SHAPE_A] = 0.4f; r.tick();
+    std::vector<std::string> want = {"set_shape@0"};
+    want.insert(want.end(), kUncachedTick.begin(), kUncachedTick.end());
+    std::vector<std::string> got = names(r.inst);
+    std::sort(want.begin(), want.end()); std::sort(got.begin(), got.end());
+    CHECK(got == want);
+    CHECK(r.inst.last("set_shape", 0) == doctest::Approx(0.4f));
+    // an int setter on deck B, through its own rounding
+    r.k[FLUXRATE_B] = 2.f; r.tick();
+    want = {"set_flux_rate@1"};
+    want.insert(want.end(), kUncachedTick.begin(), kUncachedTick.end());
+    got = names(r.inst);
+    std::sort(want.begin(), want.end()); std::sort(got.begin(), got.end());
+    CHECK(got == want);
+    // back to the value before: sent again, it is a change
+    r.k[SHAPE_A] = kInitParamDefaults[SHAPE_A]; r.tick();
+    CHECK(r.inst.index("set_shape", 0) >= 0);
+}
+
+TEST_CASE("law cache: a cold cache sends exactly the uncached push") {
+    // The first tick after construction, on_restore(), on_reset() and
+    // on_instrument_init() each sends exactly what the law without its cache
+    // sends -- same setters, same order, same bits. Both rigs see the same
+    // knobs and the same recorder state, tick for tick.
+    Rig a; RefRig b;
+    auto both = [&] { a.tick(); b.tick(); };
+    auto knobs = [&](int id, float v) { a.k[id] = v; b.k[id] = v; };
+    both();
+    CHECK(a.inst.calls == b.inst.calls);
+    knobs(ENGINE_A, 1.f); knobs(ENGINE_B, 4.f); knobs(REC_A, 1.f);
+    knobs(COMP_B, 0.95f); knobs(GRIT_A, -0.4f); knobs(MORPH, 0.3f);
+    both(); both();
+    CHECK(a.inst.calls.size() < b.inst.calls.size());     // warm: it skips
+    a.law.on_restore(); b.law.on_restore(); both();
+    CHECK(a.inst.calls == b.inst.calls);
+    both();
+    a.law.on_reset(); b.law.on_reset(); both();
+    CHECK(a.inst.calls == b.inst.calls);
+    both();
+    a.law.on_instrument_init(); b.law.on_instrument_init(); both();
+    CHECK(a.inst.calls == b.inst.calls);
+    both();
+    CHECK(a.inst.calls.size() < b.inst.calls.size());
+}
+
+TEST_CASE("law cache: an engine change sends that deck again, also when the switch lands later") {
+    // deferEngine: engine_id() keeps the old engine until land_engines(), as
+    // spky::Instrument does until the swap inside a later process(). The
+    // reference law has no cache, so its deck calls are the full deck push.
+    Rig a; RefRig b;
+    a.inst.deferEngine = b.inst.deferEngine = true;
+    auto both = [&] { a.tick(); b.tick(); };
+    auto full = [&](int p) { return deck_calls(a.inst, p) == deck_calls(b.inst, p); };
+    auto idle = [&](int p) { return deck_names(a.inst, p) == kUncachedDeck; };
+    both();                                   // cold: asks FEED / WAVE
+    CHECK(full(0)); CHECK(full(1));
+    both();                                   // nothing landed yet
+    CHECK(idle(0)); CHECK(idle(1));
+    a.inst.land_engines(); b.inst.land_engines();
+    both();                                   // both decks now report the new engines
+    CHECK(full(0)); CHECK(full(1));
+    both();
+    CHECK(idle(0)); CHECK(idle(1));
+    // The knob asks deck A for SYNTH: deck A at once, deck B untouched ...
+    a.k[ENGINE_A] = b.k[ENGINE_A] = 0.f;
+    both();
+    CHECK(full(0)); CHECK(idle(1));
+    both();                                   // ... the switch has not landed ...
+    CHECK(idle(0)); CHECK(idle(1));
+    a.inst.land_engines(); b.inst.land_engines();
+    both();                                   // ... and deck A again when it does
+    CHECK(full(0)); CHECK(idle(1));
+    both();
+    CHECK(idle(0)); CHECK(idle(1));
+    // Deck B, onto the BBD, with the switch landing at once.
+    a.inst.deferEngine = b.inst.deferEngine = false;
+    a.k[ENGINE_B] = b.k[ENGINE_B] = 4.f;
+    both();
+    CHECK(idle(0)); CHECK(full(1));
+    both();
+    CHECK(idle(0)); CHECK(idle(1));
+    // The test tone is part of what the deck asks for.
+    a.k[ENGINE_A] = b.k[ENGINE_A] = 1.f; both(); both();
+    a.opt.deck[0].test_tone = b.opt.deck[0].test_tone = true;
+    both();
+    CHECK(full(0)); CHECK(idle(1));
+    CHECK(a.inst.last("set_engine", 0) == float(spky::ENGINE_TEST_TONE));
 }
