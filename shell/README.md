@@ -311,6 +311,9 @@ image kept 2.7 KB of `SRAM_EXEC` free, under the spec's 8 KB floor; with
 `-Os` it keeps 10 088 B. The generated tables in `control/params.hpp` being
 `inline` and linked once brought that to 11 584 B; the ATTACK alternate and
 the `cyc_max` warm-up then cost 376 B, leaving 11 208 B (2026-10-09).
+After the retiming setters' unchanged-value early-outs and the repeated
+squaring in `ModLane::_update_slew`, which took newlib's double `pow` out of
+the image (it had no other caller), 19 592 B are free (2026-10-09).
 
 **Known divergences from VCV (P6b-1)** — spec §8:
 
