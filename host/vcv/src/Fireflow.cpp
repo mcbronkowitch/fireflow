@@ -930,28 +930,25 @@ struct Fireflow : Module {
             pendingRestore = false;
             restoreSamplerContent();
             // This is a restore into an ALREADY-LIVE module (right-click Load
-            // preset / module paste), not a fresh add -- pushParams() has
-            // already run at least once, so bbdEdge[p] is already seeded from
-            // BEFORE this restore. Re-arm both parts (see bbd_edge_state.hpp)
-            // so the very next control tick treats whatever ENG this JSON
-            // just set as a fresh baseline, not a transition -- otherwise a
-            // preset saved on BBD, loaded onto a module currently on a
-            // different engine, would fire the "entering BBD" edge and
-            // clobber that preset's own saved FLUX/exciteOtherDeck. The
-            // fresh-add path (curSr == 0.f, the else branch below) needs no
-            // such re-arm: no tick has run yet, so bbdEdge[p] is still at its
-            // construction-time unseeded state and the ordinary first-tick
-            // baseline in tick() already applies. songRung[p] needs the same
-            // re-arm for the same reason (song_rung_state.hpp) -- otherwise a
-            // preset saved on a rung other than the module's current one
-            // would look like a giant turn of the SONG knob and fire a
-            // re-roll the instant the module ticks again. driftSettled needs
-            // the identical re-arm for the identical reason (SHARED, not
-            // per-part, so one call outside the loop): a preset saved with
-            // DRIFT off the stop, loaded onto a module currently parked at
-            // the stop, must not have the restore itself read as a genuine
-            // entry and fire settle() on the very next tick
-            // (drift_settle_state.hpp).
+            // preset / module paste), not a fresh add -- the law has already
+            // ticked at least once, so its BBD edge state is seeded from
+            // BEFORE this restore. law.on_restore() re-arms all of it (see
+            // bbd_edge_state.hpp, song_rung_state.hpp, drift_settle_state.hpp)
+            // so the very next control tick treats whatever ENG, SONG rung
+            // and DRIFT position this JSON just set as a fresh baseline, not
+            // a transition: no SONG re-roll from a rung that merely differs
+            // from the module's previous one, no settle() from a DRIFT that
+            // merely sits in the zone. For the BBD edge the guarantee is the
+            // same, with one KNOWN EXCEPTION (measured, Ruling 10): an engine
+            // switch lands inside process() blocks after the tick that asks
+            // for it, so a preset saved on BBD and loaded over a deck that
+            // is live on a different engine fires the "entering BBD" edge on
+            // block 2 despite the re-arm and clobbers that preset's saved
+            // FLUX/exciteOtherDeck. The re-arm does stop it when the deck
+            // already runs the restored engine. Open item, not fixed by
+            // this branch. The fresh-add path (curSr == 0.f, the else branch
+            // below) needs no re-arm: no tick has run yet, so the first-tick
+            // baseline already applies.
             law.on_restore();
         } else {
             pendingRestore = true;

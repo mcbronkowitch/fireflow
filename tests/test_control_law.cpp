@@ -2,6 +2,7 @@
 #include <cmath>
 #include "control/control_law.h"
 #include "control_recorder.h"
+#include "vcv/src/sampler_ui.hpp"
 
 using Law = control::ControlLawT<Rec>;
 using namespace ffctl;
@@ -270,9 +271,16 @@ TEST_CASE("law: deck B's FLUXFB, STAGES and REC land on part 1, not part 0") {
     }
 }
 
+// Spec 3.2 / 7.1: DeckOptions' defaults are pinned against the VCV host's own
+// per-deck state, so the two cannot drift apart. sampler_ui.hpp is Rack-free.
 TEST_CASE("law: DeckOptions{} is a fresh VCV deck") {
     control::DeckOptions d;
-    CHECK(d.tape_idx == 1); CHECK_FALSE(d.reverse);
-    CHECK(d.feedback == doctest::Approx(0.95f)); CHECK_FALSE(d.test_tone);
-    CHECK(d.excite_tape); CHECK_FALSE(d.excite_other_deck); CHECK_FALSE(d.excite_audio_in);
+    const spkyvcv::SamplerPartState s;
+    CHECK(d.tape_idx == s.tapeIdx);
+    CHECK(d.reverse == s.reverse);
+    CHECK(d.feedback == s.feedback);
+    CHECK(d.test_tone == s.testTone);
+    CHECK(d.excite_tape == s.exciteTape);
+    CHECK(d.excite_other_deck == s.exciteOtherDeck);
+    CHECK(d.excite_audio_in == s.exciteAudioIn);
 }

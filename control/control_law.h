@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <type_traits>
 #include "instrument.h"
 #include "mod/song_ladder.h"
 #include "control/params.hpp"
@@ -83,7 +84,12 @@ public:
 
     // knobs: all ffctl::NUM_PARAMS values in parameter units, exactly what
     // VCV's params[] holds.
+    // The hook-less overload exists only for the hook-less law (the firmware):
+    // a host with real hooks calling this would silently drop them (VCV's
+    // factory autoload), so it must use the four-argument form.
     Events tick(const float* knobs, const Options& opt, Inst& inst) {
+        static_assert(std::is_same<Hooks, NoHooks>::value,
+                      "a law with Hooks must be ticked with its hooks");
         NoHooks h; return _tick(knobs, opt, inst, h);
     }
     Events tick(const float* knobs, const Options& opt, Inst& inst, Hooks& hooks) {
@@ -95,15 +101,18 @@ private:
     // Edge-detects the ENG switch landing on BBD, so the FLUX-off and
     // excite-other-deck defaults below (spec 5.11/5.12) apply once on a
     // genuine player-driven transition and never fight a player who
-    // deliberately turns them back on afterward -- and never fire at all on
-    // a RESTORE that lands on BBD (fresh add, whole-patch load, Ctrl+D
-    // duplicate, or an already-live preset Load/paste -- see
-    // dataFromJson()'s rearm() call). Full reasoning, and why this is its
-    // own unit-tested type rather than inline bools, lives in
-    // bbd_edge_state.hpp.
+    // deliberately turns them back on afterward. on_restore() re-arms it, so
+    // a RESTORE (fresh add, whole-patch load, Ctrl+D duplicate, the firmware's
+    // boot) adopts whatever ENG it finds as the baseline and fires nothing
+    // when the instrument already runs that engine. Known exception, open
+    // item (Ruling 10, measured): an engine switch lands inside process()
+    // blocks after the tick that asks for it, so a restore onto BBD over a
+    // live non-BBD deck fires the edge on block 2 with or without the
+    // re-arm. Full reasoning, and why this is its own unit-tested type
+    // rather than inline bools, lives in bbd_edge_state.hpp.
     spkyvcv::BbdEdgeState _bbdEdge[spky::PART_COUNT];
     // MOD latch layer state for one control tick: the lane outputs and the two
-    // masters, sampled once at the top of pushParams so every mv() read in the
+    // masters, sampled once at the top of this law's tick so every mv() read in the
     // same tick sees the same modulation frame (spec 2026-08-22 §3b).
     float _laneOut[spky::PART_COUNT][spky::LANE_COUNT] = {};
     float _laneOutStepped[spky::PART_COUNT][spky::LANE_COUNT] = {};
@@ -112,7 +121,7 @@ private:
     // owns no depth param. Built once in the constructor -- mv() runs per param
     // per control tick and must not scan the table.
     int _modIdxBySound[ffctl::NUM_PARAMS];
-    // Tracks the SONG knob's current rung so pushParams can detect a genuine
+    // Tracks the SONG knob's current rung so tick() can detect a genuine
     // rung change and re-roll the phrase -- SONG swallowed FORM and the NEW
     // pad (spec 2026-08-09 hw-control-reduction task 3). Seeded/rearm shape
     // (song_rung_state.hpp) so a RESTORED rung -- patch load, preset load,
@@ -280,7 +289,7 @@ private:
             // GRIT is bipolar now: "engaged" means the knob has cleared the
             // dead zone in either direction, not just a positive value --
             // the raw value alone would silently mute the whole CRSH
-            // (negative) side (see kGritDead and pushParams' grit block).
+            // (negative) side (see kGritDead and this tick's grit block).
             inst.set_fx_on(p, spky::FxBlock::Grit,
                             std::fabs(pp(GRIT_A, p)) > kGritDead);
             // LVL/COMP: the lower zone is pure output gain (Comp::set_amount(0)
@@ -374,7 +383,8 @@ private:
             // monitoring with it, so pushing every control tick is correct.
             // On a synth part REC is inert: ENG is the only mode selector.
             // NOT ppb(REC_A, p): REC is not part-strided (see the static_assert
-            // block near the top of this file).
+            // block near the top of host/vcv/src/Fireflow.cpp, where the VCV
+            // accessors live).
             const bool wantRec = prm(p ? REC_B : REC_A) > 0.5f
                                  && inst.engine_id(p) == spky::ENGINE_SAMPLER;
             if (wantRec != inst.sampler_is_recording(p)) {
@@ -428,17 +438,20 @@ private:
             //
             // STAGES_A/B are appended params (outside the stride, like
             // DRIVE/LINK above), so pp(STAGES_A, p) is wrong for Part B: it
-            // would read params[STAGES_A + PART_STRIDE] = params[73 + 23] =
-            // params[96], past the end of the 84-entry array. The explicit
-            // ternary is required, exactly as for DRIVE/LINK.
+            // would read params[STAGES_A + PART_STRIDE], which is not
+            // STAGES_B (when this was written it was past the end of the
+            // params array; the exact index has moved with the layout). The
+            // explicit ternary is required, exactly as for DRIVE/LINK.
             //
             if (bbdPart)
                 inst.set_target_base(p, spky::LANE_PITCH,
                     prm(p ? STAGES_B : STAGES_A));
 
             if (_bbdEdge[p].tick(bbdPart)) {
-                // Genuine player-driven entry into BBD (see bbd_edge_state.hpp
-                // for why a restore can never reach this branch).
+                // Entry into BBD, in practice a player-driven one (see
+                // bbd_edge_state.hpp: a restore is re-armed and adopts its ENG
+                // as the baseline; the one known exception is noted at
+                // _bbdEdge above).
                 //
                 // FLUX defaults disengaged (spec 5.11). The BBD's output is
                 // already six poles at 3600 Hz plus a loss pole breathing under
@@ -531,7 +544,7 @@ private:
             // (undefined); after, it silently aliased MODD_DENSITY_B, so
             // raising deck B's DENS mod depth would have driven deck B's
             // LANE_MOTION base. That is the hazard the static_assert block at
-            // the top of this file calls "UPGRADED, not gone", and it is now
+            // the top of host/vcv/src/Fireflow.cpp calls "UPGRADED, not gone", and it is now
             // guarded mechanically by res/test_panel.py's
             // strided_accessor_issues(), which derives the legal pp() bases
             // from the generator. Explicit ternary, exactly as REC/STAGES/
@@ -568,7 +581,8 @@ private:
             // pad are gone. songRung[p].tick() debounces the pot (so a value
             // parked on a seam does not re-quantise every tick) AND absorbs a
             // RESTORED rung as a baseline rather than a turn (song_rung_state.hpp)
-            // -- see rearm() call sites in dataFromJson()/onReset() below. A
+            // -- see on_reset()/on_restore(), called from Fireflow.cpp's
+            // onReset()/dataFromJson() and the firmware's control_boot(). A
             // rung change re-rolls the phrase exactly as the retired NEW pad
             // used to, and in the sampler additionally punches a fresh grain
             // -- the playhead returns to ORGANIZE and a grain spawns
