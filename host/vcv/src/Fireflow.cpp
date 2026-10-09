@@ -7,6 +7,7 @@
 #include <osdialog.h>
 #include "plugin.hpp"
 #include "generated_panel.hpp"   // enums + control table (generated from res/gen_panel.py)
+#include "control/params.hpp"    // ranges, generated beside the panel (same PARAMS list)
 #include "ff_knob.hpp"           // the panel's own knob: dark cap, deck-accent collar
 #include "ff_port.hpp"           // the panel's own jack: dark barrel, pewter ring
 #include "ff_button.hpp"         // the panel's own keycap: dark cap, accent edge
@@ -320,6 +321,12 @@ static_assert(REC_B == REC_A + 1,
 // kModLayer, never via pp().
 static_assert(MODBTN > REC_B, "mod-layer params must stay appended after REC");
 static_assert(NUM_PARAMS == MODBTN + 51, "mod layer is 51 params: MODBTN + 50 depths");
+static_assert((int)ffctl::NUM_PARAMS == (int)NUM_PARAMS, "control/params.hpp is stale");
+static_assert((int)ffctl::MODBTN == (int)MODBTN, "control/params.hpp is stale");
+
+// configControls() reads every range from the generated table, so the panel
+// and the firmware's pot scaling cannot drift apart.
+static const ffctl::ParamRange& rangeOf(int id) { return ffctl::kParamRange[id]; }
 
 struct Fireflow : Module {
     spky::Instrument inst;
@@ -438,31 +445,31 @@ struct Fireflow : Module {
                 case WK_BIGKNOB:
                 case WK_SMKNOB:
                     if (c.id == RATE_A || c.id == RATE_B)
-                        configParam<RateQuantity>(c.id, 0.f, 1.f, init, lbl);
+                        configParam<RateQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == CHOKE)  // event-priority, continuous, zone-aware tooltip
-                        configParam<ChokeQuantity>(c.id, -1.f, 1.f, init, lbl);
+                        configParam<ChokeQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == PULL)  // bipolar chord gravity between the decks (spec 2026-07-19 pull-chord-gravity)
-                        configParam(c.id, -1.f, 1.f, init,
+                        configParam(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init,
                                     "Chord gravity: left = A leads, right = B leads");
                     else if (c.id == FILT_A || c.id == FILT_B)  // bipolar cutoff trim
-                        configParam(c.id, -1.f, 1.f, init, lbl);
+                        configParam(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == PAN_A || c.id == PAN_B)  // per-deck balance, dry only (spec 2026-08-30 pan)
-                        configParam(c.id, -1.f, 1.f, init, lbl);
+                        configParam(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == TIDE)  // texture-lane rate, snaps in the GRID zone
-                        configParam<TideQuantity>(c.id, 0.f, 1.f, init, lbl);
+                        configParam<TideQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == FLUXFB_A || c.id == FLUXFB_B)
-                        configParam<FluxFbQuantity>(c.id, 0.f, 1.f, init, lbl);
+                        configParam<FluxFbQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == REV_DECAY)
-                        configParam<RevDecayQuantity>(c.id, 0.f, 1.f, init, lbl);
+                        configParam<RevDecayQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == LINK_A || c.id == LINK_B)
-                        configParam<LinkQuantity>(c.id, 0.f, 1.f, init, lbl);
+                        configParam<LinkQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == STAGES_A || c.id == STAGES_B)
-                        configParam<StagesQuantity>(c.id, 0.f, 1.f, init, lbl);
+                        configParam<StagesQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == SUB_A || c.id == SUB_B)  // INPUT (%) on BBD
-                        configParam<SubQuantity>(c.id, 0.f, 1.f, init, lbl);
+                        configParam<SubQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == SOURCE_A || c.id == SOURCE_B) {
                         auto* source = configParam(
-                            c.id, 0.f, 1.f, init,
+                            c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init,
                             c.id == SOURCE_A ? "SOURCE A" : "SOURCE B");
                         source->description =
                             "Controls Synth TIMB, Sampler ORG, Wave FRAME, Body MATL, BBD DRIVE or Feed BOND according to the selected engine.";
@@ -472,23 +479,23 @@ struct Fireflow : Module {
                         // same as every other control in this loop -- only
                         // the display quantity is still bespoke, for the
                         // squared-cents tooltip (see DetuneQuantity above).
-                        configParam<DetuneQuantity>(c.id, 0.f, 1.f, init, lbl);
+                        configParam<DetuneQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == PACE)
-                        configParam<PaceQuantity>(c.id, 0.f, 1.f, init, lbl);
+                        configParam<PaceQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else
-                        configParam(c.id, 0.f, 1.f, init, lbl);
+                        configParam(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     break;
                 case WK_KNOBC:
                     if (c.id == MELODY_A || c.id == MELODY_B)
                         // MELODY (bipolar): both decks loop — A drifts a
                         // little, B is frozen. Tooltip name follows ENG
                         // through MelodyQuantity.
-                        configParam<MelodyQuantity>(c.id, -1.f, 1.f, init, lbl);
+                        configParam<MelodyQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else
                         // GRIT (bipolar): sign picks Drive/Reduce, magnitude
                         // is the mix (spec 2026-08-09 hw-control-reduction
                         // task 4; see pushParams for the dead-zone math).
-                        configParam(c.id, -1.f, 1.f, init, lbl);
+                        configParam(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     break;
                 case WK_KNOBI:
                     if (c.id == SCALE)
@@ -498,7 +505,7 @@ struct Fireflow : Module {
                         // could boot Lydian while INIT_DEFAULTS said
                         // Mixolydian -- the bench audition read the table, the
                         // panel did not, and nothing compared them.
-                        configParam<ScaleQuantity>(c.id, 0.f, (float)(spky::SCALE_LIST_COUNT - 1),
+                        configParam<ScaleQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi,
                                                    init, "Scale");
                     else if (c.id == SONG_A || c.id == SONG_B) {
                         // SONG walks a curated 14-rung ladder through the
@@ -518,8 +525,7 @@ struct Fireflow : Module {
                             rungs.push_back(std::string(kFormWords[r.form]) +
                                             " / " + kSongWords[r.song]);
                         }
-                        configSwitch(c.id, 0.f,
-                                     float(spky::kSongLadderCount - 1),
+                        configSwitch(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi,
                                      init, "Song", rungs);
                     }
                     // TIME: 12-detent knob over the synced FLUX divisions
@@ -530,10 +536,10 @@ struct Fireflow : Module {
                     // flux_division_index().
                     else if (c.id == FLUXRATE_A || c.id == FLUXRATE_B)
                         configParam<FluxRateQuantity>(
-                            c.id, 0.f, (float)(spky::kFluxRateCount - 1),
+                            c.id, rangeOf(c.id).lo, rangeOf(c.id).hi,
                             init, lbl);
                     else  // STEPS_A / STEPS_B
-                        configParam(c.id, 0.f, 16.f, init, "Steps");
+                        configParam(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, "Steps");
                     getParamQuantity(c.id)->snapEnabled = true;
                     break;
                 case WK_SW2:
@@ -552,10 +558,10 @@ struct Fireflow : Module {
                     break;
                 case WK_LATCH:
                     if (c.id == REC_A || c.id == REC_B)
-                        configSwitch(c.id, 0.f, 1.f, init, "Record",
+                        configSwitch(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, "Record",
                                      {"Stopped", "Recording"});
                     else if (c.id == ENGINE_A || c.id == ENGINE_B) {
-                        configSwitch(c.id, 0.f, 5.f, init, "Engine",
+                        configSwitch(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, "Engine",
                                      {"Synth", "Sampler", "Wave", "Body", "BBD",
                                       "Feed"});
                         getParamQuantity(c.id)->snapEnabled = true;
@@ -603,10 +609,11 @@ struct Fireflow : Module {
         // picks which reading of the lane that swing follows (left = S&H), it
         // is not a second copy of the knob. Noon is standstill, dead-zoned in
         // mod_layer.hpp so it is reachable on a pot.
-        configSwitch(MODBTN, 0.f, 1.f, initParamDefault(MODBTN), "MOD layer",
-                     {"Off", "On"});
+        configSwitch(MODBTN, rangeOf(MODBTN).lo, rangeOf(MODBTN).hi,
+                     initParamDefault(MODBTN), "MOD layer", {"Off", "On"});
         for (const auto& t : kModLayer)
-            configParam(t.depthId, -1.f, 1.f, initParamDefault(t.depthId), t.name);
+            configParam(t.depthId, rangeOf(t.depthId).lo, rangeOf(t.depthId).hi,
+                        initParamDefault(t.depthId), t.name);
     }
 
     // Re-init the engine for a new sample rate. Without the snapshot below,

@@ -1063,8 +1063,7 @@ for (int i = 0; i < spky::kSongLadderCount; ++i) {
           "SONG labels must be composed from the ladder table itself, "
           "not written out by hand beside it")
     song_switch = """
-configSwitch(c.id, 0.f,
-             float(spky::kSongLadderCount - 1),
+configSwitch(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi,
              init, "Song", rungs);"""
     check(compact_cpp(song_switch) in compact_cpp(cpp),
           "SONG must be a snapped Rack switch spanning the whole ladder")
@@ -1687,7 +1686,7 @@ struct EngineCycleLatch : FfPadLatch {
 
     engine_config = """
 else if (c.id == ENGINE_A || c.id == ENGINE_B) {
-    configSwitch(c.id, 0.f, 5.f, init, "Engine",
+    configSwitch(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, "Engine",
                  {"Synth", "Sampler", "Wave", "Body", "BBD",
                   "Feed"});
     getParamQuantity(c.id)->snapEnabled = true;
@@ -1928,12 +1927,12 @@ def source_detune_wiring_issues(cpp):
     for required, label in (
         ("elseif(c.id==DETUNE_A||c.id==DETUNE_B)",
          "DETUNE_A/B need their own configControls branch"),
-        ("configParam<DetuneQuantity>(c.id,0.f,1.f,init,lbl);",
+        ("configParam<DetuneQuantity>(c.id,rangeOf(c.id).lo,rangeOf(c.id).hi,init,lbl);",
          "DETUNE must be configured as a normalized persistent Rack parameter"),
         ("if(c.id==SOURCE_A||c.id==SOURCE_B)",
          "SOURCE controls need their own stable Rack names"),
         (compact_cpp(
-            'auto* source = configParam(c.id, 0.f, 1.f, init, '
+            'auto* source = configParam(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, '
             'c.id == SOURCE_A ? "SOURCE A" : "SOURCE B");'
             'source->description = "Controls Synth TIMB, Sampler ORG, Wave '
             'FRAME, Body MATL, BBD DRIVE or Feed BOND according to the '
@@ -2335,7 +2334,7 @@ std::string getDisplayValueString() override {
     expected_config = """
 else if (c.id == FLUXRATE_A || c.id == FLUXRATE_B)
     configParam<FluxRateQuantity>(
-        c.id, 0.f, (float)(spky::kFluxRateCount - 1),
+        c.id, rangeOf(c.id).lo, rangeOf(c.id).hi,
         init, lbl);
 """
     if config is None or compact_cpp(expected_config) not in compact_cpp(config):
@@ -2389,10 +2388,10 @@ def test_flux_time_guard_rejects_representative_regressions():
          "int k = spky::kFluxRateOffset + spky::flux_division_index(getValue());",
          "reintroduced flux_division_index round-trip"),
         ("configParam<FluxRateQuantity>(\n"
-         "                            c.id, 0.f, (float)(spky::kFluxRateCount - 1),\n"
+         "                            c.id, rangeOf(c.id).lo, rangeOf(c.id).hi,\n"
          "                            init, lbl);",
          "configParam<FluxRateQuantity>(\n"
-         "                            c.id, 0.f, (float)(spky::kFluxRateCount - 1),\n"
+         "                            c.id, rangeOf(c.id).lo, rangeOf(c.id).hi,\n"
          "                            0.f, lbl);",
          "hard-coded default"),
     ]
@@ -3072,7 +3071,7 @@ def test_sampler_preset_init_snapshot():
           "legacy FORM value is not migrated onto a matching SONG ladder rung")
     check("spky::song_ladder_at(i).form == migrated.form" in cpp,
           "legacy FORM migration no longer searches the ladder for a match")
-    check('configParam<LinkQuantity>(c.id, 0.f, 1.f, init, lbl);' in cpp,
+    check('configParam<LinkQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);' in cpp,
           "LINK is not configured as unipolar THIN")
     check('return v > 0.005f ? string::f("thin %.0f %%", 100.f * v) : "off";' in cpp,
           "LINK does not display only thin percentage or off")
@@ -3262,9 +3261,12 @@ def test_steps_knob_carries_the_mode():
           "STEPS_A missing or no longer an integer knob")
     cpp = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             "..", "src", "Fireflow.cpp")).read()
-    check("configParam(c.id, 0.f, 16.f" in cpp or
-          "0.f, 16.f, initParamDefault" in cpp,
-          "STEPS is not configured over 0..16")
+    # The range now lives in the generated table (control/params.hpp), which
+    # configControls() reads; check both ends of that hand-off.
+    check(gp.param_range(steps[0]) == ("0.f", "16.f", True),
+          "STEPS is not generated over 0..16")
+    check('configParam(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, "Steps")' in cpp,
+          "STEPS is not configured from the range table")
     check("inst.set_step(p, steps > 0, steps)" in cpp,
           "set_step no longer derives its mode from the count")
     check("STEP_A" not in cpp, "Fireflow.cpp still references STEP_A")
@@ -3771,7 +3773,9 @@ def test_committed_files_match_the_generator():
     for path, produced in (
             (os.path.join(here, "Fireflow.svg"), g.svg()),
             (os.path.join(root, "src", "generated_panel.hpp"), g.header()),
-            (os.path.join(root, "src", "init_patch.hpp"), g.init_patch_header())):
+            (os.path.join(root, "src", "init_patch.hpp"), g.init_patch_header()),
+            (os.path.join(root, "..", "..", "control", "params.hpp"),
+             g.control_params_header())):
         if not os.path.exists(path):
             FAILS.append("%s is missing -- run res/gen_panel.py" % path)
             continue

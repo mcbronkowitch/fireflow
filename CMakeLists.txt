@@ -64,6 +64,7 @@ add_executable(spky_tests
     tests/test_step_accent.cpp
     tests/test_led_law.cpp
     tests/test_mod_layer.cpp
+    tests/test_control_params.cpp
     tests/test_step.cpp
     tests/test_shuffle_grid.cpp
     tests/test_step_clock.cpp
@@ -194,7 +195,7 @@ add_executable(spky_tests
     tests/test_smooth_law.cpp
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)
-target_include_directories(spky_tests PRIVATE host)
+target_include_directories(spky_tests PRIVATE host ${CMAKE_SOURCE_DIR})
 target_compile_definitions(spky_tests PRIVATE SPKY_TESTING=1)
 add_test(NAME spky_tests COMMAND spky_tests)
 
