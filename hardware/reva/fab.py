@@ -64,19 +64,27 @@ RAW_POS = os.path.join("board", "pos.csv")
 # their pads and both SS14 were reversed. Seen with these values: U_IN1
 # (KiCad 90), U_SR1 (KiCad 0), D_N12/D_P12, U_REG, and 0603/0805 parts at 0
 # and 90. U_MUX7 (KiCad 270) follows from the rule and was not looked at.
+#
+# Re-verified 2026-10-09 after the 9 mm panel pass moved and turned parts
+# (same preview, same method, pin-1 corners predicted from pcbnew pad
+# positions first). New SOIC rotations seen right: U_SR2/U_SR5 (KiCad -90)
+# and U_MUX6/U_MUX7 (KiCad 180). Seen right again: U_SR1/U_IN1 (90),
+# U_MUX0/U_MUX8 (0), U_REG (90), the cathode band of D_N12/D_P12 (0). No
+# SOIC sat across its pads.
 ROT_FIX = {
-    "C_0603_1608Metric": {"deg": 0, "verified": "2026-10-03"},
-    "C_0805_2012Metric": {"deg": 0, "verified": "2026-10-03"},
-    "D_SMA": {"deg": 180, "verified": "2026-10-03"},
-    "R_0603_1608Metric": {"deg": 0, "verified": "2026-10-03"},
-    "SOIC-16_3.9x9.9mm_P1.27mm": {"deg": 90, "verified": "2026-10-03"},
-    "SOT-223-3_TabPin2": {"deg": 0, "verified": "2026-10-03"},
+    "C_0603_1608Metric": {"deg": 0, "verified": "2026-10-09"},
+    "C_0805_2012Metric": {"deg": 0, "verified": "2026-10-09"},
+    "D_SMA": {"deg": 180, "verified": "2026-10-09"},
+    "R_0603_1608Metric": {"deg": 0, "verified": "2026-10-09"},
+    "SOIC-16_3.9x9.9mm_P1.27mm": {"deg": 90, "verified": "2026-10-09"},
+    "SOT-223-3_TabPin2": {"deg": 0, "verified": "2026-10-09"},
 }
 # Bottom-side parts: rotation = (sign * KiCad rotation + deg) % 360. A sign
 # error depends on each part's own rotation, so it is verified on its own:
 # with sign 1 and SOIC +270 U_IN1 (KiCad 90) sat right and U_SR1 (KiCad 0)
 # sat 180 degrees off; sign -1 and SOIC +90 puts both right (2026-10-03).
-BOTTOM_SIGN = {"sign": -1, "verified": "2026-10-03"}
+# All four SOIC rotations (0, 90, 180, -90) seen right on 2026-10-09.
+BOTTOM_SIGN = {"sign": -1, "verified": "2026-10-09"}
 
 _DATE_RES = [
     (re.compile(r"(%TF\.CreationDate,)[^*]*(\*%)"), r"\g<1>" + FIXED_DATE + r"\g<2>"),

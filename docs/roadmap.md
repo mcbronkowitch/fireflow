@@ -4236,15 +4236,22 @@ items 1 and 2 **failed** (the small caps stood 5.3 mm apart edge to edge), item
   ([`power-budget.md`](hardware/power-budget.md)). `fab.py` reports
   `order_ready: yes`; the two audio-zone pairs `IN_L/SHIFTBTN_L` and
   `MODBTN_L/OUT_R` are signed off by Bastian (2026-10-08, spec §5.3) and are
-  the only `KNOWN_PANEL` entries left. `fab.py --release` has **not** run.
+  the only `KNOWN_PANEL` entries left.
+- **Rotation re-check and release (2026-10-09).** JLC's placement preview
+  (quote upload, Economic PCBA, bottom side, no order) shows every part
+  checked with its pin 1 where pcbnew's pad positions put it, including
+  the two SOIC rotations new since 2026-10-03: U_SR2/U_SR5 (KiCad −90) and
+  U_MUX6/U_MUX7 (KiCad 180). `ROT_FIX` and `BOTTOM_SIGN` carry the new
+  date. `fab.py --release` ran green and wrote `hardware/reva/fab/`; its
+  gerber zip, CPL and BOM are byte-identical to the files the preview was
+  made from.
 - **Firmware table.** `shell/generated_panel_map.h` has 73 rows; 35 send a
   parameter, 38 send nothing, `ROOT_A`, `ROOT_B` and `REV_MOD` among them
   (reason `reserved:`).
 
 **Next:** when the correction cut arrives, Bastian repeats grip-test items 1,
-2 and 4 on it, then the freeze tag. Before the board is ordered, repeat the JLC
-placement-preview rotation check (parts moved and turned since 2026-10-03),
-then run `fab.py --release`. The hand-soldered parts of `bom-hand.csv` are
+2 and 4 on it, then the freeze tag; the board order uses the released
+package in `hardware/reva/fab/`. The hand-soldered parts of `bom-hand.csv` are
 on hand (Bastian, 2026-10-09) except `J_SD`, the Yamaichi microSD socket.
 - **Firmware image (2026-10-09).** The Rev A playing image
   (`SHELL_PANEL_SCAN=1`) did not compile after the pass: `panel_scan.cpp`
