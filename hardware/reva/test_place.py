@@ -6,16 +6,21 @@ exit code is the verdict. Re-runs itself under KiCad's Python.
 2. The fresh build is green (known panel violations listed).
 3. An unsabotaged reload is green in every step, and every sabotage turns its
    named step red. Every gated step has a sabotage and a `_missing` one.
-4. KNOWN_PANEL names only jack-row parts (the 18 jacks, hole y 114.0), the
-   SONG clusters and, by the owner's decision (Bastian, 2026-09-29), the two
-   LED/pot pairs GATE_A_L/SOURCE_A and LVL_B_L/PAN_B, each pair only with its
-   own partner, until the panel pass. Every name in every key is checked.
+4. KNOWN_PANEL is empty: the 9 mm panel pass (spec 2026-10-07 §1, Task 7c
+   2026-10-08) removed every jack-row, SONG and admitted-pair entry; a
+   non-empty entry needs Bastian's decision. The key-name rule
+   (check_kit.key_allowed) is still exercised on a fixture.
 5. The DRC report parser reads every recorded line shape, and the drc
    sabotage's finding names the sabotaged decoupler (not an empty key).
 6. The thresholds (outline, edge clearance, USB distance, shadow size) are
    place_check.py's own constants, and the sabotages module_usb, edge_outline
    and drc_empty (a report with no unconnected_items) are each red for their
    own stated reason.
+7. On a panel-only board every LED has a rotation, and no LED's body box
+   overlaps another front body (P4.1 §4.2, amended 2026-10-08).
+8. U_SM sits exactly on place.SM_PIN; an illegal pinned spot is refused
+   (pins in bodies, holes in front courtyards); without the pin the search
+   still finds a spot (P4.1 §4.3, amended 2026-10-08, Task 7c).
 
 The committed hardware/reva/kicad/reva.kicad_pcb is the routed board since
 P4-2; reva_route_guard (test_route.py) compares it with a fresh route.py run,
@@ -40,7 +45,6 @@ except ImportError:
 
 import io                    # noqa: E402
 import contextlib            # noqa: E402
-import assign                # noqa: E402
 import check_kit as CK       # noqa: E402
 import place as P           # noqa: E402
 import place_check as PC     # noqa: E402
@@ -50,7 +54,9 @@ KIPY = sys.executable
 ROOT = None                  # scratch directory of this run, removed at the end
 
 # The pairs the owner admitted until the panel pass (2026-09-29): a key naming
-# one of a pair may name nothing but that pair.
+# one of a pair may name nothing but that pair. KNOWN_PANEL is empty since the
+# 9 mm panel pass (2026-10-08); the pairs stay as check_key_names's fixture for
+# check_kit.key_allowed, which test_route.py still uses.
 PAIRS = ({"GATE_A_L", "SOURCE_A"}, {"LVL_B_L", "PAN_B"})
 UNGATED_STEPS = ("report", "render")
 
@@ -159,6 +165,80 @@ def check_sabotage_coverage():
               "gated step %s has a %s_missing sabotage" % (n, n))
 
 
+def check_led_rule():
+    """P4.1 §4.2 (amended 2026-10-08): place_panel turns every LED so that its
+    pads AND its own body box clear every other front part. Run on a
+    panel-only board, so it reports even when the back side cannot be placed.
+    Without the body test deck B's REC lamp sits on its key at rotation 0."""
+    import build as RB
+    from gen import kipcb
+    from gen import place as PL
+    s = P.Placed()
+    s.board = kipcb.new_board(P.X1 - P.X0, P.Y1 - P.Y0, P.LAYERS, origin=(P.X0, P.Y0))
+    P.place_panel(s, RB.project())
+    fps = {r: s.board.FindFootprintByReference(r) for r in s.front}
+    leds = [r for r in s.front if P._hole_index()[s.ids[r]]["kind"] == "led"]
+    check(len(leds) == 15, "the LED rule examined the 15 panel LEDs (%d)" % len(leds))
+    check(not s.no_rotation, "every LED found a rotation (none: %s)" % sorted(s.no_rotation))
+    for r in leds:
+        lb = PL.body_box(fps[r])
+        hit = [s.ids[q] for q in s.front if q != r and PL.overlaps(lb, PL.body_box(fps[q]))]
+        check(not hit, "%s (rot %.0f): its body overlaps no front body (hits: %s)"
+              % (s.ids[r], fps[r].GetOrientationDegrees(), hit))
+
+
+def check_module_pin():
+    """P4.1 §4.3 (amended 2026-10-08, Task 7c): with SM_PIN set, U_SM lands
+    exactly on it; a pinned spot that fails place_module's own tests is
+    refused, both (152.40, 64.25) rot 0 (pins in pot bodies: Task 7a found
+    no upright spot on the 9 mm raster) and (152.40, 57.75) rot 270 (legal by
+    bodies and pads, but B1 and C5 sit in REV_DIFF's / REV_MOD's courtyards:
+    the gated DRC's pth_inside_courtyard). Without the pin the search still
+    finds a spot (printed)."""
+    import build as RB
+    from gen import kipcb
+    proj = RB.project()
+
+    def panel_board():
+        s = P.Placed()
+        s.board = kipcb.new_board(P.X1 - P.X0, P.Y1 - P.Y0, P.LAYERS, origin=(P.X0, P.Y0))
+        P.place_panel(s, proj)
+        return s
+
+    def spot(s):
+        fp = s.board.FindFootprintByReference("U_SM")
+        return (round(P.pcbnew.ToMM(fp.GetPosition().x), 4), round(P.pcbnew.ToMM(fp.GetPosition().y), 4),
+                int(round(fp.GetOrientationDegrees())) % 360)
+    check(P.SM_PIN is not None, "U_SM has a pinned spot (SM_PIN)")
+    if P.SM_PIN is None:
+        return
+    s = panel_board()
+    P.place_module(s, proj)
+    check(spot(s) == (P.SM_PIN[0], P.SM_PIN[1], P.SM_PIN[2] % 360),
+          "U_SM sits on its pin %r (got %r)" % (P.SM_PIN[:3], spot(s)))
+    keep = P.SM_PIN
+    try:
+        for bad in ((152.40, 64.25, 0, "pins in pot bodies"),
+                    (152.40, 57.75, 270, "holes in front courtyards")):
+            P.SM_PIN = bad
+            try:
+                P.place_module(panel_board(), proj)
+                refused = False
+            except ValueError:
+                refused = True
+            check(refused, "an illegal pinned U_SM spot (%.2f, %.2f) rot %d (%s) is refused" % bad)
+        P.SM_PIN = None
+        s = panel_board()
+        try:
+            P.place_module(s, proj)
+            found = spot(s)
+        except ValueError as e:
+            found = str(e)
+        check(isinstance(found, tuple), "without the pin the search still finds a spot: %r" % (found,))
+    finally:
+        P.SM_PIN = keep
+
+
 def main():
     global ROOT
     ROOT = tempfile.mkdtemp(prefix="reva_place_guard_")
@@ -180,23 +260,15 @@ def run():
     # No committed-board comparison here: the committed board is routed since
     # P4-2 and guarded by reva_route_guard (test_route.py).
 
-    # The jack row: the 18 jacks, hole y 114.0. SD, the two keys and the four
-    # lamps on that row are not jacks and are not admitted.
-    jack_ids = {h["id"] for h in assign.load_holes()
-                if h["kind"] == "jack" and abs(h["y_mm"] - 114.0) < 1e-6}
-    check(len(jack_ids) == 18, "the jack row is the 18 jacks at y 114.0 (%d)" % len(jack_ids))
-    allowed = jack_ids | {"SONG_A", "SONG_B", "SONG_A_L", "SONG_B_L"} | set().union(*PAIRS)
-    n_keys = 0
-    for chk, keys in sorted(PC.KNOWN_PANEL.items()):
-        for k in sorted(keys):
-            n_keys += 1
-            check(CK.key_allowed(k, allowed, PAIRS, CLASS_WORDS),
-                  "KNOWN_PANEL[%s] %r names only jack-row parts, SONG parts or an admitted pair" % (chk, k))
-    check(n_keys > 0, "KNOWN_PANEL was examined (%d keys)" % n_keys)
+    n_keys = sum(len(v) for v in PC.KNOWN_PANEL.values())
+    check(n_keys == 0, "KNOWN_PANEL is empty after the panel pass (spec 2026-10-07 §1): %r"
+          % {k: sorted(v) for k, v in PC.KNOWN_PANEL.items() if v})
 
     check_key_names()
     check_parser()
     check_sabotage_coverage()
+    check_led_rule()
+    check_module_pin()
 
     base = P.build()
     d0 = scratch("base_")

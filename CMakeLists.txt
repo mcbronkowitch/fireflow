@@ -375,6 +375,14 @@ add_test(
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
 )
 
+# The group fields of the 60 HP plate are rectilinear unions of cell rects
+# (spec docs/superpowers/specs/2026-10-07-panel-nine-mm-raster-design.md §7).
+add_test(
+    NAME hw_fields_guard
+    COMMAND ${Python3_EXECUTABLE} res/test_hw_fields.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
+)
+
 # Rev A P1: the acrylic cut file, the print sheet and the hole list the board
 # will be placed from (spec docs/superpowers/specs/2026-09-29-rev-a-p1-
 # panel-parts-design.md §4). Same runner shape as the two guards above.
@@ -471,7 +479,10 @@ add_test(NAME reva_route_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/hardware/reva/test_route.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-set_tests_properties(reva_route_guard PROPERTIES TIMEOUT 3600)
+# Measured 2026-10-08 (Task 7c, 60 router rounds): 2651 s and 2957 s on
+# full Release runs, against the old 3600; 5400 leaves room so a placement
+# that stops converging fails on its own report, not on the timeout.
+set_tests_properties(reva_route_guard PROPERTIES TIMEOUT 5400)
 
 # The Rev A order package (P4-3): Gerbers, drill, CPL, BOM, assembly sheets,
 # every check proven red, two exports byte-identical.

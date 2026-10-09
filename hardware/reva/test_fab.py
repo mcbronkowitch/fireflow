@@ -10,10 +10,13 @@ is the verdict. Re-runs itself under KiCad's Python.
    that step's own lines.
 4. normalise() catches every date form, in any offset (Review Focus 5), and
    leaves coordinates alone.
-5. release_blockers(): it names every live known item, unverified rotation and
-   an unverified BOTTOM_SIGN (computed from the live tables); with
-   empty lists and verified rotations it is empty (Review Focus 2); with only
-   BOTTOM_SIGN unverified it names exactly that (Review Focus 1).
+5. release_blockers(): it names every live known item without a release
+   sign-off, unverified rotation and an unverified BOTTOM_SIGN (computed from
+   the live tables); with empty lists and verified rotations it is empty
+   (Review Focus 2); with only BOTTOM_SIGN unverified it names exactly that
+   (Review Focus 1). Sign-offs (P4-3 spec §4.4.6, amended 2026-10-08): an
+   unsigned entry blocks, a signed one does not, a sign-off missing any of
+   by/date/why still blocks, and a sign-off of an unlisted entry blocks.
 6. --release, in-process with release_blockers patched: one open item
    (BOTTOM_SIGN alone) refuses and writes nothing; no open item writes the
    package without board/ and leaves hardware/reva/fab/ alone. The live
@@ -115,11 +118,31 @@ def check_release_rules():
     # stay green through both
     live = F.release_blockers()
     for tag, mod in (("place_check", PC), ("route_check", RC)):
-        want = [(k, e) for k, v in sorted(mod.KNOWN_PANEL.items()) for e in sorted(v)]
+        want = [(k, e) for k, v in sorted(mod.KNOWN_PANEL.items()) for e in sorted(v)
+                if not F.signed(mod.SIGNED_OFF.get((k, e)))]
         got = [b for b in live if b.startswith(tag + " KNOWN_PANEL[")]
         check(len(got) == len(want) and all(any(b == "%s KNOWN_PANEL[%s]: %s" % (tag, k, e) for b in got)
                                             for k, e in want),
-              "release_blockers has one line per %s.KNOWN_PANEL entry (%d)" % (tag, len(want)))
+              "release_blockers has one line per unsigned %s.KNOWN_PANEL entry (%d)" % (tag, len(want)))
+        stale = [b for b in live if b.startswith(tag + " SIGNED_OFF[")]
+        check(not stale, "%s.SIGNED_OFF signs off only listed entries (%s)" % (tag, stale))
+    # the release sign-off (P4-3 spec §4.4.6, amended 2026-10-08)
+    ok_rot0 = {"X": {"deg": 0, "verified": "2026-12-01"}}
+    ok_bs = {"sign": 1, "verified": "2026-12-01"}
+    known = {"audio": {"A/B"}}
+    sign = {"by": "Bastian", "date": "2026-10-08", "why": "deliberate"}
+    check(F.release_blockers({}, known, ok_rot0, ok_bs, {}, {}) == ["route_check KNOWN_PANEL[audio]: A/B"],
+          "an unsigned known entry blocks the release")
+    check(F.release_blockers({}, known, ok_rot0, ok_bs, {}, {("audio", "A/B"): sign}) == [],
+          "a signed-off known entry does not block the release")
+    for field in F.SIGN_FIELDS:
+        part = dict(sign, **{field: ""})
+        check(F.release_blockers({}, known, ok_rot0, ok_bs, {}, {("audio", "A/B"): part})
+              == ["route_check KNOWN_PANEL[audio]: A/B"],
+              "a sign-off without %r still blocks" % field)
+    check(F.release_blockers({}, {}, ok_rot0, ok_bs, {}, {("audio", "A/B"): sign})
+          == ["route_check SIGNED_OFF[audio]: A/B signed off but not listed"],
+          "a sign-off for an entry that is not listed blocks (it may not go stale)")
     unver = sorted(k for k, v in F.ROT_FIX.items() if not v.get("verified"))
     got = sorted(b for b in live if b.startswith("ROT_FIX ") and b.endswith(" unverified"))
     check(got == ["ROT_FIX %s unverified" % k for k in unver],
@@ -127,9 +150,9 @@ def check_release_rules():
     check(("BOTTOM_SIGN unverified" in live) == (not F.BOTTOM_SIGN.get("verified")),
           "release_blockers names BOTTOM_SIGN iff it is unverified")
     ok_rot = {"X": {"deg": 0, "verified": "2026-12-01"}}
-    check(F.release_blockers({}, {}, ok_rot, {"sign": 1, "verified": "2026-12-01"}) == [],
+    check(F.release_blockers({}, {}, ok_rot, {"sign": 1, "verified": "2026-12-01"}, {}, {}) == [],
           "release_blockers is empty once the lists are empty and rotations verified")
-    check(F.release_blockers({}, {}, ok_rot, {"sign": 1, "verified": None}) == ["BOTTOM_SIGN unverified"],
+    check(F.release_blockers({}, {}, ok_rot, {"sign": 1, "verified": None}, {}, {}) == ["BOTTOM_SIGN unverified"],
           "release_blockers names exactly an unverified BOTTOM_SIGN")
 
 

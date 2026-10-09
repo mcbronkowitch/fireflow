@@ -58,7 +58,7 @@ value is right.
 | libDaisy's sequence: 12 channels, `OVS_32`, circular DMA | — | **read** from the source (`daisy_patch_sm.cpp:301-322`, `adc.h:118`, `adc.cpp:240-246`) |
 | the shell's rung, all 12 channels | 16.5 cycles | **read**, `shell/main.cpp`, `adc_use_measured_sampling_time()` |
 | oversampling order: all 32 of one channel, then the next | — | **documented**, `stm32h7xx_hal_adc.h:848` — *not measured* |
-| pot positions on the plate | 70 | **run**, `gen_hw_panel.py` (§5) |
+| pot positions on the plate | 73 | **run**, `gen_hw_panel.py` (§5) |
 
 The 387.5-cycle rung is "63 µs of acquisition" in `wait-measured.md` §9; with
 the 8.5 conversion cycles on top, a whole conversion is 64.4 µs.
@@ -121,24 +121,29 @@ raw conversions, whose noise at this rung nobody has measured; at the settle
 probe's short rungs single raw conversions scattered over bands of 10…197
 counts (`settle-measured.md` §5).
 
-## 5. The panel: 70 channels, 32 or 24 steps
+## 5. The panel: 73 channels, 32 or 24 steps
 
 `io-budget.md` §3 carries **65 mux channels**. That was 67 positions minus the
-two `REC` pads, before 2026-08-30. The plate has had **70 pot positions** since
-then (`gen_hw_panel.py`: 72 pot-class params, `STAGES_A/B` sharing
-`ATTACK_A/B`'s knob; `REC_A/B` and `MODBTN` are keycaps). The step counts do not
-move, because the address lines are common and a sweep is as long as the
-busiest sense pin:
+two `REC` pads, before 2026-08-30. The plate had **70 pot positions** from then
+until the 9 mm raster (`gen_hw_panel.py`: 72 pot-class params, `STAGES_A/B`
+sharing `ATTACK_A/B`'s knob; `REC_A/B` and `MODBTN` are keycaps). It now has
+**73**: the raster adds three reserved pots, `ROOT_A`, `ROOT_B` and `REV_MOD`
+(`HW_ONLY` entries of class S). They send nothing, but they are read through a
+mux channel like every pot (spec 2026-10-07 §4 and §8), so the count includes
+them. The step counts do not move, because the address lines are common and a
+sweep is as long as the busiest sense pin:
 
-| chip | chips for 70 | spare channels | steps | one step per block |
+| chip | chips for 73 | spare channels | steps | one step per block |
 |---|---:|---:|---:|---|
-| 74HC4067 (16:1) | 5 | 10 | 32 | **64 ms, 15.6 Hz per channel** |
-| 74HC4051 (8:1) | 9 | 2 | 24 | **48 ms, 20.8 Hz per channel** |
+| 74HC4067 (16:1) | 5 | 7 | 32 | **64 ms, 15.6 Hz per channel** |
+| 74HC4051 (8:1) | 10 | 7 | 24 | **48 ms, 20.8 Hz per channel** |
 
 `settle-budget.md`'s sweep figures, computed at 65, stand for the same reason.
 
-The 8:1 still scans a quarter faster, as `settle-budget.md` finding 5 found,
-but its margin is two channels; the 16:1's is ten.
+The 8:1 still scans a quarter faster, as `settle-budget.md` finding 5 found. The
+recount cost it a chip (ten, not nine); both options now leave seven spare
+channels. Rev A (ten 8:1 chips) spends two of those on the calibration
+channels, which leaves five (`hardware/reva/panel-map.json`).
 
 ## 6. Going faster
 
@@ -171,7 +176,7 @@ here measures either.
 | F1 reads at 16.5 what 387.5 reads | **measured** on `REF_A` (a 5150 Ω divider) in libDaisy's rotation — **not on a pot**, and not with the mux stepping |
 | B2's cost, F2's rotation | **derived** |
 | B1, B3, F3 accuracy | **unmeasured** |
-| 70 channels, 32/24 steps | **run** (`gen_hw_panel.py`) and **derived** |
+| 73 channels, 32/24 steps | **run** (`gen_hw_panel.py`) and **derived** |
 
 **First, when the panel scan is written:** step the coupon's mux once per block in
 the shell's own pattern and compare each channel with its long-rung reading

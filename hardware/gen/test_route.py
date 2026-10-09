@@ -429,6 +429,58 @@ def test_clip_routed():
           "clip routed: cells beside the copper outside the rect are marked")
 
 
+def _edge_board(edge=None, pad=False):
+    """test_clip_routed's board: victim A (1,6)-(13,6) ends inside the rect
+    (10..14, 5..7), aggr B wants the straight x 14.6, 1.6 mm from A's end.
+    `pad`: A ends on a victim pad inside the rect instead of routed copper
+    there (A then runs (1,6)-(9.6,6) only, outside)."""
+    rect = (10.0, 5.0, 14.0, 7.0)
+    r = R.Router((0, 0, 30, 20), 0.2, 1, CLR, 0.3)
+    if pad:
+        r.add_obstacle("A", (0,), ("rect", 12.5, 5.5, 13.5, 6.5), group="victim")
+        r.add_net("A", 0.125, [(1.0, 6.0, (0,)), (9.6, 6.0, (0,))], group="victim")
+    else:
+        r.add_net("A", 0.125, [(1.0, 6.0, (0,)), (13.0, 6.0, (0,))], group="victim")
+    r.add_net("B", 0.125, [(14.6, 0.5, (0,)), (14.6, 13.0, (0,))], group="aggr")
+    r.pair_clearance("victim", "aggr", 3.0)
+    r.pair_exempt(rect)
+    if edge is not None:
+        r.pair_edge("victim", "aggr", edge)
+    return r, rect, r.run()
+
+
+def test_pair_edge():
+    """pair_edge (Rev A P4-2 §5.4, 2026-10-08): A's routed copper inside the
+    rect keeps 3.0 mm from B's copper outside it, edge to edge, so B leaves
+    its straight line; without the call B stays straight (test_clip_routed),
+    so the board tests something. A static victim pad inside the rect stays
+    exempt: B runs straight past it."""
+    _r, rect, res = _edge_board(edge=3.0)
+    check(not res.failed and res.conflicts == 0, "edge: both routed (%s)" % res.failed)
+    a_in = [(p, q) for _l, a, b in res.routes["A"]["segments"] for p, q in R._clip_inside(a, b, [rect])]
+    b_out = [(p, q) for _l, a, b in res.routes["B"]["segments"] for p, q in R._clip_outside(a, b, [rect])]
+    d = min(seg_seg(s1, s2) for s1 in a_in for s2 in b_out) - 0.25 if a_in and b_out else None
+    check(d is not None and d >= 3.0 - 1e-6,
+          "edge: A inside the rect to B outside it, edge to edge %.3f mm (need 3.0)" % (d if d is not None else -1))
+    _r, _rect, res0 = _edge_board()
+    check("B" in res0.routes and length(res0, "B") < 13.1,
+          "edge: without pair_edge B runs straight (length %.2f)" % (length(res0, "B") if "B" in res0.routes else -1))
+    _r, _rect, resp = _edge_board(edge=3.0, pad=True)
+    check(not resp.failed and "B" in resp.routes and length(resp, "B") < 13.1,
+          "edge: a victim pad inside the rect is exempt, B straight (length %.2f)"
+          % (length(resp, "B") if "B" in resp.routes else -1))
+
+
+def test_clip_inside():
+    a, b = (0.0, 0.0), (10.0, 0.0)
+    got = R._clip_inside(a, b, [(2.0, -1.0, 4.0, 1.0), (3.0, -1.0, 6.0, 1.0)])
+    check(len(got) == 1 and abs(got[0][0][0] - 2.0) < 1e-9 and abs(got[0][1][0] - 6.0) < 1e-9,
+          "clip inside: overlapping rects give one piece x 2..6 (%r)" % (got,))
+    check(R._clip_inside(a, b, []) == [], "clip inside: no rects gives nothing")
+    check(R._subtract_spans([(0, 10), (20, 30)], [(5, 7), (25, 40)]) == [(0, 5), (7, 10), (20, 25)],
+          "subtract spans")
+
+
 _GAPS = ((0.6, 1.8), (9.4, 10.6), (18.2, 19.4))     # south, middle, north
 
 
@@ -587,7 +639,7 @@ if __name__ == "__main__":
               test_failed_net_leaves_no_copper, test_tree, test_deterministic,
               test_defaults_unchanged, test_pair_binding, test_pair_keeps_apart,
               test_pair_exempt, test_pair_static_pad, test_pair_other_layer,
-              test_pair_via, test_clip_outside, test_clip_routed,
+              test_pair_via, test_clip_outside, test_clip_routed, test_clip_inside, test_pair_edge,
               test_tiers, test_tier_order, test_stats,
               test_terminal_outside_grid, test_terminal_shape_is_inert_when_window_finds_a_cell,
               test_tier_occupancy_consistent, test_via_only_obstacle):

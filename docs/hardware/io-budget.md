@@ -48,6 +48,35 @@
 > Parameterzahl unabhängig und steht unverändert; es hat nur einen Nachtrag zur
 > Mux-Topologie bekommen. §6 listet, was heute noch offen ist — es ist eine
 > andere Liste als 2026-08-08.
+>
+> **Stand 2026-10-08: welche Teile noch die Platte vor dem 9-mm-Raster
+> beschreiben.** Die 9-mm-Korrektur (Spec `2026-10-07-panel-nine-mm-raster-design.md`)
+> hat jedes Bedienelement neu gesetzt. Gemessen am 2026-10-09:
+> `python res/gen_hw_panel.py` druckt `params=75 inputs=12 outputs=6 lights=15
+> panel=60HP`. Die folgenden Stellen sind **nicht** nachgezogen; sie stehen auf
+> dem Stand 2026-08-30 und werden mit diesen Zahlen gelesen:
+>
+> - **§1, Codeblock (`lights=19`):** heute `lights=15`. Die Bauformtabelle zählt
+>   Parameter-Positionen nach `HW_PARAMS` (14 / 56 / 3); mit `HW_ONLY` sind es
+>   **77 Positionen**: 14 grosse Potis, 59 kleine (darunter drei reservierte), 4
+>   Taster. Das sind 73 Potis und 4 Taster.
+> - **§1, „1 Element … `HW_ONLY`“:** heute **4**: `SHIFTBTN` (Taster) und die
+>   drei reservierten Potis `ROOT_A`, `ROOT_B`, `REV_MOD` (Beschriftung ROOT
+>   und WOBL), die einen Mux-Kanal lesen, aber nichts schicken. Die Zahl der
+>   Taster bleibt 4.
+> - **§1, Körperradien „6,0 / 4,4 / 4,0 mm“:** heute `BODY_R` = **6,0 / 3,85 /
+>   3,0 mm** (gross / klein / Taster); `CLASS_R` ist unverändert 8,5 / 6,0 /
+>   4,0 mm.
+> - **§3, 595-Zeile (19 LEDs, 5 Enables):** heute 15 LEDs, und die Kette ist
+>   40 Bit lang: Adresse Bit 0–2, Enables Bit 3–12 (zehn, eins je Mux), LEDs
+>   Bit 13–27 (`shell/generated_panel_map.h`). Die Mux-Zeile steht im Nachtrag
+>   2026-10-08 in §3.
+> - **§4, „neun Linien“, y = 114 mm, 19 LEDs, 1 reserviertes Pad:** heute
+>   **fünf Reihen** bei y = 14,5 / 34,625 / 54,75 / 74,875 / 95,0 mm (Raster
+>   20,125 mm), die Buchsenreihe bei **y = 112,75 mm** (`JACK_Y`), die
+>   Bedienelemente von x = 11,0 bis x = 293,8 mm, **15 LEDs**, und
+>   `SHIFTBTN` ist das eine reservierte Pad (daneben die drei reservierten
+>   Potis). Plattenmaß 304,8 × 128,5 mm unverändert.
 
 ## 1. Die Ausgangslage
 
@@ -118,19 +147,30 @@ und das reservierte `SHIFTBTN`.
 >
 > | Zahl | Was sie zählt | Woher |
 > |---:|---|---|
-> | **21** | `LightId`s insgesamt, alle jeden Block geschrieben | `gen_panel.LIGHTS` (4) + `HW_ONLY_LIGHTS` (17) |
-> | **19** | Lampen auf der **Hardwareplatte** | `gen_hw_panel.py` druckt `lights=19` |
+> | **17** | `LightId`s insgesamt, alle jeden Block geschrieben | `gen_panel.LIGHTS` (4) + `HW_ONLY_LIGHTS` (13) |
+> | **15** | Lampen auf der **Hardwareplatte** | `gen_hw_panel.py` druckt `lights=15` |
 > | **4** | Lampen auf dem **Rack**-Panel | `count_panel_controls.py` druckt `lights 4` |
 >
-> Die 19 sind die 21 ohne `FLOW_A_L`/`FLOW_B_L`, die `_SKIP_HW_LIGHTS` auf der
-> Hardwareplatte bewusst weglässt. **Für die 595-Kette zählen die 19** — sie
-> trägt physische Lampen, keine `LightId`s (§3).
+> Die 15 sind die 17 ohne `FLOW_A_L`/`FLOW_B_L`, die `_SKIP_HW_LIGHTS` auf der
+> Hardwareplatte bewusst weglässt. **Für die 595-Kette zählen die 15** — sie
+> trägt physische Lampen, keine `LightId`s (§3). *Stand 2026-10-08: die
+> 9-mm-Korrektur (Spec 2026-10-07 §5) hat die Platte von 19 auf 15 Lampen
+> gebracht; die Zahlen 21 und 19 stammten aus der Zeit davor.*
 
 Der Bestand: 8 der bisherigen 10 blieben, `CAP_A_L`/`CAP_B_L` sind mit der
 Capture-Sequenz gelöscht (die gibt es seit 2026-07-14 nicht mehr, siehe
-`docs/roadmap.md`), und 13 sind neu. Drei der Lampen auf der Platte sind
-absichtlich dunkel — `SYNC_L` und die zwei Pad-Lampen `MODBTN_L`/`SHIFTBTN_L`
-—, aber jeden Block *geschrieben*, nicht übersprungen; ein Gate prüft das. Das
+`docs/roadmap.md`), und 13 sind neu *(Stand 2026-08-19; 8 + 13 sind 21, die Zahl
+des Rack-Panels jener Zeit, nicht die 17 `LightId`s und 15 Plattenlampen des
+Kastens oben)*. *(Stand 2026-10-08, 15 Lampen auf der
+Platte, Spec 2026-10-07 §5: `SYNC_L` heißt jetzt `CLK_L` und soll jeden Impuls
+an der CLOCK-Buchse blitzen; neu sind `RST_L`, `FTIME_A_L`/`FTIME_B_L`. Die
+zwei Pad-Lampen `SHIFTBTN_L` und `MODBTN_L` stehen zwischen ihrer Taste und
+ihrer Buchse und **tragen je zwei Aufgaben**: `SHIFTBTN_L` zeigt gerastetes
+SHIFT, sonst den Eingangspegel; `MODBTN_L` zeigt MODs Doppelpuls, sonst den
+Master-Limiter, den vorher `CEIL_L` zeigte, das damit entfällt.)* Von diesen
+ist heute im Code nur `MODBTN_L` belegt; `CLK_L`, `RST_L`, `FTIME_*_L` und `SHIFTBTN_L`
+sind vorerst dunkel — ihre Bedeutung ist P6b (`led_law.hpp`, `fill()`) —, aber
+jeden Block *geschrieben*, nicht übersprungen; ein Gate prüft das. Das
 gilt auch für `FLOW_A_L`/`FLOW_B_L`, die geschrieben werden, obwohl die
 Hardwareplatte sie nicht zeichnet. `TEMPO_L` tickt den Transport-Beat
 (Metronom-Puls, `kTempoPulse` der Beat-Phase). Herleitung, Platzierung und die offene
@@ -429,7 +469,22 @@ Kanal.
 > of 15; nine 8:1 chips would carry it with 2 spare. The sweep length does not
 > change (32 / 24 steps). Counted by `tools/scan_budget.py`, whose guard goes
 > red when the plate moves — [`scan-budget.md`](scan-budget.md) §5. The table
-> below is left as it was written; its mux row reads 70 / 10 today.
+> below is left as it was written; its mux row read 70 / 10 on that day
+> (today's count is in the note below).
+
+> **Nachtrag 2026-10-08: die 9-mm-Korrektur hat den Bedarf auf 73 Positionen
+> gebracht.** Die Platte hat jetzt **73 Poti-Positionen** (drei reservierte
+> Potis `ROOT_A`, `ROOT_B`, `REV_MOD` zählen mit: sie schicken nichts, werden
+> aber über einen Mux-Kanal gelesen), statt der 70 des Addendums oben.
+> `tools/scan_budget.py` druckt für 73: fünf 16:1-Chips mit 32 Schritten oder
+> **zehn** 8:1-Chips mit 24 Schritten (48 ms pro Sweep bei einem Schritt pro
+> Block). Rev A baut die zehn 8:1-Chips; zusammen mit den zwei
+> Kalibrierkanälen `CAL_GND` und `CAL_3V3` sind das **75 von 80 Eingängen, 5
+> frei** (`hardware/reva/panel-map.json`) — nicht mehr „neun 8:1-Chips mit 2
+> frei“. Die 595-Zeile der Tabelle unten zählt noch 19 LEDs; es sind 15
+> (`panel-map.json`), und ihre fünf Enables sind seit P2 zehn (ein Enable je
+> Mux, `shell/mux_plan.h`); die Adress- und Enable-Spalte ist hier nicht neu
+> gerechnet.
 
 | Ressource | Kapazität | Bedarf | Rest |
 |---|---:|---:|---:|

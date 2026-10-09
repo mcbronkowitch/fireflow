@@ -69,10 +69,12 @@ def invariants(m, holes):
             bad.append("slot %s is not on its sense pin's muxes" % (r,))
     if sorted(c["id"] for c in m["calibration"]) != sorted(A.CALIBRATION):
         bad.append("calibration channels: %s" % m["calibration"])
-    bands = [[p["x_mm"] for p in m["pots"] if p["sense"] == s] for s in A.SENSE_ORDER]
+    order = sorted(m["pots"], key=lambda p: (p["x_mm"], p["y_mm"], p["id"]))
+    rank = {p["id"]: i for i, p in enumerate(order)}
+    bands = [[rank[p["id"]] for p in m["pots"] if p["sense"] == s] for s in A.SENSE_ORDER]
     for left, right in zip(bands, bands[1:]):
         if left and right and max(left) >= min(right):
-            bad.append("regions overlap in x: %.2f >= %.2f" % (max(left), min(right)))
+            bad.append("bands overlap in (x, y, id) order")
     bad += proximity_violations(m)
     leds = m["leds"]
     if sorted(l["id"] for l in leds) != sorted(led_holes):
@@ -84,10 +86,44 @@ def invariants(m, holes):
     return bad
 
 
+def split_columns(m):
+    """Columns whose pots sit in more than one band."""
+    cols = {}
+    for p in m["pots"]:
+        cols.setdefault(p["x_mm"], set()).add(p["sense"])
+    return sorted(x for x, s in cols.items() if len(s) > 1)
+
+
+def synthetic(columns):
+    """Pots in columns of the given sizes, 20.2 mm apart, rows 20.125 apart."""
+    return [{"id": "P%d_%d" % (c, r), "x_mm": 10.0 + 20.2 * c, "y_mm": 14.5 + 20.125 * r}
+            for c, n in enumerate(columns) for r in range(n)]
+
+
+def split_cases():
+    bad = []
+    # 72 pots in 18 columns of 4 fit 24/16/16/24 (+2 cal) without a split.
+    regions, _ = A._split_regions(synthetic([4] * 18))
+    xs = [{p["x_mm"] for p in regions[s]} for s in A.SENSE_ORDER]
+    if any(a & b for i, a in enumerate(xs) for b in xs[i + 1:]):
+        bad.append("a split was taken where a split-free answer exists")
+    # The plate's own column pattern (deck 5 5 5 5 5 4, centre 5 5 5, deck
+    # 4 5 5 5 5 5): whole columns cannot fill the bands, one split can.
+    regions, _ = A._split_regions(synthetic([5, 5, 5, 5, 5, 4, 5, 5, 5, 4, 5, 5, 5, 5, 5]))
+    xs = [{p["x_mm"] for p in regions[s]} for s in A.SENSE_ORDER]
+    shared = sum(len(a & b) for i, a in enumerate(xs) for b in xs[i + 1:])
+    if shared != 1:
+        bad.append("expected exactly one split column, got %d" % shared)
+    return bad
+
+
 def main():
     holes = A.load_holes()
     failures = []
+    failures += split_cases()
     m = A.assign(holes)
+    if len(split_columns(m)) > 1:
+        failures.append("more than one column split: %s" % split_columns(m))
     failures += invariants(m, holes)
     if A.assign(holes) != m:
         failures.append("assign() is not deterministic")
@@ -107,7 +143,7 @@ def main():
     pots = [h for h in holes if h["kind"] == "pot"]
     for label, bad_holes in (
             ("a duplicated pot id", holes + [dict(pots[0])]),
-            ("81 pots", holes + [dict(pots[0], id="EXTRA_%d" % i, ids=["EXTRA_%d" % i])
+            ("84 pots", holes + [dict(pots[0], id="EXTRA_%d" % i, ids=["EXTRA_%d" % i])
                                  for i in range(11)]),
             ("a duplicated LED id", holes + [dict(next(h for h in holes if h["kind"] == "led"))])):
         try:

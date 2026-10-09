@@ -95,6 +95,140 @@ def test_no_overlap_with_hw_radii():
             d = ((a.x - b.x) ** 2 + (a.y - b.y) ** 2) ** 0.5
             assert d >= a.r + b.r - 1e-6, (a.enum, b.enum, round(d, 2))
 
+
+# Real caps, written HERE and not read from hw.BODY_R: the 9 mm rule is a
+# promise about the bought parts (spec 2026-10-07 §2), and a guard that
+# imports its radii from the generator would loosen with it.
+CAP_R = {"G": 6.0, "S": 3.85, "P": 3.0}
+MIN_CAP_GAP = 9.0
+
+
+def _cap_items():
+    """Every knob position (params and reserved, ATTACK/STAGES once) and
+    every key, as (enum, class, x, y)."""
+    seen, out = set(), []
+    for c in hw.HW_PARAMS + hw.HW_ONLY:
+        cls = hw.hw_class(c.enum)
+        if cls not in CAP_R:
+            continue
+        key = (round(c.x, 6), round(c.y, 6))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append((c.enum, cls, c.x, c.y))
+    return out
+
+
+def _cap_gap_failures(items):
+    bad = []
+    for i, (ea, ca, xa, ya) in enumerate(items):
+        for eb, cb, xb, yb in items[i + 1:]:
+            gap = ((xa - xb) ** 2 + (ya - yb) ** 2) ** 0.5 - CAP_R[ca] - CAP_R[cb]
+            if gap < MIN_CAP_GAP - 1e-6:
+                bad.append(f"{ea}/{eb} caps {gap:.2f} mm apart")
+    return bad
+
+
+def test_nine_mm_between_caps():
+    """Spec 2026-10-07 §1: no two caps closer than 9 mm, edge to edge."""
+    items = _cap_items()
+    knobs = [i for i in items if i[1] in ("G", "S")]
+    check(len(knobs) == 73, f"{len(knobs)} knob positions, expected 73")
+    check(sum(i[1] == "G" for i in knobs) == 14, "expected 14 big caps")
+    check(sum(i[1] == "P" for i in items) == 4, "expected 4 keys")
+    for f in _cap_gap_failures(items):
+        check(False, f)
+    # The guard proves it can fail on every run: SHAPE_A moved 2.0 mm toward
+    # MOD_A must break the rule (the real gap is 10.35).
+    moved = [(e, c, x - 2.0 if e == "SHAPE_A" else x, y) for e, c, x, y in items]
+    check(_cap_gap_failures(moved), "the 9 mm guard did not see SHAPE_A moved onto MOD_A")
+
+
+def test_cells_are_the_source():
+    """Every knob and key stands on its cell (spec 2026-10-07 §3)."""
+    by = {c.enum: c for c in hw.HW_PARAMS + hw.HW_ONLY}
+    seen = 0
+    for stem, (row, col) in hw.DECK_CELLS.items():
+        for side in "AB":
+            c = by.get(f"{stem}_{side}")
+            if c is None:
+                check(False, f"{stem}_{side} has a cell but no control")
+                continue
+            x = hw.deck_col_x(col) if side == "A" else hw.W - hw.deck_col_x(col)
+            check(abs(c.x - x) < 1e-9 and abs(c.y - hw.ROW_Y[row - 1]) < 1e-9,
+                  f"{c.enum} at ({c.x:.3f},{c.y:.3f}), cell says ({x:.3f},{hw.ROW_Y[row - 1]:.3f})")
+            seen += 1
+    for name, (row, k) in hw.CENTRE_CELLS.items():
+        c = by.get(name)
+        if c is None:
+            check(False, f"{name} has a cell but no control")
+            continue
+        check(abs(c.x - hw.centre_col_x(k)) < 1e-9 and abs(c.y - hw.ROW_Y[row - 1]) < 1e-9,
+              f"{name} is not on its centre cell")
+        seen += 1
+    check(seen == 2 * len(hw.DECK_CELLS) + len(hw.CENTRE_CELLS), "cells not all checked")
+    # Big caps: rows 2 and 4 only, never deck column 6, never side by side.
+    for stem, (row, col) in hw.DECK_CELLS.items():
+        if hw.HW_SIZE.get(stem) == "G":
+            check(row in (2, 4) and col != 6, f"big cap {stem} at R{row} c{col}")
+            for other, (r2, c2) in hw.DECK_CELLS.items():
+                if other != stem and hw.HW_SIZE.get(other) == "G" and r2 == row:
+                    check(abs(c2 - col) > 1, f"big caps {stem} and {other} side by side")
+    occupied = {(r, k) for r, k in hw.CENTRE_CELLS.values()}
+    check(all((r, -k) in occupied for r, k in occupied), "the centre is not mirror-symmetric")
+    for name, (row, k) in hw.CENTRE_CELLS.items():
+        if hw.HW_SIZE.get(name) == "G":
+            check(row in (2, 4) and k == 0, f"big cap {name} off the centre line or row")
+    check(abs(hw.deck_col_x(1) - 11.0) < 1e-9 and abs(hw.deck_col_x(6) - 112.0) < 1e-9,
+          "deck columns drifted from 11.00 .. 112.00")
+    # The centre runs on its own 23.0 mm pitch (spec §3, amended 2026-10-08):
+    # what gives the Patch Submodule a spot on the board. Written here, not
+    # read from hw.CENTRE_PITCH, so a generator edit cannot move it unseen.
+    want = {-1: 129.4, 0: 152.4, 1: 175.4}
+    check(all(abs(hw.centre_col_x(k) - x) < 1e-9 for k, x in want.items()),
+          f"centre columns drifted from 129.40 / 152.40 / 175.40: "
+          f"{[round(hw.centre_col_x(k), 3) for k in (-1, 0, 1)]}")
+
+
+def test_fields_keep_box_gap():
+    """Fields of different groups keep BOX_GAP; deck B mirrors deck A
+    (spec 2026-10-07 §7)."""
+    boxes = hw.BOXES
+    check(len(boxes) == 26, f"expected 26 group fields, got {len(boxes)}")
+    for i, a in enumerate(boxes):
+        for b in boxes[i + 1:]:
+            g = a.gap_to(b)
+            check(g >= hw.BOX_GAP - 1e-6, f"{a.n}/{a.side} and {b.n}/{b.side} are {g:.2f} mm apart")
+    by = {(b.n, b.side): b for b in boxes}
+    for name in hw.DECK_GROUPS:
+        a, b = by.get((name, "A")), by.get((name, "B"))
+        if a is None or b is None:
+            check(False, f"{name} lacks a deck field")
+            continue
+        mir = sorted((round(hw.W - r[1], 6), round(hw.W - r[0], 6), round(r[2], 6), round(r[3], 6))
+                     for r in a.rects)
+        own = sorted(tuple(round(v, 6) for v in r) for r in b.rects)
+        check(mir == own, f"{name}: deck B field is not deck A mirrored")
+    check({b.stem for b in boxes} == set(hw.GROUP_ORDER),
+          f"fields and GROUP_ORDER disagree: { {b.stem for b in boxes} ^ set(hw.GROUP_ORDER)}")
+
+
+def test_column_cells_follow_the_centre_pitch():
+    """Spec §7 (amended 2026-10-08): the column cell's half-width, side by
+    side, written here as literals. Between the centre columns (23.0 - 3.0)
+    / 2 = 10.0; the outer centre columns' outward side (toward the deck) has
+    no column-cell minimum; deck column 6 keeps (20.2 - 3.0) / 2 = 8.6."""
+    from types import SimpleNamespace as At
+    want = {  # x: (left, right)
+        129.4: (0.0, 10.0), 152.4: (10.0, 10.0), 175.4: (10.0, 0.0),
+        112.0: (8.6, 8.6), 192.8: (8.6, 8.6), 11.0: (8.6, 8.6),
+    }
+    for x, (left, right) in want.items():
+        got = (hw._cell_half(At(x=x), -1), hw._cell_half(At(x=x), +1))
+        check(abs(got[0] - left) < 1e-9 and abs(got[1] - right) < 1e-9,
+              f"column cell at x {x}: half-widths {got}, want {(left, right)}")
+
+
 def _twin_enum(enum):
     """Name-declared mirror partner, or None if the name declares none.
 
@@ -136,11 +270,10 @@ def test_mirror_symmetry():
     # machine. Covers every hand-written mirror (JACK_POS, LIGHT_POS, the
     # HW_ONLY loop), not only the DECK_POS-derived HW_PARAMS: those are
     # equally "the instrument's identity" and were equally unchecked.
+    # Cluster lamps included: since 2026-10-08 deck B's stand mirrored too.
     items = hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS + hw.HW_LIGHTS + hw.HW_ONLY
     pairs = 0
     for enum, a, twin, b in _mirror_pairs(items):
-        if a.enum in hw.KNOB_LAMPS:
-            continue
         check(abs((hw.W - a.x) - b.x) < 1e-6,
               f"{enum}/{twin}: x does not mirror ({a.x:.2f} vs {b.x:.2f})")
         check(abs(a.y - b.y) < 1e-6,
@@ -158,7 +291,9 @@ def test_caption_mirror_symmetry():
     # landing there would have one twin step toward the axis and the
     # other step off the panel edge, with nothing catching it (spec
     # 2026-08-10 §6 fix-2). Covers every hand-written mirror, not only
-    # HW_PARAMS -- same widening as test_mirror_symmetry above.
+    # HW_PARAMS -- same widening as test_mirror_symmetry above. Cluster
+    # captions are no exception since 2026-10-08: centred under their knob,
+    # they mirror like every other word.
     items = hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS + hw.HW_LIGHTS + hw.HW_ONLY
     pairs = 0
     for enum, a, twin, b in _mirror_pairs(items):
@@ -166,18 +301,6 @@ def test_caption_mirror_symmetry():
             continue
         lxa, lya, anchor_a = hw.hw_label(a)[:3]
         lxb, lyb, anchor_b = hw.hw_label(b)[:3]
-        if a.enum in hw.KNOBS_WITH_LAMPS:
-            # Same reading order on both decks: word then LED, so the caption
-            # shifts the same way locally instead of optically mirroring.
-            check(abs((lxa - a.x) - (lxb - b.x)) < 1e-6,
-                  f"{enum}/{twin}: cluster caption offset differs "
-                  f"({lxa - a.x:.2f} vs {lxb - b.x:.2f})")
-            check(abs(lya - lyb) < 1e-6,
-                  f"{enum}/{twin}: caption y does not match ({lya:.2f} vs {lyb:.2f})")
-            check(anchor_a == anchor_b == "middle",
-                  f"{enum}/{twin}: cluster captions are not middle-anchored")
-            pairs += 1
-            continue
         check(abs((hw.W - lxa) - lxb) < 1e-6,
               f"{enum}/{twin}: caption x does not mirror ({lxa:.2f} vs {lxb:.2f})")
         check(abs(lya - lyb) < 1e-6,
@@ -249,6 +372,13 @@ def test_labels_stay_off_neighbour_footprints():
     # OTHER control's footprint by LBL_MARGIN. Bare non-overlap is not a
     # margin: at 16 mm row spacing the default offset lands 8.1 mm from an
     # 8.0 mm knob and would pass a zero-margin test with 0.1 mm to spare.
+    #
+    # A control on the caption owner's own shaft is not a neighbour: STAGES
+    # shares ATTACK's knob (one hole, one pot), so ATTACK's word is held to
+    # the own-knob floor against it -- the radius, as
+    # test_captions_stay_off_their_own_knob holds every word -- not radius +
+    # LBL_MARGIN. Every small knob's centred word sits 7.45 from its shaft;
+    # ATTACK's does too since its cluster word is centred (2026-10-08).
     for c in hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS + hw.HW_ONLY:
         if not c.label:
             continue
@@ -257,9 +387,11 @@ def test_labels_stay_off_neighbour_footprints():
             if other is c:
                 continue
             d = ((lx - other.x) ** 2 + (ly - other.y) ** 2) ** 0.5
-            check(d >= other.r + LBL_MARGIN - 1e-6,
+            same_shaft = abs(other.x - c.x) < 1e-9 and abs(other.y - c.y) < 1e-9
+            need = other.r if same_shaft else other.r + LBL_MARGIN
+            check(d >= need - 1e-6,
                   f"caption {c.enum} at ({lx:.1f},{ly:.1f}) is {d:.2f} from "
-                  f"{other.enum} (needs {other.r + LBL_MARGIN:.2f})")
+                  f"{other.enum} (needs {need:.2f})")
 
 
 def test_captions_stay_off_their_own_knob():
@@ -355,21 +487,25 @@ def test_size_classes_match_the_spec():
 
 def test_hw_only_inventory():
     """What exists on sheet metal but not in the VCV module: 1 pad (SHIFT,
-    still reserved and inert), no more extra LEDs. MODBTN moved out of
-    HW_ONLY 2026-08-22 -- it is a real latch param now, drawn from
-    hw.HW_PARAMS instead. 19 lamps drawn on the plate, 21 LightIds (`FLOW_*`
-    undrawn). The eight MOD jacks are real inputs (unwired), no longer
-    HW_ONLY placeholders."""
+    still reserved and inert) and three reserved small pots -- ROOT_A,
+    ROOT_B and REV_MOD (spec 2026-10-07 §4): a hole, a caption and a pot,
+    no ParamId. No extra LEDs. MODBTN moved out of HW_ONLY 2026-08-22 -- it
+    is a real latch param now, drawn from hw.HW_PARAMS instead. 15 lamps
+    drawn on the plate (`FLOW_*` stay LightIds, undrawn). The eight MOD jacks
+    are real inputs (unwired), no longer HW_ONLY placeholders."""
     kinds = {}
     for c in hw.HW_ONLY:
         kinds[hw.hw_class(c.enum)] = kinds.get(hw.hw_class(c.enum), 0) + 1
     check(kinds.get("P") == 1, f"expected 1 hw-only pad, got {kinds.get('P')}")
+    check(kinds.get("S") == 3,
+          f"expected 3 hw-only small pots (ROOT_A, ROOT_B, REV_MOD reserved, "
+          f"spec 2026-10-07 §4), got {kinds.get('S')}")
     check(kinds.get("J", 0) == 0, f"expected 0 hw-only jacks, got {kinds.get('J')}")
     check(kinds.get("L", 0) == 0, f"expected 0 hw-only LEDs, got {kinds.get('L')}")
     assert [c.enum for c in hw.HW_PARAMS] == \
         [c.enum for c in gp.RUNTIME_PANEL_PARAMS] + ["MODBTN"]
     total_leds = len([c for c in hw.ALL_HW if hw.hw_class(c.enum) == "L"])
-    check(total_leds == 19, f"expected 19 LEDs on the plate, got {total_leds}")
+    check(total_leds == 15, f"expected 15 LEDs on the plate, got {total_leds}")
 
 
 def test_mod_wreaths():
@@ -397,11 +533,14 @@ def test_mod_wreaths():
         check(pat in svg, f"{c.enum} body ring is not the plain HW_RING: {pat}")
     # Only body rings are checked, not every accent stroke: the keycaps have
     # worn an accent edge at the same width since 2026-08-30 (see
-    # test_pad_keycaps_are_dark_and_accented), and those are rects.
+    # test_pad_keycaps_are_dark_and_accented), and since 2026-10-07 they are
+    # round caps too -- so key centres are excused by position.
+    keys = {(hw.mm(c.x), hw.mm(c.y)) for c in hw.ALL_HW if hw.hw_class(c.enum) == "P"}
     for col in set(hw.ACC.values()):
-        check(not re.search(r'<circle[^>]*stroke="%s" stroke-width="0\.3"' % col,
-                            svg),
-              f"an accent body ring in {col} is still printed on the plate")
+        for m in re.finditer(r'<circle cx="([0-9.]+)" cy="([0-9.]+)"[^>]*stroke="%s" '
+                             r'stroke-width="0\.3"' % col, svg):
+            check((m.group(1), m.group(2)) in keys,
+                  f"an accent body ring in {col} is still printed at ({m.group(1)},{m.group(2)})")
     # the master knobs are deliberately unringed
     for enum in ("MOD_A", "MOD_B"):
         check(enum not in want, f"{enum} unexpectedly in MOD_WREATHED")
@@ -466,10 +605,11 @@ def test_knob_accent_table():
 
 def test_pad_keycaps_are_dark_and_accented():
     """The keycaps went from a near-white bed to the knob/jack family on
-    2026-08-30: a dark cap with an accent edge, printed at the size FfPad
-    actually covers. MOD and SHFT are the exception the accent table has to
-    be told about -- they sit at the two ends of the jack row, so zone_of()
-    would file the global MOD latch under deck B and SHFT under deck A."""
+    2026-08-30: a dark cap with an accent edge, printed at the real 6 mm
+    round cap since 2026-10-07 (spec §7). MOD and SHFT are the exception the
+    accent table has to be told about -- they sit at the two ends of the jack
+    row, so zone_of() would file the global MOD latch under deck B and SHFT
+    under deck A."""
     r, g, b = hw.rgb(hw.PAD_FILL)[2:4], hw.rgb(hw.PAD_FILL)[4:6], hw.rgb(hw.PAD_FILL)[6:8]
     check(max(int(r, 16), int(g, 16), int(b, 16)) < 0x40,
           f"PAD_FILL {hw.PAD_FILL} is still a light keycap")
@@ -479,8 +619,7 @@ def test_pad_keycaps_are_dark_and_accented():
     for c in pads:
         want = (hw.ACC["C"] if c.enum in hw.GLOBAL_KEYS
                 else hw.ACC[hw.zone_of(c.x)])
-        pat = (f'<rect x="{hw.mm(c.x - c.r)}" y="{hw.mm(c.y - c.r)}" '
-               f'width="{hw.mm(2 * c.r)}" height="{hw.mm(2 * c.r)}" rx="1.2" '
+        pat = (f'<circle cx="{hw.mm(c.x)}" cy="{hw.mm(c.y)}" r="{hw.mm(hw.body_r(c))}" '
                f'fill="{hw.PAD_FILL}" stroke="{want}" stroke-width="0.3"/>')
         check(pat in svg, f"{c.enum} keycap is not dark with a {want} edge: {pat}")
     check(hw.GLOBAL_KEYS == {"MODBTN", "SHIFTBTN"},
@@ -500,11 +639,10 @@ def test_pad_keycaps_are_dark_and_accented():
 
 def test_light_accent_table():
     """Every LED takes its zone accent, printed bed and live glow from the
-    same led_accent() (2026-08-30). Three of the nineteen sit at the plate's
+    same led_accent() (2026-08-30). Two of the fifteen sit at the plate's
     edges and would be read as a deck by position alone: the MOD and SHFT
-    lamps, and CEIL_L, which reports the master limiter and merely happens to
-    stand next to OUT R. REC stays red on both plates."""
-    check(hw.LED_GLOBALS == {"MODBTN_L", "SHIFTBTN_L", "CEIL_L"},
+    lamps. REC stays red on both plates."""
+    check(hw.LED_GLOBALS == {"MODBTN_L", "SHIFTBTN_L"},
           f"LED_GLOBALS drifted: {hw.LED_GLOBALS}")
     svg = open(os.path.join(HERE, "FireflowHW.svg"), encoding="utf-8").read()
     for c in hw.HW_LIGHTS:
@@ -526,7 +664,7 @@ def test_light_accent_table():
                   f"{c.enum} light accent {a}/{b} is not {want}")
         by = {c.enum: rows[i] for i, c in enumerate(hw.HW_LIGHTS) if i < len(rows)}
         neutral = hw.rgb(hw.ACC["C"])
-        for enum in ("MODBTN_L", "SHIFTBTN_L", "CEIL_L"):
+        for enum in ("MODBTN_L", "SHIFTBTN_L"):
             check(by.get(enum) == (neutral, neutral),
                   f"{enum} is not neutral: {by.get(enum)}")
     check("kLightAccent desynced" in src, "kLightAccent has no length static_assert")
@@ -538,9 +676,9 @@ def test_steps_has_no_lamp_on_the_hw_plate():
     names = {c.enum for c in hw.HW_LIGHTS}
     check("FLOW_A_L" not in names and "FLOW_B_L" not in names,
           "FLOW_* still drawn on FireflowHW")
-    check("STEPS_A" not in hw.KNOBS_WITH_LAMPS and
-          "STEPS_B" not in hw.KNOBS_WITH_LAMPS,
-          "STEPS is still in KNOBS_WITH_LAMPS")
+    owners = set(hw.KNOB_LAMPS.values())
+    check("STEPS_A" not in owners and "STEPS_B" not in owners,
+          "STEPS still owns a lamp in KNOB_LAMPS")
     by = {c.enum: c for c in hw.HW_PARAMS}
     for enum in ("STEPS_A", "STEPS_B"):
         lx, ly = hw.hw_label(by[enum])[:2]
@@ -548,95 +686,134 @@ def test_steps_has_no_lamp_on_the_hw_plate():
               f"{enum} caption x={lx:.2f} is not on the knob ({by[enum].x:.2f})")
 
 
-def test_led_inventory_after_the_feedback_round():
-    """19 lamps drawn on FireflowHW (21 LightIds, FLOW_* undrawn), the two
-    capture indicators gone, GATE out of the timing row and SYNC at the
-    CLOCK jack. Spec 2026-08-16 sections 3.1-3.5."""
+def test_led_inventory_after_the_panel_pass():
+    """15 lamps drawn (spec 2026-10-07 §5): the lane-excursion lamps and CEIL_L
+    gone, FTIME and RST new, SYNC_L renamed CLK_L, SHIFT and MOD lamps centred
+    between their key and jack."""
     names = {c.enum for c in hw.HW_LIGHTS}
-    check(len(hw.HW_LIGHTS) == 19, f"{len(hw.HW_LIGHTS)} lights, expected 19")
-    for dead in ("CAP_A_L", "CAP_B_L"):
-        check(dead not in names, f"{dead} still drawn -- capture was deleted 2026-07-14")
-    for new in ("SRC_A_L", "FLT_A_L", "CLR_A_L", "LVL_A_L", "SONG_A_L",
-                "MODBTN_L", "SHIFTBTN_L", "CEIL_L"):
-        check(new in names, f"{new} missing")
-    by = {c.enum: c for c in hw.HW_LIGHTS}
-    check(abs(by["SYNC_L"].y - 114.0) < 1e-6,
-          f"SYNC_L is at y={by['SYNC_L'].y}, not on the jack row")
-    check(abs(by["CEIL_L"].y - hw.JACK_Y) < 1e-6,
-          f"CEIL_L is at y={by['CEIL_L'].y}, not on the jack row with MODBTN_L")
-    check(by["CEIL_L"].x > hw.JACK_POS["OUT_R"],
-          "CEIL_L is not outboard of OUT_R")
+    check(len(hw.HW_LIGHTS) == 15, f"{len(hw.HW_LIGHTS)} lights, expected 15")
+    for dead in ("SRC_A_L", "SRC_B_L", "FLT_A_L", "FLT_B_L", "CLR_A_L", "CLR_B_L",
+                 "CEIL_L", "SYNC_L", "CAP_A_L", "CAP_B_L"):
+        check(dead not in names, f"{dead} is still drawn")
+    for want in ("FTIME_A_L", "FTIME_B_L", "RST_L", "CLK_L", "LVL_A_L", "SONG_A_L",
+                 "GATE_A_L", "REC_A_L", "TEMPO_L", "MODBTN_L", "SHIFTBTN_L"):
+        check(want in names, f"{want} missing")
+    lights = {c.enum for c in gp.LIGHTS + gp.HW_ONLY_LIGHTS}
+    for dead in ("SRC_A_L", "FLT_A_L", "CLR_A_L", "CEIL_L", "SYNC_L"):
+        check(dead not in lights, f"{dead} is still a LightId")
+    check(hw.KNOB_LAMPS.get("FTIME_A_L") == "FLUXRATE_A",
+          "FTIME_A_L is not FLUXRATE_A's cluster lamp")
+
+
+# Deck A side of each knob lamp, +1 = right of its word (spec §5, amended
+# 2026-10-08): toward the lamp's own group. Deck B mirrors. Written here, not
+# read from hw.LAMP_SIDE, so a flipped lamp cannot pass by flipping the table.
+CLUSTER_SIDE = {"ATTACK": +1, "FLUXRATE": -1, "COMP": +1, "SONG": +1,
+                "REC": +1, "TEMPO": +1}
+# The board-probed |dx| from which each lamp's LED clears every front part
+# on the Rev A board (2026-10-08, see LED_DX in the generator): the floor
+# LED_DX / LED_DX_KEY may not go under. Where the two sides measured
+# differently the stricter value is pinned (FLUXRATE 5.70/5.75, SONG
+# 6.75/6.80). REC's 5.90 holds with the LED's flat side toward the key --
+# its body box is not centred on its hole -- which the placer guarantees by
+# its body-aware rotation pick (place.py _led_fits, P4.1 §4.2 amended
+# 2026-10-08). COMP's lamp was clear at every probed dx (0.00, 2.05, 6.90).
+CLUSTER_DX_FLOOR = {"ATTACK": 5.70, "FLUXRATE": 5.75, "TEMPO": 5.75,
+                    "REC": 5.90, "SONG": 6.80, "COMP": 0.0}
 
 
 def test_knob_lamps_sit_in_the_caption_cluster():
-    """Knob-owned lamps sit in a word-then-LED block centred on the knob.
+    """Knob-owned lamps (spec 2026-10-07 §5, amended 2026-10-08): the word is
+    centred under its knob, the LED stands on the word's glyph midline,
+    LED_DX (LED_DX_KEY for the REC key) beside the knob's x, on the side of
+    its own group -- deck B mirrored -- and inside its owner's field.
 
-    Replaces the satellite (anchor radius + 1.5 mm) rule for those lamps.
     A lamp typed to a clear-but-wrong side of the knob still passes the
-    overlap guard; this checks the cluster itself. Pads, SYNC_L and CEIL_L
-    stay on the old satellite rule -- see the test below."""
+    overlap guard; this checks the cluster itself. REC's lamp joined the
+    cluster on 2026-10-07, SONG's on 2026-10-08. CLK_L and RST_L stay on the
+    satellite rule and SHIFTBTN_L/MODBTN_L stand between key and jack -- see
+    test_jack_row_lamps."""
     by = {c.enum: c for c in hw.ALL_HW}
     checked = 0
-    led_r = hw.BODY_R["L"]
     for lamp, knob_enum in hw.KNOB_LAMPS.items():
         if lamp not in by or knob_enum not in by:
             check(False, f"{lamp} or its knob {knob_enum} is missing")
             continue
         k, l = by[knob_enum], by[lamp]
-        cap_x, cap_y, led_x, led_y = hw.caption_led_cluster(k)
-        check(abs(l.x - led_x) < 1e-6 and abs(l.y - led_y) < 1e-6,
-              f"{lamp} is at ({l.x:.2f},{l.y:.2f}), not the cluster "
-              f"({led_x:.2f},{led_y:.2f})")
-        lx, ly = hw.hw_label(k)[:2]
-        check(abs(lx - cap_x) < 1e-6 and abs(ly - cap_y) < 1e-6,
-              f"{knob_enum} caption is at ({lx:.2f},{ly:.2f}), not the "
-              f"cluster word ({cap_x:.2f},{cap_y:.2f})")
-        w = len(k.label) * (hw.CAPTION_SIZE * hw.FONT_ADVANCE)
-        x0 = cap_x - w / 2.0
-        x1 = l.x + led_r
-        check(abs((x0 + x1) / 2.0 - k.x) < 1e-6,
-              f"{lamp} cluster is not centred on {knob_enum}")
-        gap = (l.x - led_r) - (cap_x + w / 2.0)
-        check(abs(gap - hw.LED_CAPTION_GAP) < 1e-6,
-              f"{lamp} caption-to-LED gap is {gap:.2f}, not {hw.LED_CAPTION_GAP}")
-        check(l.x > cap_x, f"{lamp} is not after the {knob_enum} word")
-        mid = cap_y - (hw.CAPTION_SIZE * hw.FONT_CAP) / 2.0
+        lx, ly, anchor = hw.hw_label(k)[:3]
+        check(abs(lx - k.x) < 1e-6 and anchor == "middle",
+              f"{knob_enum} word at x {lx:.2f} ({anchor}) is not centred on its knob ({k.x:.2f})")
+        want_y = k.y + hw.CLASS_LBL_DY[hw.hw_class(knob_enum)]
+        check(abs(ly - want_y) < 1e-6,
+              f"{knob_enum} word baseline {ly:.3f} is not the class offset ({want_y:.3f})")
+        stem = knob_enum[:-2] if knob_enum.endswith(("_A", "_B")) else knob_enum
+        if stem not in CLUSTER_SIDE:
+            check(False, f"{lamp}: the guard has no side for {stem}")
+            continue
+        side = CLUSTER_SIDE[stem] * (-1 if knob_enum.endswith("_B") else 1)
+        key = hw.hw_class(knob_enum) == "P"
+        dx = hw.LED_DX_KEY if key else hw.LED_DX
+        check(abs(l.x - (k.x + side * dx)) < 1e-6,
+              f"{lamp} at x {l.x:.3f}, want {k.x + side * dx:.3f} "
+              f"({'right' if side > 0 else 'left'} of {knob_enum}, dx {dx})")
+        check(dx >= CLUSTER_DX_FLOOR[stem] - 1e-9,
+              f"{lamp}: dx {dx} is under the board-probed {CLUSTER_DX_FLOOR[stem]}")
+        mid = ly - (hw.CAPTION_SIZE * hw.FONT_CAP) / 2.0
         check(abs(l.y - mid) < 1e-6,
               f"{lamp} y={l.y:.3f} is not on the {knob_enum} glyph midline "
               f"({mid:.3f})")
+        b = hw.box_of(l)
+        check(b is not None and b is hw.box_of(k),
+              f"{lamp} does not stand in {knob_enum}'s own field")
         checked += 1
-    check(checked == len(hw.KNOB_LAMPS),
-          f"expected {len(hw.KNOB_LAMPS)} clustered lamps, checked {checked}")
+    check(checked == 11, f"expected 11 clustered lamps, checked {checked}")
 
 
-def test_satellite_lamps_clear_their_anchor_hole():
-    """Satellite lamps sit on the jack row beside their key or jack, at ONE
-    derived distance SAT_D: the larger anchor hole's radius, the minimum
-    material web, and the LED hole's radius (Rev A P1 spec, 2026-09-29).
-    Until 2026-09-29 they sat at the anchor's class radius + 1.5 mm = 5.5,
-    which the real holes turned into a 0.85-0.95 mm web -- acrylic cracks
-    there. SYNC_L joins the rule; it was a literal before."""
-    SATELLITES = {
-        "MODBTN_L": "MODBTN", "SHIFTBTN_L": "SHIFTBTN",
-        "CEIL_L": "OUT_R", "SYNC_L": "CLOCK",
-    }
-    need = (max(hw.HOLE_D["P"], hw.HOLE_D["J"]) / 2 + hw.MIN_WEB
-            + hw.HOLE_D["L"] / 2)
-    check(hw.SAT_D >= need - 1e-9,
-          f"SAT_D {hw.SAT_D} leaves less than {hw.MIN_WEB} mm "
-          f"(needs {need:.2f})")
+def test_every_lamp_keeps_the_acrylic_web_to_its_owner():
+    """Spec 2026-10-07: between a lamp's hole and its owner's hole the acrylic
+    keeps MIN_WEB (P1). hw_cut_guard measures the same web on the cut file;
+    this catches it at the generator, before any cut is written."""
     by = {c.enum: c for c in hw.ALL_HW}
-    checked = 0
-    for lamp, anchor in SATELLITES.items():
-        if lamp not in by or anchor not in by:
-            check(False, f"{lamp} or its anchor {anchor} is missing from the panel")
-            continue
+    for lamp, owner in hw.KNOB_LAMPS.items():
+        l, k = by[lamp], by[owner]
+        d = ((l.x - k.x) ** 2 + (l.y - k.y) ** 2) ** 0.5
+        web = d - hw.HOLE_D[hw.hw_class(owner)] / 2 - hw.HOLE_D["L"] / 2
+        check(web >= hw.MIN_WEB - 1e-6,
+              f"{lamp} leaves {web:.3f} mm of acrylic to {owner} "
+              f"(MIN_WEB {hw.MIN_WEB})")
+
+
+def test_song_lamp_is_a_cluster_lamp():
+    """Spec 2026-10-07 §5.1, replaced 2026-10-08: SONG's lamp left its side
+    spot beside the knob and joined the caption clusters -- one rule for
+    every knob lamp, no second table of side lamps."""
+    for side in "AB":
+        check(hw.KNOB_LAMPS.get(f"SONG_{side}_L") == f"SONG_{side}",
+              f"SONG_{side}_L is not SONG_{side}'s cluster lamp")
+    check(not hasattr(hw, "SIDE_LAMPS"), "a SIDE_LAMPS table is back")
+
+
+def test_jack_row_lamps():
+    """CLK_L and RST_L are satellites at SAT_D; SHIFTBTN_L and MODBTN_L stand
+    centred between their key and jack (spec 2026-10-07 §5), every hole web
+    at least MIN_WEB."""
+    by = {c.enum: c for c in hw.ALL_HW}
+    for lamp, anchor in (("CLK_L", "CLOCK"), ("RST_L", "RESET")):
         l, a = by[lamp], by[anchor]
         d = ((l.x - a.x) ** 2 + (l.y - a.y) ** 2) ** 0.5
-        check(abs(d - hw.SAT_D) < 0.01,
-              f"{lamp} is {d:.3f} mm from {anchor}, not SAT_D ({hw.SAT_D:.2f} mm)")
-        checked += 1
-    check(checked == 4, f"expected 4 satellites, checked {checked}")
+        check(abs(d - hw.SAT_D) < 0.01, f"{lamp} is {d:.3f} mm from {anchor}, not SAT_D")
+    check(by["CLK_L"].x < by["CLOCK"].x and by["RST_L"].x > by["RESET"].x,
+          "CLK_L is not inboard of CLOCK or RST_L not outboard of RESET")
+    for lamp, key, jack in (("SHIFTBTN_L", "SHIFTBTN", "IN_L"), ("MODBTN_L", "MODBTN", "OUT_R")):
+        l, k, j = by[lamp], by[key], by[jack]
+        check(abs(l.x - (k.x + j.x) / 2) < 1e-9 and abs(l.y - hw.JACK_Y) < 1e-9,
+              f"{lamp} is not centred between {key} and {jack}")
+        for anchor in (k, j):
+            web = (abs(l.x - anchor.x) - hw.HOLE_D[hw.hw_class(anchor.enum)] / 2
+                   - hw.HOLE_D["L"] / 2)
+            check(web >= hw.MIN_WEB - 1e-9, f"{lamp} leaves {web:.2f} mm to {anchor.enum}")
+    need = max(hw.HOLE_D["P"], hw.HOLE_D["J"]) / 2 + hw.MIN_WEB + hw.HOLE_D["L"] / 2
+    check(hw.SAT_D >= need - 1e-9, f"SAT_D {hw.SAT_D} leaves less than {hw.MIN_WEB} mm")
 
 
 def test_mod_jacks_on_the_jack_row():
@@ -749,145 +926,6 @@ def test_plate_paints_survive_nanosvg():
               f"{b.n}/{b.side}: the two washes do not share one outline")
 
 
-def test_row3_ceiling_holds_at_seventy():
-    """Row 3's frame is chained: its TOP is pinned by row 2 + BOX_GAP, and
-    row_frames() mirrors whatever margin that leaves onto the BOTTOM edge. So
-    the row's topmost ink is not cosmetic -- it sets where the jack row below
-    starts, and the jack row has 0.75 mm of slack.
-
-    Until 2026-08-30 the big caps held that ceiling at 70.00. They moved to
-    Y_B2B, and Y_B2K came up to 74.40 so the SMALL caps hold it instead: a
-    small body is 4.40, and 74.40 - 4.40 is exactly 70.00. Lose that and the
-    frame's bottom edge drops by the same amount, which the chain cannot pay."""
-    CEILING = 70.00
-    t, _b = hw._row_ink(hw.GROUP_ROWS[2])
-    check(abs(t - CEILING) < 1e-9,
-          f"row 3's topmost ink is {t:.2f}, not {CEILING} -- its bottom edge "
-          f"has moved {t - CEILING:+.2f} mm and taken the jack row with it")
-    check(abs((hw.Y_B2K - hw.BODY_R["S"]) - CEILING) < 1e-9,
-          f"Y_B2K {hw.Y_B2K} puts a small body top at "
-          f"{hw.Y_B2K - hw.BODY_R['S']:.2f}, not on the ceiling {CEILING}")
-    y, h = hw.ROW_FRAMES[2]
-    check(abs(y - 67.85) < 1e-9 and abs((y + h) - 107.15) < 1e-9,
-          f"row 3's frame is {y:.2f}..{y+h:.2f}, not 67.85..107.15")
-    jy, jh = hw.ROW_FRAMES[3]
-    jt, _jb = hw._row_ink(hw.GROUP_ROWS[3])
-    check(jt - jy >= -1e-9,
-          f"the jack row's frame starts at {jy:.2f}, BELOW its own ink "
-          f"{jt:.2f} -- its captions are outside their frames")
-    check(abs(jy - 110.15) < 1e-9,
-          f"the jack row moved to {jy:.2f}; it belongs at 110.15")
-
-
-def test_level_band_is_evenly_divided():
-    """LEVEL's lower band (2026-08-30): three small slots on TIMING's own
-    13.0 mm pitch, hugging both ends with the same margin -- which is what
-    centres the group, rather than a centring step that could drift out of
-    step with the pitch."""
-    check(abs(hw.LEVEL_PITCH - 13.00) < 1e-9,
-          f"the pitch is {hw.LEVEL_PITCH}, not TIMING's 13.00")
-    # Not asserted from a constant: read TIMING's actual knobs, so the two
-    # cannot part company without this failing.
-    timing = sorted((c.x for c in hw.ALL_HW
-                     if c.enum in ("TEMPO", "COUPLE", "SHUFFLE")))
-    steps = {round(b - a, 6) for a, b in zip(timing, timing[1:])}
-    check(steps == {hw.LEVEL_PITCH},
-          f"TEMP/SYNC/SHFL now run on {steps}, not {hw.LEVEL_PITCH}")
-    lvl = next(b for b in hw.BOXES if b.n == "LEVEL" and b.side == "A")
-    check(abs(lvl.x - hw.LEVEL_BAND_L) < 1e-9,
-          f"LEVEL_BAND_L is {hw.LEVEL_BAND_L}, but the frame starts at {lvl.x}")
-    if lvl.foot is None:
-        # Report, do not unpack None: a traceback here aborts the whole run
-        # and the operator never sees the other 40 checks.
-        check(False, "LEVEL A lost its foot -- SEND has nothing to stand in")
-        return
-    fx0, fx1, _fy = lvl.foot
-    rs = hw.BODY_R["S"]
-    slots = hw.LEVEL_SLOTS
-    check(len(slots) == 3, f"the band has {len(slots)} slots, not 3")
-    for a, b in zip(slots, slots[1:]):
-        check(abs((b - a) - hw.LEVEL_PITCH) < 1e-9,
-              f"slots {a:.2f}/{b:.2f} are {b-a:.3f} apart, not the pitch")
-    left = (slots[0] - rs) - fx0
-    right = fx1 - (slots[-1] + rs)
-    check(abs(left - hw.LEVEL_H_MARGIN) < 1e-9 and
-          abs(right - hw.LEVEL_H_MARGIN) < 1e-9,
-          f"the band's margins are {left:.3f}/{right:.3f}, not "
-          f"{hw.LEVEL_H_MARGIN} on both sides")
-    # Equal margins ARE the centring; say so, so nobody adds a second rule.
-    check(abs((slots[0] + slots[-1]) / 2 - (fx0 + fx1) / 2) < 1e-9,
-          "the three are not centred in their own band")
-    # And the margin has to be a horizontal one. 2.15 is the row's VERTICAL
-    # margin and was wrong here by eye before it was wrong by measurement.
-    check(3.10 - 1e-9 <= hw.LEVEL_H_MARGIN <= 9.00 + 1e-9,
-          f"{hw.LEVEL_H_MARGIN} is outside the 3.10..9.00 the plate's knob "
-          f"rows actually hold horizontally")
-
-
-def test_level_band_clears_rooms_shoulder():
-    """The foot reaches under ROOM, so ROOM's upper band has to stop short of
-    it by the usual gap -- and still hold REV_SIZE's caption. That chain is
-    what forced the band down to Y_B2L; on Y_B2G it is 0.70 mm short."""
-    lvl = next(b for b in hw.BOXES if b.n == "LEVEL" and b.side == "A")
-    room = next(b for b in hw.BOXES if b.n == "ROOM")
-    if lvl.foot is None or room.foot is None:
-        check(False, f"LEVEL A foot={lvl.foot}, ROOM foot={room.foot} -- both "
-                     f"are needed; the foot and the shoulder it clears are "
-                     f"one decision, not two")
-        return
-    _fx0, _fx1, foot_top = lvl.foot
-    _rx0, _rx1, shoulder = room.foot
-    check(abs((foot_top - shoulder) - hw.BOX_GAP) < 1e-9,
-          f"shoulder {shoulder:.2f} to foot {foot_top:.2f} is "
-          f"{foot_top-shoulder:.2f} mm, not {hw.BOX_GAP}")
-    size = next(c for c in hw.ALL_HW if c.enum == "REV_SIZE")
-    cap_y = hw.hw_label(size)[1]
-    # The shoulder must run PAST the caption by the ink margin, not merely
-    # reach its baseline -- an edge sitting on the glyphs is the defect this
-    # whole round started from.
-    need = cap_y + hw.BAND_INK_MARGIN
-    check(shoulder >= need - 1e-9,
-          f"ROOM's shoulder ends at {shoulder:.2f}; REV_SIZE's caption needs "
-          f"it at {need:.2f} ({cap_y:.2f} + {hw.BAND_INK_MARGIN})")
-    send = next(c for c in hw.ALL_HW if c.enum == "REV_MIX_A")
-    check(foot_top <= send.y - hw.body_r(send) - hw.BAND_INK_MARGIN + 1e-9,
-          f"the foot starts at {foot_top:.2f}, too close to SEND's body top "
-          f"{send.y - hw.body_r(send):.2f}")
-    # The band was FORCED onto Y_B2L while the small caps were on 76.00 and
-    # REV_SIZE's caption sat at 84.00. Y_B2K went to 74.40 on 2026-08-30 and
-    # that reason expired -- Y_B2G would clear the chain again. So do not
-    # assert impossibility here; assert the reason the band is KEPT, which is
-    # that the plate's bottom line is ONE line and REV_TONE anchors it.
-    tone = next(c for c in hw.ALL_HW if c.enum == "REV_TONE")
-    check(abs(hw.Y_B2L - tone.y) < 1e-9,
-          f"the band is on {hw.Y_B2L} but REV_TONE is on {tone.y} -- the "
-          f"bottom line has split in two")
-    band = sorted(c.enum for c in hw.ALL_HW
-                  if abs(c.y - hw.Y_B2L) < 1e-9 and c.x <= hw.CX + 1e-9)
-    check(band == ["FLUXFB_A", "GRIT_A", "PAN_A", "REV_MIX_A", "REV_TONE"],
-          f"deck A's bottom line is {band}, not FB / PAN / GRIT / SEND / TONE")
-
-
-def test_level_band_holds_pan_in_slot_zero():
-    """Slot 0 was held empty for PAN from 2026-08-30 until PAN got a ParamId,
-    and the guard that held it open said so in as many words. This is that
-    guard's successor: the slot is now FILLED, by PAN and by nothing else, and
-    the band still reads PAN / GRIT / SEND left to right. An empty slot here
-    would now be a regression, not a reservation."""
-    occupied = {}
-    for c in hw.ALL_HW:
-        for i, s in enumerate(hw.LEVEL_SLOTS):
-            if abs(c.x - s) < 1e-9 and abs(c.y - hw.Y_B2L) < 1e-9:
-                occupied[i] = c.enum
-    check(sorted(occupied) == [0, 1, 2],
-          f"the LEVEL band holds {occupied}; all three slots must be filled")
-    check(occupied.get(0) == "PAN_A", f"slot 0 holds {occupied.get(0)}, not PAN_A")
-    check(occupied.get(1) == "GRIT_A" and occupied.get(2) == "REV_MIX_A",
-          f"the band's order changed: {occupied}")
-    check(hw.HW_SIZE.get("PAN") == "S",
-          f"PAN's size class is {hw.HW_SIZE.get('PAN')!r}, not 'S'")
-
-
 def test_text_run_counts_gaps_between_glyphs():
     """len-1 gaps, not len. nvgTextLetterSpacing emits one after the last
     glyph as well, but no ink follows it, so counting it overstates every run
@@ -965,102 +1003,6 @@ def test_legend_notches_clear_their_lettering():
               f"{b.n}: the drawn field does not come back up after the notch")
 
 
-def test_group_raster_closes():
-    """The frames sit on ONE raster and the arithmetic has to close: 3 mm of
-    air between any two boxes, a shared deck edge at 120 mm, and deck B is
-    deck A mirrored. Hand-placed frames drift; a cut list cannot."""
-    boxes = hw.BOXES
-    # 24 + the two ENG frames the status row gained on 2026-08-19.
-    check(len(boxes) == 26, f"expected 26 group frames, got {len(boxes)}")
-    # BAND by band, not rect by rect. Since 2026-08-30 two frames are not
-    # rectangles, and comparing their bounding boxes would be worse than
-    # useless: LEVEL's rect is unchanged, so a foot could grow straight
-    # through ROOM's tongue and this loop would report nothing.
-    for i, a in enumerate(boxes):
-        for b in boxes[i + 1:]:
-            tag = f"{a.n}/{a.side} and {b.n}/{b.side}"
-            check(not a.overlaps(b), f"{tag} overlap")
-            for ax0, ax1, ay0, ay1 in a.bands:
-                for bx0, bx1, by0, by1 in b.bands:
-                    ox = min(ax1, bx1) - max(ax0, bx0)
-                    oy = min(ay1, by1) - max(ay0, by0)
-                    if oy > 1e-9:
-                        check(-ox >= hw.BOX_GAP - 1e-9,
-                              f"{tag} are only {-ox:.2f} mm apart")
-                    elif ox > 1e-9:
-                        check(-oy >= hw.BOX_GAP - 1e-9,
-                              f"{tag} are only {-oy:.2f} mm apart")
-    for (_sy, _sh, x0, _cuts, names_a, _nb, _c), (y, h) in zip(hw.GROUP_ROWS,
-                                                               hw.ROW_FRAMES):
-        row = [b for b in boxes if abs(b.y - y) < 1e-9]
-        check(len(row) == 2 * len(names_a) + 1, f"row y={y} has {len(row)} boxes")
-        for b in row:
-            check(abs(b.h - h) < 1e-9, f"{b.n}/{b.side} is not row height {h}")
-        left = sorted((b for b in row if b.side == "A"), key=lambda b: b.x)
-        right = sorted((b for b in row if b.side == "B"), key=lambda b: b.x)
-        check(abs(left[0].x - x0) < 1e-9,
-              f"row y={y} does not start at {x0} (got {left[0].x})")
-        check(abs(left[-1].x + left[-1].w - hw.DECK_EDGE) < 1e-9,
-              f"row y={y} does not end on the deck edge {hw.DECK_EDGE}")
-        for p, q in zip(left, reversed(right)):
-            check(abs((hw.W - (q.x + q.w)) - p.x) < 1e-9,
-                  f"{p.n}: deck B frame is not deck A mirrored")
-            check(abs(p.w - q.w) < 1e-9, f"{p.n}: mirrored frame width differs")
-        centre = [b for b in row if b.side == "C"]
-        check(abs(centre[0].x - hw.CENTRE_L) < 1e-9, "centre column moved")
-        check(abs(centre[0].x + centre[0].w - (hw.W - hw.CENTRE_L)) < 1e-9,
-              "centre column is not symmetric")
-    # GROUP_ORDER outlived the two-digit index it used to number (struck
-    # 2026-08-30); it is the roster now, so it has to still match the plate.
-    check({b.stem for b in boxes} == set(hw.GROUP_ORDER),
-          f"the drawn frames and GROUP_ORDER disagree: "
-          f"{ {b.stem for b in boxes} ^ set(hw.GROUP_ORDER)}")
-
-
-def test_middle_band_runs_on_three_lines():
-    """Nothing in MOTION/VOICE/TIMING sits between the band's three lines.
-
-    This replaces four separate pins (ENG at 49.25, TIMB at 47.61, TIDE and
-    PACE at 50.22) that each recorded where one knob had been nudged. Four
-    such numbers cannot disagree with each other -- which is how the band
-    ended up with five different heights, each individually "as approved".
-    A line rule can disagree, and does the moment anything drifts off one.
-
-    FILT came DOWN to the big-cap line rather than the other three coming
-    up: MORPH cannot pass 52.0 without displacing SYNC's caption, and a
-    shorter band leaves the jack row without a margin.
-
-    LED feedback round (2026-08-16): lights do not set the row's rhythm --
-    they sit in the caption cluster under the knob, or as pad satellites --
-    so they are exempt from the on-a-line rule the knobs keep."""
-    lines = (hw.Y_B1K, hw.Y_B1M, hw.Y_B1G)
-    seed_y, seed_h = hw.GROUP_ROWS[1][0], hw.GROUP_ROWS[1][1]
-    seen, off = {}, []
-    for c in hw.ALL_HW:
-        if hw.hw_class(c.enum) == "L":
-            continue
-        if not (seed_y <= c.y <= seed_y + seed_h):
-            continue
-        hit = [ln for ln in lines if abs(c.y - ln) < 1e-9]
-        if hit:
-            seen.setdefault(hit[0], []).append(c.enum)
-        else:
-            off.append(f"{c.enum} at y={c.y}")
-    check(not off, f"middle-band controls between the lines: {off}")
-    check(len(seen) == 3,
-          f"only {len(seen)} of the three band lines are used -- {sorted(seen)}")
-    for ln, members in seen.items():
-        check(len(members) >= 2, f"line y={ln} carries only {members}")
-    # Every big cap on the band's big line, and the line is the lowest one.
-    for c in hw.HW_PARAMS:
-        if hw.hw_class(c.enum) != "G":
-            continue
-        if not (seed_y <= c.y <= seed_y + seed_h):
-            continue
-        check(abs(c.y - hw.Y_B1G) < 1e-9,
-              f"{c.enum} is a big cap in the middle band but not on Y_B1G")
-
-
 def test_caption_gap_is_one_number():
     """Every printed word keeps the SAME distance to its own body edge.
 
@@ -1094,59 +1036,15 @@ def test_caption_gap_is_one_number():
     check(set(seen) >= {"G", "S", "P"},
           f"only saw caption gaps for {sorted(seen)} -- the comparison that "
           "matters is big pot vs small pot, so both must be in it")
-    # The drawn keycap is 8 mm square, so 4.0 is its half-width. A BODY_R
+    # The drawn keycap is the round 6 mm cap, so 3.0 is its radius. A BODY_R
     # that disagrees with the drawing would put the pads' gap silently off.
     svg = hw.svg()
     for c in hw.HW_PARAMS:
         if hw.hw_class(c.enum) != "P":
             continue
-        check(f'width="{hw.mm(2 * hw.body_r(c))}"' in svg,
+        check(f'cx="{hw.mm(c.x)}" cy="{hw.mm(c.y)}" r="{hw.mm(hw.body_r(c))}" '
+              f'fill="{hw.PAD_FILL}"' in svg,
               f"{c.enum} is drawn at a size BODY_R does not know about")
-
-
-def test_rows_are_centred_on_their_ink():
-    """A group whose contents sit high in its frame with a fat empty strip
-    underneath reads as a mistake, and a fixed row height produces exactly
-    that, because captions hang below their controls. Every row's frame
-    must carry the SAME margin above and below what it prints.
-
-    The chain is what makes this checkable at all: rows are spaced by
-    BOX_GAP from each other, so once ROW1_TOP is chosen every other margin
-    follows. Bolted-on row heights would each be a free number and nothing
-    would ever go red."""
-    prev_bot = None
-    for row, (y, h) in zip(hw.GROUP_ROWS, hw.ROW_FRAMES):
-        t, b = hw._row_ink(row)
-        up, dn = t - y, (y + h) - b
-        check(abs(up - dn) < 1e-6,
-              f"row at y={y:.2f} is off centre: {up:.2f} above the ink, "
-              f"{dn:.2f} below")
-        check(up > 0.0, f"row at y={y:.2f} clips its own contents")
-        if prev_bot is not None:
-            check(abs((y - prev_bot) - hw.BOX_GAP) < 1e-6,
-                  f"row at y={y:.2f} is {y - prev_bot:.2f} mm below the one "
-                  f"above, not {hw.BOX_GAP}")
-        prev_bot = y + h
-    # The status row is as high as its own legend may print, and no higher:
-    # that legend's baseline is the rail line itself.
-    top = hw.ROW_FRAMES[0][0]
-    check(abs((top + hw.LEGEND_DY) - hw.KEEP_TOP) < 1e-6,
-          f"the status row's legend is at {top + hw.LEGEND_DY:.2f}, not on "
-          f"the rail line {hw.KEEP_TOP}")
-
-
-def _bbox_inside(b, x0, x1, y0, y1):
-    """Is this box fully covered by the frame -- foot included?
-
-    The frame's bands are stacked vertically, so it is enough that every band
-    the bbox reaches into holds the WHOLE of its x-range. That is stricter
-    than testing the four corners, which a body straddling the foot's step
-    would pass while poking out through the notch of the step itself."""
-    touched = [(bx0, bx1) for bx0, bx1, by0, by1 in b.bands
-               if y0 < by1 - 1e-9 and by0 < y1 + 1e-9]
-    if not touched:
-        return False
-    return all(bx0 - 1e-9 <= x0 and x1 <= bx1 + 1e-9 for bx0, bx1 in touched)
 
 
 def _rect_hits_circle(x0, x1, y0, y1, cx, cy, r):
@@ -1171,12 +1069,62 @@ def test_legends_are_not_buried_by_rack_widgets():
                   f"{c.enum}'s Rack widget")
 
 
+def _rect_circle_margin(x0, x1, y0, y1, cx, cy, r):
+    """Clear distance between a circle and a rectangle, mm (negative when
+    they overlap)."""
+    dx = max(x0 - cx, 0.0, cx - x1)
+    dy = max(y0 - cy, 0.0, cy - y1)
+    return (dx * dx + dy * dy) ** 0.5 - r
+
+
+def test_captions_and_lamps_are_not_under_rack_widgets():
+    """The legend guard above reads hw.TEXTS only. Every control's own
+    caption and every lamp are checked here the same way: Rack draws a widget
+    for each param, port and light, at RACK_R, and what lies under it is
+    hidden although the SVG preview shows it clear (review focus 1 of the
+    2026-10-07 plan). Captions against every widget, their own included
+    (HW_ONLY rows draw no widget but do print a caption); lamps against every
+    widget but their own. The tightest margin is printed by main()."""
+    widgets = hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS + hw.HW_LIGHTS
+    captions = lamps = 0
+    tightest = None
+    for c in hw.ALL_HW:
+        cap = None
+        if c.label:
+            lx, ly, anchor, size, _ = hw.hw_label(c)
+            cap = hw.text_run(lx, ly, size, 0.0, anchor, c.label)
+            captions += 1
+        is_lamp = hw.hw_class(c.enum) == "L"
+        lamps += is_lamp
+        for w in widgets:
+            r = hw.RACK_R[hw.hw_class(w.enum)]
+            if cap is not None:
+                m = _rect_circle_margin(*cap, w.x, w.y, r)
+                if tightest is None or m < tightest[0]:
+                    tightest = (m, f"caption {c.enum}", w.enum)
+                check(m > 1e-6,
+                      f"the caption of {c.enum} ({c.label!r}) is under "
+                      f"{w.enum}'s Rack widget ({m:.3f} mm)")
+            if is_lamp and w is not c:
+                m = ((c.x - w.x) ** 2 + (c.y - w.y) ** 2) ** 0.5 - r - hw.RACK_R["L"]
+                if tightest is None or m < tightest[0]:
+                    tightest = (m, f"lamp {c.enum}", w.enum)
+                check(m > 1e-6,
+                      f"lamp {c.enum} is under {w.enum}'s Rack widget "
+                      f"({m:.3f} mm)")
+    # Not vacuous: a plate with no captions or no lamps would pass trivially.
+    check(captions > 0 and lamps > 0,
+          f"checked {captions} captions and {lamps} lamps -- the loop did not "
+          f"see the plate")
+    test_captions_and_lamps_are_not_under_rack_widgets.stats = (captions, lamps, tightest)
+
+
 def test_bodies_and_captions_sit_inside_their_frame():
-    """Variant 2a draws the frames against the REAL bodies (12 mm and 8.8 mm
-    pots, 6.2 mm jacks), not the finger-clearance circles the layout is
-    spaced on -- that is where its air between the boxes comes from. So a
-    body or a caption crossing its own frame is the one way this raster can
-    go wrong, and reading the SVG will not show it."""
+    """The fields are drawn against the real cap radii of spec 2026-10-07 §2
+    (12 mm and 7.7 mm caps, 6 mm keys, 6.2 mm jacks), not the
+    finger-clearance circles the layout is spaced on. So a body or a caption
+    crossing its own field is the one way the fields can go wrong, and
+    reading the SVG will not show it."""
     loose = []
     for c in hw.ALL_HW:
         b = hw.box_of(c)
@@ -1184,26 +1132,24 @@ def test_bodies_and_captions_sit_inside_their_frame():
             loose.append(c.enum)
             continue
         r = hw.body_r(c)
-        check(_bbox_inside(b, c.x - r, c.x + r, c.y - r, c.y + r),
+        check(b.contains_rect(c.x - r, c.x + r, c.y - r, c.y + r),
               f"{c.enum} ({r} mm body) pokes out of frame {b.n}/{b.side}")
         if not c.label:
             continue
         lx, ly = hw.hw_label(c)[:2]
         check(b.covers(lx, ly),
               f"caption {c.enum} at ({lx:.1f},{ly:.1f}) is outside {b.n}/{b.side}")
-    # LED feedback round (2026-08-16): MODBTN_L/SHIFTBTN_L are satellites of
-    # the two pads, at anchor radius + 1.5 mm -- exactly as loose as the pads
-    # themselves, which is what makes them read as "this pad is lit" rather
-    # than as members of the jack-row frame. CEIL_L sits the same way, just
-    # outside the OUT frame to the right of OUT_R.
+    # MODBTN_L/SHIFTBTN_L stand centred between their pad and jack (spec
+    # 2026-10-07 §5) -- exactly as loose as the pads themselves, which is
+    # what makes them read as "this pad is lit" rather than as members of
+    # the jack-row frame.
     # PULL was on this list for one day (2026-08-22 -> 2026-08-23) while it sat
     # loose in the seam beside the GLOBAL box. It is gone again: re-pitching the
     # GLOBAL centre row to four knobs gave it a real frame slot, so this guard
     # is back to asserting "every knob lives inside a frame" with no knob
     # exception. Only pads and their satellite LEDs are loose, which is the
     # invariant this list is for -- keep it that way.
-    check(sorted(loose) == ["CEIL_L", "MODBTN", "MODBTN_L",
-                             "SHIFTBTN", "SHIFTBTN_L"],
+    check(sorted(loose) == ["MODBTN", "MODBTN_L", "SHIFTBTN", "SHIFTBTN_L"],
           f"controls outside the frame raster: {sorted(loose)}")
     # The SD slot is a body on the jack row like any other.
     sd = [b for b in hw.BOXES if b.n == "CLOCK"][0]
@@ -1219,79 +1165,16 @@ def test_sd_cutout_is_drawn():
 
 
 def test_drawing_geometry():
-    """Pins the graphics-round drawing: row rhythm, SD, no title, no rail
-    dashes, the plate gradient starting at the edge (Option B 2026-08-29 --
-    it is the plate itself now, not a zone wash), jack captions under the
-    jacks."""
-    by = {c.enum: c for c in hw.ALL_HW}
-    check(abs(hw.JACK_Y - 114.0) < 1e-9, f"JACK_Y is {hw.JACK_Y}, not 114")
+    """Pins the drawing's fixed points: the jack row's height, SD, no title,
+    no rail dashes, the plate gradient starting at the edge (Option B
+    2026-08-29 -- it is the plate itself now, not a zone wash), jack
+    captions under the jacks. Knob positions are not pinned here any more:
+    the cell table is their source and test_cells_are_the_source its guard
+    (spec 2026-10-07 §9)."""
+    check(abs(hw.JACK_Y - 112.75) < 1e-9, f"JACK_Y is {hw.JACK_Y}, not 112.75 (spec 2026-10-07 §6)")
     check((hw.SD_W, hw.SD_H) == (11.0, 6.0), f"SD size is {hw.SD_W}x{hw.SD_H}")
     check(abs(hw.SD_Y - hw.JACK_Y) < 1e-9, f"SD_Y is {hw.SD_Y}, not on the jack row")
-    # ENGINE left the VOICE head on 2026-08-19 for its own frame at the outer
-    # edge of the status row, which is what freed the VOICE slot DEPTH
-    # holds (its neighbour, DAMP, was removed 2026-08-20 and stays empty).
-    # Both halves are checked, because "it moved" and "it landed where it
-    # was supposed to" are different claims.
-    check(abs(by["ENGINE_A"].x - 16.25) < 1e-9,
-          f"ENGINE_A is at {by['ENGINE_A'].x}, not in its own status-row frame")
-    check(abs(by["ENGINE_A"].y - hw.Y_TOP) < 1e-9,
-          "ENGINE_A is not on the status row")
-    check("ENG" in [n for n, _s, _x, _w in hw._row_cells(hw.GROUP_ROWS[0])],
-          "the status row has no ENG frame")
-    # VOICE's lower row, approved by eye 2026-08-23 against three alternatives.
-    # It is TIMING's small-BIG-small figure, so it is checked AGAINST TIMING
-    # rather than against numbers of its own: same pitch, same two lines, big
-    # cap centred. The row followed the ATTACK/DECAY/RES/SUB columns until that
-    # day; when FILT went big and moved to the end of the row it left two small
-    # knobs crowded at 4.20 mm, a 15.60 mm hole and a third line for one knob.
-    # Restoring the columns would restore that, which is why this guard pins
-    # the figure and not the raster.
-    voice = [b for b in hw.BOXES if b.n == "VOICE" and b.side == "A"][0]
-    check(abs(hw.VOICE_MID - (voice.x + voice.w / 2)) < 1e-9,
-          f"VOICE_MID is {hw.VOICE_MID}, not the centre of the VOICE frame "
-          f"({voice.x + voice.w / 2})")
-    for row, mid in (("FILT_A SOURCE_A DEPTH_A", hw.VOICE_MID),
-                     ("MORPH TIDE PACE", hw.W / 2)):
-        big, left, right = row.split()
-        check(abs(by[big].x - mid) < 1e-9,
-              f"{big} is at {by[big].x}, not centred on {mid}")
-        check(abs(by[big].y - hw.Y_B1G) < 1e-9, f"{big} left the big line")
-        check(abs((mid - by[left].x) - hw.CENTRE_PITCH) < 1e-9 and
-              abs((by[right].x - mid) - hw.CENTRE_PITCH) < 1e-9,
-              f"{left}/{right} are not {hw.CENTRE_PITCH} mm either side of {big}")
-        for small in (left, right):
-            check(abs(by[small].y - hw.Y_B1M) < 1e-9,
-                  f"{small} is not on the small line beside {big}")
-    check(abs(hw.CENTRE_PITCH - 16.0) < 1e-9,
-          f"CENTRE_PITCH is {hw.CENTRE_PITCH}, not the approved 16.0")
-    for enum in ("ATTACK_A", "DECAY_A", "RES_A", "SUB_A"):
-        ly = hw.hw_label(by[enum])[1]
-        check(ly > by[enum].y, f"{enum} caption flipped above the knob")
-        check(abs(by[enum].y - hw.Y_B1K) < 1e-9, f"{enum} left the ATK row")
-    check(abs(by["FLUXRATE_A"].y - 89.86) < 1e-9, "TIME did not rise toward MIX")
-    check(abs(by["LINK_A"].y - 89.86) < 1e-9, "LINK did not rise toward MIX")
-    check(abs(by["REV_DECAY"].y - 79.00) < 1e-9, "DECY did not drop away from MORPH")
-    check(abs(by["REV_TONE"].y - 97.00) < 1e-9, "TONE did not follow DECY")
-    # The GLOBAL centre row, approved by eye on 2026-08-23 after PULL made it
-    # four knobs wide. Pinned for the same reason DECY/TONE above are: it is a
-    # looked-at decision, and without a pin the next control hunting for space
-    # re-pitches this row again and nobody notices.
-    #
-    # What is being held: the 13.0 mm pitch, the group centred on 152.40, and
-    # the order SCAL DRFT CHOK PULL -- PULL last so it sits beside CHOKE, the
-    # centre's only other bipolar control. Do not "restore" 139.40/152.40/
-    # 165.40 here; that was the three-knob layout and it cannot hold four
-    # (hanging PULL off the right end lands it at 178.40, whose body overruns
-    # the cell edge by 2.60 mm -- measured, see gen_hw_panel.py's CENTER_POS).
-    global_row = ("SCALE", "DRIFT", "CHOKE", "PULL")
-    for i, enum in enumerate(global_row):
-        want = 132.90 + i * 13.0
-        check(abs(by[enum].x - want) < 1e-9,
-              f"{enum} is at x={by[enum].x}, not {want} -- the GLOBAL row was re-pitched")
-        check(abs(by[enum].y - hw.Y_TOP) < 1e-9, f"{enum} left the GLOBAL status row")
-    span = by[global_row[-1]].x - by[global_row[0]].x
-    check(abs(span / 2.0 + by[global_row[0]].x - 152.40) < 1e-9,
-          "the GLOBAL row is no longer centred on the plate's centre line")
+    by = {c.enum: c for c in hw.ALL_HW}
     check(abs(by["SHIFTBTN"].y - hw.JACK_Y) < 1e-9, "SHIFT is not on the jack row")
     check(abs(by["MODBTN"].y - hw.JACK_Y) < 1e-9, "MOD is not on the jack row")
     # Lettering Rack has to draw itself: brand block plus ONE row per frame
@@ -1350,6 +1233,11 @@ def main():
         n = getattr(fn, "pairs_checked", None)
         if n is not None:
             print(f"{fn.__name__}: checked {n} mirror pairs")
+    stats = getattr(test_captions_and_lamps_are_not_under_rack_widgets, "stats", None)
+    if stats is not None:
+        n_cap, n_lamp, (margin, what, widget) = stats
+        print(f"test_captions_and_lamps_are_not_under_rack_widgets: {n_cap} captions, "
+              f"{n_lamp} lamps; tightest margin {margin:+.3f} mm ({what} / {widget}'s widget)")
     if FAILS:
         print(f"FAIL ({len(FAILS)}):")
         for f in FAILS:

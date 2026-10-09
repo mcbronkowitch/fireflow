@@ -46,12 +46,24 @@ ANGLES = (0, 90)
 
 # Back references (and footprint texts, "<ref>:text") with no free spot,
 # measured by the first run (P4-3 Task 4); each entry says what blocked it.
+# The 9 mm panel pass (Task 7c, 2026-10-08) freed C2, C3 and C5 (the caps that
+# had sat between J_PWR's outline and D_P12/D_N12). After U_SM was pinned and
+# the shift registers moved, three other references found no free spot in
+# every route run (route_check no_room); the assembly sheet still names them
+# (Bastian, 2026-10-08).
+# The blockers per side were probed on the routed board (probe_noroom, Task 7c
+# report): the owners each side's candidates hit, on every ring to 3.5 mm.
 NO_ROOM = {
-    # the three caps between J_PWR's outline and the D_P12/D_N12 pair
-    "C2": "every ring to 3.5 mm meets a pad or silk: J_PWR's outline N, C3 E, C5 S, RV15's lugs W",
-    "C3": "every ring to 3.5 mm meets a pad or silk: J_PWR's outline N, U_SR3's pads E, D_P12 S, C2/C5 W",
-    "C5": "every ring to 3.5 mm meets a pad or silk: C2 N, C3 and D_P12's outline E, D_P12 S, "
-          "RV15's lugs and D_N12 W",
+    # beside U_SM's header C, under PACE
+    "C_SENSE3": "every ring to 3.5 mm meets a pad or silk: RV39's (PACE) lugs and U_SM's outline N, "
+                "U_MUX8 E, RV39's lugs and U_SM's outline S (TP4), U_SM's outline W "
+                "(9 mm panel pass, Task 7c, 2026-10-08; the assembly sheet names it)",
+    # between U_SR5, R1 and TEMPO, at the module's west edge
+    "R25": "every ring to 3.5 mm meets a pad or silk: R1 N, RV27's (TEMPO) lugs E, U_SR5 S, TP11 W "
+           "(9 mm panel pass, Task 7c, 2026-10-08; the assembly sheet names it)",
+    "U_SR5": "every ring to 3.5 mm meets a pad or silk: TP11, TP13 and RV27's (TEMPO) lugs N, "
+             "D8 (TEMPO_L) and U_SM's outline E, RV31's (COUPLE) lugs S, TP9 and TP12 W "
+             "(9 mm panel pass, Task 7c, 2026-10-08; the assembly sheet names it)",
 }
 
 

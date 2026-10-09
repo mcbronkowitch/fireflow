@@ -195,17 +195,17 @@ TEST_CASE("led G6: every light is written, and a modulating lane moves") {
     // -- straight through, no envelope. Read the live state rather than
     // assuming it, so this is a check on the mapping, not on the sequencer.
     CHECK(duty[spkyvcv::GATE_A_L] == (inst.gate(0) ? steps - 1 : 0));
-    // CEIL: the instrument is idle here (default drive, no signal pushed
-    // near the knee), so the ceiling lamp must read dark.
-    CHECK(duty[spkyvcv::CEIL_L] == 0);
+    // MODBTN: unlatched, it shows the limiter. The instrument is idle here
+    // (default drive, no signal pushed near the knee), so it must read dark.
+    CHECK(duty[spkyvcv::MODBTN_L] == 0);
 
-    // The SOURCE excursion light must actually change over time.
+    // The LEVEL excursion light must actually change over time.
     int lo = 99, hi = -1;
     for (int k = 0; k < 400; ++k) {
         settle(inst, 64);
         spkyled::fill(inst, panel, dt, 16, false, duty);
-        lo = std::min(lo, duty[spkyvcv::SRC_A_L]);
-        hi = std::max(hi, duty[spkyvcv::SRC_A_L]);
+        lo = std::min(lo, duty[spkyvcv::LVL_A_L]);
+        hi = std::max(hi, duty[spkyvcv::LVL_A_L]);
     }
     CHECK(hi > lo);
 
@@ -217,7 +217,7 @@ TEST_CASE("led G6: every light is written, and a modulating lane moves") {
     const int decay = static_cast<int>(1.5f * spkyled::kEnvFall
                                        * std::log(1.f / spkyled::kEnvOff) / dt);
     for (int k = 0; k < decay; ++k) spkyled::fill(inst, panel, dt, 16, false, duty);
-    CHECK(duty[spkyvcv::SRC_A_L] == 0);
+    CHECK(duty[spkyvcv::LVL_A_L] == 0);
 }
 
 static void arm_song_deck(Instrument& inst) {
@@ -354,6 +354,9 @@ TEST_CASE("led law: MODBTN lamp double-pulses while the latch holds") {
     }
 
     SUBCASE("hard on/off, and it really goes dark") {
+        // MODBTN_L has two jobs (latch, else limiter, spec 2026-10-07 §5).
+        // Latched, the pulse must take over the whole duty range; an idle
+        // limiter alone would stay at 0 and fail sawOn.
         bool sawOn = false, sawOff = false;
         for (int i = 0; i < ticks; ++i) {
             spkyled::fill(inst, p, dt, steps, /*mod_latched=*/true, duty);

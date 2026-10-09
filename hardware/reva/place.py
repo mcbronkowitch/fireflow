@@ -113,6 +113,14 @@ def _front_obstacles(board, refs, skip):
 
 
 def _led_fits(fp, bodies, pads):
+    """The LED's pads miss every foreign body and keep PAD_CLEAR to every
+    foreign pad, and its own body box overlaps no foreign body (P4.1 §4.2,
+    amended 2026-10-08). The body test is what turns a lamp beside its owner
+    so its flat side faces the owner: LED_D3.0mm's body box is not centred
+    on its hole (x -1.55 .. +1.95 at rotation 0), and the pads-only pick put
+    deck B's mirrored REC lamp on its key."""
+    if any(PL.overlaps(PL.body_box(fp), o) for o in bodies):
+        return False
     for _n, b in PL.pad_boxes(fp):
         if any(PL.overlaps(b, o) for o in bodies):
             return False
@@ -123,7 +131,8 @@ def _led_fits(fp, bodies, pads):
 
 def place_panel(s, proj):
     """Every panel part on its hole (spec §4.2); LEDs last, each at the first
-    rotation whose pads miss every foreign body and keep PAD_CLEAR."""
+    rotation whose pads miss every foreign body and keep PAD_CLEAR and whose
+    body overlaps no foreign body (_led_fits)."""
     by_id = _hole_index()
     rows = []
     for part in proj.parts():
@@ -169,6 +178,7 @@ def place_panel(s, proj):
 
 SM_SHADOW_MM = (68.17, 40.18)   # spec §4.3: x -34.09..34.08, y -20.09..20.09 (the coupon's SM_SHADOW)
 SM_SHADOW_TOL = 0.1
+SM_ROTS = (0, 90, 180, 270)     # spec §4.3, amended 2026-10-08 (was 0 / 180)
 _TEXT_CLASSES = ("PCB_TEXT", "PCB_TEXTBOX", "PCB_FIELD")
 
 
@@ -176,7 +186,9 @@ def module_shadow(fp):
     """The module's shadow: the box of the silkscreen SHAPES on the part's own
     side, text excluded (probed 2026-09-29: the footprint's "INSTALL ON THIS
     SIDE" PCB_TEXT alone reaches 9 mm past the module outline). Raises
-    ValueError naming the part when the box is not SM_SHADOW_MM."""
+    ValueError naming the part when the box is not SM_SHADOW_MM, upright
+    (rotation 0/180) or turned (90/270, w and h swapped; spec §4.3 amendment
+    2026-10-08)."""
     layer = pcbnew.B_SilkS if fp.IsFlipped() else pcbnew.F_SilkS
     boxes = [PL.box(g.GetBoundingBox()) for g in fp.GraphicalItems()
              if g.GetLayer() == layer and g.GetClass() not in _TEXT_CLASSES]
@@ -185,10 +197,17 @@ def module_shadow(fp):
     b = (min(b[0] for b in boxes), min(b[1] for b in boxes),
          max(b[2] for b in boxes), max(b[3] for b in boxes))
     w, h = b[2] - b[0], b[3] - b[1]
-    if abs(w - SM_SHADOW_MM[0]) > SM_SHADOW_TOL or abs(h - SM_SHADOW_MM[1]) > SM_SHADOW_TOL:
-        raise ValueError("%s: shadow is %.2f x %.2f mm, spec §4.3 says %.2f x %.2f"
+    if not shadow_shape_ok(w, h, SM_SHADOW_MM, SM_SHADOW_TOL):
+        raise ValueError("%s: shadow is %.2f x %.2f mm, spec §4.3 says %.2f x %.2f (or turned)"
                          % (fp.GetReference(), w, h, SM_SHADOW_MM[0], SM_SHADOW_MM[1]))
     return b
+
+
+def shadow_shape_ok(w, h, want, tol):
+    """True when a w x h box is the module shadow `want`, upright or turned
+    by 90 degrees."""
+    return any(abs(w - a) <= tol and abs(h - b) <= tol
+               for a, b in (want, (want[1], want[0])))
 
 
 def _tht_clear_of_front(fp, bodies, pads):
@@ -199,6 +218,46 @@ def _tht_clear_of_front(fp, bodies, pads):
             return False
         if any(PL.gap(b, o) < PAD_CLEAR for o in pads):
             return False
+    return True
+
+
+def _front_courtyards(board, refs):
+    """[(courtyard polygon, its box)] of the front parts in `refs` on the board."""
+    out = []
+    for ref in refs:
+        fp = board.FindFootprintByReference(ref)
+        if fp is None:
+            continue
+        cy = fp.GetCourtyard(pcbnew.F_CrtYd)
+        if cy.OutlineCount():
+            out.append((cy, PL.box(cy.BBox())))
+    return out
+
+
+def _holes_clear_of_courtyards(fp, courtyards):
+    """No through hole of `fp` overlaps a front courtyard (P4.1 §4.3, amended
+    2026-10-08): KiCad's gated pth_inside_courtyard. The hole's bounding box
+    is intersected with the courtyard polygon. Calibrated on the 9 mm panel
+    board: none at U_SM (152.40, 69.75) rot 90, where the DRC found none;
+    exactly B1/REV_DIFF and C5/REV_MOD at (152.40, 57.75) rot 270, the two
+    items the DRC reported."""
+    for p in fp.Pads():
+        if p.GetAttribute() not in (pcbnew.PAD_ATTRIB_PTH, pcbnew.PAD_ATTRIB_NPTH):
+            continue
+        hb = p.GetEffectiveHoleShape().BBox()
+        hbox = PL.box(hb)
+        for cy, cbox in courtyards:
+            if not PL.overlaps(hbox, cbox):
+                continue
+            hole = pcbnew.SHAPE_POLY_SET()
+            hole.NewOutline()
+            for x, y in ((hb.GetLeft(), hb.GetTop()), (hb.GetRight(), hb.GetTop()),
+                         (hb.GetRight(), hb.GetBottom()), (hb.GetLeft(), hb.GetBottom())):
+                hole.Append(x, y)
+            x2 = pcbnew.SHAPE_POLY_SET(cy)
+            x2.BooleanIntersection(hole)
+            if x2.Area() > 0:
+                return False
     return True
 
 
@@ -217,22 +276,68 @@ def _tht_blocked(s):
     return out
 
 
+# The module's pinned spot (spec §4.3, amended 2026-10-08, Task 7c; Bastian):
+# (x, y, rotation, reason), or None for the spiral search. place_module runs
+# its own legality tests on the pin and raises when the spot is illegal.
+SM_PIN = (152.40, 56.00, 270,
+          "U_SM sweep 2026-10-08 (Task 7c report, Resumes 3 and 4): the spiral's spot "
+          "(152.40, 69.75) rot 90 left SD_CMD and SENSE_3 (pins D7/D8 boxed in by "
+          "RV34's netless tab, 0.63 mm) and SR_CLK/SR_DATA (pins B7/B8 against the "
+          "audio pair marks) unroutable. Legal window by the body/pad tests, x 0.1 / "
+          "y 0.25 mm grid: rot 90 y 51.50..53.75 and 69.75..72.00, rot 270 y "
+          "54.00..58.00 and 74.25..74.75 (x 152.0..152.8); with the courtyard test "
+          "rot 270 keeps y 54.00..56.50 and 74.25..74.75. Courtyard-clean spots where "
+          "probe routes (every net, pair rules on) take every module net out: only "
+          "rot 270 y 54.50..56.50. Here place_check is GREEN and 30 router rounds "
+          "left no net unrouted (13 conflicts). (152.40, 57.75) rot 270, approved "
+          "first, was refused by the gated DRC (pth_inside_courtyard B1/REV_DIFF, "
+          "C5/REV_MOD). Reserve: 0.4 mm in x to the legal window, 0.50 mm in y to "
+          "the courtyard limit (y 56.50)")
+
+
+def _module_legal(fp, inner, bodies, pads, courtyards):
+    """place_module's legality tests for one footprint position: the shadow
+    inside the inset outline, every pin clear of the front bodies and pads,
+    and every hole clear of the front courtyards."""
+    return (PL.inside(module_shadow(fp), inner) and _tht_clear_of_front(fp, bodies, pads)
+            and _holes_clear_of_courtyards(fp, courtyards))
+
+
 def place_module(s, proj):
-    """U_SM on the back, rotation 0 or 180, the spiral spot nearest the board
-    centre whose pins miss every front body and whose shadow (its silkscreen
-    box) stays EDGE_INSET inside the outline (spec §4.3; probed free spots
-    at (151.0, 64.2) rot 0 and (154.0, 64.2) rot 180)."""
+    """U_SM on the back. With SM_PIN set: exactly at that spot, which must
+    pass the same tests as the search (ValueError otherwise). Without it:
+    any of SM_ROTS, the spiral spot nearest the board centre whose pins miss
+    every front body, keep PAD_CLEAR to every front pad and whose holes
+    miss every front courtyard, and whose shadow (its silkscreen box) stays
+    EDGE_INSET inside the outline (spec §4.3). Rotations 90/270 were
+    admitted 2026-10-08 (§4.3 amendment): the 9 mm raster leaves no 0/180
+    spot, and the USB clearance rule is rotation-agnostic. The courtyard
+    test and the pin came the same day (§4.3, second amendment)."""
     part = {p.ref: p for p in proj.parts()}["U_SM"]
     cx, cy = (X0 + X1) / 2.0, (Y0 + Y1) / 2.0
     fp = kipcb.add_part(s.board, part, cx, cy, 0, side="B")
     bodies, pads = _front_obstacles(s.board, s.front, None)
+    courtyards = _front_courtyards(s.board, s.front)
     inner = PL.grow(outline_box(), -EDGE_INSET)
+    if SM_PIN is not None:
+        x, y, rot, reason = SM_PIN
+        fp.SetOrientationDegrees(rot)
+        fp.SetPosition(kipcb._pt(x, y))
+        if not _module_legal(fp, inner, bodies, pads, courtyards):
+            raise ValueError("U_SM's pinned spot (%.2f, %.2f) rot %d is not legal: its shadow leaves the "
+                             "inset outline, a pin meets a front body or pad, or a hole a front courtyard"
+                             % (x, y, rot))
+        s.parts["U_SM"] = part
+        s.shadow = module_shadow(fp)
+        s.anchors["U_SM"] = (x, y)
+        s.overrides_used.append("U_SM pinned at (%.2f, %.2f) rot %d: %s" % (x, y, rot, reason))
+        return
     best = None
-    for rot in (0, 180):
+    for rot in SM_ROTS:
         for x, y in PL.spiral(cx, cy, 0.5, 60.0):
             fp.SetOrientationDegrees(rot)
             fp.SetPosition(kipcb._pt(x, y))
-            if PL.inside(module_shadow(fp), inner) and _tht_clear_of_front(fp, bodies, pads):
+            if _module_legal(fp, inner, bodies, pads, courtyards):
                 d = math.hypot(x - cx, y - cy)
                 if best is None or d < best[0]:
                     best = (d, x, y, rot)
@@ -312,49 +417,48 @@ def place_power_header(s, proj, blocked):
 # the part's anchor. An entry names the render that justified it.
 # (The first Task 5 run needed five, all for a decoupler with no room at its
 # IC's VCC pad; the IC search now leaves that room itself, but only against
-# the parts placed before it, so a later IC can still take it: U_SR1 below.)
-# P4-2 Task 6a (2026-09-30): the shift registers' and U_IN1's anchors are
-# centroids of board-wide loads and fall inside the module shadow, so the
-# spiral packed them against the module's north and west edges, where the
-# router never converged (146 pads on 2208 mm2 at x 104-152, y 29-75).
+# the parts placed before it, so a later IC can still take it: U_SR2 below.)
+# P4-2 Task 6a (2026-09-30) added U_SR1/2/3/5, U_IN1 and R1/R2/R3 because the
+# spiral packed the shift registers against the module's edges, where the
+# router never converged. The 9 mm panel pass (2026-10-08, Task 7c) moved the
+# pots and the module (152.40, 69.75 rot 90): each of those targets then lay
+# on a pot's THT pads or another part's courtyard, and their reasons described
+# a board that is gone, so they were removed and the §4.4 spiral places those
+# parts again. R12's target stayed free and was kept, until U_SR1's move
+# below shifted R12's anchor (MUX_EN8 runs from U_SR1 to U_MUX8) and put
+# its target, (165.62, 37.34), on a blocked spot: removed the same day.
+# Later the same day (Task 7c, with U_SM pinned at (152.40, 56.00) rot 270)
+# the spiral again packed U_IN1, U_SR1, U_SR2 and U_SR3 into the strip west
+# of the module (x 114..137): every route run left 7..19 nets in conflict
+# there. probe_sr_prop (7c report) moves each to the first free spot from
+# the centroid of only its loads west of the module shadow, by the IC
+# search's own rules (step 0.5, radius 30, its 100 nF still fits), with the
+# strip kept out: 102 -> 56 back SMD pads in x 104..132.3. (C17, U_SR1's
+# 100 nF, needed a turn at U_SR1's first new spot so its stitch via cleared a
+# pot body; at U_SR1's re-probed spot below its own search resolves.)
+_SR_PROBE = ("probe_sr_prop 2026-10-08 (Task 7c, U_SM pinned at (152.40, 56.00) rot 270): "
+             "the conflict strip x 114..137 west of the module; moved to the first free spot "
+             "from the centroid of its loads west of the module shadow (%s), strip kept out")
 OVERRIDES = {
-    "U_SR3": (-32.03, 19.42, 90,
-              "reva-routed-bottom.png 2026-09-30: U_SR3 in the dense field west of U_SM "
-              "(LED4-8, SR_CHAIN in conflict); moved west toward its LEDs D4, D5, D6. "
-              "Task 6b (2026-10-01, stitch probe): at (96.8, 41.3) its GND pin 8 lay under "
-              "RV22's body (5.70 mm stitch stub) and C19.2 could not be stitched; moved "
-              "south-west to (84, 73), between D5/D6 and D8, with every plane-net pad of "
-              "U_SR3 and C19 clear of the pot bodies (of nine such spots screened, the one "
-              "with 0 conflicts, every SENSE net under 1.3 x MST and no dangling track)"),
-    "U_SR2": (-15.16, -7.75, 0,
-              "reva-routed-bottom.png 2026-09-30: U_SR2 against U_SM's west edge "
-              "(LED0-2, MUX_EN6_SR, SENSE_2 in conflict); moved west toward LED0-2 and U_MUX7"),
-    "U_IN1": (41.35, 3.20, 90,
-              "reva-routed-bottom.png 2026-09-30: U_IN1 in the field north of U_SM "
-              "(KEY_*, MUX_EN8 knot); moved east of U_SM toward KEY_REC_B / KEY_MODBTN. "
-              "Task 6b (2026-10-01, stitch probe): 8 mm south, so its decoupler C22's GND "
-              "pad leaves RV40's body (it had a 3.36 mm stitch stub)"),
-    "U_SR1": (-13.50, -7.50, 0,
-              "reva-routed-bottom.png 2026-09-30 (Task 6a run 1): MUX_S1_SR/S2_SR and MUX_EN8 "
-              "knotted east of U_SR1 at x 134-141, y 30-40; rot 0 turns pins 1-8 (MUX_S1/S2_SR, "
-              "MUX_EN0-4_SR) west, 1.5 mm north so C17 keeps room; also keeps U_SR1 out of "
-              "U_IN1's old place, where C17 found no room"),
-    "U_SR5": (70.85, 3.55, 0,
-              "reva-routed-bottom.png 2026-09-30: U_SR5 north of U_SM (SR_SPARE* in conflict); "
-              "its outputs are test points only, moved east toward U_SR4 (SR_CHAIN4). Kept at "
-              "(230, 65): its anchor follows U_SR3 and U_IN1, so the offset is re-derived"),
-    "R1": (-22.27, -8.07, 90,
-           "reva-routed-bottom.png 2026-09-30 (Task 6a run 1): mux-select resistor in the knot "
-           "east of U_SR1; moved into the pocket west of U_SR1, below R2 / R3"),
-    "R2": (-21.13, -11.26, 90,
-           "reva-routed-bottom.png 2026-09-30 (Task 6a run 1): MUX_S1_SR in conflict in the knot "
-           "east of U_SR1; moved into the pocket west of U_SR1, beside pin 1"),
-    "R3": (-18.74, -10.91, 90,
-           "reva-routed-bottom.png 2026-09-30 (Task 6a run 1): MUX_S2_SR in conflict in the knot "
-           "east of U_SR1; moved into the pocket west of U_SR1, beside pin 2"),
-    "R12": (35.11, -8.74, 0,
-            "reva-routed-bottom.png 2026-09-30 (Task 6a run 1): MUX_EN8 the worst net of the knot "
-            "east of U_SR1; moved out of that corridor next to U_MUX8, the mux it enables"),
+    "U_IN1": (-73.47, 0.41, 90, _SR_PROBE % "4 of its 8 panel-side pads, west anchor (76.93, 61.34)"),
+    # U_SR1 re-probed the same day (probe_sr1, 7c report Resume 6): at
+    # (104.29, 46.01) rot 0 its chain airwires crossed U_MUX7's channel
+    # airwires 4 times (SR_DATA twice), and every route run kept SR_DATA x
+    # M7_CH0 in conflict at x 110..116, y 50..57.
+    "U_SR1": (-36.84, -6.23, 90,
+              "probe_sr1 2026-10-08 (Task 7c, U_SM pinned at (152.40, 56.00) rot 270): of the 1359 "
+              "free spots (IC search rules, its 100 nF fits, strip x 114..137 kept out) around its "
+              "west anchor (100.43, 48.96), the nearest whose SR_DATA / SR_CLK / SR_LATCH / "
+              "SR_CHAIN1 airwires cross none of U_MUX7's M7_CH* airwires (4 crossings before, "
+              "SR_DATA 2): (104.93, 41.96) rot 90, 8.32 mm from that anchor"),
+    "U_SR2": (-38.33, 10.97, 270, _SR_PROBE % "6 of 8, west anchor (82.23, 62.73); replaces the "
+              "earlier (-6.00, +2.50) entry that only made room for C22"),
+    "U_SR3": (-31.79, 8.88, 90, _SR_PROBE % "5 of 8, west anchor (108.27, 69.61)"),
+    "C6": (8.50, -7.00, 270,
+           "route.py 2026-10-08 (Task 7c, 9 mm panel; probe_c6 in the 7c report): at its first "
+           "fit (rot 90) C6.2's GND stitch via found no spot outside RV18's (DETUNE_A) pot "
+           "keep-out and was kept under the pot body (route_check pot_keepout); the same spot "
+           "turned to rot 270 puts pad 2 on the other end, where the stitch resolves"),
 }
 
 # Search step and radius per class (spec §4.4; spike values for ICs,

@@ -1,5 +1,23 @@
 # Panel correction — the 9 mm raster: Implementation Plan
 
+> **Amended 2026-10-08 after Task 7a (read this over the numbers below; the
+> plan body is not rewritten):**
+> - The centre runs on its own pitch, `CENTRE_PITCH` = **23.0**: centre
+>   columns **129.40, 152.40, 175.40** (not 132.20 / 172.60); deck columns
+>   unchanged. Smallest cap gap 9.70, not 10.27.
+> - `SIDE_LAMPS` is gone: SONG's lamp is a cluster lamp (`KNOB_LAMPS`).
+> - Every cluster lamp follows spec §5 / §5.1 as amended 2026-10-08: word
+>   centred under its knob, LED on its glyph midline at `knob.x ± LED_DX`
+>   (6.9 pots, 6.0 the REC key) toward its own group, deck B mirrored.
+> - `place.py`: U_SM may turn 90/270 (P4.1 §4.3) and the LED rotation pick
+>   keeps the LED body off every front body (P4.1 §4.2), both amended
+>   2026-10-08.
+> - Task 7c: U_SM is pinned (`place.SM_PIN`) at (152.40, 56.00) rotation 270,
+>   courtyard-legal (`place_module` checks front courtyards since 7c).
+> - Task 7c: the router runs with `HIST_INC` 2.0 and 60 rounds
+>   (`MAX_ITERS`), and keeps audio copper `EDGE_MM` 3.0 mm across a module
+>   zone edge (the zone-edge rule, `route_check`'s own rule).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Re-place every control of the 60 HP plate on one 20.2 × 20.125 mm raster that keeps ≥ 9 mm (in fact ≥ 10.27 mm) between cap edges, rework the LEDs, raise the jack row, and carry the new plate through the cut file, the mux assignment, the Rev A schematic and board, the firmware table and the VCV `FireflowHW` panel.

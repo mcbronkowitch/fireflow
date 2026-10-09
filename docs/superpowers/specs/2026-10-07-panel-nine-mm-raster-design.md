@@ -20,9 +20,12 @@ the knob raster, so the scripted chain to the board runs once.
 
 ## 1. Goal and scope
 
+*Amended 2026-10-08 after Task 7a:* the smallest gap is 9.70 mm since the
+centre re-pitch (§3); it was 10.27.
+
 Every knob and key on the 60 HP plate keeps at least 9.0 mm between cap
 edges, measured with the real caps — and the layout below delivers at least
-10.27 mm. Deck B stays deck A mirrored; the centre column is mirror-symmetric
+9.70 mm. Deck B stays deck A mirrored; the centre column is mirror-symmetric
 about the plate's centre line. The plate stays 60 HP.
 
 Done means: the generator places every control from one cell table; a guard
@@ -59,7 +62,8 @@ gap. 54 pairs are under 9 mm, involving 66 of the 70 knobs.
 (P1 §3.1, deferred to this round).
 
 **The new plate** (§3, §4): 73 knob positions and 2 deck keys. **Smallest gap
-10.27 mm** (a big cap over a small one, vertically). Small beside small:
+10.27 mm** (a big cap over a small one, vertically; 9.70 since the centre
+re-pitch of 2026-10-08, §3). Small beside small:
 12.50 mm across, 12.43 mm down; big beside small across: 10.35 mm; median
 nearest-neighbour gap 10.35 mm. Caps span x 5.00 .. 299.80 (4.8 mm to each
 edge of the 304.4 mm plate). Lowest cap edge 98.85; lowest knob ink (a small
@@ -74,14 +78,38 @@ row pitch, and the cables want that room).
 
 ## 3. The raster
 
+*Amended 2026-10-08 after Task 7a (Bastian's decision):* the centre runs on
+its own pitch, **23.0 mm**; the outer centre columns move from 132.20 /
+172.60 to **129.40 / 175.40**, column 0 stays at 152.40, the deck columns do
+not move, the mirror symmetry about 152.4 holds. Why: on the uniform
+20.2 mm pitch the Patch Submodule (U_SM, back side, THT sockets that stay
+THT, pins reaching the front) had **no legal spot anywhere on the board**
+— its headers A and D stand 28.0 mm apart against a 20.125 mm row pitch, and
+the windows between pot lugs missed by 3.75 mm (Task 7a's whole-board
+scan). Measured with the board placer's own tests at 23.0: U_SM fits at
+rotation 90/270 with its centre at x 152.00 .. 152.80, never at 0/180;
+`place.py` puts it at (152.40, 69.75) rot 90 (P4.1 §4.3 amendment of the
+same day admits 90/270). *Amended 2026-10-08 (Task 7c):* that spot left four
+module nets unroutable. U_SM is pinned at (152.40, 56.00) rot 270 (P4.1
+§4.3, second amendment of that day, which records the sweep).
+(152.40, 57.75) rot 270 was approved first and refused by the gated DRC's
+`pth_inside_courtyard`. Cost on the plate, measured: deck column 6 to the
+outer centre column is 17.40 mm centre to centre, so the **smallest cap-edge
+gap is 9.70 mm**, above the 9.0 rule — the eight small-beside-small pairs
+across that seam (R2–R5 on both sides, e.g. COUPLE/PAN_A); every other pair
+keeps ≥ 10.0 mm. Median nearest-neighbour gap over the
+73 knobs and 2 deck keys 10.28 mm. Unchanged: caps span x 5.00 .. 299.80,
+jack-row keys 11.15 mm from the nearest cap, nearest jack centre 13.95 mm
+from a cap edge.
+
 | | Value | Why |
 |---|---|---|
-| Column pitch | **20.20 mm**, the same everywhere | 15 columns (6 + 3 + 6) centred on 152.4; 7 × 20.2 + 6.0 = 147.4 puts deck A's outer big cap 5.0 mm from the nominal edge |
+| Column pitch | **20.20 mm** in the decks, **23.00 mm** in the centre | 15 columns (6 + 3 + 6) centred on 152.4; 7 × 20.2 + 6.0 = 147.4 puts deck A's outer big cap 5.0 mm from the nominal edge; the centre pitch gives U_SM its spot (above) |
 | Row pitch | **20.125 mm** | rows 14.5 → 95.0 in four steps |
 | Rows R1..R5 | y = 14.500, 34.625, 54.750, 74.875, 95.000 | top row as today |
 | Deck A columns c1..c6 | x = 11.00, 31.20, 51.40, 71.60, 91.80, 112.00 | x = 152.4 − (8 − c) · 20.2 |
 | Deck B | x → 304.8 − x | mirror axis 152.4, as today |
-| Centre columns k = −1, 0, +1 | x = 132.20, 152.40, 172.60 | x = 152.4 + k · 20.2 |
+| Centre columns k = −1, 0, +1 | x = 129.40, 152.40, 175.40 | x = 152.4 + k · 23.0 (was k · 20.2) |
 
 **Big caps stand in R2 and R4 only, never in deck column c6, and never next
 to another big cap in the same row.** Two orthogonally adjacent big caps would
@@ -91,7 +119,8 @@ the lowest ink is a small caption at 102.45.
 
 The centre had 16 controls for 15 cells until Bastian dropped the `REV_SMEAR`
 reservation (§4); three centre columns are what let the whole plate run on
-one 20.2 mm pitch instead of 18.85.
+one 20.2 mm pitch instead of 18.85. (Since 2026-10-08 the centre runs wider,
+23.0 mm, for the module — see the amendment above.)
 
 ### 3.1 Deck A (c1 = outer edge; deck B mirrored; ● = big; *italics* = reserved, §4)
 
@@ -155,15 +184,20 @@ blue, part B 23 of 24 orange); big caps unchanged.
 
 ## 5. LEDs
 
+*Amended 2026-10-08 after Task 7a:* every knob lamp, SONG's included, is
+one caption cluster by the rule of §5.1 (word centred, LED beside it on its
+glyph midline toward its own group, deck B mirrored). "Cluster" in the table
+below means that rule.
+
 19 lamps drawn today, **15** after.
 
 | Lamp | Where | Shows | Status |
 |---|---|---|---|
-| `SONG_A_L` / `_B_L` | **beside** SONG, inboard (§5.1) | flash on a phrase change | unchanged meaning; leaves the caption cluster |
+| `SONG_A_L` / `_B_L` | beside the SONG word (cluster, §5.1) | flash on a phrase change | unchanged meaning; a cluster lamp again since 2026-10-08 (beside the knob 2026-10-07) |
 | `GATE_A_L` / `_B_L` | under ATTACK (cluster) | a note is sounding (`inst.gate()`) | unchanged |
 | `LVL_A_L` / `_B_L` | under COMP (cluster) | **this deck delivers signal at all** — lit while the deck's own output into the mix is above a floor, dark when nothing comes out (cutoff all the way down, LVL at zero, an empty sampler) | **new meaning** (was the `LANE_LEVEL` excursion, i.e. modulation). Tap and floor: a P6b / VCV-host probe |
 | `FTIME_A_L` / `_B_L` | under FLUXRATE, caption TIME (cluster) | one flash per FLUX time period — the repeat tempo TIME sets — **only while that deck's FLUX MIX > 0** | **new**. FLUX is a tempo-synced delay and TIME picks its division (`set_flux_rate(slice_idx)`), so this is timing; gating on MIX keeps it from doubling `TEMPO_L` at a quarter note and says FLUX is in the sound |
-| `REC_A_L` / `_B_L` | under the REC key (cluster) | unchanged | **moved** from a hand-placed satellite (108.5, 14.5) into a word-then-LED cluster like the knob lamps, so it stays inside CAPTURE's cell (§7) |
+| `REC_A_L` / `_B_L` | beside the REC word, under the key (cluster, §5.1; `LED_DX_KEY` 6.0) | unchanged | **moved** from a hand-placed satellite (108.5, 14.5) into the caption cluster like the knob lamps, so it stays inside CAPTURE's field (§7) |
 | `TEMPO_L` | under TEMPO (cluster) | the transport beat | unchanged |
 | `CLK_L` | jack-row satellite of CLOCK, inboard (129.30) | a flash on every pulse arriving at the CLOCK jack | **renamed from `SYNC_L`** (the COUPLE knob's printed caption is also SYNC and has no lamp; the two were confused in review) and **given a meaning** — today it is held dark. Not redundant with `TEMPO_L`: with PACE in use the beat and the incoming pulse run at different rates |
 | `RST_L` | jack-row satellite of RESET, outboard (168.80 + 6.7 = 175.50) | a flash on every reset received | **new**; mirrors `CLK_L` about the centre line |
@@ -182,26 +216,61 @@ song-phrase-flash S4 stands, `FLOW_*` stay undrawn and
 scales the texture lanes' rate, PACE the modulator's base rate — both would
 show modulation speed).
 
-### 5.1 The SONG lamp sits beside its knob
+### 5.1 The caption cluster: the LED beside its centred word
 
-A cluster LED sits ~7 mm under its control, and the **top row's pots have
-their pins south** (`POT_TOP_ROT` = 90 in `place.py`), right where that LED
-lands. P4-1 measured that the SONG lamp needed a 2.6 mm drop at LED rotation
-0 for 0.51 mm pad clearance (P4-1 placement spec, SONG item). SONG is the only
-top-row knob lamp (REC is a key; the others sit in R3/R4, where their own
-pot's pins point north, away from them). A drop is ruled out by the fields
-(§7): the uniform row band leaves the SEQUENCE field no room to grow down.
+*Amended 2026-10-08 after Task 7a (Bastian's decision, from a 1:1
+preview):* this section replaces "The SONG lamp sits beside its knob". The
+side lamp is gone; SONG is a cluster lamp like the others.
 
-**So the SONG lamp stands beside its knob, inboard, on the knob's line:**
-x = SONG.x + 20.2 / 2 (deck A; mirrored on B), y = 14.50, halfway to RATE;
-the SONG caption stays centred under the knob. Computed from KiCad's
-`Potentiometer_Alpha_RD901F-40-00D_Single_Vertical`: at rotation 90 the
-support lugs sit 4.8 mm left and right of the shaft, pads 2.72 × 3.24, so
-their outer edge is 6.16 mm out; an LED with its pads stacked vertically at
-10.1 mm keeps **3.04 mm** pad to pad to both SONG's and RATE's lugs. Plate
-web to SONG's hole: 5.05 mm. The board task confirms it with
-`place_check.py`; if that disagrees with this arithmetic, the board task
-stops and reports.
+Why: Task 7a's board run found seven LED bodies overlapping their owner's
+body (GATE ×2, FTIME ×2, TEMPO, REC ×2; Task 7a report §3) — the old
+word-then-LED block, centred on the knob, put the LED only 2.05–3.24 mm
+beside the knob's x. Dropping the LEDs instead was considered and withdrawn;
+Bastian rejected that look and the SONG side spot.
+
+**The rule** (`caption_led_cluster` in `gen_hw_panel.py`):
+
+- The word is centred under its knob (`cap_x = knob.x`), at the one
+  `CAPTION_GAP` every caption keeps (its y did not change).
+- The LED centre sits on the word's glyph midline, at
+  `knob.x ± LED_DX`: **6.9 mm** for a pot owner, **6.0 mm**
+  (`LED_DX_KEY`) for the REC key.
+- The LED stands on the side of its own group, never into a neighbour's:
+  deck A puts ATTACK's, COMP's, SONG's and REC's lamp right of the word and
+  FLUXRATE's left; TEMPO's (centre, no partner) right. **Deck B mirrors**
+  (the signs flip) — this replaces the 2026-10-07 rule "same reading order
+  on both decks, not an optical mirror".
+- No outward slide any more: every lamp keeps ≥ 3.70 mm of acrylic to its
+  owner's hole (REC; the pot lamps 4.54, LVL 6.14), against P1's `MIN_WEB`
+  of 2.0.
+
+**Board-probed** (2026-10-08, `place.py`'s footprints and `LED_ROTS`, the LED
+on its word's glyph midline, slid sideways): the LED body clears every front
+body and its pads clear every foreign body and keep `PAD_CLEAR` to every
+foreign pad, at some LED rotation, from |dx| **5.70** (ATTACK; FLUXRATE_A,
+left), **5.75** (TEMPO; FLUXRATE_B, right), **5.90** (REC key) and **6.75**
+(SONG, on its own pot whose pins point south in the top row; 6.80 for
+SONG_B on its right, the side it does not take). COMP's lamp (dy 8.808) was clear at every probed dx — 0.00, the old
+cluster's 2.05 and the placed 6.90 — at every LED rotation. The guard pins
+these as floors under `LED_DX`, the stricter side where two were measured
+(FLUXRATE 5.75, SONG 6.80).
+
+On the placed board (2026-10-08, panel + U_SM + J_PWR) the seven Task 7a
+overlaps and every SONG finding are gone. The LED's body box is asymmetric
+about its hole (−1.55 .. +1.95 mm at rotation 0), so REC's 5.90 holds only
+with the flat side toward the key (rotation 0 right of the key, 180 left of
+it; 6.30 at any rotation). The first board run still showed `REC_B/REC_B_L`
+(0.295 × 0.487 mm), because `place_panel` took the first rotation whose
+*pads* fit — 0 on both decks. *Resolved the same day (Bastian):* the LED
+rotation pick also keeps the LED's own body off every front body (P4.1 §4.2
+amendment), so REC_B_L takes 180, no other LED changes rotation, and the
+front check reports 0 violations. (Raising `LED_DX_KEY` to the
+rotation-free 6.30 instead would have cost CAPTURE/GLOBAL their 3 mm field
+gap: 2.85.)
+
+The SONG lamp's old arithmetic (3.04 mm pad to lug beside the knob) is
+history; on the board the cluster SONG lamp keeps 2.600 mm pad to pad to its
+own pot at LED rotation 90.
 
 ### 5.2 Lamps over big caps
 
@@ -236,20 +305,33 @@ as little as the board allows.
 
 ## 7. Group fields
 
+*Amended 2026-10-08 after Task 7a:* the column cell knows the centre pitch
+(§3) — the cell-rect and join rules below; SONG's lamp is a cluster lamp
+(§5.1). Measured on the new plate: every pair of fields of different groups
+keeps ≥ 3.000 mm, `FIELD_MARGIN` 1.45 still holds (1.4825 is still the
+largest that keeps 3.0, 1.485 gives 2.997), deck B's fields are deck A's
+mirrored.
+
 A group's field is built from its cells, no longer from the fixed
 `GROUP_ROWS` cut raster:
 
 - **Cell rect, x:** the union of the control's ink ± `FIELD_MARGIN` and its
-  column cell, x ± (20.2 − 3.0) / 2 = ± 8.6. The column cell is what gives a
+  column cell. A deck column's cell is x ± (20.2 − 3.0) / 2 = ± 8.6, on both
+  sides (deck column c6 too). Between the centre columns the cell is
+  ± (23.0 − 3.0) / 2 = ± 10.0. The outer centre columns' **outward** side
+  (toward the deck) has no column-cell minimum — ink + `FIELD_MARGIN` only:
+  deck column c6 stands 17.40 mm away there, and a 10.0 cell would meet its
+  field. The column cell is what gives a
   one-control group (ENG, CAPTURE) room for its legend; CAPTURE's 17.2 mm
   holds its legend at today's `LEGEND_INSET` of 4.0 (needs 16.55).
 - **Band, y:** per group and row, from the topmost ink − `FIELD_MARGIN` to the
   bottommost ink + `FIELD_MARGIN` of that group's controls in that row. Ink is
-  bodies, captions, and lamps (a cluster LED hangs 0.7 mm under its caption;
-  SONG's side lamp counts as SONG's ink).
+  bodies, captions, and lamps (a cluster LED hangs 0.7 mm under its caption
+  and counts as its owner's ink).
 - **Field:** the union of the group's cell rects, stretched to their row's
   band, plus the joins between cells that are neighbours in the same group
-  (same row, adjacent columns; or same column, adjacent rows). The outline is
+  (same row, adjacent columns — neighbouring columns in the one list of
+  fifteen, whatever their pitch; or same column, adjacent rows). The outline is
   any rectilinear polygon — TIMING's arch is not a rectangle or an L — drawn
   with the existing rounded-corner and legend-notch rules. The legend sits on
   the field's top-left edge as today.
@@ -287,6 +369,42 @@ That pot's wire runs to the neighbouring band's mux — a longer track, no
 schematic change.
 
 ## 9. Guards
+
+*Amended 2026-10-08 after Task 7a* (`test_hw_panel.py`; each change proven
+red once against a generator sabotaged in memory):
+
+- **Rewritten:** `test_knob_lamps_sit_in_the_caption_cluster` to §5.1 — the
+  word centred under its knob at the class offset, the LED on the glyph
+  midline at `knob.x ± LED_DX` (`LED_DX_KEY` for REC), the side per group
+  written into the test (deck B mirrored), the board-probed dx floors of
+  §5.1 written into the test, the LED inside its owner's field, 11 lamps.
+- **Replaced:** `test_song_lamp_stands_beside_its_knob` by
+  `test_song_lamp_is_a_cluster_lamp` (SONG's lamps are `KNOB_LAMPS`
+  entries; no `SIDE_LAMPS` table).
+- **Widened:** `test_mirror_symmetry` covers the cluster lamps, and
+  `test_caption_mirror_symmetry` drops its cluster exception — both mirror
+  now.
+- **Pinned:** `test_cells_are_the_source` checks the centre columns at
+  129.40 / 152.40 / 175.40, written into the test.
+- **Refined:** `test_labels_stay_off_neighbour_footprints` holds a caption
+  to the own-knob floor (the radius), not radius + `LBL_MARGIN`, against a
+  control on its owner's own shaft — STAGES shares ATTACK's knob. With the
+  word centred, ATTACK's sits 7.45 mm from that shaft like every small
+  knob's word, which the margin rule (7.50) refused although STAGES is no
+  neighbour. The alternative, moving every cluster word 0.865 mm away from
+  its LED, was measured (fields keep 3.000) and not taken: §5.1 says the
+  word is centred. The generator's own caption check (`_caption_is_clear`)
+  carries the same rule, and cluster words go through it like every other
+  caption.
+- **New:** `test_column_cells_follow_the_centre_pitch` pins the column
+  cell's half-widths as literals: 0.0 / 10.0 at 129.40, 10.0 / 10.0 at
+  152.40, 10.0 / 0.0 at 175.40, 8.6 / 8.6 on the deck columns.
+
+Guards in other places: `place.py`'s `module_shadow` and `place_check.py`'s
+module step accept the turned shadow (P4.1 §4.3 amendment), still refusing
+any other box. `hardware/reva/test_place.py` checks on a panel-only board
+that every LED has a rotation and no LED body overlaps a front body (P4.1
+§4.2 amendment).
 
 `host/vcv/res/test_hw_panel.py`:
 
@@ -373,9 +491,9 @@ the drawing is polished.
 
 - **Router does not close** on the new pot positions (§10.4). It runs right
   after the generator, so a failure costs one task, not a redrawn plate.
-- **The SONG lamp's clearance is arithmetic from the footprint file** (§5.1),
-  not yet a `place_check` run. If the board disagrees, that comes back to
-  Bastian before anything else moves.
+- ~~**The SONG lamp's clearance is arithmetic from the footprint file**~~
+  (§5.1) — *resolved 2026-10-08:* the board disagreed (Task 7a), SONG
+  became a cluster lamp, and its clearance is now board-probed (§5.1).
 - **Field margin 1.45 mm is tight by construction** (§5.2, §7): it is what
   the worst pair allows. Any later lamp over a big cap of another group breaks
   it; the field guard catches that.

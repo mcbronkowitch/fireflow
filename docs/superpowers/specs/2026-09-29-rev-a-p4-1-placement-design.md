@@ -175,6 +175,13 @@ ones), so P4-1 generates one.
   - LED: the first of 0, 90, 180, 270 whose pads avoid every foreign body box
     and keep the pad clearance. If no rotation passes, the check fails; see
     §5.3 for the known cases.
+    *Amended 2026-10-08 (panel 9 mm raster, Task 7b):* the rotation must also
+    keep the LED's own body box off every foreign body box. LED_D3.0mm's
+    body box is not centred on its hole (x −1.55 .. +1.95 mm at rotation 0),
+    so a lamp beside its owner clears only with its flat side toward it; the
+    pads-only pick took rotation 0 on both decks and put deck B's mirrored
+    REC lamp on its key (0.295 × 0.487 mm). With the body test it takes 180
+    there; no other LED changes rotation.
 - **SD socket (J_SD):** on the front, through hole, centred on the `SD`
   slot's centre. Its footprint comes from `sd_footprint.py`, which writes a
   `.kicad_mod`. *Amended 2026-09-29 while planning:* the source is the
@@ -204,6 +211,43 @@ J_PWR.
     spiral from the centre and takes the first spot that passes.
   - **Rotation:** 0 or 180, whichever finds a spot nearer the centre
     (amended 2026-09-29, see below).
+    *Amended 2026-10-08 (panel 9 mm raster, Task 7a/7b):* **0, 90, 180 or
+    270**, whichever finds a spot nearer the centre. 90/270 were left out
+    only because they found nothing on the 2026-09-29 panel (below). On the
+    9 mm raster no 0/180 spot exists anywhere on the board (Task 7a's
+    whole-board scan); with the centre columns re-pitched to 152.4 ± 23.0
+    the module fits at 90/270 on the centre line. The USB clearance rule
+    below is rotation-agnostic, and the shadow check accepts the turned
+    box (40.18 × 68.17).
+    *Amended 2026-10-08 (Task 7c, Bastian): a courtyard test, and a pinned
+    position.*
+    - **Courtyard test.** `place_module`'s legality test now also requires
+      every module through hole to miss every front courtyard: the rule
+      KiCad's gated `pth_inside_courtyard` enforces (§5.1 item 6). It
+      applies to the search and to the pin. The test was missing before,
+      and that let a spot that is legal by bodies and pads,
+      (152.40, 57.75) rot 270, through to the DRC. There B1 and C5 sat in
+      REV_DIFF's and REV_MOD's courtyards. Without the pin, the search
+      still finds (152.40, 69.75) rot 90.
+    - **Pin.** `place.SM_PIN` = (152.40, 56.00) rot 270; an illegal pin
+      raises. The search's spot, (152.40, 69.75) rot 90, left four module
+      nets unroutable:
+      - SD_CMD and SENSE_3 (pins D7/D8) were boxed in by RV34's netless
+        tab, 0.63 mm away;
+      - SR_CLK and SR_DATA (pins B7/B8) were shut in by the audio pair
+        marks.
+    - **Measured by the U_SM sweep** (0.1 mm in x, 0.25 mm in y):
+      - Legal by bodies and pads: rot 90 y 51.50..53.75 and 69.75..72.00;
+        rot 270 y 54.00..58.00 and 74.25..74.75; x within 152.0..152.8.
+      - With the courtyard test, rot 270 keeps y 54.00..56.50 and
+        74.25..74.75, and rot 90 keeps only y 69.75..72.00.
+      - Probe routes (every net, pair rules on, back side re-placed per
+        position) take every module net out of a courtyard-clean spot only
+        in rot 270 y 54.50..56.50.
+      - At the pin, place_check is GREEN and 30 router rounds left no net
+        unrouted.
+      - Reserve: 0.4 mm in x to the legal window, 0.50 mm in y to the
+        courtyard limit (y 56.50).
   - **USB clearance** (amended 2026-09-29 while planning): no part taller than
     3 mm within 35 mm of the module shadow, on any side. Only J_PWR is that
     tall on the back. The USB-C plug enters parallel to the board at module

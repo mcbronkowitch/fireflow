@@ -33,40 +33,37 @@ def load_holes(path=HOLES):
 
 
 def _split_regions(pots):
-    """Four contiguous x-bands, one per sense pin in SENSE_ORDER.
+    """Four contiguous bands, one per sense pin in SENSE_ORDER, in
+    (x, y, id) order.
 
-    Pots sharing an x stay in one band. Every split whose bands fit their
-    capacity -- both calibration channels going to the band with the most room
-    -- is scored by its fullest band's fill ratio; the lowest wins, ties to
-    the split whose cuts sit furthest left. Exhaustive: 63 columns give about
-    40 000 splits, well under a second.
+    A cut may fall inside a column (spec 2026-10-07 §8): a deck carries 29
+    pots and its first five columns hold 25 against a 24-channel band, so
+    whole columns no longer fit. A split is taken only when no split-free
+    answer exists: every split whose bands fit their capacity -- both
+    calibration channels going to the band with the most room -- is scored
+    (columns split, fullest band's fill ratio, cuts); the lowest wins.
+    Exhaustive: 73 pots give C(72, 3) = 59 640 splits, well under a second.
     """
-    columns = {}
-    for p in pots:
-        columns.setdefault(p["x_mm"], []).append(p)
-    cols = [columns[x] for x in sorted(columns)]
-    prefix = [0]
-    for c in cols:
-        prefix.append(prefix[-1] + len(c))
+    order = sorted(pots, key=lambda p: (p["x_mm"], p["y_mm"], p["id"]))
     caps = [CHANNELS * len(MUXES[s]) for s in SENSE_ORDER]
     best = None
-    for cuts in itertools.combinations(range(1, len(cols)), len(caps) - 1):
-        bounds = (0,) + cuts + (len(cols),)
-        sizes = [prefix[bounds[i + 1]] - prefix[bounds[i]] for i in range(len(caps))]
+    for cuts in itertools.combinations(range(1, len(order)), len(caps) - 1):
+        bounds = (0,) + cuts + (len(order),)
+        sizes = [bounds[i + 1] - bounds[i] for i in range(len(caps))]
         free = [c - s for c, s in zip(caps, sizes)]
         cal = max(range(len(caps)), key=lambda i: (free[i], -i))
         used = [s + (len(CALIBRATION) if i == cal else 0) for i, s in enumerate(sizes)]
         if any(u > c for u, c in zip(used, caps)):
             continue
-        score = (max(u / c for u, c in zip(used, caps)), cuts)
+        splits = sum(order[c - 1]["x_mm"] == order[c]["x_mm"] for c in cuts)
+        score = (splits, max(u / c for u, c in zip(used, caps)), cuts)
         if best is None or score < best[0]:
             best = (score, bounds, cal)
     if best is None:
         raise ValueError("%d pots do not fit %d channels in four contiguous bands"
                          % (len(pots), sum(caps)))
     _, bounds, cal = best
-    regions = {s: [p for c in cols[bounds[i]:bounds[i + 1]] for p in c]
-               for i, s in enumerate(SENSE_ORDER)}
+    regions = {s: order[bounds[i]:bounds[i + 1]] for i, s in enumerate(SENSE_ORDER)}
     return regions, SENSE_ORDER[cal]
 
 

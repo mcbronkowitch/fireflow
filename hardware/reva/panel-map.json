@@ -1,13 +1,13 @@
 {
  "calibration": [
   {
-   "channel": 6,
+   "channel": 4,
    "id": "CAL_GND",
-   "mux": 0,
+   "mux": 1,
    "sense": "SENSE_0"
   },
   {
-   "channel": 6,
+   "channel": 5,
    "id": "CAL_3V3",
    "mux": 1,
    "sense": "SENSE_0"
@@ -18,116 +18,92 @@
   {
    "id": "SHIFTBTN_L",
    "index": 0,
-   "x_mm": 20.7,
-   "y_mm": 114.0
-  },
-  {
-   "id": "CLR_A_L",
-   "index": 1,
-   "x_mm": 26.1,
-   "y_mm": 103.808
+   "x_mm": 23.5,
+   "y_mm": 112.75
   },
   {
    "id": "SONG_A_L",
-   "index": 2,
-   "x_mm": 50.6,
-   "y_mm": 21.708
+   "index": 1,
+   "x_mm": 58.3,
+   "y_mm": 21.158
   },
   {
    "id": "GATE_A_L",
+   "index": 2,
+   "x_mm": 58.3,
+   "y_mm": 61.408
+  },
+  {
+   "id": "FTIME_A_L",
    "index": 3,
-   "x_mm": 70.3,
-   "y_mm": 41.208
-  },
-  {
-   "id": "SRC_A_L",
-   "index": 4,
-   "x_mm": 75.475,
-   "y_mm": 57.428
-  },
-  {
-   "id": "FLT_A_L",
-   "index": 5,
-   "x_mm": 91.475,
-   "y_mm": 61.808
-  },
-  {
-   "id": "REC_A_L",
-   "index": 6,
-   "x_mm": 108.5,
-   "y_mm": 14.5
+   "x_mm": 64.7,
+   "y_mm": 81.533
   },
   {
    "id": "LVL_A_L",
-   "index": 7,
-   "x_mm": 108.55,
-   "y_mm": 87.808
+   "index": 4,
+   "x_mm": 98.7,
+   "y_mm": 83.683
   },
   {
-   "id": "SYNC_L",
-   "index": 8,
+   "id": "REC_A_L",
+   "index": 5,
+   "x_mm": 118.0,
+   "y_mm": 20.308
+  },
+  {
+   "id": "CLK_L",
+   "index": 6,
    "x_mm": 129.3,
-   "y_mm": 114.0
+   "y_mm": 112.75
   },
   {
    "id": "TEMPO_L",
-   "index": 9,
-   "x_mm": 142.0,
-   "y_mm": 41.208
+   "index": 7,
+   "x_mm": 136.3,
+   "y_mm": 61.408
+  },
+  {
+   "id": "RST_L",
+   "index": 8,
+   "x_mm": 175.5,
+   "y_mm": 112.75
   },
   {
    "id": "REC_B_L",
-   "index": 10,
-   "x_mm": 196.3,
-   "y_mm": 14.5
+   "index": 9,
+   "x_mm": 186.8,
+   "y_mm": 20.308
   },
   {
    "id": "LVL_B_L",
+   "index": 10,
+   "x_mm": 206.1,
+   "y_mm": 83.683
+  },
+  {
+   "id": "FTIME_B_L",
    "index": 11,
-   "x_mm": 200.35,
-   "y_mm": 87.808
-  },
-  {
-   "id": "FLT_B_L",
-   "index": 12,
-   "x_mm": 218.525,
-   "y_mm": 61.808
-  },
-  {
-   "id": "SRC_B_L",
-   "index": 13,
-   "x_mm": 234.525,
-   "y_mm": 57.428
-  },
-  {
-   "id": "GATE_B_L",
-   "index": 14,
-   "x_mm": 238.6,
-   "y_mm": 41.208
+   "x_mm": 240.1,
+   "y_mm": 81.533
   },
   {
    "id": "SONG_B_L",
-   "index": 15,
-   "x_mm": 259.4,
-   "y_mm": 21.708
+   "index": 12,
+   "x_mm": 246.5,
+   "y_mm": 21.158
   },
   {
-   "id": "CEIL_L",
-   "index": 16,
-   "x_mm": 278.5,
-   "y_mm": 114.0
-  },
-  {
-   "id": "CLR_B_L",
-   "index": 17,
-   "x_mm": 283.9,
-   "y_mm": 103.808
+   "id": "GATE_B_L",
+   "index": 13,
+   "x_mm": 246.5,
+   "y_mm": 61.408
   },
   {
    "id": "MODBTN_L",
-   "index": 18,
-   "x_mm": 284.1,
-   "y_mm": 114.0
+   "index": 14,
+   "x_mm": 281.3,
+   "y_mm": 112.75
   }
  ],
  "muxes": {
@@ -159,7 +135,7 @@
    ],
    "mux": 0,
    "sense": "SENSE_0",
-   "x_mm": 16.25,
+   "x_mm": 11.0,
    "y_mm": 14.5
   },
   {
@@ -170,7 +146,7 @@
    ],
    "mux": 0,
    "sense": "SENSE_0",
-   "x_mm": 35.0,
+   "x_mm": 31.2,
    "y_mm": 14.5
   },
   {
@@ -181,7 +157,7 @@
    ],
    "mux": 0,
    "sense": "SENSE_0",
-   "x_mm": 48.0,
+   "x_mm": 51.4,
    "y_mm": 14.5
   },
   {
@@ -192,41 +168,63 @@
    ],
    "mux": 0,
    "sense": "SENSE_0",
-   "x_mm": 61.0,
+   "x_mm": 71.6,
    "y_mm": 14.5
   },
   {
    "channel": 4,
-   "id": "MELODY_A",
+   "id": "MOD_A",
    "ids": [
-    "MELODY_A"
+    "MOD_A"
    ],
    "mux": 0,
    "sense": "SENSE_0",
-   "x_mm": 74.0,
-   "y_mm": 14.5
+   "x_mm": 11.0,
+   "y_mm": 34.625
   },
   {
    "channel": 5,
-   "id": "SMOOTH_A",
-   "ids": [
-    "SMOOTH_A"
-   ],
-   "mux": 0,
-   "sense": "SENSE_0",
-   "x_mm": 31.25,
-   "y_mm": 34.0
-  },
-  {
-   "channel": 0,
    "id": "SHAPE_A",
    "ids": [
     "SHAPE_A"
    ],
+   "mux": 0,
+   "sense": "SENSE_0",
+   "x_mm": 31.2,
+   "y_mm": 34.625
+  },
+  {
+   "channel": 6,
+   "id": "DENSITY_A",
+   "ids": [
+    "DENSITY_A"
+   ],
+   "mux": 0,
+   "sense": "SENSE_0",
+   "x_mm": 51.4,
+   "y_mm": 34.625
+  },
+  {
+   "channel": 7,
+   "id": "SOURCE_A",
+   "ids": [
+    "SOURCE_A"
+   ],
+   "mux": 0,
+   "sense": "SENSE_0",
+   "x_mm": 71.6,
+   "y_mm": 34.625
+  },
+  {
+   "channel": 0,
+   "id": "SMOOTH_A",
+   "ids": [
+    "SMOOTH_A"
+   ],
    "mux": 1,
    "sense": "SENSE_0",
-   "x_mm": 18.25,
-   "y_mm": 34.0
+   "x_mm": 11.0,
+   "y_mm": 54.75
   },
   {
    "channel": 1,
@@ -236,8 +234,8 @@
    ],
    "mux": 1,
    "sense": "SENSE_0",
-   "x_mm": 44.25,
-   "y_mm": 34.0
+   "x_mm": 31.2,
+   "y_mm": 54.75
   },
   {
    "channel": 2,
@@ -248,63 +246,41 @@
    ],
    "mux": 1,
    "sense": "SENSE_0",
-   "x_mm": 68.25,
-   "y_mm": 34.0
+   "x_mm": 51.4,
+   "y_mm": 54.75
   },
   {
    "channel": 3,
-   "id": "SOURCE_A",
+   "id": "DECAY_A",
    "ids": [
-    "SOURCE_A"
+    "DECAY_A"
    ],
    "mux": 1,
    "sense": "SENSE_0",
-   "x_mm": 72.875,
-   "y_mm": 50.22
-  },
-  {
-   "channel": 4,
-   "id": "MOD_A",
-   "ids": [
-    "MOD_A"
-   ],
-   "mux": 1,
-   "sense": "SENSE_0",
-   "x_mm": 21.75,
-   "y_mm": 53.0
-  },
-  {
-   "channel": 5,
-   "id": "DENSITY_A",
-   "ids": [
-    "DENSITY_A"
-   ],
-   "mux": 1,
-   "sense": "SENSE_0",
-   "x_mm": 40.75,
-   "y_mm": 53.0
+   "x_mm": 71.6,
+   "y_mm": 54.75
   },
   {
    "channel": 0,
+   "id": "COLOR_A",
+   "ids": [
+    "COLOR_A"
+   ],
+   "mux": 2,
+   "sense": "SENSE_0",
+   "x_mm": 11.0,
+   "y_mm": 74.875
+  },
+  {
+   "channel": 1,
    "id": "TUNE_A",
    "ids": [
     "TUNE_A"
    ],
    "mux": 2,
    "sense": "SENSE_0",
-   "x_mm": 17.0,
-   "y_mm": 74.4
-  },
-  {
-   "channel": 1,
-   "id": "DETUNE_A",
-   "ids": [
-    "DETUNE_A"
-   ],
-   "mux": 2,
-   "sense": "SENSE_0",
-   "x_mm": 30.0,
-   "y_mm": 74.4
+   "x_mm": 31.2,
+   "y_mm": 74.875
   },
   {
    "channel": 2,
@@ -314,8 +290,8 @@
    ],
    "mux": 2,
    "sense": "SENSE_0",
-   "x_mm": 67.0,
-   "y_mm": 79.0
+   "x_mm": 51.4,
+   "y_mm": 74.875
   },
   {
    "channel": 3,
@@ -325,195 +301,206 @@
    ],
    "mux": 2,
    "sense": "SENSE_0",
-   "x_mm": 54.0,
-   "y_mm": 89.86
+   "x_mm": 71.6,
+   "y_mm": 74.875
   },
   {
    "channel": 4,
-   "id": "COLOR_A",
+   "id": "ROOT_A",
    "ids": [
-    "COLOR_A"
+    "ROOT_A"
    ],
    "mux": 2,
    "sense": "SENSE_0",
-   "x_mm": 23.5,
+   "x_mm": 11.0,
    "y_mm": 95.0
   },
   {
    "channel": 5,
+   "id": "DETUNE_A",
+   "ids": [
+    "DETUNE_A"
+   ],
+   "mux": 2,
+   "sense": "SENSE_0",
+   "x_mm": 31.2,
+   "y_mm": 95.0
+  },
+  {
+   "channel": 6,
    "id": "FLUXFB_A",
    "ids": [
     "FLUXFB_A"
    ],
    "mux": 2,
    "sense": "SENSE_0",
-   "x_mm": 67.0,
-   "y_mm": 97.0
+   "x_mm": 51.4,
+   "y_mm": 95.0
+  },
+  {
+   "channel": 7,
+   "id": "LINK_A",
+   "ids": [
+    "LINK_A"
+   ],
+   "mux": 2,
+   "sense": "SENSE_0",
+   "x_mm": 71.6,
+   "y_mm": 95.0
   },
   {
    "channel": 0,
+   "id": "MELODY_A",
+   "ids": [
+    "MELODY_A"
+   ],
+   "mux": 6,
+   "sense": "SENSE_2",
+   "x_mm": 91.8,
+   "y_mm": 14.5
+  },
+  {
+   "channel": 1,
    "id": "SCALE",
    "ids": [
     "SCALE"
    ],
    "mux": 6,
    "sense": "SENSE_2",
-   "x_mm": 132.9,
-   "y_mm": 14.5
-  },
-  {
-   "channel": 1,
-   "id": "DRIFT",
-   "ids": [
-    "DRIFT"
-   ],
-   "mux": 6,
-   "sense": "SENSE_2",
-   "x_mm": 145.9,
+   "x_mm": 129.4,
    "y_mm": 14.5
   },
   {
    "channel": 2,
-   "id": "DECAY_A",
-   "ids": [
-    "DECAY_A"
-   ],
-   "mux": 6,
-   "sense": "SENSE_2",
-   "x_mm": 81.25,
-   "y_mm": 34.0
-  },
-  {
-   "channel": 3,
-   "id": "RES_A",
-   "ids": [
-    "RES_A"
-   ],
-   "mux": 6,
-   "sense": "SENSE_2",
-   "x_mm": 94.25,
-   "y_mm": 34.0
-  },
-  {
-   "channel": 4,
-   "id": "SUB_A",
-   "ids": [
-    "SUB_A"
-   ],
-   "mux": 6,
-   "sense": "SENSE_2",
-   "x_mm": 107.25,
-   "y_mm": 34.0
-  },
-  {
-   "channel": 5,
-   "id": "TEMPO",
-   "ids": [
-    "TEMPO"
-   ],
-   "mux": 6,
-   "sense": "SENSE_2",
-   "x_mm": 139.4,
-   "y_mm": 34.0
-  },
-  {
-   "channel": 6,
-   "id": "TIDE",
-   "ids": [
-    "TIDE"
-   ],
-   "mux": 6,
-   "sense": "SENSE_2",
-   "x_mm": 136.4,
-   "y_mm": 50.22
-  },
-  {
-   "channel": 7,
    "id": "FILT_A",
    "ids": [
     "FILT_A"
    ],
    "mux": 6,
    "sense": "SENSE_2",
-   "x_mm": 88.875,
-   "y_mm": 53.0
+   "x_mm": 91.8,
+   "y_mm": 34.625
   },
   {
-   "channel": 0,
+   "channel": 3,
    "id": "DEPTH_A",
    "ids": [
     "DEPTH_A"
    ],
-   "mux": 7,
+   "mux": 6,
    "sense": "SENSE_2",
-   "x_mm": 104.875,
-   "y_mm": 50.22
+   "x_mm": 112.0,
+   "y_mm": 34.625
   },
   {
-   "channel": 1,
-   "id": "REV_SIZE",
+   "channel": 4,
+   "id": "TIDE",
    "ids": [
-    "REV_SIZE"
+    "TIDE"
+   ],
+   "mux": 6,
+   "sense": "SENSE_2",
+   "x_mm": 129.4,
+   "y_mm": 34.625
+  },
+  {
+   "channel": 5,
+   "id": "RES_A",
+   "ids": [
+    "RES_A"
+   ],
+   "mux": 6,
+   "sense": "SENSE_2",
+   "x_mm": 91.8,
+   "y_mm": 54.75
+  },
+  {
+   "channel": 6,
+   "id": "TEMPO",
+   "ids": [
+    "TEMPO"
+   ],
+   "mux": 6,
+   "sense": "SENSE_2",
+   "x_mm": 129.4,
+   "y_mm": 54.75
+  },
+  {
+   "channel": 0,
+   "id": "SUB_A",
+   "ids": [
+    "SUB_A"
    ],
    "mux": 7,
    "sense": "SENSE_2",
-   "x_mm": 136.4,
-   "y_mm": 74.4
+   "x_mm": 112.0,
+   "y_mm": 54.75
   },
   {
-   "channel": 2,
+   "channel": 1,
    "id": "COMP_A",
    "ids": [
     "COMP_A"
    ],
    "mux": 7,
    "sense": "SENSE_2",
-   "x_mm": 106.5,
-   "y_mm": 79.0
+   "x_mm": 91.8,
+   "y_mm": 74.875
   },
   {
-   "channel": 3,
-   "id": "LINK_A",
-   "ids": [
-    "LINK_A"
-   ],
-   "mux": 7,
-   "sense": "SENSE_2",
-   "x_mm": 80.0,
-   "y_mm": 89.86
-  },
-  {
-   "channel": 4,
+   "channel": 2,
    "id": "PAN_A",
    "ids": [
     "PAN_A"
    ],
    "mux": 7,
    "sense": "SENSE_2",
-   "x_mm": 103.75,
-   "y_mm": 97.0
+   "x_mm": 112.0,
+   "y_mm": 74.875
   },
   {
-   "channel": 5,
+   "channel": 3,
+   "id": "COUPLE",
+   "ids": [
+    "COUPLE"
+   ],
+   "mux": 7,
+   "sense": "SENSE_2",
+   "x_mm": 129.4,
+   "y_mm": 74.875
+  },
+  {
+   "channel": 4,
    "id": "GRIT_A",
    "ids": [
     "GRIT_A"
    ],
    "mux": 7,
    "sense": "SENSE_2",
-   "x_mm": 116.75,
-   "y_mm": 97.0
+   "x_mm": 91.8,
+   "y_mm": 95.0
   },
   {
-   "channel": 6,
+   "channel": 5,
    "id": "REV_MIX_A",
    "ids": [
     "REV_MIX_A"
    ],
    "mux": 7,
    "sense": "SENSE_2",
-   "x_mm": 129.75,
-   "y_mm": 97.0
+   "x_mm": 112.0,
+   "y_mm": 95.0
+  },
+  {
+   "channel": 6,
+   "id": "REV_DIFF",
+   "ids": [
+    "REV_DIFF"
+   ],
+   "mux": 7,
+   "sense": "SENSE_2",
+   "x_mm": 129.4,
+   "y_mm": 95.0
   },
   {
    "channel": 0,
@@ -523,7 +510,7 @@
    ],
    "mux": 8,
    "sense": "SENSE_3",
-   "x_mm": 158.9,
+   "x_mm": 152.4,
    "y_mm": 14.5
   },
   {
@@ -534,66 +521,22 @@
    ],
    "mux": 8,
    "sense": "SENSE_3",
-   "x_mm": 171.9,
+   "x_mm": 175.4,
    "y_mm": 14.5
   },
   {
    "channel": 2,
-   "id": "COUPLE",
+   "id": "MELODY_B",
    "ids": [
-    "COUPLE"
+    "MELODY_B"
    ],
    "mux": 8,
    "sense": "SENSE_3",
-   "x_mm": 152.4,
-   "y_mm": 34.0
+   "x_mm": 213.0,
+   "y_mm": 14.5
   },
   {
    "channel": 3,
-   "id": "SHUFFLE",
-   "ids": [
-    "SHUFFLE"
-   ],
-   "mux": 8,
-   "sense": "SENSE_3",
-   "x_mm": 165.4,
-   "y_mm": 34.0
-  },
-  {
-   "channel": 4,
-   "id": "SUB_B",
-   "ids": [
-    "SUB_B"
-   ],
-   "mux": 8,
-   "sense": "SENSE_3",
-   "x_mm": 197.55,
-   "y_mm": 34.0
-  },
-  {
-   "channel": 5,
-   "id": "PACE",
-   "ids": [
-    "PACE"
-   ],
-   "mux": 8,
-   "sense": "SENSE_3",
-   "x_mm": 168.4,
-   "y_mm": 50.22
-  },
-  {
-   "channel": 6,
-   "id": "DEPTH_B",
-   "ids": [
-    "DEPTH_B"
-   ],
-   "mux": 8,
-   "sense": "SENSE_3",
-   "x_mm": 199.925,
-   "y_mm": 50.22
-  },
-  {
-   "channel": 7,
    "id": "MORPH",
    "ids": [
     "MORPH"
@@ -601,21 +544,65 @@
    "mux": 8,
    "sense": "SENSE_3",
    "x_mm": 152.4,
-   "y_mm": 53.0
+   "y_mm": 34.625
+  },
+  {
+   "channel": 4,
+   "id": "PACE",
+   "ids": [
+    "PACE"
+   ],
+   "mux": 8,
+   "sense": "SENSE_3",
+   "x_mm": 175.4,
+   "y_mm": 34.625
+  },
+  {
+   "channel": 5,
+   "id": "DEPTH_B",
+   "ids": [
+    "DEPTH_B"
+   ],
+   "mux": 8,
+   "sense": "SENSE_3",
+   "x_mm": 192.8,
+   "y_mm": 34.625
+  },
+  {
+   "channel": 6,
+   "id": "SUB_B",
+   "ids": [
+    "SUB_B"
+   ],
+   "mux": 8,
+   "sense": "SENSE_3",
+   "x_mm": 192.8,
+   "y_mm": 54.75
   },
   {
    "channel": 0,
-   "id": "REV_DIFF",
+   "id": "REV_SIZE",
    "ids": [
-    "REV_DIFF"
+    "REV_SIZE"
    ],
    "mux": 9,
    "sense": "SENSE_3",
-   "x_mm": 168.4,
-   "y_mm": 74.4
+   "x_mm": 152.4,
+   "y_mm": 54.75
   },
   {
    "channel": 1,
+   "id": "SHUFFLE",
+   "ids": [
+    "SHUFFLE"
+   ],
+   "mux": 9,
+   "sense": "SENSE_3",
+   "x_mm": 175.4,
+   "y_mm": 54.75
+  },
+  {
+   "channel": 2,
    "id": "REV_DECAY",
    "ids": [
     "REV_DECAY"
@@ -623,21 +610,32 @@
    "mux": 9,
    "sense": "SENSE_3",
    "x_mm": 152.4,
-   "y_mm": 79.0
-  },
-  {
-   "channel": 2,
-   "id": "COMP_B",
-   "ids": [
-    "COMP_B"
-   ],
-   "mux": 9,
-   "sense": "SENSE_3",
-   "x_mm": 198.3,
-   "y_mm": 79.0
+   "y_mm": 74.875
   },
   {
    "channel": 3,
+   "id": "DRIFT",
+   "ids": [
+    "DRIFT"
+   ],
+   "mux": 9,
+   "sense": "SENSE_3",
+   "x_mm": 175.4,
+   "y_mm": 74.875
+  },
+  {
+   "channel": 4,
+   "id": "PAN_B",
+   "ids": [
+    "PAN_B"
+   ],
+   "mux": 9,
+   "sense": "SENSE_3",
+   "x_mm": 192.8,
+   "y_mm": 74.875
+  },
+  {
+   "channel": 5,
    "id": "REV_TONE",
    "ids": [
     "REV_TONE"
@@ -645,118 +643,29 @@
    "mux": 9,
    "sense": "SENSE_3",
    "x_mm": 152.4,
-   "y_mm": 97.0
+   "y_mm": 95.0
   },
   {
-   "channel": 4,
+   "channel": 6,
+   "id": "REV_MOD",
+   "ids": [
+    "REV_MOD"
+   ],
+   "mux": 9,
+   "sense": "SENSE_3",
+   "x_mm": 175.4,
+   "y_mm": 95.0
+  },
+  {
+   "channel": 7,
    "id": "REV_MIX_B",
    "ids": [
     "REV_MIX_B"
    ],
    "mux": 9,
    "sense": "SENSE_3",
-   "x_mm": 175.05,
-   "y_mm": 97.0
-  },
-  {
-   "channel": 5,
-   "id": "GRIT_B",
-   "ids": [
-    "GRIT_B"
-   ],
-   "mux": 9,
-   "sense": "SENSE_3",
-   "x_mm": 188.05,
-   "y_mm": 97.0
-  },
-  {
-   "channel": 6,
-   "id": "PAN_B",
-   "ids": [
-    "PAN_B"
-   ],
-   "mux": 9,
-   "sense": "SENSE_3",
-   "x_mm": 201.05,
-   "y_mm": 97.0
-  },
-  {
-   "channel": 0,
-   "id": "MELODY_B",
-   "ids": [
-    "MELODY_B"
-   ],
-   "mux": 3,
-   "sense": "SENSE_1",
-   "x_mm": 230.8,
-   "y_mm": 14.5
-  },
-  {
-   "channel": 1,
-   "id": "RATE_B",
-   "ids": [
-    "RATE_B"
-   ],
-   "mux": 3,
-   "sense": "SENSE_1",
-   "x_mm": 243.8,
-   "y_mm": 14.5
-  },
-  {
-   "channel": 2,
-   "id": "RES_B",
-   "ids": [
-    "RES_B"
-   ],
-   "mux": 3,
-   "sense": "SENSE_1",
-   "x_mm": 210.55,
-   "y_mm": 34.0
-  },
-  {
-   "channel": 3,
-   "id": "DECAY_B",
-   "ids": [
-    "DECAY_B"
-   ],
-   "mux": 3,
-   "sense": "SENSE_1",
-   "x_mm": 223.55,
-   "y_mm": 34.0
-  },
-  {
-   "channel": 4,
-   "id": "ATTACK_B",
-   "ids": [
-    "ATTACK_B",
-    "STAGES_B"
-   ],
-   "mux": 3,
-   "sense": "SENSE_1",
-   "x_mm": 236.55,
-   "y_mm": 34.0
-  },
-  {
-   "channel": 5,
-   "id": "SOURCE_B",
-   "ids": [
-    "SOURCE_B"
-   ],
-   "mux": 3,
-   "sense": "SENSE_1",
-   "x_mm": 231.925,
-   "y_mm": 50.22
-  },
-  {
-   "channel": 6,
-   "id": "FILT_B",
-   "ids": [
-    "FILT_B"
-   ],
-   "mux": 3,
-   "sense": "SENSE_1",
-   "x_mm": 215.925,
-   "y_mm": 53.0
+   "x_mm": 192.8,
+   "y_mm": 95.0
   },
   {
    "channel": 0,
@@ -764,9 +673,9 @@
    "ids": [
     "SONG_B"
    ],
-   "mux": 4,
+   "mux": 3,
    "sense": "SENSE_1",
-   "x_mm": 256.8,
+   "x_mm": 253.4,
    "y_mm": 14.5
   },
   {
@@ -775,9 +684,9 @@
    "ids": [
     "STEPS_B"
    ],
-   "mux": 4,
+   "mux": 3,
    "sense": "SENSE_1",
-   "x_mm": 269.8,
+   "x_mm": 273.6,
    "y_mm": 14.5
   },
   {
@@ -786,142 +695,242 @@
    "ids": [
     "ENGINE_B"
    ],
-   "mux": 4,
+   "mux": 3,
    "sense": "SENSE_1",
-   "x_mm": 288.55,
+   "x_mm": 293.8,
    "y_mm": 14.5
   },
   {
    "channel": 3,
-   "id": "RANGE_B",
-   "ids": [
-    "RANGE_B"
-   ],
-   "mux": 4,
-   "sense": "SENSE_1",
-   "x_mm": 260.55,
-   "y_mm": 34.0
-  },
-  {
-   "channel": 4,
-   "id": "SMOOTH_B",
-   "ids": [
-    "SMOOTH_B"
-   ],
-   "mux": 4,
-   "sense": "SENSE_1",
-   "x_mm": 273.55,
-   "y_mm": 34.0
-  },
-  {
-   "channel": 5,
    "id": "SHAPE_B",
    "ids": [
     "SHAPE_B"
    ],
-   "mux": 4,
+   "mux": 3,
    "sense": "SENSE_1",
-   "x_mm": 286.55,
-   "y_mm": 34.0
+   "x_mm": 273.6,
+   "y_mm": 34.625
+  },
+  {
+   "channel": 4,
+   "id": "MOD_B",
+   "ids": [
+    "MOD_B"
+   ],
+   "mux": 3,
+   "sense": "SENSE_1",
+   "x_mm": 293.8,
+   "y_mm": 34.625
+  },
+  {
+   "channel": 5,
+   "id": "RANGE_B",
+   "ids": [
+    "RANGE_B"
+   ],
+   "mux": 3,
+   "sense": "SENSE_1",
+   "x_mm": 273.6,
+   "y_mm": 54.75
   },
   {
    "channel": 6,
+   "id": "SMOOTH_B",
+   "ids": [
+    "SMOOTH_B"
+   ],
+   "mux": 3,
+   "sense": "SENSE_1",
+   "x_mm": 293.8,
+   "y_mm": 54.75
+  },
+  {
+   "channel": 7,
+   "id": "COLOR_B",
+   "ids": [
+    "COLOR_B"
+   ],
+   "mux": 3,
+   "sense": "SENSE_1",
+   "x_mm": 293.8,
+   "y_mm": 74.875
+  },
+  {
+   "channel": 0,
+   "id": "RATE_B",
+   "ids": [
+    "RATE_B"
+   ],
+   "mux": 4,
+   "sense": "SENSE_1",
+   "x_mm": 233.2,
+   "y_mm": 14.5
+  },
+  {
+   "channel": 1,
+   "id": "FILT_B",
+   "ids": [
+    "FILT_B"
+   ],
+   "mux": 4,
+   "sense": "SENSE_1",
+   "x_mm": 213.0,
+   "y_mm": 34.625
+  },
+  {
+   "channel": 2,
+   "id": "SOURCE_B",
+   "ids": [
+    "SOURCE_B"
+   ],
+   "mux": 4,
+   "sense": "SENSE_1",
+   "x_mm": 233.2,
+   "y_mm": 34.625
+  },
+  {
+   "channel": 3,
    "id": "DENSITY_B",
    "ids": [
     "DENSITY_B"
    ],
    "mux": 4,
    "sense": "SENSE_1",
-   "x_mm": 264.05,
-   "y_mm": 53.0
-  },
-  {
-   "channel": 7,
-   "id": "MOD_B",
-   "ids": [
-    "MOD_B"
-   ],
-   "mux": 4,
-   "sense": "SENSE_1",
-   "x_mm": 283.05,
-   "y_mm": 53.0
-  },
-  {
-   "channel": 0,
-   "id": "DETUNE_B",
-   "ids": [
-    "DETUNE_B"
-   ],
-   "mux": 5,
-   "sense": "SENSE_1",
-   "x_mm": 274.8,
-   "y_mm": 74.4
-  },
-  {
-   "channel": 1,
-   "id": "TUNE_B",
-   "ids": [
-    "TUNE_B"
-   ],
-   "mux": 5,
-   "sense": "SENSE_1",
-   "x_mm": 287.8,
-   "y_mm": 74.4
-  },
-  {
-   "channel": 2,
-   "id": "FLUX_B",
-   "ids": [
-    "FLUX_B"
-   ],
-   "mux": 5,
-   "sense": "SENSE_1",
-   "x_mm": 237.8,
-   "y_mm": 79.0
-  },
-  {
-   "channel": 3,
-   "id": "LINK_B",
-   "ids": [
-    "LINK_B"
-   ],
-   "mux": 5,
-   "sense": "SENSE_1",
-   "x_mm": 224.8,
-   "y_mm": 89.86
+   "x_mm": 253.4,
+   "y_mm": 34.625
   },
   {
    "channel": 4,
+   "id": "RES_B",
+   "ids": [
+    "RES_B"
+   ],
+   "mux": 4,
+   "sense": "SENSE_1",
+   "x_mm": 213.0,
+   "y_mm": 54.75
+  },
+  {
+   "channel": 5,
+   "id": "DECAY_B",
+   "ids": [
+    "DECAY_B"
+   ],
+   "mux": 4,
+   "sense": "SENSE_1",
+   "x_mm": 233.2,
+   "y_mm": 54.75
+  },
+  {
+   "channel": 6,
+   "id": "ATTACK_B",
+   "ids": [
+    "ATTACK_B",
+    "STAGES_B"
+   ],
+   "mux": 4,
+   "sense": "SENSE_1",
+   "x_mm": 253.4,
+   "y_mm": 54.75
+  },
+  {
+   "channel": 7,
+   "id": "COMP_B",
+   "ids": [
+    "COMP_B"
+   ],
+   "mux": 4,
+   "sense": "SENSE_1",
+   "x_mm": 213.0,
+   "y_mm": 74.875
+  },
+  {
+   "channel": 0,
    "id": "FLUXRATE_B",
    "ids": [
     "FLUXRATE_B"
    ],
    "mux": 5,
    "sense": "SENSE_1",
-   "x_mm": 250.8,
-   "y_mm": 89.86
+   "x_mm": 233.2,
+   "y_mm": 74.875
   },
   {
-   "channel": 5,
-   "id": "COLOR_B",
+   "channel": 1,
+   "id": "FLUX_B",
    "ids": [
-    "COLOR_B"
+    "FLUX_B"
    ],
    "mux": 5,
    "sense": "SENSE_1",
-   "x_mm": 281.3,
+   "x_mm": 253.4,
+   "y_mm": 74.875
+  },
+  {
+   "channel": 2,
+   "id": "TUNE_B",
+   "ids": [
+    "TUNE_B"
+   ],
+   "mux": 5,
+   "sense": "SENSE_1",
+   "x_mm": 273.6,
+   "y_mm": 74.875
+  },
+  {
+   "channel": 3,
+   "id": "GRIT_B",
+   "ids": [
+    "GRIT_B"
+   ],
+   "mux": 5,
+   "sense": "SENSE_1",
+   "x_mm": 213.0,
    "y_mm": 95.0
   },
   {
-   "channel": 6,
+   "channel": 4,
+   "id": "LINK_B",
+   "ids": [
+    "LINK_B"
+   ],
+   "mux": 5,
+   "sense": "SENSE_1",
+   "x_mm": 233.2,
+   "y_mm": 95.0
+  },
+  {
+   "channel": 5,
    "id": "FLUXFB_B",
    "ids": [
     "FLUXFB_B"
    ],
    "mux": 5,
    "sense": "SENSE_1",
-   "x_mm": 237.8,
-   "y_mm": 97.0
+   "x_mm": 253.4,
+   "y_mm": 95.0
+  },
+  {
+   "channel": 6,
+   "id": "DETUNE_B",
+   "ids": [
+    "DETUNE_B"
+   ],
+   "mux": 5,
+   "sense": "SENSE_1",
+   "x_mm": 273.6,
+   "y_mm": 95.0
+  },
+  {
+   "channel": 7,
+   "id": "ROOT_B",
+   "ids": [
+    "ROOT_B"
+   ],
+   "mux": 5,
+   "sense": "SENSE_1",
+   "x_mm": 293.8,
+   "y_mm": 95.0
   }
  ],
  "sense_order": [
@@ -933,8 +942,8 @@
  "source": "host/vcv/res/FireflowHW-holes.json",
  "spare": [
   {
-   "channel": 7,
-   "mux": 0,
+   "channel": 6,
+   "mux": 1,
    "sense": "SENSE_0"
   },
   {
@@ -943,14 +952,9 @@
    "sense": "SENSE_0"
   },
   {
-   "channel": 6,
-   "mux": 2,
-   "sense": "SENSE_0"
-  },
-  {
    "channel": 7,
-   "mux": 2,
-   "sense": "SENSE_0"
+   "mux": 6,
+   "sense": "SENSE_2"
   },
   {
    "channel": 7,
@@ -959,18 +963,8 @@
   },
   {
    "channel": 7,
-   "mux": 9,
+   "mux": 8,
    "sense": "SENSE_3"
-  },
-  {
-   "channel": 7,
-   "mux": 3,
-   "sense": "SENSE_1"
-  },
-  {
-   "channel": 7,
-   "mux": 5,
-   "sense": "SENSE_1"
   }
  ]
 }

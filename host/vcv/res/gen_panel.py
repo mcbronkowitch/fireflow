@@ -1007,23 +1007,19 @@ STATIC_LIGHTS = [c for c in LIGHTS if c.enum not in ("REC_A_L", "REC_B_L")]
 # coordinates. Exactly the split HW_MOD_INPUTS already uses. Coordinates are
 # 0/0 here and come from gen_hw_panel's LIGHT_POS, same as those jacks.
 HW_ONLY_LIGHTS = [
-    Ctl("SRC_A_L",     LIGHT, 0, 0, ""),   # LANE_SOURCE excursion
-    Ctl("SRC_B_L",     LIGHT, 0, 0, ""),
-    Ctl("FLT_A_L",     LIGHT, 0, 0, ""),   # LANE_SIZE excursion
-    Ctl("FLT_B_L",     LIGHT, 0, 0, ""),
-    Ctl("CLR_A_L",     LIGHT, 0, 0, ""),   # LANE_MOTION excursion
-    Ctl("CLR_B_L",     LIGHT, 0, 0, ""),
-    Ctl("LVL_A_L",     LIGHT, 0, 0, ""),   # LANE_LEVEL excursion
-    Ctl("LVL_B_L",     LIGHT, 0, 0, ""),
+    Ctl("LVL_A_L",     LIGHT, 0, 0, ""),   # deck delivers signal (spec 2026-10-07 §5);
+    Ctl("LVL_B_L",     LIGHT, 0, 0, ""),   # the VCV law still shows LANE_LEVEL until P6b
     Ctl("SONG_A_L",    LIGHT, 0, 0, ""),   # which phrase snapshot is sounding
     Ctl("SONG_B_L",    LIGHT, 0, 0, ""),
-    Ctl("FLOW_A_L",    LIGHT, 0, 0, ""),   # drawn since the regroup, never lit
+    Ctl("FTIME_A_L",   LIGHT, 0, 0, ""),   # one flash per FLUX time period while MIX > 0
+    Ctl("FTIME_B_L",   LIGHT, 0, 0, ""),
+    Ctl("FLOW_A_L",    LIGHT, 0, 0, ""),   # LightId only: gen_hw_panel skips it, never drawn
     Ctl("FLOW_B_L",    LIGHT, 0, 0, ""),
     Ctl("TEMPO_L",     LIGHT, 0, 0, ""),
-    Ctl("SYNC_L",      LIGHT, 0, 0, ""),
-    Ctl("MODBTN_L",    LIGHT, 0, 0, ""),   # latched, per spec 3.4
-    Ctl("SHIFTBTN_L",  LIGHT, 0, 0, ""),
-    Ctl("CEIL_L",      LIGHT, 0, 0, ""),   # the master shaper is bending
+    Ctl("CLK_L",       LIGHT, 0, 0, ""),   # a pulse at the CLOCK jack (was SYNC_L)
+    Ctl("RST_L",       LIGHT, 0, 0, ""),   # a reset received
+    Ctl("MODBTN_L",    LIGHT, 0, 0, ""),   # MOD latched, otherwise the limiter
+    Ctl("SHIFTBTN_L",  LIGHT, 0, 0, ""),   # SHIFT latched, otherwise input level
 ]
 
 # --- shared panel lettering (drawn by SVG for preview, by C++ at runtime) -----

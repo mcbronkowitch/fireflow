@@ -7,15 +7,15 @@ verdict. Re-runs itself under KiCad's Python.
 3. Every gated step of route_check has a sabotage and a `_missing` one, and
    every sabotage has its own phrase (WHY).
 4. KNOWN_PANEL names only what spec §4.4 admits, and the name rule itself
-   refuses what it must refuse:
-   - drc keys: a gated class word, then names of the 18 jacks (hole y 114.0),
-     the SONG clusters or the pairs GATE_A_L/SOURCE_A and LVL_B_L/PAN_B, each
-     pair only with its own partner;
-   - routed keys: "unrouted", then such names; a key with one name is only
-     one of the two SONG plane cut-offs ("unrouted SONG_A", "unrouted
-     SONG_B"); "unrouted net ..." never;
+   refuses what it must refuse. Since the 9 mm panel pass (2026-10-08) the
+   SONG clusters, the GATE_A_L/SOURCE_A and LVL_B_L/PAN_B pairs and the SONG
+   plane cut-offs are no longer admitted:
+   - drc keys: a gated class word, then names of the 18 jacks (hole y 112.75);
+   - routed keys: "unrouted", then such names, at least two; "unrouted net
+     ..." never;
    - audio keys (bare, no class word): exactly one of the jack-zone pairs
-     CEIL_L/OUT_R and IN_L/SHIFTBTN_L (Bastian, 2026-09-30).
+     IN_L/SHIFTBTN_L and MODBTN_L/OUT_R (Bastian, 2026-09-30, renewed
+     2026-10-07 for the combined lamps).
 5. An in-process build, saved and reloaded, is green in every step. Its
    exemption zones (module and jack) lie pairwise more than AUDIO_MM apart
    (a pair with items in two different zones is exempt and never measured),
@@ -26,6 +26,11 @@ verdict. Re-runs itself under KiCad's Python.
    item; drc_cut also turns rules_file red on the saved report.
 7. Branch probes: the non-vacuity and count branches no sabotage reaches are
    each driven red once, with their own phrase on their own step (PROBES).
+8. U_REG's heat copper rule (route.reg_copper_rects, Task 7c 2026-10-08)
+   gives the hand-computed L on a synthetic field, touches no keep-out and
+   refuses a keep-out on the tab (check_reg_rule).
+9. The router's AUDIO_MM / EDGE_MM (rules.py) equal route_check's own copies
+   (check_rule_copies).
 
 Counts on a sabotaged board are never asserted: kicad-cli's counts vary from
 run to run where copper crosses (probed 2026-10-01: 9 or 11 clearance items)."""
@@ -65,22 +70,26 @@ KIPY = sys.executable
 ROOT = None                  # scratch directory of this run, removed at the end
 UNGATED_STEPS = ("report", "render")
 
-# Spec §4.4. The P4-1 pairs (Bastian, 2026-09-29) and the jack-zone pairs
-# (Bastian, 2026-09-30): a key naming one of a pair names nothing else. The
-# jack-zone pairs are admitted for the audio step's jack zones only.
-PAIRS = ({"GATE_A_L", "SOURCE_A"}, {"LVL_B_L", "PAN_B"})
-ZONE_PAIRS = ({"CEIL_L", "OUT_R"}, {"IN_L", "SHIFTBTN_L"})
-SONG = {"SONG_A", "SONG_B", "SONG_A_L", "SONG_B_L"}
-CUT_OFF_KEYS = {"unrouted SONG_A", "unrouted SONG_B"}   # the SONG lamps' plane cut-offs
+# Spec §4.4. The P4-1 pairs (Bastian, 2026-09-29), the SONG clusters and
+# their plane cut-offs were admitted until the panel pass and are gone since
+# 2026-10-08 (Task 7c): nothing of them may be listed again. The jack-zone
+# pairs (Bastian, 2026-09-30; renewed 2026-10-07 for the combined lamps) stay,
+# for the audio step's jack zones only: a key naming one of a pair names
+# nothing else.
+PAIRS = ()
+ZONE_PAIRS = ({"IN_L", "SHIFTBTN_L"}, {"MODBTN_L", "OUT_R"})
+SONG = set()
+CUT_OFF_KEYS = set()
 CLASS_WORDS = {"routed": {"unrouted"}, "drc": set(RC.GATED_DRC)}
 
-# The jack zones as the audio step finds them on the 2026-10-01 board (spec
-# §4.2.2, review M2): the key, the victim pad and every aggressor pad by
-# ref.pad. A new aggressor pad (panel or not) that widens a zone under the
-# same key turns this red. Empties with KNOWN_PANEL["audio"] at the panel pass.
+# The jack zones as the audio step finds them (spec §4.2.2, review M2): the
+# key, the victim pad and every aggressor pad by ref.pad. A new aggressor pad
+# (panel or not) that widens a zone under the same key turns this red. The
+# panel pass (2026-10-08, Task 7c) did not empty them: two pairs stay,
+# admitted, with the members of the new board's route_check report.
 JACK_ZONES = {
-    "CEIL_L/OUT_R": ("J18.T", {"D17.2", "R34.1", "R34.2"}),
-    "IN_L/SHIFTBTN_L": ("J1.T", {"D1.2"}),
+    "IN_L/SHIFTBTN_L": ("J1.T", {"D1.2", "R18.1", "R18.2"}),
+    "MODBTN_L/OUT_R": ("J18.T", {"D15.2"}),
 }
 
 STEP_RE = re.compile(r"^(RED|   ) \d+\. (\S+)")
@@ -144,7 +153,7 @@ def admissible(chk, key, jacks):
     if chk == "audio":
         # bare keys: no class word, the names are the whole key
         names = set(CK.key_names(key, set()))
-        return (CK.key_allowed(key, jacks | {"CEIL_L", "SHIFTBTN_L"}, ZONE_PAIRS, set())
+        return (CK.key_allowed(key, jacks | set().union(*ZONE_PAIRS), ZONE_PAIRS, set())
                 and names in [set(p) for p in ZONE_PAIRS])
     words = CLASS_WORDS.get(chk)
     if words is None or key.partition(" ")[0] not in words or key.startswith("unrouted net "):
@@ -158,29 +167,31 @@ def admissible(chk, key, jacks):
 
 def check_key_names(jacks):
     """The name rule is itself able to go red (keys it must refuse)."""
-    good = [("drc", "copper_edge_clearance CLOCK"), ("drc", "shorting_items GATE_A_L/SOURCE_A"),
-            ("drc", "shorting_items SONG_A/SONG_A_L"), ("drc", "clearance IN_L/IN_R"),
-            ("routed", "unrouted SONG_A"), ("routed", "unrouted SONG_B"), ("routed", "unrouted CLOCK/RESET"),
-            ("audio", "CEIL_L/OUT_R"), ("audio", "IN_L/SHIFTBTN_L")]
+    good = [("drc", "copper_edge_clearance CLOCK"), ("drc", "clearance IN_L/IN_R"),
+            ("routed", "unrouted CLOCK/RESET"),
+            ("audio", "MODBTN_L/OUT_R"), ("audio", "IN_L/SHIFTBTN_L")]
     bad = [("routed", "unrouted OUT_L"),          # a pad-to-track gap at one jack
-           ("routed", "unrouted SOURCE_A"),       # one name of an admitted pair
-           ("routed", "unrouted SONG_A_L"),       # one name, but not a listed cut-off
+           ("routed", "unrouted SOURCE_A"),       # one name of a pair no longer admitted
+           ("routed", "unrouted SONG_A"),         # a SONG plane cut-off, gone with the panel pass
+           ("routed", "unrouted SONG_A_L"),       # one name, not a cut-off
            ("routed", "unrouted net SENSE_2"),    # a gap between tracks
            ("routed", "unrouted net ?"),
            ("routed", "unrouted CLOCK_BOGUS"),    # not a part
            ("routed", "clearance CLOCK"),         # a drc class word under routed
-           ("drc", "unrouted SONG_A"),            # routed's class word under drc
+           ("drc", "unrouted CLOCK/RESET"),       # routed's class word under drc
            ("drc", "CLOCK"),                      # no class word
            ("drc", "widget CLOCK"),               # an unknown class word
-           ("drc", "clearance CEIL_L/OUT_R"),     # a jack-zone pair outside the audio step
-           ("drc", "shorting_items SONG_A/GATE_A_L"),   # one of a pair with a stranger
+           ("drc", "clearance MODBTN_L/OUT_R"),   # a jack-zone pair outside the audio step
+           ("drc", "shorting_items GATE_A_L/SOURCE_A"),  # a P4-1 pair, gone with the panel pass
+           ("drc", "shorting_items SONG_A/SONG_A_L"),    # a SONG cluster, gone with the panel pass
            ("drc", "clearance "),                 # no names at all
            ("audio", "OUT_R"),                    # a jack alone
-           ("audio", "CEIL_L/IN_L"),              # across the two pairs
-           ("audio", "CEIL_L/OUT_R/SHIFTBTN_L"),
-           ("audio", "jack CEIL_L/OUT_R"),        # a class word on a bare key
+           ("audio", "IN_L/MODBTN_L"),            # across the two pairs
+           ("audio", "MODBTN_L/OUT_R/SHIFTBTN_L"),
+           ("audio", "CEIL_L/OUT_R"),             # the 2026-09-30 name, gone with the panel pass
+           ("audio", "jack MODBTN_L/OUT_R"),      # a class word on a bare key
            ("audio", "IN_L/SHIFTBTN_L/SONG_A"),
-           ("planes", "unrouted SONG_A")]         # a check that has no known list
+           ("planes", "unrouted CLOCK/RESET")]    # a check that has no known list
     for chk, k in good:
         check(admissible(chk, k, jacks), "name rule accepts %s %r" % (chk, k))
     for chk, k in bad:
@@ -198,6 +209,41 @@ def check_sabotage_coverage():
     for name in sorted(RC.SABOTAGES):
         check(bool(RC.WHY.get(name)) and name in RC.TURNS_RED,
               "sabotage %s names its step and its phrase" % name)
+
+
+def check_rule_copies():
+    """The router's audio distances (rules.py) and the check's own copies
+    (route_check.py; a check keeps its thresholds on purpose) are the same
+    values: compared, never derived one from the other (Task 7c review,
+    2026-10-08)."""
+    import rules as RU
+    for name in ("AUDIO_MM", "EDGE_MM"):
+        a, b = getattr(RU, name, None), getattr(RC, name, None)
+        check(a is not None and a == b, "rules.%s %r equals route_check.%s %r" % (name, a, name, b))
+
+
+def check_reg_rule():
+    """route.reg_copper_rects on a hand-computed field (Task 7c, 2026-10-08):
+    tab (0, 0, 2, 4), grid 0.5, half-size 5 (window x -4..6, y -3..7), a pin
+    column left of the tab (x < -0.5 for y -1..5) and a foreign box top
+    right (x >= 3 for y < 1). The largest rectangle holding the tab is
+    (-0.5, -3, 3, 7), 35 mm2; the best partner overlapping it by >= 2 mm
+    both ways is (-0.5, 1, 6, 7), union 53 mm2. No rectangle may touch a
+    keep-out, and a keep-out on the tab is refused."""
+    tab = (0.0, 0.0, 2.0, 4.0)
+    keep = [(-10.0, -1.0, -0.5, 5.0), (3.0, -3.0, 6.0, 1.0)]
+    inner = (-100.0, -100.0, 100.0, 100.0)
+    got = R.reg_copper_rects(tab, keep, inner, win=5.0, grid=0.5)
+    check(got == [(-0.5, -3.0, 3.0, 7.0), (-0.5, 1.0, 6.0, 7.0)],
+          "heat copper rule: the hand-computed L, got %r" % (got,))
+    check(all(not PL.overlaps(r, k) for r in got for k in keep),
+          "heat copper rule: no rectangle overlaps a keep-out")
+    try:
+        R.reg_copper_rects(tab, keep + [(1.0, 1.0, 1.2, 1.2)], inner, win=5.0, grid=0.5)
+        refused = False
+    except ValueError:
+        refused = True
+    check(refused, "heat copper rule: a keep-out on the tab is refused")
 
 
 def check_known_names(jacks):
@@ -312,12 +358,14 @@ def _prep_zone_dup(s, pcb, prefix):
 
 
 def _prep_rules_severity(s, pcb, prefix):
-    """A project file with the five rule values unchanged and clearance
-    switched to "ignore" (probed 2026-10-01: clearance 0 under it, 8 under
-    the saved one), so only the count comparison can see it."""
+    """A project file with the five rule values unchanged and courtyards_overlap
+    switched to "ignore", so only the count comparison can see it. It was
+    clearance until 2026-10-08 (8 items under the saved pro on the old
+    board); the 9 mm plate board has no clearance item, but 11 front
+    courtyard overlaps, the only gated class with items there."""
     with open(os.path.join(HERE, "kicad", "reva.kicad_pro"), encoding="utf-8") as fh:
         body = json.load(fh)
-    body["board"]["design_settings"]["rule_severities"] = {"clearance": "ignore"}
+    body["board"]["design_settings"]["rule_severities"] = {"courtyards_overlap": "ignore"}
     s.rules_pro_bytes = json.dumps(body).encode("utf-8")
 
 
@@ -334,12 +382,15 @@ PROBES = {
     "planes_no_zone": (_mut_no_gnd_zone, None, None, [("planes", "no filled GND zone on In1.Cu")], []),
     "routed_router": (None, _prep_router_failed, ["routed"],
                       [("routed", "router left 3 nets in conflict"), ("routed", "router failed nets: SENSE_2")], []),
-    "routed_count": (None, _drop_header(lambda ln: ln.startswith("[unconnected_items]")), ["routed"],
-                     [("routed", "unconnected pads but")], []),
+    # the routed board has no unconnected item since the 9 mm panel pass
+    # (2026-10-08): the routed sabotage's open connection gives the block
+    # whose header the probe drops
+    "routed_count": (RC.SABOTAGES["routed"], _drop_header(lambda ln: ln.startswith("[unconnected_items]")),
+                     ["routed"], [("routed", "unconnected pads but")], []),
     "drc_count": (None, _drop_header(lambda ln: not ln.startswith("[unconnected_items]")), ["drc"],
                   [("drc", "the DRC report was not read: complete True")], []),
     "rules_count": (None, _prep_rules_severity, ["rules_file"],
-                    [("rules_file", "class clearance: 0 under the committed pro")],
+                    [("rules_file", "class courtyards_overlap: 0 under the committed pro")],
                     [("rules_file", "in reva.kicad_pro, not")]),
     "zones_all": (None, _prep_zone_all, ["audio", "lr"],
                   [("audio", "OUT_L: no copper outside the exemption zones"),
@@ -443,13 +494,15 @@ def run():
           and open(R.COMMITTED, "rb").read() == open(pcb1, "rb").read(),
           "committed %s equals a fresh run (rerun route.py --write)" % os.path.relpath(R.COMMITTED))
 
-    # The jack row: the 18 jacks, hole y 114.0.
+    # The jack row: the 18 jacks, hole y 112.75 (JACK_Y since the 9 mm panel pass).
     jacks = {h["id"] for h in assign.load_holes()
-             if h["kind"] == "jack" and abs(h["y_mm"] - 114.0) < 1e-6}
-    check(len(jacks) == 18, "the jack row is the 18 jacks at y 114.0 (%d)" % len(jacks))
+             if h["kind"] == "jack" and abs(h["y_mm"] - 112.75) < 1e-6}
+    check(len(jacks) == 18, "the jack row is the 18 jacks at y 112.75 (%d)" % len(jacks))
     check_key_names(jacks)
     check_known_names(jacks)
     check_sabotage_coverage()
+    check_reg_rule()
+    check_rule_copies()
     lap("static checks")
 
     base = R.build()

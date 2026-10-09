@@ -121,11 +121,16 @@ def pot_positions():
     Read from host/vcv/res/gen_hw_panel.py, the authority (importing it
     writes nothing).  Size classes G and S are pots, P are keycaps on the 165
     chain; STAGES shares ATTACK's knob, so positions are counted, not params.
+    The three reserved pots (ROOT_A, ROOT_B, REV_MOD: HW_ONLY entries of
+    class S) send nothing but are read through a mux channel like every pot
+    (spec 2026-10-07 sections 4 and 8), so HW_ONLY's pots are counted too; its
+    keycap (SHIFTBTN) is a 165-chain input, not a pot.
     """
     sys.path.insert(0, _HW_RES)
     import gen_hw_panel as g
-    return len({(round(c.x, 3), round(c.y, 3)) for c in g.HW_PARAMS
-                if g.hw_class(c.enum) in ("G", "S")})
+    knobs = [c for c in g.HW_PARAMS if g.hw_class(c.enum) in ("G", "S")]
+    knobs += [c for c in g.HW_ONLY if c.kind == g.gp.SMKNOB]
+    return len({(round(c.x, 3), round(c.y, 3)) for c in knobs})
 
 
 def topology(chip, n_channels):

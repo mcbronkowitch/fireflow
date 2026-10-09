@@ -83,7 +83,7 @@ TEST_CASE("controls: an entry records its sense pin, -1 when unrecorded") {
 }
 
 TEST_CASE("controls: the Rev A table has one row per pot") {
-    CHECK(shell::kRevaTable.count == 70);
+    CHECK(shell::kRevaTable.count == 73);
 }
 
 TEST_CASE("controls: every Rev A row is a channel the scan reads, on its own sense pin") {

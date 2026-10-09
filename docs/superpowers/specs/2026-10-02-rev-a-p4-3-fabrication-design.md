@@ -29,17 +29,20 @@ P4-3 has two halves:
 
 Like P4-1 and P4-2, P4-3 runs now, before the panel freeze (6 Nov). The
 pipeline and every check are built and green against today's board. The
-order-ready package is **not** committed until the panel pass has emptied the
-known lists; it is then one re-run (§9).
+order-ready package is **not** committed until the panel pass has left no
+known entry without a sign-off; it is then one re-run (§9). *(Amended
+2026-10-08, §4.4.6: this said "has emptied the known lists"; a deliberate
+entry with a sign-off no longer blocks.)*
 
 ## 2. Decisions taken in brainstorming (Bastian, 2026-10-02)
 
 1. **Pipeline now, package later.** Everything in §1 is built and runs on
    today's board. Outputs land in `hardware/reva/out/fab/` (gitignored).
    `fab.py --release` writes the committed package to `hardware/reva/fab/` and
-   refuses while a known list is non-empty or a rotation entry is unverified
-   (§4.4.3). The refusal is not a ctest gate, so ctest stays green before the
-   freeze.
+   refuses while a known entry has no sign-off or a rotation entry is
+   unverified (§4.4.3, §4.4.6). The refusal is not a ctest gate, so ctest
+   stays green before the freeze. *(Amended 2026-10-08: this said "while a
+   known list is non-empty"; see §4.4.6.)*
 2. **Front silkscreen: outlines and polarity only.** The front disappears
    behind the plate and carries only the 112 hand-soldered panel parts.
    Footprint outlines and polarity marks (LED flat, pin 1) stay; reference
@@ -347,12 +350,26 @@ Rev A gets two sheets, `reva-assembly-front.svg` and
 - Front and back renders of the committed board (`kicad-cli pcb render`),
   looked at every iteration (rule 2).
 - `order_ready` prints the open items: every entry of the known lists of
-  `place_check.py` and `route_check.py`, every `NO_ROOM` entry (informational
+  `place_check.py` and `route_check.py` that has no sign-off (see the
+  amendment below), every `NO_ROOM` entry (informational
   only — the assembly sheet covers them), and every unverified `ROT_FIX` entry.
 - `--release` runs every check, refuses on any open known-list entry or
   unverified rotation, and otherwise writes the package to
   `hardware/reva/fab/`: `gerbers/`, `reva-gerbers.zip`, `bom-jlc.csv`,
   `cpl-jlc.csv`, both assembly sheets, both renders.
+- *Amended 2026-10-08 (Task 7c, Bastian): release sign-off.* A known-list
+  entry that is deliberate design, not an open defect, carries a sign-off
+  next to its list: `SIGNED_OFF[(check, key)] = {"by", "date", "why"}` in
+  `place_check.py` / `route_check.py`, in the style of `BOTTOM_SIGN`'s
+  `verified`.
+  - "Open" means a known entry without a complete sign-off. Only those block
+    `--release` and count in `order_ready`.
+  - A sign-off whose entry is no longer listed also blocks, so it cannot go
+    stale.
+  - The checks' own gating is unchanged: a signed-off entry is still a known
+    item there.
+  - First use: the two audio jack zones IN_L/SHIFTBTN_L and MODBTN_L/OUT_R
+    (spec 2026-10-07 §5.3: the lamp sits between key and jack).
 
 ### 4.5 Line endings
 

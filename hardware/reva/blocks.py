@@ -71,9 +71,17 @@ SR_OUTPUTS = (      # chip order from SR_DATA; outputs QA..QH
     tuple(sr(n) for n in MUX_S) + tuple(sr(n) for n in MUX_EN[0:5]),
     tuple(sr(n) for n in MUX_EN[5:10]) + (led_net(0), led_net(1), led_net(2)),
     tuple(led_net(i) for i in range(3, 11)),
-    tuple(led_net(i) for i in range(11, 19)),
+    # 15 lamps since the 9 mm panel pass (spec 2026-10-07 §5): LED11..LED14,
+    # then four more spare outputs.
+    tuple(led_net(i) for i in range(11, 15)) + tuple("SR_SPARE%d" % i for i in range(8, 12)),
     tuple("SR_SPARE%d" % i for i in range(8)),
 )
+# Spare outputs of the last chip (SR_SPARE0..7) end on a test point. The four
+# spares on U_SR4 (SR_SPARE8..11) are marked no-connect instead: four more
+# test points would wrap the chains sheet onto another row (check.py
+# sheet_edge) and add four more parts to a board that has no use for them.
+SR_TEST_POINTS = SR_OUTPUTS[-1]
+SR_NO_CONNECT = tuple(n for outs in SR_OUTPUTS[:-1] for n in outs if n.startswith("SR_SPARE"))
 KEYS = ("REC_A", "REC_B", "MODBTN", "SHIFTBTN")      # 165 inputs D0..D3
 
 
@@ -144,7 +152,10 @@ def chains(refs):
         u.by_name("~{OE}", GND).by_name("SRCLK", SR_CLK).by_name("RCLK", SR_LATCH)
         u.by_name("SER", prev)
         for letter, net in zip("ABCDEFGH", outs):
-            u.by_name("Q" + letter, net)
+            if net in SR_NO_CONNECT:
+                u.no_connect(u.sym.by_name("Q" + letter))
+            else:
+                u.by_name("Q" + letter, net)
         if i < len(SR_OUTPUTS):
             prev = "SR_CHAIN%d" % i
             u.by_name("QH'", prev)
@@ -170,7 +181,7 @@ def chains(refs):
         sw = make("key", refs("SW"), value=key, panel_id=key, panel=True, strict=True)
         sw.by_number(1, key_net(key)).by_number(2, GND).no_connect(3, 4, 5, 6)
         parts.append(sw)
-    for net in SR_OUTPUTS[-1]:
+    for net in SR_TEST_POINTS:
         parts.append(make("tp", refs("TP"), value=net).by_number(1, net))
     return Sheet("chains", "Shift-register chains and keys", parts)
 
