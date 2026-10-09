@@ -28,10 +28,11 @@ namespace spky {
 // Spec: docs/superpowers/specs/2026-07-19-fast-tanh-design.md.
 //
 // One shared implementation so the two targets run the same curve -- the same
-// rule fast_sin.h states for itself. Firmware and bench build with
-// -ffast-math -funroll-loops; the desktop CMake build sets neither, so FMA
-// contraction and reciprocal division can differ in the last bit between the
-// two. No libm call.
+// rule fast_sin.h states for itself. Firmware and bench build without
+// -ffast-math (their Makefiles once named it in a variable libDaisy never
+// reads, see shell/Makefile), but at a different -O level and FMA contraction
+// default than the desktop CMake build, so the two can still differ in the
+// last bit. No libm call.
 inline float fast_tanh(float x) {
     const float ax = x < 0.f ? -x : x;
     if (ax >= 3.646739f) return x < 0.f ? -1.f : 1.f;

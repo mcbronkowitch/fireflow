@@ -93,9 +93,10 @@ Useful flags: `--profile NAME` (default `full`; see the table above and
  build, QSPI binding, and measurement so the host can reject an AXI/ITCM
  mix-up.
 
-`C_USR_FLAGS = -ffast-math -funroll-loops` remains dormant in the underlying
-build and was deliberately not activated by the completed compiler-mode
-selection. The benchmark reports its requested `o2`, `o3`, or `o3-lto`
+The bench builds without `-ffast-math -funroll-loops`. The Makefile used to
+name them in `C_USR_FLAGS`, which libDaisy never reads; the completed
+compiler-mode selection deliberately did not activate them, and the dead line
+was removed on 2026-10-09. The benchmark reports its requested `o2`, `o3`, or `o3-lto`
 identity; the measured winner is `o3`, the shipping firmware sets
 `override OPT := -O3` (`shell/Makefile`), and LTO remains rejected.
 
