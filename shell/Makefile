@@ -421,9 +421,12 @@ $(BUILD_DIR)/mux_plan.o: override OPT := -Os
 # The second exception: the shared control law (control/control_law.h), which
 # control_tick.cpp alone instantiates. At -O3 it cost the Rev A image 14.3 KB
 # of SRAM_EXEC and left 2.7 KB free, under the 8 KB floor of spec
-# 2026-10-09-rev-a-p6b1 section 5; the spec names -Os as the fallback. It
-# runs once per block, not per sample, and SHELL_PLAY_LAW reports its cycles.
-$(BUILD_DIR)/control_tick.o: override OPT := -Os
+# 2026-10-09-rev-a-p6b1 section 5; the spec names -Os as the fallback. After
+# the slew and setter-cache fixes, -O2 measured on the coupon 2026-10-09:
+# 11 800 cycles per tick against 15 800 at -Os, for about 1 KB of SRAM_EXEC
+# (Rev A 16 928 B free). It runs once per block, not per sample, and
+# SHELL_PLAY_LAW reports its cycles.
+$(BUILD_DIR)/control_tick.o: override OPT := -O2
 
 # Boot-only code executes in place from QSPI (spec 2026-10-09-rev-a-p6b1
 # section 5); the list and the rules for what may go on it are in
