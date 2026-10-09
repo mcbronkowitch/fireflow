@@ -1562,11 +1562,13 @@ RANGE > 0 (the init patch parks RANGE at 0, which flattens the PITCH lane),
 SMOOTH > 0 and `_ev_rate` drifting mid-block (a fast STEP clock under GROW):
 the PITCH lane's per-sample `_slew` reads the push that lands mid-block, and
 the lane values differed in 1462 comparisons while the audio stayed identical
-(the quantizer absorbs it). **At division 96 `Center::update` rebuilds every
+(task 9a gate: 10 s, `refresh_slew()` stubbed to a no-op, RANGE 1/1, fast
+clock from 8.5 s, division 16). **At division 96 `Center::update` rebuilds every
 lane through `set_rate_scale` at the top of each block and masks it.** So a law
 cache that swallowed those pushes turned the real-Instrument gate red at
-division 16 only (engine scenario 457 506 sample diffs, DRIFT scenario 20 718
-lane diffs) and stayed green at division 96, which is why the cache exempts
+division 16 only (task 9b gate, all six retiming setters plus `set_drift`
+cached: engine scenario 457 506 sample diffs, DRIFT scenario 20 718 lane
+diffs; different runs from the 1462) and stayed green at division 96, which is why the cache exempts
 them (`set_drift` too, by reasoning: `Center::settle()` writes
 `_drift_target` behind its setter). Everything else the law sends is cached
 and measured bit-identical, cache on against off, 7 scenarios x 20 s x both

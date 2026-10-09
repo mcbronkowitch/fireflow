@@ -252,11 +252,11 @@ squaring it cost 29 500; with the law-side sent-value cache, 15 800 at `-Os`;
 at `-O2`, **11 800 cycles per tick, peak 13 900** (1.23 and 1.45 points).
 That is over the 9600 budget, and the rule above would put the tick on every
 second block. **Deviation (Ruling 14, approved by Bastian):** it stays one tick
-per block. By ear: clicks at 90 000, 29 500 and 15 800, none at 11 800. **Plan
+per block. By ear: noise and dropouts after a few seconds at 90 000, clicks at 29 500 and 15 800, none at 11 800. **Plan
 B**, not built: a two-block split (deck A and the globals in one block, deck B,
 the depth loop and the tail in the other). **Trigger:** clicks, or `cyc_max`
 above 2.9 points on the Rev A board with the full panel. The roadmap's M6 entry
-of 2026-10-09 carries the full table.
+of 2026-10-09 carries the full figures.
 
 ## 7. Tests
 
