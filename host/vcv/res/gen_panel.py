@@ -1406,24 +1406,27 @@ def control_params_header():
         L.append(f"    {c.enum},")
     L += ["    NUM_PARAMS", "};", "",
           f"static constexpr int PART_STRIDE = {PART_STRIDE};", "",
+          "// The tables below are inline: one copy per image however many",
+          "// translation units read them (the firmware's knob mapping and its",
+          "// control law are two).",
           "enum ModKind { MODK_TDEPTH = 0, MODK_FXDEPTH = 1, MODK_HOST = 2 };",
           "struct ModTarget { int soundId; int depthId; unsigned char kind; "
           "unsigned char slot; unsigned char part; };",
-          "static const ModTarget kModLayer[] = {"]
+          "inline constexpr ModTarget kModLayer[] = {"]
     KINDMAP = {"TDEPTH": 0, "FXDEPTH": 1, "HOST": 2}
     for base, kind, slot, _init in MOD_DECK_TARGETS:
         for pi, sfx in enumerate(("_A", "_B")):
             L.append(f"    {{{base}{sfx}, MODD_{base}{sfx}, {KINDMAP[kind]}, {slot}, {pi}}},")
     for base, kind, slot, _init in MOD_CENTER_TARGETS:
         L.append(f"    {{{base}, MODD_{base}, {KINDMAP[kind]}, {slot}, 2}},")
-    L += ["};", "", "static constexpr float kInitParamDefaults[] = {"]
+    L += ["};", "", "inline constexpr float kInitParamDefaults[] = {"]
     for c in PARAMS:
         L.append(f"    {_float_literal(INIT_DEFAULTS[c.enum])}f, // {c.enum}")
     L += ["};",
           "static_assert(sizeof(kInitParamDefaults) / sizeof(kInitParamDefaults[0]) == NUM_PARAMS,",
           '              "init snapshot must cover every ParamId");', "",
           "struct ParamRange { float lo, hi; bool snap; };",
-          "static constexpr ParamRange kParamRange[] = {"]
+          "inline constexpr ParamRange kParamRange[] = {"]
     for c in PARAMS:
         lo, hi, snap = param_range(c)
         L.append(f"    {{{lo}, {hi}, {'true' if snap else 'false'}}}, // {c.enum}")

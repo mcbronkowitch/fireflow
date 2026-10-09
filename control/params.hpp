@@ -142,9 +142,12 @@ enum ParamId {
 
 static constexpr int PART_STRIDE = 20;
 
+// The tables below are inline: one copy per image however many
+// translation units read them (the firmware's knob mapping and its
+// control law are two).
 enum ModKind { MODK_TDEPTH = 0, MODK_FXDEPTH = 1, MODK_HOST = 2 };
 struct ModTarget { int soundId; int depthId; unsigned char kind; unsigned char slot; unsigned char part; };
-static const ModTarget kModLayer[] = {
+inline constexpr ModTarget kModLayer[] = {
     {SOURCE_A, MODD_SOURCE_A, 0, 0, 0},
     {SOURCE_B, MODD_SOURCE_B, 0, 0, 1},
     {DEPTH_A, MODD_DEPTH_A, 0, 3, 0},
@@ -197,7 +200,7 @@ static const ModTarget kModLayer[] = {
     {TIDE, MODD_TIDE, 2, 1, 2},
 };
 
-static constexpr float kInitParamDefaults[] = {
+inline constexpr float kInitParamDefaults[] = {
     0.112000011f, // RATE_A
     0.0f, // SHAPE_A
     0.604819179f, // DENSITY_A
@@ -328,7 +331,7 @@ static_assert(sizeof(kInitParamDefaults) / sizeof(kInitParamDefaults[0]) == NUM_
               "init snapshot must cover every ParamId");
 
 struct ParamRange { float lo, hi; bool snap; };
-static constexpr ParamRange kParamRange[] = {
+inline constexpr ParamRange kParamRange[] = {
     {0.f, 1.f, false}, // RATE_A
     {0.f, 1.f, false}, // SHAPE_A
     {0.f, 1.f, false}, // DENSITY_A
