@@ -6,6 +6,7 @@
 #if SHELL_PANEL_SCAN
 
 #include <atomic>
+#include <cstdio>
 
 #include "controls.h"
 #include "coupon_expect.h"
@@ -149,21 +150,24 @@ void run_panel_scan_report(bench::Board& hw)
                      static_cast<int>(hw.adc.Get(daisy::patch_sm::ADC_11)),
                      static_cast<int>(hw.adc.Get(daisy::patch_sm::ADC_12)));
 #else
-        // Ten values per line, in generated_panel_map.h's row order: seventy
-        // in one line would overrun libDaisy's 128-byte log buffer.
-        static_assert(kTable.count % 10 == 0, "SHELL_PLAY_V prints ten rows a line");
+        // Up to ten values per line, in generated_panel_map.h's row order:
+        // seventy in one line would overrun libDaisy's 128-byte log buffer.
+        // The last line carries the remainder (73 rows: seven of ten, one of
+        // three). Worst case "SHELL_PLAY_V r=70" plus ten " -1000" is 77 bytes.
         for(int r0 = 0; r0 < kTable.count; r0 += 10)
         {
-            int v[10];
-            for(int i = 0; i < 10; ++i)
+            const int n = kTable.count - r0 < 10 ? kTable.count - r0 : 10;
+            char      line[96];
+            int       len = snprintf(line, sizeof line, "SHELL_PLAY_V r=%d", r0);
+            for(int i = 0; i < n; ++i)
             {
                 const ControlEntry& e    = kTable.entries[r0 + i];
                 const int           step = step_of(kActiveChain, e.group, e.ch);
                 const int           idx  = mux_channel(kActiveChain, step, e.sense);
-                v[i] = static_cast<int>(g_value[idx] * 1000.0f);
+                len += snprintf(line + len, sizeof line - len, " %d",
+                                static_cast<int>(g_value[idx] * 1000.0f));
             }
-            hw.PrintLine("SHELL_PLAY_V r=%d %d %d %d %d %d %d %d %d %d %d", r0,
-                         v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9]);
+            hw.PrintLine("%s", line);
         }
         hw.PrintLine("SHELL_PLAY zero=%d rail=%d valid=%d sweeps=%d keys=%d "
                      "presses=%d,%d,%d,%d",

@@ -252,8 +252,9 @@ that carries the mux address (P2 §4). On Rev A the keys have no function yet.
 measured a valid one, no knob reaches the engine.
 
 **Reading it.** The coupon prints part 1's `SHELL_PLAY` line plus
-`SHELL_PLAY_IO keys= presses= adc11= adc12=`. Rev A prints seven
-`SHELL_PLAY_V r=<first row> <ten values>` lines (row order and names are in
+`SHELL_PLAY_IO keys= presses= adc11= adc12=`. Rev A prints eight
+`SHELL_PLAY_V r=<first row> <up to ten values>` lines — 73 rows, so the
+last line carries three (row order and names are in
 the generated header's comments; values ×1000, −1000 = never emitted: no valid span yet, i.e. calibration
 never succeeded) and one
 `SHELL_PLAY` summary line with key mask and press counts.
