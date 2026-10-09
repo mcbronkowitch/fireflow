@@ -455,7 +455,7 @@ three positions as they stand. Unlike the PULL section above, the *behaviour*
 is no longer a guess. The dead-zone width below still is, and it is the kind of
 question Rack cannot answer.
 
-- **`kDepthDead = 0.04f`** (`host/vcv/src/mod_layer.hpp`) — the standstill
+- **`kDepthDead = 0.04f`** (`control/mod_layer.hpp`) — the standstill
   zone around noon, there for the same reason `kGritDead` is: a 9 mm pot on an
   ADC cannot hit an exact zero, so without a zone "off" would be unreachable
   on hardware. `|depth|` is rescaled off it so both stops still reach a full

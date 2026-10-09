@@ -126,7 +126,7 @@ struct DeckOptions {          // what menus feed today; the firmware passes {}
 
 struct Options {
     DeckOptions deck[2];
-    float bpm_override = 0.f;  // > 0: the host measured CLOCK; 0: use TEMPO
+    float measured_bpm = 0.f;  // the host's measured CLOCK rate; the law accepts it inside 20..400, else uses TEMPO
 };
 
 struct Events {               // what the law used to write back into Rack
@@ -257,7 +257,7 @@ value). Gates, each with one RED proven:
 - ENGINE remap, with and without `test_tone`;
 - DETUNE squared, skipped on FEED;
 - COUPLE zone split and DRIFT settle;
-- TEMPO from the knob, and with `bpm_override` in and out of 20..400;
+- TEMPO from the knob, and with `measured_bpm` in and out of 20..400;
 - `mv()` for each kind: lane term, mirror term (PAN_B reads deck A),
   centre term; and the 50-row depth loop's split into engine-backed and
   host-computed;

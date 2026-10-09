@@ -49,6 +49,10 @@ PATH="/c/Program Files/DaisyToolchain/bin:/c/Program Files/Git/usr/bin:$PATH"
 cd shell && make -j8 images
 ```
 
+**Never use libDaisys `make program-dfu` or `all` for this firmware**: they
+build and flash the flat, unguarded `shell.bin`. Use `images` and the two
+`dfu-util` commands below.
+
 `images` (nicht `all`) ist der richtige Zielname. libDaisys Standardziel
 baut ein flaches `shell.bin` über SRAM (`0x24000000`) **und** QSPI
 (`0x90100000`) hinweg — rund 17 MB, fast alles Füllbytes, an die falsche
@@ -304,8 +308,9 @@ ATTACK rows carry STAGES as an alternate id (`ControlEntry::alt`, from
 (`knob_target()`). The law
 builds with `-Os` (`control_tick.o`, like `mux_plan.o`): at `-O3` the Rev A
 image kept 2.7 KB of `SRAM_EXEC` free, under the spec's 8 KB floor; with
-`-Os` it keeps 10 088 B, and 11 208 B since the generated tables in
-`control/params.hpp` are `inline` and linked once (2026-10-09).
+`-Os` it keeps 10 088 B. The generated tables in `control/params.hpp` being
+`inline` and linked once brought that to 11 584 B; the ATTACK alternate and
+the `cyc_max` warm-up then cost 376 B, leaving 11 208 B (2026-10-09).
 
 **Known divergences from VCV (P6b-1)** — spec §8:
 

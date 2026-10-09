@@ -1477,7 +1477,7 @@ VCV calls `control::ControlLaw::tick()` every 16 samples, the firmware once per
 96-sample block. Does anything in the law, or in a setter it calls, advance per
 CALL rather than per sample?
 
-**No. The law is rate-independent.** What differs between the two rates is
+**No. The law is rate-independent** (init patch, one knob swept). What differs between the two rates is
 when a moving value is sampled (a staircase of at most 96 samples, 2 ms), not
 state.
 
@@ -1533,8 +1533,8 @@ spky::hyst_step(rung, norm, count);` (`song_rung_state.hpp:51`, and
 same input returns false and leaves the state as it was. The setters store
 targets; every glide runs on the engine's own sample counters inside
 `process()`: Instrument's `_ctrl_ctr` (`instrument.cpp:239`, 96 samples), Part's
-raster (`part.h:386-392`), the reverb-mix one-poles (`instrument.cpp:517-518`),
-MORPH's `_morph_smooth` (`center.cpp:135`). The one comment that says something
+raster (`part.h:386-392`), the reverb-mix one-poles (`instrument.cpp:517-520`),
+MORPH's `_morph_smooth` (`engine/center/center.cpp:135`). The one comment that says something
 counts calls ("Quantizer::process's slew counts *calls*", `part.h:375`) means
 Part's own `_control_tick()`, which that raster drives, not the host. Setters
 that do work on a change guard it: `Instrument::set_pace` (`instrument.cpp:220`),
