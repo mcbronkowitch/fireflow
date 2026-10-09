@@ -21,6 +21,8 @@ void SuperModulator::init(float sample_rate, uint32_t seed_base) {
     _onsets = 0;
     _gap[0] = _gap[1] = 0;
     _rhythm = RhythmView{};
+    _tide_applied  = false;
+    _steps_applied = false;
     _update_rate();
 }
 
@@ -60,10 +62,17 @@ void SuperModulator::_apply_steps() {
                                    : _deck_steps;
         _lanes[i].set_step(_step_on, slots);
     }
+    _steps_applied = true;
 }
 
 void SuperModulator::set_tide(float norm) {
-    _tide_norm = clampf(norm, 0.f, 1.f);
+    const float n = clampf(norm, 0.f, 1.f);
+    // Early-out: see set_tempo_bpm (super_modulator.h).
+    if (_skip_unchanged && _tide_applied && same_bits(n, _tide_norm)) {
+        _refresh_slews();
+        return;
+    }
+    _tide_norm = n;
     _update_tide();
 }
 
@@ -72,6 +81,7 @@ void SuperModulator::_update_tide() {
                          : tide_free(_tide_norm);
     _apply_steps();
     _apply_rate();
+    _tide_applied = true;
 }
 
 void SuperModulator::set_shape(float s)       { for (auto& l : _lanes) l.set_shape(s); }
@@ -85,9 +95,17 @@ void SuperModulator::set_shuffle(float amount){
     for (auto& l : _lanes) l.set_shuffle(amount);
 }
 void SuperModulator::set_step(bool on, int n) {
+    const int steps = n < 1 ? 1 : n;
+    // Early-out on BOTH arguments (see set_tempo_bpm, super_modulator.h). An
+    // unchanged pair is never an entry, and ModLane::set_step with the slot
+    // counts the lanes already hold has no effect beyond its slew rebuild.
+    if (_skip_unchanged && _steps_applied && on == _step_on && steps == _deck_steps) {
+        _refresh_slews();
+        return;
+    }
     const bool entering = on && !_step_on;
     _step_on    = on;
-    _deck_steps = n < 1 ? 1 : n;
+    _deck_steps = steps;
     if (entering) { _deck_step = 0; _last_pitch_step = -1; }
     _apply_steps();
     _apply_rate();

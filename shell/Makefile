@@ -32,7 +32,7 @@ LDSCRIPT = ../alt_sram.lds
 # overdrive.h", "Utility/dsp.h"), also muss das Verzeichnis auf den Pfad.
 # ../src/ ist fuer genau einen Header drauf: hw/board.h -- derselbe, den die
 # Bench einbindet, und der einzige geteilte Code zwischen beiden Baeumen.
-C_INCLUDES = -I. -I../src/ -I../engine/ -I../third_party/ -I../lib/DaisySP/Source/
+C_INCLUDES = -I. -I../ -I../src/ -I../engine/ -I../third_party/ -I../lib/DaisySP/Source/
 C_USR_FLAGS = -ffast-math -funroll-loops
 
 # Dieses Board und nur dieses. Ein blankes -D ist hier zulaessig, obwohl die
@@ -367,6 +367,7 @@ CPP_SOURCES = \
 	scan_check.cpp \
 	scan_value.cpp \
 	controls.cpp \
+	control_tick.cpp \
 	keys.cpp \
 	panel_scan.cpp \
 	mux_scan.cpp \
@@ -417,6 +418,27 @@ include $(SYSTEM_FILES_DIR)/Makefile
 # line would name the target "/mux_plan.o" and silently do nothing.
 $(BUILD_DIR)/mux_plan.o: override OPT := -Os
 
+# The second exception: the shared control law (control/control_law.h), which
+# control_tick.cpp alone instantiates. At -O3 it cost the Rev A image 14.3 KB
+# of SRAM_EXEC and left 2.7 KB free, under the 8 KB floor of spec
+# 2026-10-09-rev-a-p6b1 section 5; the spec names -Os as the fallback. After
+# the slew and setter-cache fixes, -O2 measured on the coupon 2026-10-09:
+# 11 800 cycles per tick against 15 800 at -Os, for about 1 KB of SRAM_EXEC
+# (Rev A 16 928 B free). It runs once per block, not per sample, and
+# SHELL_PLAY_LAW reports its cycles.
+$(BUILD_DIR)/control_tick.o: override OPT := -O2
+
+# Boot-only code executes in place from QSPI (spec 2026-10-09-rev-a-p6b1
+# section 5); the list and the rules for what may go on it are in
+# qspi_cold.ld. As -Wl,-T and not as a second plain -T: gcc puts -Wl options
+# ahead of the -T$(LDSCRIPT) in LDFLAGS, and the fragment has to be read first
+# for its names to win over the main script's *(.text*). The edge makes an
+# edit to the list relink.
+LDFLAGS += -Wl,-T,qspi_cold.ld
+$(BUILD_DIR)/$(TARGET).elf: qspi_cold.ld
+NM := $(CP:objcopy=nm)
+OBJDUMP := $(CP:objcopy=objdump)
+
 # --- generierte Schalter-Header ------------------------------------------
 # Als echte Header und mit echter Abhaengigkeitskante, nicht als blankes
 # -D. Die Begruendung steht in write_shell_selftest.py; es ist dieselbe
@@ -427,7 +449,7 @@ $(BUILD_DIR)/mux_plan.o: override OPT := -Os
 # Fehler zurueck, und er sieht wie eine Messung aus.
 C_INCLUDES += -I$(BUILD_DIR)
 
-SWITCH_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/probe_adc.o $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/scan_check.o $(BUILD_DIR)/panel_scan.o
+SWITCH_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/probe_adc.o $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/scan_check.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o
 
 # ZUR PARSE-ZEIT, nicht als Regel, und das ist der Kern der Reparatur vom
 # 2026-08-23. Als Regel mit FORCE hat es ZWEIMAL nicht gehalten:
@@ -472,6 +494,7 @@ $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/wait_probe.o: $(BUILD_DIR)/shell_pot_ro
 $(BUILD_DIR)/pot_report.o: $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/scan_check.o: $(BUILD_DIR)/shell_scan_check.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h
+$(BUILD_DIR)/control_tick.o: $(BUILD_DIR)/shell_panel_scan.h
 
 .PHONY: FORCE
 FORCE:
@@ -482,13 +505,19 @@ FORCE:
 # Adresse gezielt. Stattdessen zwei Artefakte aus derselben gelinkten ELF,
 # genau wie bench/qspi_tools.py es fuer die Bench macht:
 #
-#   shell-sram.bin  -- alles ausser der Wavetable-Bank, geht per DFU nach
-#                      0x90040000 und wird vom Daisy-Bootloader nach SRAM
-#                      kopiert.
-#   shell-qspi.bin  -- nur die Bank. Liegt seit dem 7. August auf dem Board
-#                      und muss normalerweise NICHT neu geschrieben werden;
-#                      das Ziel existiert, damit man es vergleichen kann.
-QSPI_SECTION = .qspiflash_data
+#   shell-sram.bin  -- everything but QSPI_SECTIONS below; goes over DFU to
+#                      0x90040000 and is copied to SRAM by the Daisy
+#                      bootloader.
+#   shell-qspi.bin  -- the bank and the boot-only code behind it (see below).
+#                      Since 2026-10-09 it changes with the code: always flash
+#                      both images, QSPI first.
+# .qspiflash_text (alt_sram.lds) sits in FRONT of the wavetable bank and is
+# empty, and must stay empty: anything placed there shifts the bank off
+# 0x90100000, where bench/, bench/audition and qspi_programmer expect it.
+# Cold code goes to .qspi_cold (qspi_cold.ld), BEHIND the bank at 0x90110000.
+# All three travel as one image, shell-qspi.bin, which pairs with the
+# shell-sram.bin of the same build: always flash both, QSPI first.
+QSPI_SECTIONS = .qspiflash_text .qspiflash_data .qspi_cold
 
 # FORCE an allen drei Ableitungen, und das ist kein Schluderfix. Make hat auf
 # diesem Rechner Sekundenaufloesung und vergleicht mit "echt neuer": werden
@@ -501,11 +530,21 @@ QSPI_SECTION = .qspiflash_data
 .PHONY: images
 images: $(BUILD_DIR)/$(TARGET)-sram.bin $(BUILD_DIR)/$(TARGET)-qspi.bin
 
-$(BUILD_DIR)/$(TARGET)-sram.elf: $(BUILD_DIR)/$(TARGET).elf FORCE
-	$(CP) --remove-section=$(QSPI_SECTION) $< $@
+# The QSPI placement guard (qspi_placement.py): refuses an ELF with hot code in
+# QSPI, or code that runs before the QSPI is memory-mapped -- by name on the
+# nm listing, and by call graph on the disassembly and the ELF's stored words
+# (nothing hot, pre-QSPI or address-taken may reach QSPI code). Both images
+# depend on it, so a refused link yields no fresh image; the old ones are
+# deleted too, so nothing stale is left to flash. One shell line on purpose: a
+# failing nm or objdump takes the same deleting branch as a refusal.
+$(BUILD_DIR)/$(TARGET).nm: $(BUILD_DIR)/$(TARGET).elf FORCE
+	( $(NM) -C -S $< > $@ && $(OBJDUMP) -d -C --no-show-raw-insn $< > $(BUILD_DIR)/$(TARGET).dis && python qspi_placement.py $@ $(BUILD_DIR)/$(TARGET).dis $< ) || (rm -f $@ $(BUILD_DIR)/$(TARGET).dis $(BUILD_DIR)/$(TARGET)-sram.bin $(BUILD_DIR)/$(TARGET)-qspi.bin && exit 1)
+
+$(BUILD_DIR)/$(TARGET)-sram.elf: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).nm FORCE
+	$(CP) $(foreach s,$(QSPI_SECTIONS),--remove-section=$(s)) $< $@
 
 $(BUILD_DIR)/$(TARGET)-sram.bin: $(BUILD_DIR)/$(TARGET)-sram.elf FORCE
 	$(CP) -O binary -S $< $@
 
-$(BUILD_DIR)/$(TARGET)-qspi.bin: $(BUILD_DIR)/$(TARGET).elf FORCE
-	$(CP) -O binary --only-section=$(QSPI_SECTION) $< $@
+$(BUILD_DIR)/$(TARGET)-qspi.bin: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).nm FORCE
+	$(CP) -O binary $(foreach s,$(QSPI_SECTIONS),--only-section=$(s)) $< $@

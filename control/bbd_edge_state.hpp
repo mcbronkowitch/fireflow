@@ -8,9 +8,14 @@
 // Invariant: entering BBD by PLAYER ACTION applies the FLUX-off/
 // exciteOtherDeck-on defaults exactly once, on the transition; arriving on
 // BBD because state was RESTORED -- fresh module add, whole-patch open,
-// Ctrl+D duplicate, or an already-live preset Load/module paste -- must
-// never apply them, because the restored state (including a deliberately
-// re-enabled FLUX) is exactly what the player saved.
+// Ctrl+D duplicate, the firmware's boot -- must not apply them, because the
+// restored state (including a deliberately re-enabled FLUX) is exactly what
+// the player saved. This unit guarantees that for the sequence of tick()
+// calls it sees. Known exception, one level up and not fixed here: the host
+// switches the engine inside process() blocks after the control tick that
+// asks for it (measured, Ruling 10), so a restore onto BBD over a LIVE
+// non-BBD deck makes tick() observe the false -> true change a block later
+// and fires the edge despite the re-arm. Open item.
 //
 // This took two review rounds to get right, which is the whole reason it now
 // lives in its own tested unit rather than as inline bools in Fireflow.cpp:
@@ -44,10 +49,12 @@ struct BbdEdgeState {
         return entered;
     }
 
-    // Call when a JSON restore lands on an ALREADY-LIVE instance (Fireflow's
-    // dataFromJson(), `curSr > 0.f` branch). Re-arms so the very next tick()
-    // treats whatever ENG the restore just set as a fresh baseline instead
-    // of a transition from the stale pre-restore state.
+    // Call when a restore lands on an ALREADY-LIVE instance (Fireflow's
+    // dataFromJson(), `curSr > 0.f` branch, via ControlLawT::on_restore()).
+    // Re-arms so the very next tick() treats whatever ENG the restore just
+    // set as a fresh baseline instead of a transition from the stale
+    // pre-restore state. If the instrument is not yet running that engine
+    // (see the known exception in the header comment) the re-arm cannot help.
     //
     // Deliberately NOT needed for a fresh module add / whole-patch open /
     // Ctrl+D duplicate: those restore into an instance whose tick() has

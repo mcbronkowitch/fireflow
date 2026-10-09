@@ -64,6 +64,9 @@ add_executable(spky_tests
     tests/test_step_accent.cpp
     tests/test_led_law.cpp
     tests/test_mod_layer.cpp
+    tests/test_control_params.cpp
+    tests/test_control_law.cpp
+    tests/test_law_cache.cpp
     tests/test_step.cpp
     tests/test_shuffle_grid.cpp
     tests/test_step_clock.cpp
@@ -192,9 +195,10 @@ add_executable(spky_tests
     tests/test_param_table.cpp
     tests/test_param_impact.cpp
     tests/test_smooth_law.cpp
+    tests/test_skip_unchanged.cpp
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)
-target_include_directories(spky_tests PRIVATE host)
+target_include_directories(spky_tests PRIVATE host ${CMAKE_SOURCE_DIR})
 target_compile_definitions(spky_tests PRIVATE SPKY_TESTING=1)
 add_test(NAME spky_tests COMMAND spky_tests)
 
@@ -554,6 +558,11 @@ add_test(NAME read_scan_check_guard
 add_test(NAME shell_panel_map_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_gen_panel_map.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
+
+add_test(NAME shell_qspi_placement_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_qspi_placement.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
 
 # The two budget calculations under tools/. scan_budget imports settle_budget,

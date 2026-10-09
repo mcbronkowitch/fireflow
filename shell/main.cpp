@@ -339,8 +339,10 @@ int main(void)
 #endif
 
 #if SHELL_PANEL_SCAN
-    // RATE_A and DENSITY_A above stay as the start point; on the coupon the
-    // pots override them with their first emission once the span is valid.
+    // The fixed point above lasts one block: from the second block on, the
+    // shared control law sets every parameter from the init patch's knob
+    // vector, and a pot overrides its knob with its first emission once the
+    // span is valid (spec 2026-10-09-rev-a-p6b1 section 4.2).
     shell::panel_scan_init();
     hw.StartAudio(AudioCallback);
     shell::run_panel_scan_report(hw);   // never returns

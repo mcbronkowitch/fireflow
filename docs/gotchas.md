@@ -402,6 +402,20 @@ by ear are a different list: [`docs/by-ear-decisions.md`](by-ear-decisions.md).
   written down so the next author of one does not read the sign as a phase
   flip. The render host has no dead zone and needs none: it is not a pot.
 
+- **The law's sent-value cache goes stale behind any host path that re-inits
+  the instrument.** `control::ControlLaw` calls a setter only when its value
+  changed since the last send (`control/control_law.h`, `Out`). So any host
+  path that calls `Instrument::init()`, or writes an `Instrument` field the
+  law caches, behind the law's back must call `law.on_instrument_init()`
+  afterwards; otherwise the next tick skips every value as unchanged against
+  a defaulted instrument and the stale state holds until the knob moves.
+  VCV's `Fireflow::reinit()` does (a sample-rate change re-inits the
+  instrument without a restore). The firmware has only `control_boot` →
+  `on_restore()` → `on_reset()`, which forgets as well; its `inst.init()` runs
+  before the law's first tick. Not cached, deliberately: the six lane-retiming
+  setters and `set_drift` (see `docs/engine-map.md`, "Control-law tick rate"),
+  and the events. (2026-10-09, P6b-1.)
+
 ## Hardware generators (`pcbnew`, `hardware/coupon/scripts/`)
 
 Measured 2026-09-02 while generating the test coupon's PCB. All three are

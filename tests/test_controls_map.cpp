@@ -1,8 +1,9 @@
 // The control table: which (group, channel) drives which parameter, and how
-// a 0..1 value is scaled into that parameter's range. Pure data logic, host
-// tested: on the board a wrong row is only audible as "the knob does the
+// a 0..1 value becomes a knob in that parameter's VCV units. Pure data logic,
+// host tested: on the board a wrong row is only audible as "the knob does the
 // wrong thing". Spec: docs/superpowers/specs/
-// 2026-09-28-coupon-panel-scan-design.md sections 3 and 5.
+// 2026-09-28-coupon-panel-scan-design.md sections 3 and 5, and
+// 2026-10-09-rev-a-p6b1-shared-control-law-design.md section 4.2.
 #include <doctest/doctest.h>
 #include <set>
 #include <utility>
@@ -11,13 +12,14 @@
 #include "../shell/mux_plan.h"
 #include "../shell/pot_plan.h"
 #include "instrument.h"
+#include "control/control_law.h"
 
 TEST_CASE("controls: the coupon table maps RV2, RV4 and RV6") {
     const shell::ControlTable& t = shell::kCouponTable;
     REQUIRE(t.count == 3);
-    CHECK(t.entries[0].param == spky::P_RATE_A);
-    CHECK(t.entries[1].param == spky::P_DENSITY_A);
-    CHECK(t.entries[2].param == spky::P_FILT_A);
+    CHECK(t.entries[0].param == ffctl::RATE_A);
+    CHECK(t.entries[1].param == ffctl::DENSITY_A);
+    CHECK(t.entries[2].param == ffctl::FILT_A);
 }
 
 TEST_CASE("controls: the coupon table's channels are pot_plan.h's pots") {
@@ -34,51 +36,35 @@ TEST_CASE("controls: the coupon table's channels are pot_plan.h's pots") {
 TEST_CASE("controls: find_control answers only for mapped channels") {
     const shell::ControlTable& t = shell::kCouponTable;
     REQUIRE(shell::find_control(t, 0, 6) != nullptr);
-    CHECK(shell::find_control(t, 0, 6)->param == spky::P_DENSITY_A);
+    CHECK(shell::find_control(t, 0, 6)->param == ffctl::DENSITY_A);
     CHECK(shell::find_control(t, 0, 3) == nullptr);    // a rail tie
     CHECK(shell::find_control(t, 1, 6) == nullptr);    // group 1's divider
     CHECK(shell::find_control(t, 5, 0) == nullptr);
     CHECK(shell::find_control(t, -1, 2) == nullptr);
 }
 
-TEST_CASE("controls: values scale into the parameter's own range") {
-    CHECK(shell::control_value(spky::P_RATE_A, 0.25f) == doctest::Approx(0.25f));
-    CHECK(shell::control_value(spky::P_FILT_A, 0.0f) == doctest::Approx(-1.0f));
-    CHECK(shell::control_value(spky::P_FILT_A, 0.5f) == doctest::Approx(0.0f));
-    CHECK(shell::control_value(spky::P_FILT_A, 1.0f) == doctest::Approx(1.0f));
-    CHECK(shell::control_value(-1, 0.5f) == doctest::Approx(0.0f));
-    CHECK(shell::control_value(spky::P_COUNT, 0.5f) == doctest::Approx(0.0f));
+TEST_CASE("controls: a pot becomes a knob in parameter units") {
+    CHECK(shell::knob_from_pot(ffctl::RATE_A, 0.25f) == doctest::Approx(0.25f));
+    CHECK(shell::knob_from_pot(ffctl::FILT_A, 0.0f) == doctest::Approx(-1.0f));
+    CHECK(shell::knob_from_pot(ffctl::FILT_A, 1.0f) == doctest::Approx(1.0f));
+    CHECK(shell::knob_from_pot(-1, 0.5f) == 0.0f);
 }
 
-TEST_CASE("controls: applying RV2's entry moves part A's rate and only it") {
-    spky::Instrument inst;
-    inst.init(48000.0f);
-    const float b_before = inst.rate(spky::PART_B);
-    const shell::ControlEntry* e = shell::find_control(shell::kCouponTable, 0, 2);
-    REQUIRE(e != nullptr);
-    shell::apply_control(*e, 0.75f, inst);
-    CHECK(inst.rate(spky::PART_A) == doctest::Approx(0.75f));
-    CHECK(inst.rate(spky::PART_B) == doctest::Approx(b_before));
-}
-
-TEST_CASE("controls: an entry without a parameter is refused, not applied") {
-    // Rev A's table carries rows that are scanned and reported but sent
-    // nowhere (spec section 2.3). apply_param() would index kParams[-1].
-    spky::Instrument inst;
-    inst.init(48000.0f);
-    const float a = inst.rate(spky::PART_A);
-    CHECK_FALSE(shell::apply_control(shell::ControlEntry{0, 0, -1}, 0.9f, inst));
-    CHECK_FALSE(shell::apply_control(shell::ControlEntry{0, 0, spky::P_COUNT}, 0.9f, inst));
-    CHECK(inst.rate(spky::PART_A) == doctest::Approx(a));
-    CHECK(shell::apply_control(shell::ControlEntry{0, 2, spky::P_RATE_A}, 0.9f, inst));
-    CHECK(inst.rate(spky::PART_A) == doctest::Approx(0.9f));
+TEST_CASE("controls: snapping pots reach both stops") {
+    CHECK(shell::knob_from_pot(ffctl::ENGINE_A, 1.0f) == 5.f);
+    CHECK(shell::knob_from_pot(ffctl::STEPS_B, 1.0f) == 16.f);
+    CHECK(shell::knob_from_pot(ffctl::FLUXRATE_A, 1.0f) == 11.f);
+    CHECK(shell::knob_from_pot(ffctl::SCALE, 1.0f) == 12.f);
+    CHECK(shell::knob_from_pot(ffctl::SONG_B, 1.0f) == 13.f);
+    CHECK(shell::knob_from_pot(ffctl::ENGINE_A, 0.0f) == 0.f);
+    CHECK(shell::knob_from_pot(ffctl::ENGINE_A, 0.55f) == 3.f);   // 2.75 rounds up
 }
 
 TEST_CASE("controls: an entry records its sense pin, -1 when unrecorded") {
     CHECK(shell::kCouponControls[0].sense == -1);
     // A local, not a braced temporary inside CHECK(): the preprocessor
     // splits macro arguments on the commas inside braces.
-    const shell::ControlEntry e{3, 4, spky::P_RATE_B, 1};
+    const shell::ControlEntry e{3, 4, ffctl::RATE_B, 1};
     CHECK(e.sense == 1);
 }
 
@@ -114,20 +100,143 @@ TEST_CASE("controls: no two Rev A rows share an input, and none is a calibration
                               shell::kRevaCalRail.ch) == nullptr);
 }
 
-TEST_CASE("controls: the Rev A table sends exactly the 35 safe parameters (spec 2.3)") {
-    using namespace spky;
-    const std::set<int> expected = {
-        P_RATE_A, P_RATE_B, P_SHAPE_A, P_SHAPE_B, P_SMOOTH_A, P_SMOOTH_B,
-        P_RANGE_A, P_RANGE_B, P_TUNE_A, P_TUNE_B, P_DECAY_A, P_DECAY_B,
-        P_FILT_A, P_FILT_B, P_COLOR_A, P_COLOR_B, P_LINK_A, P_LINK_B,
-        P_PAN_A, P_PAN_B, P_REVMIX_A, P_REVMIX_B, P_DEPTH_A, P_DEPTH_B,
-        P_MORPH, P_TIDE, P_CHOKE, P_PULL, P_SHUFFLE, P_REV_SIZE, P_REV_DECAY,
-        P_REV_TONE, P_REV_DIFF, P_PACE, P_SCALE};
-    REQUIRE(expected.size() == 35);
-    std::multiset<int> got;
+TEST_CASE("controls: only the three reserved Rev A pots send nothing") {
+    int none = 0;
+    for (int i = 0; i < shell::kRevaTable.count; ++i)
+        none += shell::kRevaTable.entries[i].param < 0;
+    CHECK(shell::kRevaTable.count == 73);
+    CHECK(none == 3);
+}
+
+TEST_CASE("controls: the first tick after on_restore with init knobs fires nothing") {
+    spky::Instrument inst; inst.init(48000.f);
+    control::ControlLaw law; law.on_restore();
+    float k[ffctl::NUM_PARAMS];
+    for (int i = 0; i < ffctl::NUM_PARAMS; ++i) k[i] = ffctl::kInitParamDefaults[i];
+    const control::Events ev = law.tick(k, control::Options{}, inst);
+    CHECK_FALSE(ev.bbd_edge[0]); CHECK_FALSE(ev.bbd_edge[1]);
+    CHECK_FALSE(ev.rec_started[0]); CHECK_FALSE(ev.rec_started[1]);
+    // The first tick alone cannot fire: the engines it asks for land blocks
+    // later (an engine switch completes inside process()), and only then
+    // could the BBD edge or a REC start show. So the firmware's boot is run
+    // on: process, tick, as the audio callback does, until the switch is long
+    // done. With a BBD deck in the init patch this goes red on block 2
+    // (measured 2026-10-09).
+    float il[96] = {}, ir[96] = {}, ol[96], orr[96];
+    int fired = 0;
+    for (int b = 0; b < 32; ++b) {
+        inst.process(il, ir, ol, orr, 96);
+        const control::Events e = law.tick(k, control::Options{}, inst);
+        fired += e.bbd_edge[0] + e.bbd_edge[1] + e.rec_started[0] + e.rec_started[1];
+    }
+    CHECK(fired == 0);
+}
+
+namespace {
+// The Instrument with its two one-shot actions counted: the law is a template
+// on the instrument, and these members hide the base's for it.
+struct ActionSpy : spky::Instrument {
+    int phrases = 0;
+    int settles = 0;
+    void new_phrase(int p) { ++phrases; spky::Instrument::new_phrase(p); }
+    void settle()          { ++settles; spky::Instrument::settle(); }
+};
+} // namespace
+
+TEST_CASE("controls: the first tick after on_restore with init knobs re-rolls and settles nothing") {
+    // The firmware boots exactly this way (spec 2026-10-09-rev-a-p6b1 4.1):
+    // a restored SONG rung and DRIFT position are a baseline, not a turn.
+    ActionSpy inst; inst.init(48000.f);
+    control::ControlLawT<ActionSpy> law; law.on_restore();
+    float k[ffctl::NUM_PARAMS];
+    for (int i = 0; i < ffctl::NUM_PARAMS; ++i) k[i] = ffctl::kInitParamDefaults[i];
+    law.tick(k, control::Options{}, inst);
+    law.tick(k, control::Options{}, inst);
+    CHECK(inst.phrases == 0);
+    CHECK(inst.settles == 0);
+}
+
+TEST_CASE("controls: on_restore over a live law makes the restored knobs a baseline") {
+    // The init patch puts DRIFT and SONG at their left stops, so a fresh law
+    // cannot show what on_restore() is for. Here the law has run at another
+    // state first; the restore then lands on a new SONG rung and DRIFT in its
+    // settle zone. Without on_restore() both would fire. (The BBD edge is not
+    // checked here: an engine switch lands blocks after the tick that asks
+    // for it, so a restore onto the BBD over a live non-BBD deck fires the
+    // edge with or without on_restore() -- measured 2026-10-09. The firmware
+    // boots a fresh Instrument onto ENGINE 5 and 2, neither of them the BBD.)
+    ActionSpy inst; inst.init(48000.f);
+    control::ControlLawT<ActionSpy> law;
+    float k[ffctl::NUM_PARAMS];
+    for (int i = 0; i < ffctl::NUM_PARAMS; ++i) k[i] = ffctl::kInitParamDefaults[i];
+    k[ffctl::DRIFT] = 1.f;
+    law.tick(k, control::Options{}, inst);
+    for (int i = 0; i < ffctl::NUM_PARAMS; ++i) k[i] = ffctl::kInitParamDefaults[i];
+    k[ffctl::SONG_A] = 5.f;
+    inst.phrases = 0;
+    inst.settles = 0;
+    law.on_restore();
+    law.tick(k, control::Options{}, inst);
+    CHECK(inst.phrases == 0);
+    CHECK(inst.settles == 0);
+}
+
+TEST_CASE("controls: the Rev A table carries STAGES for exactly the two ATTACK rows") {
+    std::set<std::pair<int, int>> alts;
     for(int i = 0; i < shell::kRevaTable.count; ++i)
-        if(shell::kRevaTable.entries[i].param >= 0)
-            got.insert(shell::kRevaTable.entries[i].param);
-    CHECK(got.size() == 35);
-    CHECK(std::set<int>(got.begin(), got.end()) == expected);
+        if(shell::kRevaTable.entries[i].alt >= 0)
+            alts.insert({shell::kRevaTable.entries[i].param, shell::kRevaTable.entries[i].alt});
+    const std::set<std::pair<int, int>> want = {{ffctl::ATTACK_A, ffctl::STAGES_A},
+                                                {ffctl::ATTACK_B, ffctl::STAGES_B}};
+    CHECK(alts == want);
+    for(int i = 0; i < shell::kCouponTable.count; ++i)
+        CHECK(shell::kCouponTable.entries[i].alt == -1);
+}
+
+namespace {
+const shell::ControlEntry* attack_row(int param) {
+    for(int i = 0; i < shell::kRevaTable.count; ++i)
+        if(shell::kRevaTable.entries[i].param == param) return &shell::kRevaTable.entries[i];
+    return nullptr;
+}
+} // namespace
+
+TEST_CASE("controls: an ATTACK pot writes what FireflowHW shows -- STAGES on the BBD only") {
+    // Every ENGINE slot on each deck, the other deck held on the opposite
+    // choice, so a pot reading the wrong deck's ENGINE goes red. The slot is
+    // held against the law: the slot that makes the law put the deck on
+    // ENGINE_BBD is exactly the slot that picks STAGES.
+    for(int deck = 0; deck < 2; ++deck)
+    {
+        const int attack = deck ? ffctl::ATTACK_B : ffctl::ATTACK_A;
+        const int stages = deck ? ffctl::STAGES_B : ffctl::STAGES_A;
+        const int engine = deck ? ffctl::ENGINE_B : ffctl::ENGINE_A;
+        const int other  = deck ? ffctl::ENGINE_A : ffctl::ENGINE_B;
+        const shell::ControlEntry* e = attack_row(attack);
+        REQUIRE(e != nullptr);
+        for(int slot = 0; slot <= 5; ++slot)
+        {
+            CAPTURE(deck);
+            CAPTURE(slot);
+            float k[ffctl::NUM_PARAMS];
+            for(int i = 0; i < ffctl::NUM_PARAMS; ++i) k[i] = ffctl::kInitParamDefaults[i];
+            k[engine] = static_cast<float>(slot);
+            k[other]  = slot == 4 ? 0.f : 4.f;
+            spky::Instrument inst; inst.init(48000.f);
+            control::ControlLaw law; law.on_restore();
+            float il[96] = {}, ir[96] = {}, ol[96], orr[96];
+            for(int b = 0; b < 32; ++b) {
+                law.tick(k, control::Options{}, inst);
+                inst.process(il, ir, ol, orr, 96);
+            }
+            const bool on_bbd = inst.engine_id(deck ? spky::PART_B : spky::PART_A) == spky::ENGINE_BBD;
+            CHECK(on_bbd == (slot == 4));
+            CHECK(shell::knob_target(*e, k) == (on_bbd ? stages : attack));
+        }
+    }
+    // A row without an alternate always writes its own id.
+    float k[ffctl::NUM_PARAMS];
+    for(int i = 0; i < ffctl::NUM_PARAMS; ++i) k[i] = ffctl::kInitParamDefaults[i];
+    k[ffctl::ENGINE_A] = 4.f;
+    CHECK(shell::knob_target(shell::kCouponControls[0], k) == ffctl::RATE_A);
 }

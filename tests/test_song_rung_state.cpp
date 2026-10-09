@@ -1,6 +1,6 @@
 #include <doctest/doctest.h>
 
-#include "vcv/src/song_rung_state.hpp"
+#include "control/song_rung_state.hpp"
 
 
 // Covers the defect a Task 3 review round found (spec 2026-08-09

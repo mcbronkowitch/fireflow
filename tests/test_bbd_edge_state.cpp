@@ -1,6 +1,6 @@
 #include <doctest/doctest.h>
 
-#include "vcv/src/bbd_edge_state.hpp"
+#include "control/bbd_edge_state.hpp"
 
 
 // Covers all three restore paths a review round found broken in turn (spec

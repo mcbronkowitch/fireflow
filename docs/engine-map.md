@@ -1467,3 +1467,120 @@ table, the negative-half measurements, and BODY's zone-2 blind spot. All of
 it described code removed 2026-08-20 (`docs/by-ear-decisions.md` carries the
 withdrawal and the measurements that motivated it); nothing in `engine/`
 answers to `set_edge` any more, so there is nothing left to map.
+
+---
+
+## Control-law tick rate (2026-10-09)
+
+The question (spec `2026-10-09-rev-a-p6b1-shared-control-law-design.md` §4.3):
+VCV calls `control::ControlLaw::tick()` every 16 samples, the firmware once per
+96-sample block. Does anything in the law, or in a setter it calls, advance per
+CALL rather than per sample?
+
+**No. The law is rate-independent** (init patch, one knob swept). What differs between the two rates is
+when a moving value is sampled (a staircase of at most 96 samples, 2 ms), not
+state.
+
+**Setup** (scratchpad probe, recipe §6, linked against the render host's
+engine source list plus `daisysp_min`, `-O3 -DNDEBUG`): a fresh `Instrument`
+with full `FxMem` per run, `init(48000)`, `ControlLaw` + `on_restore()`, knobs
+from `ffctl::kInitParamDefaults`, 20 s, `process()` one sample per call in both
+runs so that only the tick division differs. Sweep: `RATE_A = 0.5 + 0.4 sin(0.7 t)`,
+`DRIFT` 0.6 except 0 for 10.0–10.5 s (one `settle()`), `SONG_A` to rung 9 at
+15 s (one `new_phrase()`). A derived instrument type counts the law's calls:
+exactly one `settle()` and one `new_phrase()` at both divisions in every row
+(60 000 against 10 000 ticks).
+
+| Row | What differs between div 16 and div 96 | Samples differing (of 960 000) | Worst per-second RMS diff |
+|---|---|---|---|
+| repeat, div 16 twice / div 96 twice | nothing | 0 / 0 | 0.000 dB |
+| A: the sweep, init patch | knob sampling + MOD frame | 959 686 | −0.049 dB (8 s) |
+| K: sweep, host-computed MOD depths at 0 | knob sampling only | 932 445 | −0.046 dB |
+| HM: knobs held on the 96 grid, init depths | MOD frame only | 959 686 | +0.010 dB |
+| **H0: knobs held on the 96 grid, host depths 0** | **per-call state, if any** | **0** | **0.000 dB** |
+| RED: H0 + a per-call one-pole (0.05) on `RATE_A` in front of `tick()` | deliberate per-call state | 959 904 | −0.992 dB |
+| div 96 with `process(1)` against `process(96)` | the Daisy's block shape | 0 | 0.000 dB |
+
+Row A per second, div 96 against div 16, s 0–19 (dB): +0.005 +0.019 −0.030
+−0.005 +0.008 +0.015 +0.003 −0.029 −0.049 −0.020 +0.012 −0.013 −0.009 −0.014
++0.008 +0.011 +0.009 −0.001 +0.005 +0.021.
+
+How to read it:
+
+- **The engine is deterministic** (repeats bit-identical), so run-to-run noise is
+  zero and the tolerance is the brief's ±0.5 dB. Row A stays inside ±0.05 dB.
+- **H0 is the deciding row.** Knobs change only on the 96 grid and no
+  host-computed MOD term is live, so div 16 calls `tick()` six times per change
+  with identical input. The output is bit-identical for 20 s, settle and rung
+  change included. The RED row proves this comparison can fail: a per-call
+  smoother differs in 959 904 samples.
+- **Per-second RMS is a blunt detector.** That gross per-call smoother moves it
+  by at most 0.99 dB, and only 3 of 20 seconds exceed 0.5 dB. Bit identity of
+  H0 is the sharp test; the RMS column is a sanity line.
+- **K and HM are the two expected effects, both quantisation.** K: a moving
+  knob is read every 96 instead of every 16 samples, so it lands up to 2 ms later
+  (the end lane state differs by 3.1e-4, a phase offset). HM: the MOD frame
+  (`_laneOut`, sampled at the top of each tick, `control_law.h:209-215`) steps
+  at 500 Hz instead of 3 kHz for the init patch's five live host-computed depths
+  (SUB_B, DETUNE_A/B, MORPH, REV_DIFF). Neither exceeds 0.05 dB in any second.
+
+**Why, from the source.** The three state types in `control/` are edge
+detectors and a hysteresis with no time constant: `const bool entered = bbdPart
+&& !wasBbd;` (`bbd_edge_state.hpp:42`), `const bool entered = zoneNow &&
+!inZone;` (`drift_settle_state.hpp:39`), `const int next =
+spky::hyst_step(rung, norm, count);` (`song_rung_state.hpp:51`, and
+`hyst_step`, `song_ladder.h:61`, is a pure function). A repeated call with the
+same input returns false and leaves the state as it was. The setters store
+targets; every glide runs on the engine's own sample counters inside
+`process()`: Instrument's `_ctrl_ctr` (`instrument.cpp:239`, 96 samples), Part's
+raster (`part.h:386-392`), the reverb-mix one-poles (`instrument.cpp:517-520`),
+MORPH's `_morph_smooth` (`engine/center/center.cpp:135`). The one comment that says something
+counts calls ("Quantizer::process's slew counts *calls*", `part.h:375`) means
+Part's own `_control_tick()`, which that raster drives, not the host. Setters
+that do work on a change guard it: `Instrument::set_pace` (`instrument.cpp:220`),
+`Flux::set_bpm` (`flux.cpp:42`), `Part::set_engine` (`part.cpp:186`),
+`Part::set_step`'s edge (`part.cpp:195`). A script walked the 94 functions
+reachable from the law's `inst.` calls for accumulating or counting writes.
+Every hit was a change guard, an edge or a hysteresis (`ChordBuilder::set_color`),
+a counter that is set rather than advanced (`settle()`'s `_settle_ctr`,
+`set_recording`'s `_fade_ctr`), `new_phrase()`'s reseed counter (the law calls
+it only on a rung edge), or a scanner match that ran past a short body into
+the next function.
+
+**Consequence:** `tick()` needs no `dt`, and the firmware may tick once per
+block. Scope: the init patch with one knob swept. The source reading covers the
+setters for other states; the probe does not.
+
+**Measured later the same day: the six retiming setters stay out of the law's
+sent-value cache.** `set_rate`, `set_smooth`, `set_step`, `set_sync`, `set_tide`
+and `set_tempo_bpm` early-out in the engine on an unchanged value, but the
+early-out still calls `ModLane::refresh_slew()`, which rebuilds a lane's slew
+only if the lane's `_ev_rate` (it drifts under GROW/RENEW wraps and SETTLE,
+and no setter writes it) differs bitwise from the value the last rebuild
+read. That refresh is observable **only at division 16 (VCV)** and only with
+RANGE > 0 (the init patch parks RANGE at 0, which flattens the PITCH lane),
+SMOOTH > 0 and `_ev_rate` drifting mid-block (a fast STEP clock under GROW):
+the PITCH lane's per-sample `_slew` reads the push that lands mid-block, and
+the lane values differed in 1462 comparisons while the audio stayed identical
+(task 9a gate: 10 s, `refresh_slew()` stubbed to a no-op, RANGE 1/1, fast
+clock from 8.5 s, division 16). **At division 96 `Center::update` rebuilds every
+lane through `set_rate_scale` at the top of each block and masks it.** So a law
+cache that swallowed those pushes turned the real-Instrument gate red at
+division 16 only (task 9b gate, all six retiming setters plus `set_drift`
+cached: engine scenario 457 506 sample diffs, DRIFT scenario 20 718 lane
+diffs; different runs from the 1462) and stayed green at division 96, which is why the cache exempts
+them (`set_drift` too, by reasoning: `Center::settle()` writes
+`_drift_target` behind its setter). Everything else the law sends is cached
+and measured bit-identical, cache on against off, 7 scenarios x 20 s x both
+divisions.
+
+**What the law costs on the board (measured 2026-10-09, coupon, init patch,
+`SHELL_PLAY_LAW`, cycles per tick of a 960 000-cycle block):** about 90 000
+before any fix (the six retiming setters called `ModLane::_update_slew` 110
+times a tick, each a double `pow(1-k, 96)` through newlib), 29 500 with the
+unchanged-value early-outs and `pow` by repeated squaring, 15 800 with the
+law-side cache at `-Os`, **11 800 at `-O2` (peak 13 900)**. Where the 29 500
+went (a scratch board image, cold tick about 30 500, warm second tick about
+27 100): deck A 12 100, deck B 10 700, the depth loop 2 300, the tail (centre,
+reverb, tempo) 5 000, framing about 500; the setter rows (`set_rate` ..
+`set_pan`, libm `powf`/`expf`) were about 60 %.

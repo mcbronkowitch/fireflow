@@ -7,6 +7,7 @@
 #include <osdialog.h>
 #include "plugin.hpp"
 #include "generated_panel.hpp"   // enums + control table (generated from res/gen_panel.py)
+#include "control/params.hpp"    // ranges, generated beside the panel (same PARAMS list)
 #include "ff_knob.hpp"           // the panel's own knob: dark cap, deck-accent collar
 #include "ff_port.hpp"           // the panel's own jack: dark barrel, pewter ring
 #include "ff_button.hpp"         // the panel's own keycap: dark cap, accent edge
@@ -14,11 +15,12 @@
 #include "init_patch.hpp"       // sampler.vcvm snapshot + non-param init state
 #include "form_song_migration.hpp"
 #include "link_migration.hpp"
-#include "bbd_edge_state.hpp"   // ENG->BBD edge detector (dependency-free, unit-tested)
-#include "song_rung_state.hpp"  // SONG rung tracker (dependency-free, unit-tested)
-#include "drift_settle_state.hpp"  // DRIFT left-stop edge detector (dependency-free, unit-tested)
+#include "control/bbd_edge_state.hpp"  // ENG->BBD edge detector (dependency-free, unit-tested)
+#include "control/song_rung_state.hpp"  // SONG rung tracker (dependency-free, unit-tested)
+#include "control/drift_settle_state.hpp"  // DRIFT left-stop edge detector (dependency-free, unit-tested)
 #include "led_law.hpp"           // the panel's LED display law (Rack-free, unit-tested)
-#include "mod_layer.hpp"         // the MOD latch layer's host-computed math (Rack-free, unit-tested)
+#include "control/mod_layer.hpp"         // the MOD latch layer's host-computed math (Rack-free, unit-tested)
+#include "control/control_law.h"       // the control law pushParams() runs (Rack-free, shared with the firmware)
 
 // The portable engine core -- exactly the same headers the desktop render host
 // and (later) the Daisy firmware use. No hardware type crosses this boundary.
@@ -29,16 +31,6 @@
 #include "sampler_ui.hpp"
 
 using namespace spkyvcv;
-
-// COUPLE swallowed the SYNC switch (task 7, spec 2026-08-09
-// hw-control-reduction): SYNC was the right-hand end of COUPLE's own axis.
-// Below the split the knob is the FREE world (couple drives the Kuramoto
-// lock); at or above it the GRID world (couple sets how tightly the texture
-// lanes follow). Each half sweeps 0..1, so the grid world keeps its full
-// spread -- "on the grid but breathing" stays reachable. Shared by the
-// RATE/TIDE tooltips below and pushParams; mirrored (not shared -- see
-// res/test_panel.py) in bench/audition/init_patch.cpp.
-static constexpr float kCoupleZoneSplit = 0.5f;
 
 // RATE tooltip: the division name while grid (COUPLE >= split) is on, free
 // Hz otherwise. The free branch is multiplied by PACE (spec 2026-08-12
@@ -60,7 +52,7 @@ static constexpr float kCoupleZoneSplit = 0.5f;
 
 struct RateQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
-        if (module && module->params[COUPLE].getValue() >= kCoupleZoneSplit)
+        if (module && module->params[COUPLE].getValue() >= control::kCoupleZoneSplit)
             return spky::kDivisions[spky::division_index(getValue())].name;
         const float pace = module
             ? spky::pace_mult(module->params[PACE].getValue()) : 1.f;
@@ -72,7 +64,7 @@ struct RateQuantity : ParamQuantity {
 // otherwise (same table the engine snaps to, mod/divisions.h).
 struct TideQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
-        if (module && module->params[COUPLE].getValue() >= kCoupleZoneSplit)
+        if (module && module->params[COUPLE].getValue() >= control::kCoupleZoneSplit)
             return spky::kTideNames[spky::tide_index(getValue())];
         return string::f("x%.2f", spky::tide_free(getValue()));
     }
@@ -320,6 +312,12 @@ static_assert(REC_B == REC_A + 1,
 // kModLayer, never via pp().
 static_assert(MODBTN > REC_B, "mod-layer params must stay appended after REC");
 static_assert(NUM_PARAMS == MODBTN + 51, "mod layer is 51 params: MODBTN + 50 depths");
+static_assert((int)ffctl::NUM_PARAMS == (int)NUM_PARAMS, "control/params.hpp is stale");
+static_assert((int)ffctl::MODBTN == (int)MODBTN, "control/params.hpp is stale");
+
+// configControls() reads every range from the generated table, so the panel
+// and the firmware's pot scaling cannot drift apart.
+static const ffctl::ParamRange& rangeOf(int id) { return ffctl::kParamRange[id]; }
 
 struct Fireflow : Module {
     spky::Instrument inst;
@@ -362,46 +360,13 @@ struct Fireflow : Module {
     // now, so Rack persists it as a ParamId and this module holds no state
     // for it at all: the float array, its JSON key, its reset and the
     // slider all left together.
-    // Edge-detects the ENG switch landing on BBD, so the FLUX-off and
-    // excite-other-deck defaults below (spec 5.11/5.12) apply once on a
-    // genuine player-driven transition and never fight a player who
-    // deliberately turns them back on afterward -- and never fire at all on
-    // a RESTORE that lands on BBD (fresh add, whole-patch load, Ctrl+D
-    // duplicate, or an already-live preset Load/paste -- see
-    // dataFromJson()'s rearm() call). Full reasoning, and why this is its
-    // own unit-tested type rather than inline bools, lives in
-    // bbd_edge_state.hpp.
-    spkyvcv::BbdEdgeState bbdEdge[spky::PART_COUNT];
     spky::WavData factoryNative;
     bool factoryNativeTried = false;
     std::vector<float> factoryL, factoryR;
 
     float curSr = 0.f;
-    // MOD latch layer state for one control tick: the lane outputs and the two
-    // masters, sampled once at the top of pushParams so every mv() read in the
-    // same tick sees the same modulation frame (spec 2026-08-22 §3b).
-    float laneOut[spky::PART_COUNT][spky::LANE_COUNT] = {};
-    float laneOutStepped[spky::PART_COUNT][spky::LANE_COUNT] = {};
-    float modMaster[spky::PART_COUNT] = {};
-    // Reverse index into kModLayer, keyed by SOUND param id: -1 means the face
-    // owns no depth param. Built once in the constructor -- mv() runs per param
-    // per control tick and must not scan the table.
-    int modIdxBySound[NUM_PARAMS];
     dsp::ClockDivider ctrlDiv;              // throttle param push to control rate
     dsp::SchmittTrigger clockTrig, resetTrig;
-    // Tracks the SONG knob's current rung so pushParams can detect a genuine
-    // rung change and re-roll the phrase -- SONG swallowed FORM and the NEW
-    // pad (spec 2026-08-09 hw-control-reduction task 3). Seeded/rearm shape
-    // (song_rung_state.hpp) so a RESTORED rung -- patch load, preset load,
-    // module add, or Initialize -- adopts as a baseline instead of firing.
-    spkyvcv::SongRungState songRung[spky::PART_COUNT];
-    // Edge-detects DRIFT parking at its own left stop -- the old SETL pad's
-    // job, folded into the knob's lower kDriftSettleZone (spec 2026-08-09
-    // hw-control-reduction task 8). Same seeded/rearm shape as bbdEdge/
-    // songRung above, for the same reason: a RESTORED DRIFT already in the
-    // zone must adopt as a baseline instead of firing settle() on load. See
-    // drift_settle_state.hpp.
-    spkyvcv::DriftSettleState driftSettled;
     float clkSamples = 0.f;                 // samples since last external clock edge
     // The mux scan gives the hardware 16 brightness steps for free, so Rack
     // quantises to the same raster -- and applies the same perceptual gamma
@@ -418,9 +383,6 @@ struct Fireflow : Module {
     Fireflow() {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
         configControls();
-        for (int i = 0; i < NUM_PARAMS; ++i) modIdxBySound[i] = -1;
-        for (size_t i = 0; i < sizeof(kModLayer) / sizeof(kModLayer[0]); ++i)
-            modIdxBySound[kModLayer[i].soundId] = (int)i;
         for (int p = 0; p < spky::PART_COUNT; ++p) {
             fxmem.bbd[p][0] = bbd[p][0];
             fxmem.bbd[p][1] = bbd[p][1];
@@ -438,31 +400,31 @@ struct Fireflow : Module {
                 case WK_BIGKNOB:
                 case WK_SMKNOB:
                     if (c.id == RATE_A || c.id == RATE_B)
-                        configParam<RateQuantity>(c.id, 0.f, 1.f, init, lbl);
+                        configParam<RateQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == CHOKE)  // event-priority, continuous, zone-aware tooltip
-                        configParam<ChokeQuantity>(c.id, -1.f, 1.f, init, lbl);
+                        configParam<ChokeQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == PULL)  // bipolar chord gravity between the decks (spec 2026-07-19 pull-chord-gravity)
-                        configParam(c.id, -1.f, 1.f, init,
+                        configParam(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init,
                                     "Chord gravity: left = A leads, right = B leads");
                     else if (c.id == FILT_A || c.id == FILT_B)  // bipolar cutoff trim
-                        configParam(c.id, -1.f, 1.f, init, lbl);
+                        configParam(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == PAN_A || c.id == PAN_B)  // per-deck balance, dry only (spec 2026-08-30 pan)
-                        configParam(c.id, -1.f, 1.f, init, lbl);
+                        configParam(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == TIDE)  // texture-lane rate, snaps in the GRID zone
-                        configParam<TideQuantity>(c.id, 0.f, 1.f, init, lbl);
+                        configParam<TideQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == FLUXFB_A || c.id == FLUXFB_B)
-                        configParam<FluxFbQuantity>(c.id, 0.f, 1.f, init, lbl);
+                        configParam<FluxFbQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == REV_DECAY)
-                        configParam<RevDecayQuantity>(c.id, 0.f, 1.f, init, lbl);
+                        configParam<RevDecayQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == LINK_A || c.id == LINK_B)
-                        configParam<LinkQuantity>(c.id, 0.f, 1.f, init, lbl);
+                        configParam<LinkQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == STAGES_A || c.id == STAGES_B)
-                        configParam<StagesQuantity>(c.id, 0.f, 1.f, init, lbl);
+                        configParam<StagesQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == SUB_A || c.id == SUB_B)  // INPUT (%) on BBD
-                        configParam<SubQuantity>(c.id, 0.f, 1.f, init, lbl);
+                        configParam<SubQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == SOURCE_A || c.id == SOURCE_B) {
                         auto* source = configParam(
-                            c.id, 0.f, 1.f, init,
+                            c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init,
                             c.id == SOURCE_A ? "SOURCE A" : "SOURCE B");
                         source->description =
                             "Controls Synth TIMB, Sampler ORG, Wave FRAME, Body MATL, BBD DRIVE or Feed BOND according to the selected engine.";
@@ -472,23 +434,23 @@ struct Fireflow : Module {
                         // same as every other control in this loop -- only
                         // the display quantity is still bespoke, for the
                         // squared-cents tooltip (see DetuneQuantity above).
-                        configParam<DetuneQuantity>(c.id, 0.f, 1.f, init, lbl);
+                        configParam<DetuneQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else if (c.id == PACE)
-                        configParam<PaceQuantity>(c.id, 0.f, 1.f, init, lbl);
+                        configParam<PaceQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else
-                        configParam(c.id, 0.f, 1.f, init, lbl);
+                        configParam(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     break;
                 case WK_KNOBC:
                     if (c.id == MELODY_A || c.id == MELODY_B)
                         // MELODY (bipolar): both decks loop — A drifts a
                         // little, B is frozen. Tooltip name follows ENG
                         // through MelodyQuantity.
-                        configParam<MelodyQuantity>(c.id, -1.f, 1.f, init, lbl);
+                        configParam<MelodyQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     else
                         // GRIT (bipolar): sign picks Drive/Reduce, magnitude
                         // is the mix (spec 2026-08-09 hw-control-reduction
                         // task 4; see pushParams for the dead-zone math).
-                        configParam(c.id, -1.f, 1.f, init, lbl);
+                        configParam(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, lbl);
                     break;
                 case WK_KNOBI:
                     if (c.id == SCALE)
@@ -498,7 +460,7 @@ struct Fireflow : Module {
                         // could boot Lydian while INIT_DEFAULTS said
                         // Mixolydian -- the bench audition read the table, the
                         // panel did not, and nothing compared them.
-                        configParam<ScaleQuantity>(c.id, 0.f, (float)(spky::SCALE_LIST_COUNT - 1),
+                        configParam<ScaleQuantity>(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi,
                                                    init, "Scale");
                     else if (c.id == SONG_A || c.id == SONG_B) {
                         // SONG walks a curated 14-rung ladder through the
@@ -518,8 +480,7 @@ struct Fireflow : Module {
                             rungs.push_back(std::string(kFormWords[r.form]) +
                                             " / " + kSongWords[r.song]);
                         }
-                        configSwitch(c.id, 0.f,
-                                     float(spky::kSongLadderCount - 1),
+                        configSwitch(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi,
                                      init, "Song", rungs);
                     }
                     // TIME: 12-detent knob over the synced FLUX divisions
@@ -530,10 +491,10 @@ struct Fireflow : Module {
                     // flux_division_index().
                     else if (c.id == FLUXRATE_A || c.id == FLUXRATE_B)
                         configParam<FluxRateQuantity>(
-                            c.id, 0.f, (float)(spky::kFluxRateCount - 1),
+                            c.id, rangeOf(c.id).lo, rangeOf(c.id).hi,
                             init, lbl);
                     else  // STEPS_A / STEPS_B
-                        configParam(c.id, 0.f, 16.f, init, "Steps");
+                        configParam(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, "Steps");
                     getParamQuantity(c.id)->snapEnabled = true;
                     break;
                 case WK_SW2:
@@ -552,10 +513,10 @@ struct Fireflow : Module {
                     break;
                 case WK_LATCH:
                     if (c.id == REC_A || c.id == REC_B)
-                        configSwitch(c.id, 0.f, 1.f, init, "Record",
+                        configSwitch(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, "Record",
                                      {"Stopped", "Recording"});
                     else if (c.id == ENGINE_A || c.id == ENGINE_B) {
-                        configSwitch(c.id, 0.f, 5.f, init, "Engine",
+                        configSwitch(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, "Engine",
                                      {"Synth", "Sampler", "Wave", "Body", "BBD",
                                       "Feed"});
                         getParamQuantity(c.id)->snapEnabled = true;
@@ -603,10 +564,11 @@ struct Fireflow : Module {
         // picks which reading of the lane that swing follows (left = S&H), it
         // is not a second copy of the knob. Noon is standstill, dead-zoned in
         // mod_layer.hpp so it is reachable on a pot.
-        configSwitch(MODBTN, 0.f, 1.f, initParamDefault(MODBTN), "MOD layer",
-                     {"Off", "On"});
+        configSwitch(MODBTN, rangeOf(MODBTN).lo, rangeOf(MODBTN).hi,
+                     initParamDefault(MODBTN), "MOD layer", {"Off", "On"});
         for (const auto& t : kModLayer)
-            configParam(t.depthId, -1.f, 1.f, initParamDefault(t.depthId), t.name);
+            configParam(t.depthId, rangeOf(t.depthId).lo, rangeOf(t.depthId).hi,
+                        initParamDefault(t.depthId), t.name);
     }
 
     // Re-init the engine for a new sample rate. Without the snapshot below,
@@ -651,6 +613,10 @@ struct Fireflow : Module {
         fxmem.sampler_frames = frames;
 
         inst.init(sr, fxmem);
+        // init() put every value the law ever sent back to its default; the
+        // law's sent-value cache must forget them, or the next tick would
+        // skip them as unchanged (control_law.h). Re-arms no edge detector.
+        law.on_instrument_init();
 
         for (int p = 0; p < spky::PART_COUNT; ++p)
             if (!snapL[p].empty())
@@ -680,247 +646,11 @@ struct Fireflow : Module {
         reinit(e.sampleRate);
     }
 
-    // Read a per-part param: baseId is the PART A enum, part in {0,1}.
-    inline float pp(int baseA, int part) {
-        return params[baseA + part * PART_STRIDE].getValue();
-    }
-    inline bool ppb(int baseA, int part) { return pp(baseA, part) > 0.5f; }
-
-    // MOD-layer read of a host-computed sound param: knob + depth * MOD *
-    // lane, in KNOB space, clamped to the param's own declared range (spec
-    // 2026-08-22 §3b). Non-targets and the engine-backed faces fall straight
-    // through to the knob -- their modulation happens inside the Part, so
-    // adding a host-side term here would modulate them twice.
-    //
-    // At init every host-computed depth is 0 and modded() returns the knob by
-    // early return, so this whole layer is a no-op on a fresh patch: the push
-    // stream is exactly what it was before the layer existed.
-    // No `part` parameter (fix round 2): the master/lane index the term
-    // needs is `t.part`, read out of the very kModLayer row this function
-    // already looks up by soundId -- a caller-supplied part that disagreed
-    // with it used to be silently obeyed instead of the row's own part,
-    // which is the same shape of cross-deck aliasing the DEPTH_A/DEPTH_B fix
-    // above closed (F1). All eight call sites already passed a part matching
-    // t.part (verified by inspection, fix round 2), so this is a no-op in
-    // behaviour; it just removes the ability to get it wrong.
-    inline float mv(int soundId) {
-        const float v = params[soundId].getValue();
-        const int mi = modIdxBySound[soundId];
-        if (mi < 0) return v;
-        const ModTarget& t = kModLayer[mi];
-        if (t.kind != MODK_HOST) return v;
-        // t.part == 2 marks a center-column target: both decks mixed, so both
-        // masters down means the center is still. Both readings are built the
-        // same way -- the sum of two staircases is itself a staircase (spec
-        // 2026-08-22 mod-sh-split §5), so the center needs no extra clock.
-        //
-        // PAN_B is the layer's one cross-deck row: it reads deck A's lane
-        // through deck A's MASTER, negated, so the two PANs always open the
-        // stereo image instead of walking the whole mix to one side (why, and
-        // the measurement behind it: spkymod::mirror_term). Both readings are
-        // mirrored, continuous and S&H alike -- mirroring only one would flip
-        // the symmetry the moment the depth ring crosses noon.
-        //
-        // The exception is keyed off the soundId HERE rather than handed in by
-        // the caller, for the same reason mv() lost its `part` parameter in
-        // fix round 2: the row decides, never the call site. t.part stays 1
-        // for that row, and truthfully so -- PAN_B's DEPTH is still deck B's
-        // ring. Only the source moved. What it costs: MOD_B no longer reaches
-        // PAN_B, so deck B's pan is switched off at its own depth ring.
-        const bool mirror = (soundId == PAN_B);
-        const float term = (t.part == 2)
-            ? spkymod::center_term(modMaster[0], laneOut[0][t.slot],
-                                   modMaster[1], laneOut[1][t.slot])
-            : mirror
-            ? spkymod::mirror_term(modMaster[0], laneOut[0][t.slot])
-            : spkymod::lane_term(modMaster[t.part], laneOut[t.part][t.slot]);
-        const float stepTerm = (t.part == 2)
-            ? spkymod::center_term(modMaster[0], laneOutStepped[0][t.slot],
-                                   modMaster[1], laneOutStepped[1][t.slot])
-            : mirror
-            ? spkymod::mirror_term(modMaster[0], laneOutStepped[0][t.slot])
-            : spkymod::lane_term(modMaster[t.part],
-                                 laneOutStepped[t.part][t.slot]);
-        ParamQuantity* q = paramQuantities[soundId];
-        return spkymod::modded(v, spkymod::depth_of(params[t.depthId].getValue()),
-                               term, stepTerm,
-                               q->getMinValue(), q->getMaxValue());
-    }
-    // Strided twin of pp(). Only valid inside the part blocks, exactly like
-    // pp() itself -- the appended pairs (COLOR/LINK/FILT/FLUX/FLUXFB/REV_MIX/
-    // DEPTH/STAGES/PAN) must go through mv(p ? X_B : X_A). mvp() still takes
-    // `part`: it needs it to build the strided soundId, same as pp() does.
-    inline float mvp(int baseA, int part) {
-        return mv(baseA + part * PART_STRIDE);
-    }
-
-    // GRIT is one bipolar knob (spec 2026-08-09 hw-control-reduction task
-    // 4): sign picks the mode, magnitude is the mix. The dead zone exists
-    // because a 9 mm pot on an ADC cannot hit an exact zero -- without it
-    // "off" would be unreachable on hardware. Shared between the fx_on gate
-    // below and the mode/mix push further down so both agree on what
-    // "engaged" means.
-    static constexpr float kGritDead = 0.03f;
-
-    void pushParams() {
-        // Sample the modulation frame once per control tick (spec 2026-08-22
-        // §3b), before any mv() read: one frozen frame per tick means deck A's
-        // first knob and deck B's last knob see the same lane positions, and
-        // the center's mix of both decks is taken at one instant.
-        for (int p = 0; p < 2; ++p) {
-            modMaster[p] = pp(MOD_A, p);
-            for (int s = 0; s < spky::LANE_COUNT; ++s) {
-                laneOut[p][s]        = inst.lane_output(p, s);
-                laneOutStepped[p][s] = inst.lane_output_stepped(p, s);
-            }
-        }
-
-        // STEP entry latches the groove target immediately. Push the shared
-        // amount before either deck sees its FLOW->STEP transition so both
-        // decks latch the value from this same control update.
-        inst.set_shuffle(params[SHUFFLE].getValue());
-        for (int p = 0; p < 2; ++p) {
-            inst.set_rate(p, mvp(RATE_A, p));
-            inst.set_shape(p, mvp(SHAPE_A, p));
-            inst.set_density(p, mvp(DENSITY_A, p));
-            inst.set_smooth(p, mvp(SMOOTH_A, p));
-            inst.set_range(p, mvp(RANGE_A, p));
-            // MOD is the per-deck master in both modes and is never itself
-            // modulated (spec §2) -- a raw pp() read on purpose.
-            inst.set_depth(p, pp(MOD_A, p));
-            inst.set_tune(p, mvp(TUNE_A, p));
-
-            inst.set_voice_attack(p, mvp(ATTACK_A, p));
-            inst.set_voice_decay(p, mvp(DECAY_A, p));
-            inst.set_voice_resonance(p, mvp(RES_A, p));
-            // FILT is engine-backed (its depth writes _tdepth[LANE_SIZE] in
-            // step 6 below), so the knob stays the raw trim it always was.
-            inst.set_voice_filt(p, params[p ? FILT_B : FILT_A].getValue());
-            inst.set_color(p, mv(p ? COLOR_B : COLOR_A));
-            inst.set_voice_sub(p, mvp(SUB_A, p));
-            // Quadratic taper: the first ~20 ct is where the fine beating
-            // lives, and a linear map would squeeze it into a fifth of the
-            // travel now that the ceiling is 105 ct.
-            //
-            // Not on a FEED deck. There DETUNE means SPREAD and gets to the
-            // engine as the LANE_SIZE base further down -- the sampler's
-            // SUB -> LANE_SIZE re-point, one entry further down the same
-            // ledger. It is passed RAW there, not squared: FEED owns its own
-            // curve in feed_cfg's two-segment SPREAD map, and applying
-            // DetuneQuantity's square on top would compress the single-digit
-            // region the spec reserves for the lower half.
-            if (inst.engine_id(p) != spky::ENGINE_FEED) {
-                // The MOD-layer term lands in KNOB space, before the square
-                // (spec §3b): modulating the mapped value would make the same
-                // depth mean a different number of cents at every knob
-                // position.
-                const float detKnob = mvp(DETUNE_A, p);
-                inst.set_voice_detune(p, detKnob * detKnob);
-            }
-
-            inst.set_flux_mix(p, pp(FLUX_A, p));
-            inst.set_flux_rate(p, (int)std::lround(
-                params[p ? FLUXRATE_B : FLUXRATE_A].getValue()));
-            inst.set_fx_target_base(p, spky::FXT_FLUX_FB,
-                params[p ? FLUXFB_B : FLUXFB_A].getValue());
-            // The tape multiplier keeps its modulation sink but loses its knob:
-            // 0.5 is the neutral multiplier (tape_time_mult(0.5) == 1), so CV
-            // and the mod lanes still bend the tape while the panel does not.
-            inst.set_fx_target_base(p, spky::FXT_FLUX_TIME, 0.5f);
-            // Appended params are outside the stride, so pp() would compute the
-            // wrong id — the explicit ternary is required (see FLUXRATE/FLUXFB).
-            inst.set_link(p, mv(p ? LINK_B : LINK_A));
-            // STAGES itself is pushed further down, alongside samplerPart's
-            // analogous re-point gate -- it needs this tick's dispatched
-            // engine_id(p), which set_engine (below) hasn't set yet here.
-            // The FX blocks are gated by an explicit on/off (a pad on hardware,
-            // a scenario action on the desktop). VCV has no such pad, so the mix
-            // knob doubles as the on switch: knob up == engaged. At 0 the block
-            // stays idle and the whole chain is skipped (bit-exact bypass).
-            inst.set_fx_on(p, spky::FxBlock::Flux, pp(FLUX_A, p) > 1e-4f);
-            // GRIT is bipolar now: "engaged" means the knob has cleared the
-            // dead zone in either direction, not just a positive value --
-            // the raw value alone would silently mute the whole CRSH
-            // (negative) side (see kGritDead and pushParams' grit block).
-            inst.set_fx_on(p, spky::FxBlock::Grit,
-                            std::fabs(pp(GRIT_A, p)) > kGritDead);
-            // LVL/COMP: the lower zone is pure output gain (Comp::set_amount(0)
-            // is a bit-exact bypass, so it costs no compressor CPU); the top
-            // two fifths engage the compressor with make-up, ending at the 0.7
-            // that used to be the knob's working value.
-            //
-            // Both the split and the shape are about loudness per degree of
-            // travel. Comp::update_curve makes make-up strongly superlinear in
-            // the amount (_makeup_db = -_thr_db * (1 - 1/ratio) * 0.9, with
-            // ratio = 1 + 9a^2), so a LINEAR ramp across a narrow zone dumps
-            // most of its gain into the last few degrees: at the old 0.8 split
-            // the final tenth of the knob was worth +11.2 dB while the tenth
-            // just below the seam was worth +1.2 dB. A tenfold step change in
-            // sensitivity exactly where the hand crosses over reads as the
-            // volume pulling away at the top, which is what it was doing.
-            //
-            // Widening the zone alone does not fix that -- the a^2 term simply
-            // moves the same cliff to the right. kCompShape is the other half:
-            // raising the zone position to 0.6 front-loads the amount so
-            // make-up grows nearly LINEARLY IN dB across the zone (3.6..4.8 dB
-            // per tenth of travel, against 5.3 then 11.2 before). The exponent
-            // is fitted to update_curve's law above; change one and the other
-            // stops being right.
-            //
-            // kCompTop stays 0.7: full travel still reaches the compressor
-            // character the old knob was habitually parked at.
-            static constexpr float kLvlCompSplit = 0.6f;
-            static constexpr float kCompTop      = 0.7f;
-            static constexpr float kCompShape    = 0.6f;
-            // One face, one read: the MOD-layer term is applied once here, so
-            // the gain leg and the compressor leg stay two halves of the same
-            // knob travel rather than drifting apart under modulation.
-            const float lvlKnob = mvp(COMP_A, p);
-            inst.set_part_level(p, std::min(1.f, lvlKnob / kLvlCompSplit));
-            inst.set_comp(p, lvlKnob <= kLvlCompSplit ? 0.f
-                             : kCompTop * std::pow(
-                                   (lvlKnob - kLvlCompSplit) /
-                                   (1.f - kLvlCompSplit), kCompShape));
-
-            // PAN goes through mv() so the MOD ring's host-computed term is
-            // included; at boot the depth is 0 and mv() returns the knob by early
-            // return, so this is bit-identical to pushing the raw param.
-            //
-            // Deck B's mirror is NOT applied here -- mv() recognises PAN_B by
-            // its own soundId and swaps the lane source itself, so this call
-            // site stays the same shape as every other one. See mv().
-            //
-            // mv(p ? PAN_B : PAN_A), NOT mvp(PAN_A, p): mvp() adds p * PART_STRIDE
-            // and is only valid for params inside part_controls(). PAN is an
-            // APPENDED pair, so its two ids are not a stride apart -- see the
-            // comment on mvp itself, which names the appended pairs that
-            // have to take this route.
-            inst.set_pan(p, mv(p ? PAN_B : PAN_A));
-
-            // Saved ENG meanings remain 0 = Synth and 1 = Sampler; 2 adds
-            // Wave, 3 Body, 4 the BBD, 5 FEED. Each new engine needs its own
-            // explicit arm here -- anything that isn't 0/2/3/4/5 still falls
-            // through to Sampler (or the dev test tone), which is also why old
-            // patches keep their exact meaning. The test tone stays a
-            // Sampler-only override.
-            const int eng = static_cast<int>(std::round(pp(ENGINE_A, p)));
-            const spky::EngineId id =
-                eng == 0 ? spky::ENGINE_SYNTH :
-                eng == 2 ? spky::ENGINE_WAVE :
-                eng == 3 ? spky::ENGINE_BODY :
-                eng == 4 ? spky::ENGINE_BBD :
-                eng == 5 ? spky::ENGINE_FEED :
-                smp[p].testTone ? spky::ENGINE_TEST_TONE : spky::ENGINE_SAMPLER;
-            inst.set_engine(p, id);
-
-            // The excitation bus is patch state (design spec §6), pushed
-            // every control tick like the other per-part settings below --
-            // cheap, idempotent, and correct after a patch load without a
-            // separate "apply on restore" path.
-            inst.set_excitation_sources(p, smp[p].exciteTape,
-                                         smp[p].exciteOtherDeck,
-                                         smp[p].exciteAudioIn);
-
+    // The host side of control/control_law.h: what needs Rack or a file.
+    struct VcvHooks {
+        Fireflow* m;
+        void after_engine(int p, int eng, spky::Instrument& inst) {
+            // moved verbatim from pushParams: the factory autoload (Task 8)
             // First-user experience: flipping ENG to Sampler on an empty part
             // loads the factory drone, so one pad press makes sound. It never
             // overwrites content -- sampler_empty() is the whole guard, and
@@ -938,328 +668,42 @@ struct Fireflow : Module {
             // SampleBuffer::clear()'s _size==0 fast path (sample_buffer.cpp)
             // that memset is skipped here: what actually runs is the guard
             // check above plus a ~3.4 MB memcpy of the factory sample.
-            if (eng == 1 && !smp[p].testTone && inst.sampler_empty(p)
-                     && !factoryTried[p]) {
-                factoryTried[p] = true;
-                if (!factoryL.empty()) {
-                    inst.load_sample(p, factoryL.data(), factoryR.data(),
-                                     factoryL.size());
-                    smp[p].factoryLoaded = true;
+            if (eng == 1 && !m->smp[p].testTone && inst.sampler_empty(p)
+                     && !m->factoryTried[p]) {
+                m->factoryTried[p] = true;
+                if (!m->factoryL.empty()) {
+                    inst.load_sample(p, m->factoryL.data(), m->factoryR.data(),
+                                     m->factoryL.size());
+                    m->smp[p].factoryLoaded = true;
                 }
             }
+        }
+    };
+    control::ControlLawT<spky::Instrument, VcvHooks> law;
+    float knobs[NUM_PARAMS] = {};
 
-            inst.sampler_speed_mode(p, smp[p].tapeIdx != 0);
-            inst.sampler_reverse(p, smp[p].reverse);
-            inst.sampler_feedback(p, smp[p].feedback);
-
-            // REC is a latch, so its value IS the desired state -- an edge
-            // trigger would miss a state restored from a saved patch. The
-            // engine's set_recording is idempotent, and sampler_record flips
-            // monitoring with it, so pushing every control tick is correct.
-            // On a synth part REC is inert: ENG is the only mode selector.
-            // NOT ppb(REC_A, p): REC is not part-strided (see the static_assert
-            // block near the top of this file).
-            const bool wantRec = params[p ? REC_B : REC_A].getValue() > 0.5f
-                                 && inst.engine_id(p) == spky::ENGINE_SAMPLER;
-            if (wantRec != inst.sampler_is_recording(p)) {
-                inst.sampler_record(p, wantRec);
-                // path/factoryLoaded mean "the buffer still holds exactly
-                // what that source provided" -- once recording starts, the
-                // buffer no longer matches either source, so the part must
-                // stop claiming one.
-                if (wantRec) {
-                    smp[p].path.clear();
-                    smp[p].factoryLoaded = false;
-                }
-            }
-
-            // --- sampler control surface (spec 2026-07-21 morphagene-controls) ---
-            // Four knobs that do nothing in the sampler's FLOW cloud get a
-            // job of their own. The param ids do not change, so no saved
-            // patch moves; only what the knob means when ENG says Sampler.
-            //
-            // set_density above keeps firing unconditionally -- the "push to
-            // both, let the inactive side ignore it" pattern the voice row
-            // already uses. set_variation left that pattern when MELODY became
-            // SCAN-only on a Sampler deck (spec 2026-08-03); it is pushed
-            // below, behind the same samplerPart gate. DENS is the one knob
-            // that genuinely does two things in sampler STEP mode: it still
-            // thins the groove gate AND now sets grain overlap. Both meanings
-            // now follow the same modulated read (fix round 2, spec §8): the
-            // groove gate already went through mv()/mvp() above, and a raw
-            // pp() here would let a DENS mod depth move the gate without
-            // moving overlap, splitting one wreathed knob's face in two.
-            const bool samplerPart = inst.engine_id(p) == spky::ENGINE_SAMPLER;
-            inst.sampler_overlap(p, mvp(DENSITY_A, p));
-            inst.set_target_base(p, spky::LANE_SOURCE, pp(SOURCE_A, p));
-
-            // Ledger of every lane base this function re-points per engine, so
-            // the next addition has one place to check itself against rather
-            // than re-discovering the rule by breaking it a third time:
-            //   - LANE_SIZE:  sampler (SUB_A -> GENE SIZE) and FEED
-            //                 (DETUNE_A -> SPREAD), restored to 0.5f below
-            //                 when the deck is neither.
-            //   - LANE_PITCH: BBD-only (STAGES_A/B). Other engines retain
-            //                 their existing base; this movement only rehomes
-            //                 the preserved STAGES state while BBD is active.
-            //   - LANE_MOTION: the DPTH knob's base, on every engine, since
-            //                 2026-08-19 (no more FEED-only ternary). Before
-            //                 2026-08-18 this host never wrote this base at
-            //                 all, so the only thing that could reach
-            //                 LANE_MOTION in Rack was MOD.
-            const bool bbdPart = inst.engine_id(p) == spky::ENGINE_BBD;
-            const bool feedPart = inst.engine_id(p) == spky::ENGINE_FEED;
-            // STAGES is orphaned by movement 3 and becomes the LANE_PITCH base
-            // on a BBD deck. Re-pointing a knob per engine is not new -- the
-            // sampler already moves SUB_A to LANE_SIZE as GENE SIZE.
-            //
-            // STAGES_A/B are appended params (outside the stride, like
-            // DRIVE/LINK above), so pp(STAGES_A, p) is wrong for Part B: it
-            // would read params[STAGES_A + PART_STRIDE] = params[73 + 23] =
-            // params[96], past the end of the 84-entry array. The explicit
-            // ternary is required, exactly as for DRIVE/LINK.
-            //
-            if (bbdPart)
-                inst.set_target_base(p, spky::LANE_PITCH,
-                    params[p ? STAGES_B : STAGES_A].getValue());
-
-            if (bbdEdge[p].tick(bbdPart)) {
-                // Genuine player-driven entry into BBD (see bbd_edge_state.hpp
-                // for why a restore can never reach this branch).
-                //
-                // FLUX defaults disengaged (spec 5.11). The BBD's output is
-                // already six poles at 3600 Hz plus a loss pole breathing under
-                // a compander, and its gappy repeats are its most distinctive
-                // trait -- which a tape echo behind it fills in. The player can
-                // add it back; the default should not be darker-and-smeared.
+    void pushParams() {
+        for (int i = 0; i < NUM_PARAMS; ++i) knobs[i] = params[i].getValue();
+        control::Options opt;
+        for (int p = 0; p < spky::PART_COUNT; ++p) {
+            opt.deck[p] = {smp[p].tapeIdx, smp[p].reverse, smp[p].feedback,
+                           smp[p].testTone, smp[p].exciteTape,
+                           smp[p].exciteOtherDeck, smp[p].exciteAudioIn};
+        }
+        if (inputs[CLOCK].isConnected() && clkSamples > 1.f && curSr > 0.f)
+            opt.measured_bpm = 60.f * curSr / clkSamples;
+        VcvHooks hooks{this};
+        const control::Events ev = law.tick(knobs, opt, inst, hooks);
+        for (int p = 0; p < spky::PART_COUNT; ++p) {
+            if (ev.bbd_edge[p]) {            // spec 5.11 / 5.12, see control_law.h
                 params[p ? FLUX_B : FLUX_A].setValue(0.f);
-                // The silence trap's first half (spec 5.12): a BBD deck with no
-                // source selected is an FX unit wired to nothing. Default the
-                // neighbouring deck ON. Audio-in already reaches process_in
-                // unconditionally through Part::process; what the checkbox gates
-                // is the cross-deck bus (movement 1, Part::_src_deck), and that
-                // is what makes resampling work without external cabling.
                 smp[p].exciteOtherDeck = true;
             }
-
-            // SCAN nur fuer Sampler-Parts (K-03). Der urspruengliche Grund --
-            // set_scan -> scan_rate enthielt im unteren Zweig ein std::pow,
-            // und bei ctrlDiv = 16 waren das bis zu 6000 Aufrufe/s im
-            // Audio-Callback fuer eine Engine, die niemand hoert -- ist mit
-            // der linearen Kurve (spec 2026-07-23 sampler-performance-fixes)
-            // weg: scan_rate() ruft kein pow mehr auf. Das Gate bleibt
-            // trotzdem, jetzt aus demselben Grund wie beim sampler-only SIZE-
-            // Routing weiter unten: SCAN treibt ein sampler-eigenes Stueck
-            // Zustand (_scan_rate), das ein Synth-Deck nie liest, und es dort
-            // unbedingt zu schreiben waere nur Arbeit ohne Wirkung. Das ist
-            // ein Konsistenz-, kein Kosten-Argument mehr.
-            //
-            // Kein Soft-Takeover hier, und das ist eine Entscheidung, keine
-            // Luecke. Der Review vom 2026-07-22 meldete als F-07, dass der
-            // erste ENG-Flip den Lesekopf sofort losrasen laesst: MELO traegt
-            // im Synth VARIATION, steht im Init-Patch an den Extremen
-            // (-0.728 und -1.0), und als SCAN gelesen sind das jetzt -0.97x
-            // und -4x Realtime rueckwaerts -- mit dem neuen Maximum naeher an
-            // Realtime, nicht weiter davon weg. Das stimmt -- aber es ist
-            // genau das Verhalten, das README.md unter "Known limitations"
-            // ausdruecklich waehlt: die Knopfposition gilt ueber den
-            // Engine-Wechsel hinweg, ohne getrenntes Gedaechtnis und ohne
-            // Soft-Takeover, weil die Hardware kein Soft-Takeover hat und
-            // beide Seiten dasselbe tun sollen. Eine Sperre einzubauen hiesse,
-            // diese Linie zu verlassen -- und sie ueber Patch-Laden hinweg
-            // dicht zu bekommen verlangt genau das persistente Gedaechtnis,
-            // das dort ausgeschlossen ist. Offen fuer den Autor des
-            // Instruments, nicht fuer die Engine.
-            //
-            // MELODY is one knob with one meaning per engine (spec 2026-08-03
-            // vcv-engine-aware-captions): VARY off the Sampler, SCAN on it.
-            // Both jobs at once is why SCAN had to be printed permanently
-            // beside MELO. Variation parks at 0 (LOOP) here, the same shape
-            // as the LANE_SIZE gate below, which parks at 0.5f off the
-            // Sampler. The cost is deliberate and recorded in the spec: a
-            // Sampler deck no longer renews its phrases on its own, and NEW
-            // is the gesture that asks for a fresh pair.
-            inst.set_variation(p, samplerPart ? 0.f : mvp(MELODY_A, p));
-            if (samplerPart) inst.sampler_scan(p, mvp(MELODY_A, p));
-
-            // GENE SIZE rides the lane base in the sampler, SPREAD in FEED.
-            // The else branch is load-bearing -- a base left behind on an
-            // engine flip would silently stick.
-            //
-            // Both re-pointed reads go through mv() too: a conditional face
-            // follows its FACE, not its engine wiring (spec §4, last
-            // paragraph). SUB is a modulated face on a synth deck, so it stays
-            // one on a sampler deck even though the value now lands on a lane
-            // base -- same for DTUN on FEED.
-            if (samplerPart) {
-                inst.set_target_base(p, spky::LANE_SIZE,   mvp(SUB_A, p));
-            } else if (feedPart) {
-                inst.set_target_base(p, spky::LANE_SIZE,   mvp(DETUNE_A, p));
-            } else {
-                inst.set_target_base(p, spky::LANE_SIZE,   0.5f);
-            }
-
-            // DPTH writes LANE_MOTION's base on every engine, because every
-            // engine reads that lane: width (and drift) on SYNTH/WAVE, drift
-            // alone on BODY, scatter on the sampler, the feedback amount on
-            // the BBD, the FM index on FEED. This host never wrote the base at
-            // all until 2026-08-18, so all six had a control whose ends the
-            // player could not reach; FEED got the repair first, through a
-            // ternary that pinned the other five to Part's compiled-in 0.5.
-            // The knob's init default IS that 0.5 (and IS feed_cfg::kDepthBase),
-            // so an untouched patch writes exactly what the ternary wrote --
-            // the sampler excepted, which halves the base (sampler_config.h).
-            //
-            // NOT pp(DEPTH_A, p). DEPTH_A/B are APPENDED ids (69/70), not a
-            // part-strided pair, so pp() computed params[69 + 20] = params[89]
-            // for deck B -- measured 2026-08-22. Before the MOD layer appended
-            // its 49 params that index was past the end of the params vector
-            // (undefined); after, it silently aliased MODD_DENSITY_B, so
-            // raising deck B's DENS mod depth would have driven deck B's
-            // LANE_MOTION base. That is the hazard the static_assert block at
-            // the top of this file calls "UPGRADED, not gone", and it is now
-            // guarded mechanically by res/test_panel.py's
-            // strided_accessor_issues(), which derives the legal pp() bases
-            // from the generator. Explicit ternary, exactly as REC/STAGES/
-            // LINK/COLOR do three lines up.
-            //
-            // Consequence, stated so nobody has to rediscover it: deck B's
-            // LANE_MOTION base at init moves from 0.0 (MODD_DENSITY_B's
-            // default, read by accident) to 0.5 (DEPTH_B's own default).
-            // Deck B's init sound changes and a listening pass is owed.
-            inst.set_target_base(p, spky::LANE_MOTION,
-                                 params[p ? DEPTH_B : DEPTH_A].getValue());
-
-            // Stable pitch in the sampler: the lane still FIRES (that is what
-            // keeps STEP triggering alive -- Part::process reads the fire as
-            // _mod.lane_fired(LANE_PITCH), part.h:258, while _active gates
-            // modulation only, part.cpp:101), it just stops moving the pitch.
-            // Sample material and a synth deck can then sit in the same key.
-            inst.set_target_active(p, spky::LANE_PITCH, !samplerPart);
-
-            // GRIT is one bipolar knob: sign is the mode, magnitude the mix.
-            // The dead zone exists because a 9 mm pot on an ADC cannot hit an
-            // exact zero -- without it "off" would be unreachable on hardware.
-            const float gritKnob = params[p ? GRIT_B : GRIT_A].getValue();
-            inst.set_grit_mode(p, gritKnob < 0.f ? spky::GritMode::Reduce
-                                                 : spky::GritMode::Drive);
-            const float gritMag = std::fabs(gritKnob);
-            inst.set_grit_mix(p, gritMag <= kGritDead ? 0.f
-                                 : (gritMag - kGritDead) / (1.f - kGritDead));
-            const int steps = (int)std::round(pp(STEPS_A, p));
-            inst.set_step(p, steps > 0, steps);
-
-            // SONG walks a curated 14-rung ladder through (Principle, SongMode)
-            // (spec 2026-08-09 hw-control-reduction task 3) -- FORM and the NEW
-            // pad are gone. songRung[p].tick() debounces the pot (so a value
-            // parked on a seam does not re-quantise every tick) AND absorbs a
-            // RESTORED rung as a baseline rather than a turn (song_rung_state.hpp)
-            // -- see rearm() call sites in dataFromJson()/onReset() below. A
-            // rung change re-rolls the phrase exactly as the retired NEW pad
-            // used to, and in the sampler additionally punches a fresh grain
-            // -- the playhead returns to ORGANIZE and a grain spawns
-            // immediately, without which the long end of GENE SIZE is
-            // unplayable.
-            const float songNorm = pp(SONG_A, p) /
-                                   float(spky::kSongLadderCount - 1);
-            if (songRung[p].tick(songNorm, spky::kSongLadderCount)) {
-                inst.new_phrase(p);          // turn the knob, get a new melody
-                // Fires once per rung detent; inherited the retired NEW
-                // pad's Sampler punch. Whether every detent should punch, or
-                // only some, is still an open by-ear question -- on this
-                // plan's listening checklist.
-                if (samplerPart) inst.sampler_punch(p);
-            }
-            const spky::SongRung& r = spky::song_ladder_at(songRung[p].rung);
-            inst.set_form(p, r.form);
-            inst.set_song(p, r.song);
-        }
-
-        // Engine-backed mod depths (spec 2026-08-22 §3a): TIMB/DPTH/FILT write
-        // the Part's own _tdepth slots, MIX/FB/SEND the FX row -- active iff
-        // the depth is off noon. Nothing else in this host writes those slots,
-        // so this loop is their sole owner. The init snapshot repeats back the
-        // KNOB POSITIONS, which since the bipolar split are the pre-images
-        // (1.0 / 0.712 / 0.568 and three zeroes); through depth_of they reach
-        // the engine as the booted depths 1.0 / 0.7 / 0.55 and three zeroes.
-        //
-        // The engine already multiplies its own master MOD into the texture
-        // lanes, so no modMaster factor appears here -- that is the whole
-        // reason these six faces do NOT take the host-computed path.
-        for (const auto& t : kModLayer) {
-            // Through depth_of, not raw: noon needs its dead zone here too,
-            // and a negative depth is what tells Part to read the lane's S&H
-            // twin (spec 2026-08-22 mod-sh-split §4).
-            const float d = spkymod::depth_of(params[t.depthId].getValue());
-            if (t.kind == MODK_TDEPTH) {
-                inst.set_target_depth(t.part, t.slot, d);
-            } else if (t.kind == MODK_FXDEPTH) {
-                inst.set_fx_target_depth(t.part, t.slot, d);
-                // Active on EITHER side of noon now -- the old `d > 0.f`
-                // would have left every S&H FX target pinned to its base.
-                inst.set_fx_target_active(t.part, t.slot, d != 0.f);
+            if (ev.rec_started[p]) {         // the buffer no longer matches a source
+                smp[p].path.clear();
+                smp[p].factoryLoaded = false;
             }
         }
-
-        inst.set_morph(mv(MORPH));
-        // COUPLE runs both worlds on one axis (kCoupleZoneSplit, declared
-        // above). Below the split SYNC is off and couple drives the
-        // Kuramoto lock; at or above it SYNC is on and couple sets how
-        // tightly the texture lanes follow. Each half sweeps 0..1, so the
-        // grid world keeps its full spread -- "on the grid but breathing"
-        // is a real state and must stay reachable.
-        const float coupleKnob = params[COUPLE].getValue();
-        const bool  grid = coupleKnob >= kCoupleZoneSplit;
-        inst.set_sync(grid);
-        inst.set_couple(grid
-            ? (coupleKnob - kCoupleZoneSplit) / (1.f - kCoupleZoneSplit)
-            : coupleKnob / kCoupleZoneSplit);
-        // The left stop IS the old SETL pad: Center::settle() is drift_target = 0
-        // plus a ~1 s glide of EVOLVE and kick, so the button always lived at
-        // the end of this axis. Edge-triggered via driftSettled -- a knob
-        // parked at the stop must not re-fire the glide on every control
-        // tick, and a patch that RESTORES with DRIFT already parked there
-        // must not panic on the very first tick either (drift_settle_state.hpp).
-        static constexpr float kDriftSettleZone = 0.02f;
-        const float driftKnob = params[DRIFT].getValue();
-        const bool  driftInZone = driftKnob <= kDriftSettleZone;
-        if (driftSettled.tick(driftInZone)) inst.settle();
-        inst.set_drift(driftInZone
-            ? 0.f
-            : (driftKnob - kDriftSettleZone) / (1.f - kDriftSettleZone));
-        inst.set_tide(mv(TIDE));
-        inst.set_choke(params[CHOKE].getValue());   // continuous -1..+1, engine quantises zones
-        inst.set_pull(params[PULL].getValue());     // continuous -1..+1, engine holds the dead zone
-        // The room's four shape knobs are center targets: mixed from both
-        // decks' SIZE lanes (mv() takes the center branch on t.part == 2), so
-        // the reverb breathes with whichever deck is actually moving. SEND is
-        // NOT here -- it is per-deck and engine-backed (step 6 above).
-        inst.set_reverb_size(mv(REV_SIZE));
-        inst.set_reverb_decay(mv(REV_DECAY));
-        inst.set_reverb_tone(mv(REV_TONE));
-        inst.set_reverb_diffusion(mv(REV_DIFF));
-        inst.set_reverb_mix(spky::PART_A, params[REV_MIX_A].getValue());
-        inst.set_reverb_mix(spky::PART_B, params[REV_MIX_B].getValue());
-        // Fixed by ear (spec 2026-08-09 hw-control-reduction task 9): PUSH
-        // sat at 0.40 in every patch, and once the limiter rides, DRIVE
-        // stops controlling dirt anyway. SMEAR ("smear ... 0.3 sowas") and
-        // WOBL/MOD ("wobbel fest auf .1 - .2") are the same kind of decision
-        // -- the owner never moved them either. The engine API (set_master_
-        // drive/set_reverb_smear/set_reverb_mod) is unchanged so the render
-        // host and its scenarios can still drive them.
-        inst.set_master_drive(0.40f);
-        inst.set_reverb_smear(0.30f);
-        inst.set_reverb_mod(0.15f);
-        inst.set_scale((int)std::round(params[SCALE].getValue()));
-
-        // Tempo: an external clock (one pulse per beat) overrides the knob.
-        float bpm = 40.f + params[TEMPO].getValue() * 200.f;
-        if (inputs[CLOCK].isConnected() && clkSamples > 1.f && curSr > 0.f) {
-            float measured = 60.f * curSr / clkSamples;
-            if (measured >= 20.f && measured <= 400.f) bpm = measured;
-        }
-        inst.set_tempo_bpm(bpm);
-        inst.set_pace(params[PACE].getValue());
     }
 
     void process(const ProcessArgs& args) override {
@@ -1319,20 +763,19 @@ struct Fireflow : Module {
             smp[p] = SamplerPartState{};
             inst.sampler_clear(p);
             factoryTried[p] = false;
-            // Rack resets params (including SONG_A/B) to their default
-            // BEFORE calling onReset(). Without this re-arm, an
-            // already-ticking module's stale pre-Initialize rung would make
-            // the reset-to-default SONG value look like a giant turn of the
-            // knob and fire a re-roll on the very next control tick
-            // (song_rung_state.hpp).
-            songRung[p].rearm();
         }
+        // Rack resets params (including SONG_A/B) to their default
+        // BEFORE calling onReset(). Without this re-arm, an
+        // already-ticking module's stale pre-Initialize rung would make
+        // the reset-to-default SONG value look like a giant turn of the
+        // knob and fire a re-roll on the very next control tick
+        // (song_rung_state.hpp).
         // Rack resets DRIFT to its default BEFORE calling onReset() too --
         // without this re-arm, an already-ticking module whose DRIFT was off
         // the stop would see the reset-to-default value and, if that default
         // sits in the settle zone, treat it as a genuine entry and fire
         // settle() on the very next control tick (drift_settle_state.hpp).
-        driftSettled.rearm();
+        law.on_reset();
         reinit(curSr > 0.f ? curSr : 48000.f);
     }
 
@@ -1491,33 +934,26 @@ struct Fireflow : Module {
             pendingRestore = false;
             restoreSamplerContent();
             // This is a restore into an ALREADY-LIVE module (right-click Load
-            // preset / module paste), not a fresh add -- pushParams() has
-            // already run at least once, so bbdEdge[p] is already seeded from
-            // BEFORE this restore. Re-arm both parts (see bbd_edge_state.hpp)
-            // so the very next control tick treats whatever ENG this JSON
-            // just set as a fresh baseline, not a transition -- otherwise a
-            // preset saved on BBD, loaded onto a module currently on a
-            // different engine, would fire the "entering BBD" edge and
-            // clobber that preset's own saved FLUX/exciteOtherDeck. The
-            // fresh-add path (curSr == 0.f, the else branch below) needs no
-            // such re-arm: no tick has run yet, so bbdEdge[p] is still at its
-            // construction-time unseeded state and the ordinary first-tick
-            // baseline in tick() already applies. songRung[p] needs the same
-            // re-arm for the same reason (song_rung_state.hpp) -- otherwise a
-            // preset saved on a rung other than the module's current one
-            // would look like a giant turn of the SONG knob and fire a
-            // re-roll the instant the module ticks again. driftSettled needs
-            // the identical re-arm for the identical reason (SHARED, not
-            // per-part, so one call outside the loop): a preset saved with
-            // DRIFT off the stop, loaded onto a module currently parked at
-            // the stop, must not have the restore itself read as a genuine
-            // entry and fire settle() on the very next tick
-            // (drift_settle_state.hpp).
-            for (int p = 0; p < spky::PART_COUNT; ++p) {
-                bbdEdge[p].rearm();
-                songRung[p].rearm();
-            }
-            driftSettled.rearm();
+            // preset / module paste), not a fresh add -- the law has already
+            // ticked at least once, so its BBD edge state is seeded from
+            // BEFORE this restore. law.on_restore() re-arms all of it (see
+            // bbd_edge_state.hpp, song_rung_state.hpp, drift_settle_state.hpp)
+            // so the very next control tick treats whatever ENG, SONG rung
+            // and DRIFT position this JSON just set as a fresh baseline, not
+            // a transition: no SONG re-roll from a rung that merely differs
+            // from the module's previous one, no settle() from a DRIFT that
+            // merely sits in the zone. For the BBD edge the guarantee is the
+            // same, with one KNOWN EXCEPTION (measured, Ruling 10): an engine
+            // switch lands inside process() blocks after the tick that asks
+            // for it, so a preset saved on BBD and loaded over a deck that
+            // is live on a different engine fires the "entering BBD" edge on
+            // block 2 despite the re-arm and clobbers that preset's saved
+            // FLUX/exciteOtherDeck. The re-arm does stop it when the deck
+            // already runs the restored engine. Open item, not fixed by
+            // this branch. The fresh-add path (curSr == 0.f, the else branch
+            // below) needs no re-arm: no tick has run yet, so the first-tick
+            // baseline already applies.
+            law.on_restore();
         } else {
             pendingRestore = true;
         }

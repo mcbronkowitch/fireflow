@@ -2,17 +2,20 @@
 """Generates shell/generated_panel_map.h: the Rev A panel as the firmware sees it.
 
 Spec: docs/superpowers/specs/2026-10-02-rev-a-p6a-panel-scan-design.md,
-sections 2 and 4.
+sections 2 and 4; the classification is spec
+docs/superpowers/specs/2026-10-09-rev-a-p6b1-shared-control-law-design.md,
+section 4.2.
 
 Inputs, all read, none written:
   hardware/reva/panel-map.json         P3's assignment (assign.py): pots, muxes,
                                        calibration and spare channels
   hardware/reva/blocks.py              P2's tables: SR_OUTPUTS, KEYS, MODULE_PINS
-  engine/param_table.h                 the ParamId names
+  control/params.hpp                   the shared control law's ParamId names
   host/vcv/src/generated_hw_panel.hpp  the FireflowHW controls
 
-SAFE, UNMAPPED and RESERVED below are the only hand-written part. A pot P3
-adds or renames stops the generator until it is put in one of them.
+RESERVED below is the only hand-written part. Every other pot sends the
+control-law parameter of its own name; a pot P3 adds or renames with no such
+parameter stops the generator until it gets one or goes into RESERVED.
 
     python shell/gen_panel_map.py           write the header
     python shell/gen_panel_map.py --check   exit 1 if the committed header is stale
@@ -26,7 +29,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 REVA = os.path.join(ROOT, "hardware", "reva")
 PANEL_MAP = os.path.join(REVA, "panel-map.json")
-PARAM_TABLE = os.path.join(ROOT, "engine", "param_table.h")
+PARAMS_HPP = os.path.join(ROOT, "control", "params.hpp")
 HW_PANEL = os.path.join(ROOT, "host", "vcv", "src", "generated_hw_panel.hpp")
 OUT = os.path.join(HERE, "generated_panel_map.h")
 
@@ -38,73 +41,19 @@ SENSE_ADC_BASE = 8     # shell/mux_plan.h kSenseAdcBase (ADC_9)
 ADC_OF_PIN = {"A2": 8, "A3": 9, "D9": 10, "D8": 11}
 CAL_IDS = ("CAL_GND", "CAL_3V3")
 
-# Spec section 2.2: VCV calls exactly the setter apply_param() calls, passes
-# the knob value unchanged, over the same range. Evidence is the line in
-# host/vcv/src/Fireflow.cpp as of 2026-10-02; deck B runs through the same
-# line inside pushParams()' per-deck loop.
-_PER_DECK_SAFE = {
-    "RATE":    ("P_RATE",    "set_rate(mvp), Fireflow.cpp:783"),
-    "SHAPE":   ("P_SHAPE",   "set_shape(mvp), Fireflow.cpp:784"),
-    "SMOOTH":  ("P_SMOOTH",  "set_smooth(mvp), Fireflow.cpp:786"),
-    "RANGE":   ("P_RANGE",   "set_range(mvp), Fireflow.cpp:787"),
-    "MOD":     ("P_DEPTH",   "set_depth(pp(MOD)), Fireflow.cpp:790; "
-                             "apply_param(P_DEPTH) calls set_depth"),
-    "TUNE":    ("P_TUNE",    "set_tune(mvp), Fireflow.cpp:791"),
-    "DECAY":   ("P_DECAY",   "set_voice_decay(mvp), Fireflow.cpp:794"),
-    "FILT":    ("P_FILT",    "set_voice_filt(raw), Fireflow.cpp:798"),
-    "COLOR":   ("P_COLOR",   "set_color(mv), Fireflow.cpp:799"),
-    "LINK":    ("P_LINK",    "set_link(mv), Fireflow.cpp:832"),
-    "PAN":     ("P_PAN",     "set_pan(mv), Fireflow.cpp:898"),
-    "REV_MIX": ("P_REVMIX",  "set_reverb_mix(part, raw), Fireflow.cpp:1241-1242"),
-}
-_GLOBAL_SAFE = {
-    "SHUFFLE":   ("P_SHUFFLE",   "set_shuffle(raw), Fireflow.cpp:781"),
-    "MORPH":     ("P_MORPH",     "set_morph(mv), Fireflow.cpp:1204"),
-    "TIDE":      ("P_TIDE",      "set_tide(mv), Fireflow.cpp:1230"),
-    "CHOKE":     ("P_CHOKE",     "set_choke(raw), Fireflow.cpp:1231"),
-    "PULL":      ("P_PULL",      "set_pull(raw), Fireflow.cpp:1232"),
-    "REV_SIZE":  ("P_REV_SIZE",  "set_reverb_size(mv), Fireflow.cpp:1237"),
-    "REV_DECAY": ("P_REV_DECAY", "set_reverb_decay(mv), Fireflow.cpp:1238"),
-    "REV_TONE":  ("P_REV_TONE",  "set_reverb_tone(mv), Fireflow.cpp:1239"),
-    "REV_DIFF":  ("P_REV_DIFF",  "set_reverb_diffusion(mv), Fireflow.cpp:1240"),
-    "SCALE":     ("P_SCALE",     "set_scale(round), Fireflow.cpp:1253; 13 steps both sides"),
-    "PACE":      ("P_PACE",      "set_pace(raw), Fireflow.cpp:1262"),
-}
-_PER_DECK_UNMAPPED = {
-    "DENSITY":  "also drives sampler_overlap, Fireflow.cpp:993",
-    "ATTACK":   "one pot with STAGES; the BBD re-points it, Fireflow.cpp:1022",
-    "SUB":      "LANE_SIZE on the sampler, Fireflow.cpp:1095",
-    "RES":      "VCV knob 0..1 (Fireflow.cpp:479), table 0..0.75",
-    "DEPTH":    "LANE_MOTION base, Fireflow.cpp:1130",
-    "COMP":     "level/compressor split with a curve, Fireflow.cpp:872-883",
-    "FLUX":     "also switches the FX block on, Fireflow.cpp:840",
-    "GRIT":     "bipolar with a dead zone and a mode, Fireflow.cpp:1143-1148",
-    "MELODY":   "SCAN on the sampler, Fireflow.cpp:1082-1083",
-    "DETUNE":   "squared; SPREAD on FEED, Fireflow.cpp:812-819, 1097",
-    "ENGINE":   "UI remap, Fireflow.cpp:906-914",
-    "STEPS":    "0 = STEP off, per-deck set_step, Fireflow.cpp:1149-1150",
-    "SONG":     "14-rung ladder, Fireflow.cpp:1163-1175",
-    "SOURCE":   "no ParamId; LANE_SOURCE base, Fireflow.cpp:994",
-    "FLUXRATE": "no ParamId; detented index, Fireflow.cpp:822-823",
-    "FLUXFB":   "no ParamId; FX target base, Fireflow.cpp:824-825",
-}
-_GLOBAL_UNMAPPED = {
-    "COUPLE": "sync zone split, Fireflow.cpp:1211-1216",
-    "DRIFT":  "settle zone, Fireflow.cpp:1223-1229",
-    "TEMPO":  "VCV maps 40 + 200 v (Fireflow.cpp:1256), table 50..140",
-}
-
-SAFE = dict(_GLOBAL_SAFE)
-for _base, (_pid, _ev) in _PER_DECK_SAFE.items():
-    for _d in "AB":
-        SAFE["%s_%s" % (_base, _d)] = ("%s_%s" % (_pid, _d), _ev)
-UNMAPPED = dict(_GLOBAL_UNMAPPED)
-for _base, _why in _PER_DECK_UNMAPPED.items():
-    for _d in "AB":
-        UNMAPPED["%s_%s" % (_base, _d)] = _why
-
+# P6a's "safe" rule (SAFE/UNMAPPED, spec 2026-10-02 section 2.2) is retired:
+# the firmware runs the same control law as VCV (spec 2026-10-09-rev-a-p6b1
+# section 4.2), so every pot with a FireflowHW counterpart sends its own id.
+#
 # Spec 2026-10-07 section 4: pots on the board with no parameter yet. They are
 # read like every pot and send nothing until the follow-up spec gives them one.
+# One pot, two FireflowHW controls at its position: Fireflow.cpp's ctlVisible()
+# shows STAGES ("BBD Bend") where the deck's ENGINE is the BBD and ATTACK on
+# every other engine. That is the only such rule the firmware knows
+# (shell::knob_target()), so a panel-map "ids" list may name a second id only
+# from here, and only for its own deck.
+ALT_ON_BBD = {"ATTACK_A": "STAGES_A", "ATTACK_B": "STAGES_B"}
+
 RESERVED = {
     "ROOT_A": "per-deck scale root, follow-up to spec 2026-10-07 section 4",
     "ROOT_B": "per-deck scale root, follow-up to spec 2026-10-07 section 4",
@@ -126,8 +75,10 @@ def read_committed():
 
 
 def param_names(text):
-    start = text.index("#define SPKY_PARAMS")
-    return set(re.findall(r"X\((P_\w+)", text[start:text.index("enum ParamId", start)]))
+    """The ffctl::ParamId enumerators, NUM_PARAMS excluded."""
+    start = text.index("enum ParamId {")
+    end = text.index("NUM_PARAMS", start)
+    return set(re.findall(r"^\s+(\w+),$", text[start:end], re.M))
 
 
 def hw_panel_ids(text):
@@ -149,9 +100,8 @@ def load_inputs():
         "leds": [blocks.led_net(i) for i in range(len(panel_map["leds"]))],
     }
     return {"panel_map": panel_map, "tables": tables,
-            "params": param_names(read(PARAM_TABLE)),
+            "params": param_names(read(PARAMS_HPP)),
             "hw_ids": hw_panel_ids(read(HW_PANEL)),
-            "safe": dict(SAFE), "unmapped": dict(UNMAPPED),
             "reserved": dict(RESERVED)}
 
 
@@ -166,7 +116,7 @@ def _run(flat, nets):
     return idx[0]
 
 
-def build(panel_map, tables, params, hw_ids, safe, unmapped, reserved):
+def build(panel_map, tables, params, hw_ids, reserved):
     pots, cal = panel_map["pots"], panel_map["calibration"]
     spare, muxes = panel_map.get("spare", []), panel_map["muxes"]
 
@@ -230,39 +180,43 @@ def build(panel_map, tables, params, hw_ids, safe, unmapped, reserved):
     if sorted(cal_by_id) != sorted(CAL_IDS):
         raise GenError("calibration: %s, expected %s" % (sorted(cal_by_id), list(CAL_IDS)))
 
-    # classification (spec section 2)
+    # classification (spec 2026-10-09-rev-a-p6b1 section 4.2): a reserved pot
+    # sends nothing, every other pot the control-law parameter of its name
     ids = [p["id"] for p in pots]
     if len(set(ids)) != len(ids):
         raise GenError("pot ids not unique")
-    for name in sorted(set(safe) | set(unmapped) | set(reserved)):
+    for name in sorted(reserved):
         if name not in ids:
             raise GenError("not a pot: %s" % name)
-    both = sorted((set(safe) & set(unmapped)) | (set(safe) & set(reserved))
-                  | (set(unmapped) & set(reserved)))
-    if both:
-        raise GenError("in two of SAFE, UNMAPPED, RESERVED: %s" % ", ".join(both))
-    missing = [i for i in ids if i not in safe and i not in unmapped and i not in reserved]
-    if missing:
-        raise GenError("unclassified: %s" % ", ".join(missing))
-    for name, (pid, _) in sorted(safe.items()):
-        if pid not in params:
-            raise GenError("%s: no ParamId %s in engine/param_table.h" % (name, pid))
     for p in pots:
         if p["id"] in reserved:   # HwOnly on the VCV panel, not in kParamCtls
             continue
+        # First, so a reserved pot taken off the list names its own defect
+        # rather than the VCV panel's missing control.
+        if p["id"] not in params:
+            raise GenError("%s: no ffctl id in control/params.hpp" % p["id"])
         for i in p.get("ids", [p["id"]]):
             if i not in hw_ids:
                 raise GenError("not in generated_hw_panel.hpp: %s" % i)
 
     rows = []
     for p in sorted(pots, key=lambda r: (r["mux"], r["channel"])):
-        if p["id"] in safe:
-            pid, ev = safe[p["id"]]
-            rows.append((p, "spky::" + pid, "safe: " + ev))
-        elif p["id"] in reserved:
-            rows.append((p, "-1", "reserved: " + reserved[p["id"]]))
-        else:
-            rows.append((p, "-1", "unmapped: " + unmapped[p["id"]]))
+        if p["id"] in reserved:
+            rows.append((p, "-1", None, "reserved: " + reserved[p["id"]]))
+            continue
+        ids = p.get("ids", [p["id"]])
+        if ids[0] != p["id"]:
+            raise GenError("%s: ids list starts with %s" % (p["id"], ids[0]))
+        alt = None
+        if len(ids) > 1:
+            if len(ids) > 2 or ALT_ON_BBD.get(p["id"]) != ids[1]:
+                raise GenError("%s: shares its position with %s; the firmware knows "
+                               "only %s" % (p["id"], ", ".join(ids[1:]), ALT_ON_BBD))
+            if ids[1] not in params:
+                raise GenError("%s: alternate %s has no ffctl id" % (p["id"], ids[1]))
+            alt = ids[1]
+        rows.append((p, "ffctl::" + p["id"], alt,
+                     p["id"] + (" / %s on the BBD" % alt if alt else "")))
 
     return _render(rows, len(senses), n_mux, sense_of_mux, len(flat), addr_shift,
                    len(tables["mux_s"]), enable_shift, led_shift, len(leds),
@@ -275,8 +229,9 @@ def _render(rows, n_sense, n_mux, sense_of_mux, chain_bits, addr_shift, addr_bit
     w = out.append
     w("// GENERATED by shell/gen_panel_map.py -- do not edit by hand.")
     w("// Sources: hardware/reva/panel-map.json, hardware/reva/blocks.py,")
-    w("// engine/param_table.h; the SAFE/UNMAPPED/RESERVED lists live in the generator.")
-    w("// Spec: docs/superpowers/specs/2026-10-02-rev-a-p6a-panel-scan-design.md")
+    w("// control/params.hpp; the RESERVED list lives in the generator.")
+    w("// Spec: docs/superpowers/specs/2026-10-02-rev-a-p6a-panel-scan-design.md,")
+    w("// classification: 2026-10-09-rev-a-p6b1-shared-control-law-design.md 4.2")
     w("#pragma once")
     w('#include "controls.h"')
     w('#include "keys.h"')
@@ -297,12 +252,18 @@ def _render(rows, n_sense, n_mux, sense_of_mux, chain_bits, addr_shift, addr_bit
       % (chain_bits, addr_shift, enable_shift, led_shift, led_bits, addr_bits))
     w("")
     w("// One row per pot in (mux, channel) order; SHELL_PLAY_V prints the values")
-    w("// in this order. param -1: scanned and reported, sent nowhere (spec 2.3).")
+    w("// in this order. param -1: scanned and reported, sent nowhere (spec 2.3);")
+    w("// every other row writes its control-law knob (P6b-1 spec 4.2), the ATTACK")
+    w("// rows STAGES instead while their deck is on the BBD (knob_target()).")
     w("inline constexpr ControlEntry kRevaControls[] = {")
-    for i, (p, target, note) in enumerate(rows):
-        w("    {%d, %d, %s, %d},  // row %d %s -- %s"
-          % (p["mux"], p["channel"], target, sense_of_mux[p["mux"]], i, p["id"], note))
+    for i, (p, target, alt, note) in enumerate(rows):
+        w("    {%d, %d, %s, %d%s},  // row %d %s -- %s"
+          % (p["mux"], p["channel"], target, sense_of_mux[p["mux"]],
+             ", ffctl::" + alt if alt else "", i, p["id"], note))
     w("};")
+    w("static_assert(entries_valid(kRevaControls,")
+    w("                            sizeof(kRevaControls) / sizeof(kRevaControls[0])),")
+    w('              "kRevaControls: an id outside the knob vector");')
     w("inline constexpr ControlTable kRevaTable{")
     w("    kRevaControls,")
     w("    static_cast<int>(sizeof(kRevaControls) / sizeof(kRevaControls[0]))};")

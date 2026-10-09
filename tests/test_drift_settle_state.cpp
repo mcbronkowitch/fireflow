@@ -1,6 +1,6 @@
 #include <doctest/doctest.h>
 
-#include "vcv/src/drift_settle_state.hpp"
+#include "control/drift_settle_state.hpp"
 
 
 // The DRIFT knob's left stop swallowed the SETL pad (spec 2026-08-09

@@ -128,6 +128,15 @@ public:
     uint32_t lane_wraps_for_test(int p, int lane) const {
         return _parts[p].mod().lane_wraps_for_test(lane);
     }
+    // The unchanged-value early-outs' two test handles: how often a lane's
+    // slew pair was rebuilt, and a switch back to the full path on every
+    // push (the bit-identity reference). See SuperModulator::set_tempo_bpm.
+    uint32_t lane_slew_updates_for_test(int p, int lane) const {
+        return _parts[p].mod().lane_slew_updates_for_test(lane);
+    }
+    void set_skip_unchanged_for_test(bool on) {
+        for (auto& p : _parts) p.mod().set_skip_unchanged_for_test(on);
+    }
     // Fractional remainder, paired with lane_wraps_for_test into "turns".
     float lane_phase_for_test(int p, int lane) const {
         return _parts[p].mod().lane_phase_for_test(lane);

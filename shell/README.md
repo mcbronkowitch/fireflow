@@ -49,6 +49,10 @@ PATH="/c/Program Files/DaisyToolchain/bin:/c/Program Files/Git/usr/bin:$PATH"
 cd shell && make -j8 images
 ```
 
+**Never use libDaisy's `make program-dfu` or `all` for this firmware**: they
+build and flash the flat, unguarded `shell.bin`. Use `images` and the two
+`dfu-util` commands below.
+
 `images` (nicht `all`) ist der richtige Zielname. libDaisys Standardziel
 baut ein flaches `shell.bin` über SRAM (`0x24000000`) **und** QSPI
 (`0x90100000`) hinweg — rund 17 MB, fast alles Füllbytes, an die falsche
@@ -58,8 +62,8 @@ tut:
 
 | Artefakt | Inhalt | Ziel |
 |---|---|---|
-| `build/shell-sram.bin` | alles außer der Wavetable-Bank | DFU nach `0x90040000` |
-| `build/shell-qspi.bin` | nur die Bank | `0x90100000`, liegt schon dort |
+| `build/shell-sram.bin` | everything except the bank and the boot-only code | DFU nach `0x90040000` |
+| `build/shell-qspi.bin` | the bank, then the boot-only code | `0x90100000`; flash whenever its md5 changed |
 
 Belegung beim ersten grünen Build (2026-08-08, `-O2`):
 
@@ -79,6 +83,7 @@ Das Submodule hat **keine SWD-Pins**. Alles geht über DFU (USB), es gibt
 keinen Debug-Probe-Weg und keinen Semihosting-Weg auf diesem Board.
 
 ```bash
+dfu-util -a 0 -s 0x90100000 -D build/shell-qspi.bin
 dfu-util -a 0 -s 0x90040000:leave -D build/shell-sram.bin
 ```
 
@@ -88,11 +93,24 @@ nicht selbst in den Bootloader zurück — die Bench tut das, weil sie
 wiederholt geflasht wird, der Shell soll laufen. Jedes Neuflashen kostet
 also die zwei Tastendrücke.
 
-Die Wavetable-Bank in QSPI muss normalerweise **nicht** mitgeschrieben
-werden: sie liegt seit dem 7. August auf dem Board, und `shell-qspi.bin` ist
-byte-identisch zu `bench-qspi.bin`. Wer ein frisches Submodule bespielt,
-schreibt sie einmal nach `0x90100000` — ebenfalls über DFU, nicht über einen
-Probe.
+**Always flash both images, QSPI first**, as above. `shell-qspi.bin` carries
+the wavetable bank (`.qspiflash_data`, at `0x90100000`) **and** the boot-only
+code that executes in place from QSPI (`.qspi_cold`, at `0x90110000`; the list
+and its rules are in `qspi_cold.ld`, the link-time guard is
+`qspi_placement.py`). The SRAM image calls into that code at fixed addresses,
+so the two images of one build are a pair. **A mismatched pair** -- a new
+`shell-sram.bin` over an older shell's or the bench's QSPI contents -- jumps
+into whatever lies at those addresses during boot: it hard-faults or hangs
+before USB comes up, so the board stays dark and no serial port appears. The
+cure is flashing the matching `shell-qspi.bin` (DFU buttons again), then the
+SRAM image.
+
+The QSPI command has no `:leave`, so the bootloader stays in DFU mode and the
+SRAM command follows directly; only if dfu-util then reports no DFU device,
+press RESET, then BOOT within two seconds, and run the SRAM command. The bank
+keeps `0x90100000`, where `bench/` and `bench/audition` expect it; coming back
+from a bench or audition session, flash both images again before the shell
+runs.
 
 ## Der Selbsttest, und warum es ihn gibt
 
@@ -236,13 +254,13 @@ like-for-like with the 2026-08-23 bench numbers.
 
 **The table is generated.** `python shell/gen_panel_map.py` writes
 `shell/generated_panel_map.h` from `hardware/reva/panel-map.json`,
-`hardware/reva/blocks.py` and `engine/param_table.h`. Never edit the header;
-`shell_panel_map_guard` regenerates and compares it. The 73 rows split 35
-safe (they send a parameter — those whose VCV law is exactly `apply_param()`'s,
-spec §2), 35 unmapped (scanned and printed, they wait for P6b's shared control
-layer) and 3 reserved (`ROOT_A`, `ROOT_B`, `REV_MOD`: pots on the plate that
-send nothing and have no engine target yet).
-A pot added to the panel stops the generator until it is classified.
+`hardware/reva/blocks.py` and `control/params.hpp`. Never edit the header;
+`shell_panel_map_guard` regenerates and compares it. Since P6b-1 the 73 rows
+split 70 that send the shared control law's id of their own name (the
+`FireflowHW` control at that position) and 3 reserved (`ROOT_A`, `ROOT_B`,
+`REV_MOD`: pots on the plate that send nothing and have no parameter yet).
+P6a's "safe"/"unmapped" split is retired. A pot added to the panel with no
+`control/params.hpp` id stops the generator until it gets one or is reserved.
 
 **Keys and LEDs.** Every step reads the 165 in the same pass as the write;
 keys debounce over three reads (6 ms). LED bits only ever travel in the latch
@@ -257,7 +275,17 @@ measured a valid one, no knob reaches the engine.
 last line carries three (row order and names are in
 the generated header's comments; values ×1000, −1000 = never emitted: no valid span yet, i.e. calibration
 never succeeded) and one
-`SHELL_PLAY` summary line with key mask and press counts.
+`SHELL_PLAY` summary line with key mask and press counts. Both images then
+print `SHELL_PLAY_LAW cyc_last=<n> cyc_max=<n>`: the shared control law's
+cost in DWT cycles, the last block's tick and the worst since the first
+second (the first 500 blocks are left out of the maximum, which reads 0
+until then, so a cold-cache boot tick cannot pin it) (spec
+2026-10-09-rev-a-p6b1 §6: above 9600 cycles, one point, the tick moves to
+every second block). **Measured on the coupon, init patch, `-O2`
+(2026-10-09): `cyc_last` 11 800, `cyc_max` 13 900** (1.23 and 1.45 points),
+over the 9600 budget; the tick stays once per block by decision (spec §6,
+"Outcome"). Plan B is the two-block split, triggered by clicks or by
+`cyc_max` above 2.9 points on the Rev A board with the full panel.
 
 **Coupon session** (spec §7) on the coupon play image:
 1. All three pots reach both stops; at rest their printed values do not change.
@@ -267,6 +295,47 @@ never succeeded) and one
    `adc11` reads near `zero`, `adc12` near `rail`. Swap the jumpers: they
    swap. (The coupon's test points carry its netlist's old D8/D9 names; P2 §2
    corrected them.)
+
+## The shared control law (P6b-1)
+
+Spec: `docs/superpowers/specs/2026-10-09-rev-a-p6b1-shared-control-law-design.md`.
+
+The playing images no longer hand a pot to an engine setter. A pot that
+emits writes `lo + v·(hi − lo)` of its parameter's VCV range into a knob
+vector (`knob_from_pot()`, rounded for a parameter Rack snaps), and once per
+audio block `control_tick()` runs the whole vector through
+`control::ControlLaw` — the law `FireflowHW` runs in Rack — so every pot
+drives what its VCV twin drives. At boot the vector is the init patch,
+depths included, and the law is re-armed as for a patch restore. Rev A's
+ATTACK rows carry STAGES as an alternate id (`ControlEntry::alt`, from
+`panel-map.json`'s `ids`), written while the deck is on the BBD
+(`knob_target()`). The law
+builds with `-O2` (`control_tick.o`; it was `-Os` first, like `mux_plan.o`): at `-O3` the Rev A
+image kept 2.7 KB of `SRAM_EXEC` free, under the spec's 8 KB floor; with
+`-Os` it keeps 10 088 B. The generated tables in `control/params.hpp` being
+`inline` and linked once brought that to 11 584 B; the ATTACK alternate and
+the `cyc_max` warm-up then cost 376 B, leaving 11 208 B (2026-10-09).
+After the retiming setters' unchanged-value early-outs and the repeated
+squaring in `ModLane::_update_slew`, which took newlib's double `pow` out of
+the image (it had no other caller), 19 592 B are free (2026-10-09). The
+law's sent-value cache (a setter is called only when its value changed) and
+two reorderings in `mv()` and the depth loop then cost 1 704 B, leaving
+17 888 B (2026-10-09). `-O2` for the law instead of `-Os` cost 960 B more
+and took the tick from 15 800 to 11 800 cycles: 16 928 B free (2026-10-09).
+
+**Known divergences from VCV (P6b-1)** — spec §8:
+
+- Depths are the init patch's and cannot be edited (P6b-2).
+- After a BBD edge the hardware's FLUX stays at its pot value; VCV's knob
+  drops to zero. The law's events are ignored: a physical pot cannot be
+  turned back.
+- A Sampler deck is silent: no factory sample, no REC yet.
+- No CLOCK, RESET or CV on the hardware.
+- The ATTACK pot is two Rack knobs at one position: it writes STAGES
+  ("BBD Bend") while its deck's ENGINE is on the BBD and ATTACK otherwise,
+  as FireflowHW shows them. Turning ENGINE does not copy the pot's position
+  into the newly shown parameter: that one keeps its last value until the
+  pot moves, where Rack shows the other knob at its own value.
 
 ## Where the work stands, and where it goes next
 
