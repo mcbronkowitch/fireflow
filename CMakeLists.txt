@@ -558,6 +558,11 @@ add_test(NAME shell_panel_map_guard
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_gen_panel_map.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
 
+add_test(NAME shell_qspi_placement_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_qspi_placement.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
+
 # The two budget calculations under tools/. scan_budget imports settle_budget,
 # so a constant revised there reaches both guards; scan_budget also reads the
 # pot count from host/vcv/res/gen_hw_panel.py and goes red when the panel moves.
