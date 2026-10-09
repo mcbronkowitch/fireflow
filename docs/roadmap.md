@@ -4192,7 +4192,8 @@ on branch `feat/p6b1-control-law` (base `042b78b6`).
     the SONG detent re-rolls, save/reload without a re-roll or a settle glide.
     Check 6 confirms the pre-existing bug above: loading a patch with a BBD deck
     over a running SYNTH deck drops that deck's FLUX to 0 (Ruling 10) — fixed
-    the same day, see above; Rack re-check pending.
+    the same day, see above; Rack re-check passed (the load keeps FLUX, a hand
+    turn to BBD still drops it and turns on excite-other-deck).
 - **Next:** P6b-2 (MOD, key functions, LED law).
 
 **2026-10-08 — the grip test failed on spacing, and the 9 mm panel pass re-placed every control; the board and the firmware table follow it.**
