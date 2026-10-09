@@ -48,6 +48,35 @@
 > Parameterzahl unabhängig und steht unverändert; es hat nur einen Nachtrag zur
 > Mux-Topologie bekommen. §6 listet, was heute noch offen ist — es ist eine
 > andere Liste als 2026-08-08.
+>
+> **Stand 2026-10-08: welche Teile noch die Platte vor dem 9-mm-Raster
+> beschreiben.** Die 9-mm-Korrektur (Spec `2026-10-07-panel-nine-mm-raster-design.md`)
+> hat jedes Bedienelement neu gesetzt. Gemessen am 2026-10-09:
+> `python res/gen_hw_panel.py` druckt `params=75 inputs=12 outputs=6 lights=15
+> panel=60HP`. Die folgenden Stellen sind **nicht** nachgezogen; sie stehen auf
+> dem Stand 2026-08-30 und werden mit diesen Zahlen gelesen:
+>
+> - **§1, Codeblock (`lights=19`):** heute `lights=15`. Die Bauformtabelle zählt
+>   Parameter-Positionen nach `HW_PARAMS` (14 / 56 / 3); mit `HW_ONLY` sind es
+>   **77 Positionen**: 14 grosse Potis, 59 kleine (darunter drei reservierte), 4
+>   Taster. Das sind 73 Potis und 4 Taster.
+> - **§1, „1 Element … `HW_ONLY`“:** heute **4**: `SHIFTBTN` (Taster) und die
+>   drei reservierten Potis `ROOT_A`, `ROOT_B`, `REV_MOD` (Beschriftung ROOT
+>   und WOBL), die einen Mux-Kanal lesen, aber nichts schicken. Die Zahl der
+>   Taster bleibt 4.
+> - **§1, Körperradien „6,0 / 4,4 / 4,0 mm“:** heute `BODY_R` = **6,0 / 3,85 /
+>   3,0 mm** (gross / klein / Taster); `CLASS_R` ist unverändert 8,5 / 6,0 /
+>   4,0 mm.
+> - **§3, 595-Zeile (19 LEDs, 5 Enables):** heute 15 LEDs, und die Kette ist
+>   40 Bit lang: Adresse Bit 0–2, Enables Bit 3–12 (zehn, eins je Mux), LEDs
+>   Bit 13–27 (`shell/generated_panel_map.h`). Die Mux-Zeile steht im Nachtrag
+>   2026-10-08 in §3.
+> - **§4, „neun Linien“, y = 114 mm, 19 LEDs, 1 reserviertes Pad:** heute
+>   **fünf Reihen** bei y = 14,5 / 34,625 / 54,75 / 74,875 / 95,0 mm (Raster
+>   20,125 mm), die Buchsenreihe bei **y = 112,75 mm** (`JACK_Y`), die
+>   Bedienelemente von x = 11,0 bis x = 293,8 mm, **15 LEDs**, und
+>   `SHIFTBTN` ist das eine reservierte Pad (daneben die drei reservierten
+>   Potis). Plattenmaß 304,8 × 128,5 mm unverändert.
 
 ## 1. Die Ausgangslage
 
@@ -130,7 +159,9 @@ und das reservierte `SHIFTBTN`.
 
 Der Bestand: 8 der bisherigen 10 blieben, `CAP_A_L`/`CAP_B_L` sind mit der
 Capture-Sequenz gelöscht (die gibt es seit 2026-07-14 nicht mehr, siehe
-`docs/roadmap.md`), und 13 sind neu. *(Stand 2026-10-08, 15 Lampen auf der
+`docs/roadmap.md`), und 13 sind neu *(Stand 2026-08-19; 8 + 13 sind 21, die Zahl
+des Rack-Panels jener Zeit, nicht die 17 `LightId`s und 15 Plattenlampen des
+Kastens oben)*. *(Stand 2026-10-08, 15 Lampen auf der
 Platte, Spec 2026-10-07 §5: `SYNC_L` heißt jetzt `CLK_L` und soll jeden Impuls
 an der CLOCK-Buchse blitzen; neu sind `RST_L`, `FTIME_A_L`/`FTIME_B_L`. Die
 zwei Pad-Lampen `SHIFTBTN_L` und `MODBTN_L` stehen zwischen ihrer Taste und

@@ -52,7 +52,7 @@ items 1, 2 and 4 on it; item 3 passed on the first plate.
 | | Panel-to-board height, pot and jack seated on a board | |
 | | Alpha anti-rotation tab: present? where? | |
 | | Actual plate width of a bought 60 HP blank, if one is at hand (the cut assumes 304.4 mm) | |
-| | Kerf: measure one pot hole and one LED hole (expected ~0.1–0.2 mm over size); the four satellite webs are 2.05–2.15 mm in the file, so about 1.9 mm in the plate | |
+| | Kerf: measure one pot hole and one LED hole (expected ~0.1–0.2 mm over size); the narrowest webs in the file (`FireflowHW-holes.json`, 111 holes without the mounting slots, as printed by `web()` of `test_hw_cut.py`): the two satellite lamps `CLK_L` and `RST_L` to their jacks 2.15 mm; the cluster lamps 3.70 mm (`REC_A_L` / `REC_B_L` to their key) and 4.54 mm (the other pot-cluster lamps to their own pot); `SHIFTBTN_L` / `MODBTN_L` 4.85 mm to their key; `LVL_A_L` / `LVL_B_L` 6.14 mm. Measure the two satellite webs and one cluster web on the correction cut: with the kerf above they should come out about 0.1–0.2 mm below those figures | |
 
 ## Checklist (spec §5)
 
@@ -66,6 +66,8 @@ items 1, 2 and 4 on it; item 3 passed on the first plate.
 
 Every fix goes into `host/vcv/res/gen_hw_panel.py`, never into a generated
 file. The freeze tag `panel-freeze-2026-11-06` goes on the generator commit
-that passes this list. The freeze also needs `KNOWN_PANEL` in
-`hardware/reva/place_check.py` to be empty (P4-1 spec §5.3), and
-`KNOWN_PANEL` in `hardware/reva/route_check.py` to be empty (P4-2 spec §5).
+that passes this list. The freeze also needs every `KNOWN_PANEL` entry in
+`hardware/reva/place_check.py` (P4-1 spec §5.3) and in `hardware/reva/route_check.py`
+(P4-2 spec §5) to carry a `SIGNED_OFF` record, the same rule
+`fab.release_blockers()` applies (P4-3 spec §4.4.6); an entry without one blocks
+the freeze.

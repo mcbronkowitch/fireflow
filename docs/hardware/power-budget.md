@@ -159,7 +159,8 @@ before 3V3D B.Cu copper touching the tab: 238.7 mm2 (0.370 in2; 116.8 mm2 within
 corner and U_REG with it, to (21.12, 92.98). The area now follows the placed
 regulator: `route.reg_copper()` takes the largest rectangle holding the tab,
 plus the partner rectangle that overlaps it by at least the tab's short
-side and enlarges the union most. Both stay within 15 mm of the tab centre
+side and enlarges the union most. Both stay inside a ±15 mm square around
+the tab centre (`REG_WIN_MM` in `route.py` is its half-size, not a radius)
 and clear of:
 
 - foreign B.Cu pads (+0.2 mm);
@@ -168,7 +169,11 @@ and clear of:
 - U_REG's pin column.
 
 On this board it is (17.42, 74.83, 24.82, 94.83) and
-(6.22, 76.83, 35.22, 86.23), 351.0 mm² in one outline.
+(6.22, 76.83, 35.22, 86.23), 351.0 mm² in one outline. The two rectangles
+cross: the committed zone outline has 12 vertices, a plus sign. The tab
+centre is (21.12, 89.83); the zone reaches 14.9 mm from it in x and 15.0 mm
+in y, so it fills the ±15 mm square along both axes while its far corners
+lie up to 19.77 mm away.
 
 How it is built:
 
@@ -190,8 +195,8 @@ plus the 3V3D tracks that leave it on B.Cu.
 after  3V3D B.Cu copper touching the tab: 381.6 mm2 (0.591 in2; 161.0 mm2 within 10 mm of the tab centre; the tab pad alone 7.38 mm2) -> RthJA 73.4 C/W (TI Table 9-2, interpolated)
 ```
 
-The area is an L (a long strip across a short column), not TI's compact
-square. More than half of it (all but 161.0 of 381.6 mm²) lies more than
+The area is a cross (a 29.0 × 9.4 mm strip across a 7.4 × 20.0 mm column),
+not TI's compact square. More than half of it (all but 161.0 of 381.6 mm²) lies more than
 10 mm from the tab centre, and that far part spreads heat less well than
 TI's pattern does. Two things push the other way:
 

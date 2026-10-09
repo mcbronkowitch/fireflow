@@ -333,8 +333,9 @@ for byte.
     foreign pads. The area now follows the placed regulator:
     `route.reg_copper()` takes the largest rectangle holding the tab, plus
     the partner rectangle that overlaps it by at least the tab's short side
-    and enlarges the union most. Both stay within 15 mm of the tab centre
-    and keep off every foreign B.Cu pad (+0.2 mm), every back courtyard, the
+    and enlarges the union most; the two overlap as a cross, not an L. Both
+    stay inside a ±15 mm square around the tab centre (`REG_WIN_MM`, the
+    half-size of that square, not a radius) and keep off every foreign B.Cu pad (+0.2 mm), every back courtyard, the
     module shadow, the stitching's vias and B.Cu tracks, and U_REG's pin
     column, which runs from its pins to the board edge. `route_check`'s
     200 mm² gate is unchanged.

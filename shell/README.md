@@ -237,9 +237,11 @@ like-for-like with the 2026-08-23 bench numbers.
 **The table is generated.** `python shell/gen_panel_map.py` writes
 `shell/generated_panel_map.h` from `hardware/reva/panel-map.json`,
 `hardware/reva/blocks.py` and `engine/param_table.h`. Never edit the header;
-`shell_panel_map_guard` regenerates and compares it. 35 of the 70 pots send
-a parameter — those whose VCV law is exactly `apply_param()`'s (spec §2). The
-other 35 are scanned and printed, and wait for P6b's shared control layer.
+`shell_panel_map_guard` regenerates and compares it. The 73 rows split 35
+safe (they send a parameter — those whose VCV law is exactly `apply_param()`'s,
+spec §2), 35 unmapped (scanned and printed, they wait for P6b's shared control
+layer) and 3 reserved (`ROOT_A`, `ROOT_B`, `REV_MOD`: pots on the plate that
+send nothing and have no engine target yet).
 A pot added to the panel stops the generator until it is classified.
 
 **Keys and LEDs.** Every step reads the 165 in the same pass as the write;
@@ -328,7 +330,7 @@ the 16:1, 48 ms on the 8:1.
    Board session 2 played `SHELL_PANEL_SCAN` on the coupon, and RV2, RV4 and
    RV6 all moved the engine audibly, and all three reached both stops (RV4's
    low stop in a later read the same day). **Part 2 (P6a) is built**: the
-   Rev A scan, the generated 70-row table (keyed by global mux 0-9 plus
+   Rev A scan, the generated table (70 rows at P6a, 73 since the 9 mm panel pass; keyed by global mux 0-9 plus
    channel, unique; the sense pin rides along as a host-tested check field),
    35 pots sending, the four keys on the 165, and the span calibrated from
    two channels. Code space is tight: `SRAM_EXEC` is 99.10 % on the coupon

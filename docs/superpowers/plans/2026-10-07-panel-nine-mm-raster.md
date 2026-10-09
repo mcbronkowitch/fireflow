@@ -12,6 +12,11 @@
 > - `place.py`: U_SM may turn 90/270 (P4.1 §4.3) and the LED rotation pick
 >   keeps the LED body off every front body (P4.1 §4.2), both amended
 >   2026-10-08.
+> - Task 7c: U_SM is pinned (`place.SM_PIN`) at (152.40, 56.00) rotation 270,
+>   courtyard-legal (`place_module` checks front courtyards since 7c).
+> - Task 7c: the router runs with `HIST_INC` 2.0 and 60 rounds
+>   (`MAX_ITERS`), and keeps audio copper `EDGE_MM` 3.0 mm across a module
+>   zone edge (the zone-edge rule, `route_check`'s own rule).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
