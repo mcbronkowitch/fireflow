@@ -18,6 +18,7 @@ deadline. Delivery dates go in the table when the parcels arrive.
 |---|---|---|---|
 | Thonk | One set of panel parts (below) | **£179.01 paid**: £164.51 parts excl. VAT + £14.50 FedEx International Connect Plus (4–7 days). DDU: import VAT and carrier fee still due on delivery | |
 | Formulor | The plate: `FireflowHW-cut.svg` as of commit `60fbc37e`, clear acrylic GS 3 mm, P2. Formulor read it as one part, 304.4 × 128.5 mm | **28.14 € paid** | |
+| Formulor | The correction cut (2026-10-09): `FireflowHW-cut.svg` as of commit `815dbe3a`, clear acrylic GS **2 mm**, P2. Formulor read it as one part, 304.4 × 128.5 mm, 116 paths (outline + 115 holes) | **24.77 € paid** incl. shipping | |
 
 Thonk cart, 207 items, read back before checkout:
 
@@ -35,11 +36,18 @@ Thonk cart, 207 items, read back before checkout:
 Green Micro Knobs: Thonk had 23 in stock, so part A's 22 small knobs have one
 spare instead of the spec's two.
 
-**Correction cut (not ordered yet).** Checklist items 1 and 2 failed, so the
+**Correction cut (ordered 2026-10-09).** Checklist items 1 and 2 failed, so the
 plate is cut again from the 9 mm panel pass's file: `FireflowHW-cut.svg` as of
 commit `815dbe3a` (the last commit that changed it; 304.4 × 128.5 mm, 115
-holes, as `gen_hw_cut.py` prints). Bastian orders it at Formulor, then repeats
-items 1, 2 and 4 on it; item 3 passed on the first plate.
+holes, as `gen_hw_cut.py` prints). Items 1, 2 and 4 are repeated on it; item 3
+passed on the first plate.
+
+It is **2 mm**, not 3 mm: clear GS and clear XT were both out of stock in 3 mm
+on the order day. 2 mm is the thickness of Rev A's aluminium, so the knob caps
+sit at the production height, which suits items 1 and 2 better than the first
+plate did. The cost is strength: the 1.4 mm web at the rail slots is weaker in
+2 mm acrylic, so this plate rests in the rails or is screwed only hand-tight
+with nylon washers.
 
 ## Measurements (spec §6)
 

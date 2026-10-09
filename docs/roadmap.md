@@ -39,7 +39,8 @@ is actually built today, and what is still design-only.
   still a Spotykach fork.)
 - **Last updated:** 2026-10-09 (**the 9 mm panel pass re-placed every control
   and the Rev A board and firmware table follow it** — the 2026-10-08 M6
-  entry; the grip test failed on spacing, the correction cut is not ordered.
+  entry; the grip test failed on spacing, the correction cut was ordered
+  2026-10-09 in 2 mm clear GS, see `docs/hardware/grip-test.md`.
   Earlier, 2026-09-28: **Rev A is one board, not two**, and the
   second coupon turn is dropped — Bastian's decisions after a research pass;
   see the last M6 entry of that date. Earlier the same day: **part 1 of the
@@ -4136,7 +4137,9 @@ items 1 and 2 **failed** (the small caps stood 5.3 mm apart edge to edge), item
   jobs each. The jack row rose to y = 112.75. `gen_hw_panel.py` prints
   `params=75 inputs=12 outputs=6 lights=15 panel=60HP`.
 - **Correction cut.** `FireflowHW-cut.svg` as of `815dbe3a`, 115 holes on
-  304.4 × 128.5 mm. Not ordered.
+  304.4 × 128.5 mm. Ordered at Formulor 2026-10-09, 24.77 € incl. shipping,
+  in **2 mm** clear GS (3 mm clear was out of stock; 2 mm matches Rev A's
+  aluminium).
 - **Board.** Rev A follows the plate: 73 pots plus two calibration channels use
   75 of the 80 inputs on ten 8:1 chips, 5 spare. U_SM is pinned at
   (152.40, 56.00) rotation 270, J_PWR sits in the bottom-left corner, the
@@ -4153,8 +4156,8 @@ items 1 and 2 **failed** (the small caps stood 5.3 mm apart edge to edge), item
   parameter, 38 send nothing, `ROOT_A`, `ROOT_B` and `REV_MOD` among them
   (reason `reserved:`).
 
-**Next:** Bastian orders the correction cut and repeats grip-test items 1, 2
-and 4 on it, then the freeze tag. Before the board is ordered, repeat the JLC
+**Next:** when the correction cut arrives, Bastian repeats grip-test items 1,
+2 and 4 on it, then the freeze tag. Before the board is ordered, repeat the JLC
 placement-preview rotation check (parts moved and turned since 2026-10-03),
 then run `fab.py --release`.
 
