@@ -4291,8 +4291,19 @@ items 1 and 2 **failed** (the small caps stood 5.3 mm apart edge to edge), item
   as Share Tech Mono outlines. Positions are the frozen
   `FireflowHW-holes.json`; only the drilled diameters differ from the acrylic
   (pot 7.2, jack 6.2, LED 3.2, key 6.2 mm, Bastian). The mounting slots fit the
-  rails on the correction cut and stay as they are. Guard `hw_alu_guard`. Not
-  yet quoted or ordered.
+  rails on the correction cut and stay as they are. Guard `hw_alu_guard`.
+
+- **Aluminium plate ordered (P5, 2026-10-13).** Schaeffer AG, one plate,
+  built in the web Front Panel Designer (fpd.schaeffer-ag.de, beta) from the
+  files as of `9050081b`: 2 mm aluminium, black anodised, 304.40 × 128.50 mm,
+  UV print with white underprint. The designer's price was 105.69 € net /
+  125.77 € gross (material 15.67, outline 11.83, set-up 10.18, 110 drillings
+  34.94, SD cut-out and slots 2.03, print 31.04 €); **about 140 € with DHL**, delivery about ten days
+  (around 2026-10-23). Its own hole list matched the generator (RATE_A at
+  71.40 / 114.00, slots at x 7.50 / 297.06). The web beta cannot deselect DXF
+  layers, so the upload was a copy without `PLATE_OUTLINE`. This is two
+  months ahead of the master plan's 18 Dec, so the plate is in hand before
+  the Rev A bring-up.
 
 **Next:** bring-up (P7) when the boards arrive. The hand-soldered parts of
 `bom-hand.csv` are on hand (Bastian, 2026-10-09) except `J_SD`, the Yamaichi
