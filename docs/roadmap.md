@@ -4284,6 +4284,15 @@ items 1 and 2 **failed** (the small caps stood 5.3 mm apart edge to edge), item
   Yamaichi's drawing first (`hardware/reva/review.md`); pin 1's side waits
   for a socket in hand.
 
+- **Aluminium plate files (P5, 2026-10-13).** `host/vcv/res/gen_hw_alu.py`
+  writes the Front Panel Designer inputs for Schaeffer AG: a hole DXF and two
+  UV-print PDFs (artwork on black anodise; or the full plate colour with 1 mm
+  bleed), text as Share Tech Mono outlines. Positions are the frozen
+  `FireflowHW-holes.json`; only the drilled diameters differ from the acrylic
+  (pot 7.2, jack 6.2, LED 3.2, key 6.2 mm, Bastian). The mounting slots fit the
+  rails on the correction cut and stay as they are. Guard `hw_alu_guard`. Not
+  yet quoted or ordered.
+
 **Next:** bring-up (P7) when the boards arrive. The hand-soldered parts of
 `bom-hand.csv` are on hand (Bastian, 2026-10-09) except `J_SD`, the Yamaichi
 microSD socket.

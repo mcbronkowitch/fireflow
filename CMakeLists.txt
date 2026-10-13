@@ -396,6 +396,15 @@ add_test(
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
 )
 
+# Rev A P5: the aluminium plate's Front Panel Designer files (hole DXF, print
+# PDFs) from res/gen_hw_alu.py. Needs fontTools and PyMuPDF, like
+# hardware/gen/check.py; without them it fails, never skips.
+add_test(
+    NAME hw_alu_guard
+    COMMAND ${Python3_EXECUTABLE} res/test_hw_alu.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
+)
+
 # Rev A P3 (docs/superpowers/specs/2026-09-29-rev-a-p3-schematic-design.md):
 # the generator tools shared under hardware/gen/. Plain scripts; the exit code
 # is the verdict. Guards that call kicad-cli fail -- never skip -- without it.
