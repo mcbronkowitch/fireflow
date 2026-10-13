@@ -324,6 +324,12 @@ on the other five engines, none of them confirmed by ear yet (spec §9).
   SYNTH and BODY read the same knob through different scales that only agree
   at full deflection, so there is no single correct number (see the
   control-merge init trap in [`gotchas.md`](gotchas.md)).
+- **The aluminium print's field tints run at ×3 the screen's** (by eye,
+  2026-10-13). `gen_hw_alu.py`'s `PRINT_TINT` triples both field washes for
+  the UV print only; the VCV panel keeps ×1. Chosen from rendered previews at
+  ×1/2/3/4/6, before any print was seen — a real plate may move it, but
+  nothing else should. Same day, also by eye: the print covers the whole
+  plate (with bleed), not just the fields on bare anodise.
 
 ## MOD latch layer (2026-08-22) — CONFIRMED BY EAR
 

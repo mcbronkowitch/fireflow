@@ -127,9 +127,16 @@ def _hex(c): return "#" + "".join(f"{round(v):02x}" for v in c)
 PLATE_MID = _mix(_rgb(hw.PLATE_HI), _rgb(hw.PLATE_LO), 0.5)
 
 
+# The print's fields run both washes at three times the screen's opacity:
+# the Rack panel's tints are too faint for ink (Bastian chose x3 of
+# x1/2/3/4/6 from rendered previews, 2026-10-13). The VCV panel itself is
+# unchanged.
+PRINT_TINT = 3.0
+
+
 def field_ink(side):
-    c = _mix(PLATE_MID, (255, 255, 255), hw.FIELD_BASE_OPACITY)
-    return _hex(_mix(c, _rgb(hw.ACC[side]), hw.FIELD_ACC_OPACITY[side]))
+    c = _mix(PLATE_MID, (255, 255, 255), hw.FIELD_BASE_OPACITY * PRINT_TINT)
+    return _hex(_mix(c, _rgb(hw.ACC[side]), hw.FIELD_ACC_OPACITY[side] * PRINT_TINT))
 
 
 class Outliner:
