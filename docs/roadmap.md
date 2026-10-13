@@ -4258,8 +4258,14 @@ items 1 and 2 **failed** (the small caps stood 5.3 mm apart edge to edge), item
   that Bastian **released the PCB order** (2026-10-13). Record:
   [`docs/hardware/grip-test.md`](hardware/grip-test.md).
 
+- **Panel frozen (2026-10-13).** Tag `panel-freeze-2026-11-06` sits on
+  `d9613793`, the last generator commit; its plate files are the ones cut
+  (unchanged since `815dbe3a`, regenerated without a diff). `fab.py` under
+  KiCad's Python reports `order_ready: yes`, and a fresh export matches the
+  released package (gerbers byte-identical, BOM/CPL up to line endings).
+
 **Next:** order the boards from the released package in
-`hardware/reva/fab/`, then the freeze tag. The hand-soldered parts of
+`hardware/reva/fab/`. The hand-soldered parts of
 `bom-hand.csv` are on hand (Bastian, 2026-10-09) except `J_SD`, the Yamaichi
 microSD socket.
 The three reserved pots (`ROOT_A`, `ROOT_B`, WOBL) still send nothing; making

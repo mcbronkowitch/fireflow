@@ -84,3 +84,8 @@ that passes this list. The freeze also needs every `KNOWN_PANEL` entry in
 (P4-2 spec §5) to carry a `SIGNED_OFF` record, the same rule
 `fab.release_blockers()` applies (P4-3 spec §4.4.6); an entry without one blocks
 the freeze.
+
+**Frozen 2026-10-13:** `panel-freeze-2026-11-06` is on `d9613793`, the last
+commit that touched `gen_hw_panel.py`; the plate files it generates are the
+ones cut at `815dbe3a`. Both open `KNOWN_PANEL` entries are signed off and
+`fab.py` reports `order_ready: yes`.
