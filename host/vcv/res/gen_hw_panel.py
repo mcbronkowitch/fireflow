@@ -74,14 +74,14 @@ FIELD_R = 1.5                     # the field's own corner radius
 NOTCH_R = 0.4                     # the bite's own corners -- minimal on purpose
 NOTCH_PAD = 1.0                   # air each side of the legend's ink
 NOTCH_DEPTH = 1.10                # clears the baseline (LEGEND_DY 0.75) by 0.35
-# The number that constrains the three above is how much frame is left to the
-# RIGHT of the longest legend in the tightest box. Measured on the 9 mm raster
-# plate (2026-10-09), as the guard measures it, against the frame's bounding
-# box: CAPTURE, a 17.55 mm frame, has 1.00 mm to spare before the notch would
-# reach its rounded corner; then ENG, the narrowest frame at 17.20 mm, with
-# 6.45 mm, then ROOM 7.80, and every other frame has more (LEVEL 23.75, then
-# up). So LEGEND_INSET + NOTCH_PAD may grow by 1.0 mm between them before the
-# guard in test_hw_panel.py starts refusing a plate.
+# The number that constrains the three above is how much top edge is left on
+# EACH side of the legend's notch in the tightest box, now that the legend is
+# centred on that edge (2026-10-13; it started 4.0 mm in from the left before,
+# which put deck B's legends at the inner end of their fields and deck A's at
+# the outer one). Measured as the guard measures it, to the field's rounded
+# corner: CAPTURE, a 17.70 mm edge under a 9.65 mm word, has 1.125 mm to spare
+# each side; then ENG 3.775, ROOM 4.45, and every other field has more. So NOTCH_PAD may
+# grow by 1.125 mm before the guard in test_hw_panel.py refuses a plate.
 
 # Real hardware bodies, not the finger-clearance radius the layout is spaced
 # on. The fields are drawn against THESE. They are the real parts (spec
@@ -589,10 +589,9 @@ GROUP_ORDER = ("ENG", "SEQUENCE", "CAPTURE", "MOTION", "VOICE", "PITCH",
 
 LEGEND_SIZE, LEGEND_SPACING = 1.9, 0.5
 LEGEND_DY = 0.75                  # legend baseline below a frame's top edge
-LEGEND_INSET = 4.0                # legend's left edge, in from the frame's.
-                                  # It is where the struck index used to start,
-                                  # so the lettering did not move on 2026-08-30
-                                  # -- only the two digits in front of it went.
+# The legend is centred on its field's top edge (Box.legend_x), so deck B's
+# reads as deck A's mirror image. LEGEND_INSET -- a fixed 4.0 mm from the
+# left edge -- was struck for it on 2026-10-13.
 
 
 def body_r(c):
@@ -610,13 +609,20 @@ def _cell_half(c, side):
     as amended 2026-10-08. Deck columns: CELL_HALF both ways. Between the
     centre columns: CENTRE_CELL_HALF. The outer centre columns' OUTWARD side
     (toward the deck) has no column-cell minimum -- ink + FIELD_MARGIN only --
-    because deck column 6 already stands 17.4 mm away there, not 23.0."""
+    because deck column 6 already stands 17.4 mm away there, not 23.0.
+
+    Deck column 6's side toward the centre reaches DECK_EDGE (2026-10-13), so
+    the seam between a deck and the centre is BOX_GAP like every other one --
+    it was 3.15 / 3.50 when CELL_HALF and the centre's own ink each set one
+    edge."""
     d = c.x - CX
     if abs(d) < 1e-6:
         return CENTRE_CELL_HALF
     if abs(abs(d) - CENTRE_PITCH) < 1e-6:
         inward = (d > 0) == (side < 0)
         return CENTRE_CELL_HALF if inward else 0.0
+    if abs(abs(d) - (CX - deck_col_x(6))) < 1e-6 and (d < 0) == (side > 0):
+        return DECK_EDGE - deck_col_x(6)
     return CELL_HALF
 
 
@@ -637,7 +643,8 @@ def _adjacent_columns(xa, xb):
 # The jack row keeps its own frames (no legends since 2026-08-30).
 JACK_ROW_X0, JACK_ROW_CUTS = 28.00, (50.25, 73.25)
 JACK_ROW_A, JACK_ROW_B, JACK_ROW_C = ("IN", "CV A", "MOD A"), ("OUT", "CV B", "MOD B"), "CLOCK"
-DECK_EDGE, CENTRE_L = 120.0, 123.0
+# DECK_EDGE and CENTRE_L -- the deck/centre seam -- are derived from the ink
+# below, once _ink exists (see _centre_edge).
 
 
 class Box(hw_fields.Field):
@@ -661,6 +668,12 @@ class Box(hw_fields.Field):
         return abs(self.y - JACK_ROW_Y) > 1e-9
 
     @property
+    def legend_x(self):
+        """Centre of the group legend: the middle of the top edge, which is
+        the edge it straddles (for an L or an arch, not of the bounding box)."""
+        return self.x + self.w / 2.0
+
+    @property
     def legend_y(self):
         """Baseline of the group legend -- always straddling the top edge."""
         return self.y + LEGEND_DY
@@ -671,9 +684,9 @@ class Box(hw_fields.Field):
         legend, or None where the field prints no legend to make room for."""
         if not self.prints_legend:
             return None
-        _, ink_r, _, _ = text_run(self.x + LEGEND_INSET, self.legend_y,
-                                  LEGEND_SIZE, LEGEND_SPACING, "start", self.n)
-        return (self.x + LEGEND_INSET - NOTCH_PAD, ink_r + NOTCH_PAD)
+        ink_l, ink_r, _, _ = text_run(self.legend_x, self.legend_y,
+                                      LEGEND_SIZE, LEGEND_SPACING, "middle", self.n)
+        return (ink_l - NOTCH_PAD, ink_r + NOTCH_PAD)
 
 
 def _ink(c):
@@ -693,24 +706,69 @@ def _ink(c):
     return x0, x1, y0, y1
 
 
+def _row_of(c):
+    """Index into ROW_Y of the knob row c stands on, or None."""
+    for i, y in enumerate(ROW_Y):
+        if abs(c.y - y) < 1e-6:
+            return i
+    return None
+
+
+def _centre_edge():
+    """Left edge of the centre fields: the outer centre column's ink plus
+    FIELD_MARGIN, which is all that column's outward side asks (_cell_half)."""
+    return min(_ink(c)[0] - FIELD_MARGIN for c in ALL_HW
+               if hw_class(c.enum) != "L" and _row_of(c) is not None
+               and abs((CX - c.x) - CENTRE_PITCH) < 1e-6)
+
+
+# The deck/centre seam, one BOX_GAP wide on every row, the jack row included
+# (MOD A ends and CLOCK starts on the same lines as the fields above them).
+CENTRE_L = _centre_edge()
+DECK_EDGE = CENTRE_L - BOX_GAP
+
+
+def _row_bands():
+    """(top, bottom) of every knob row's band, plate-wide, plus the jack
+    row's (2026-10-13). Every field of a row shares that row's top and bottom
+    edge, so CAPTURE (a key, shorter than a pot) stands as tall as SEQUENCE
+    and GLOBAL beside it. The seam between two rows sits halfway between the
+    lower ink of the one and the upper ink of the next, and both bands stop
+    BOX_GAP / 2 short of it -- so every gap between two rows is BOX_GAP,
+    wherever two different groups meet across it. It was 3.07 .. 5.92 mm
+    when each group stretched only to its own row's ink."""
+    tops, bots = [], []
+    for i in range(len(ROW_Y)):
+        ink = [_ink(c) for c in ALL_HW
+               if hw_class(c.enum) != "L" and _row_of(c) == i]
+        tops.append(min(e[2] for e in ink))
+        bots.append(max(e[3] for e in ink))
+    jack_top, jack_bot = _jack_row_band()
+    tops.append(jack_top + FIELD_MARGIN)
+    bots.append(jack_bot - FIELD_MARGIN)
+    seams = [(bots[i] + tops[i + 1]) / 2.0 for i in range(len(tops) - 1)]
+    bands = []
+    for i in range(len(tops)):
+        top = tops[i] - FIELD_MARGIN if i == 0 else seams[i - 1] + BOX_GAP / 2.0
+        bot = bots[i] + FIELD_MARGIN if i == len(tops) - 1 else seams[i] - BOX_GAP / 2.0
+        if top > tops[i] - FIELD_MARGIN + 1e-9 or bot < bots[i] + FIELD_MARGIN - 1e-9:
+            raise ValueError(f"row {i + 1}: no room for FIELD_MARGIN and BOX_GAP "
+                             f"between the rows -- move a control (spec 2026-10-07 §7)")
+        bands.append((top, bot))
+    return bands[:-1], bands[-1]
+
+
 def _knob_field_rects(members):
     """Spec §7: each control's cell rect (its ink plus FIELD_MARGIN, at least
-    its column cell), stretched to its row's band within the group, plus the
-    joins between neighbouring cells of the same group."""
-    rows = {}
-    for c in members:
-        x0, x1, y0, y1 = _ink(c)
-        cell = [min(x0 - FIELD_MARGIN, c.x - _cell_half(c, -1)),
-                max(x1 + FIELD_MARGIN, c.x + _cell_half(c, +1)),
-                y0 - FIELD_MARGIN, y1 + FIELD_MARGIN]
-        rows.setdefault(round(c.y, 6), []).append((c, cell))
+    its column cell), stretched to its row's plate-wide band (ROW_BANDS),
+    plus the joins between neighbouring cells of the same group."""
     cells = []
-    for row in rows.values():
-        top = min(cell[2] for _c, cell in row)
-        bot = max(cell[3] for _c, cell in row)
-        for c, cell in row:
-            cell[2], cell[3] = top, bot
-            cells.append((c, cell))
+    for c in members:
+        x0, x1, _y0, _y1 = _ink(c)
+        top, bot = ROW_BANDS[_row_of(c)]
+        cell = [min(x0 - FIELD_MARGIN, c.x - _cell_half(c, -1)),
+                max(x1 + FIELD_MARGIN, c.x + _cell_half(c, +1)), top, bot]
+        cells.append((c, cell))
     rects = [tuple(cell) for _c, cell in cells]
     for (a, ra), (b, rb) in itertools.combinations(cells, 2):
         if abs(a.y - b.y) < 1e-6 and _adjacent_columns(a.x, b.x):
@@ -781,7 +839,8 @@ def _jack_row_band():
     return top - FIELD_MARGIN, bot + FIELD_MARGIN
 
 
-JACK_ROW_Y = _jack_row_band()[0]
+ROW_BANDS, JACK_BAND = _row_bands()
+JACK_ROW_Y = JACK_BAND[0]
 
 
 def group_boxes():
@@ -794,7 +853,7 @@ def group_boxes():
             out.append(Box(name, side, _knob_field_rects(members)))
     for name, names in CENTRE_GROUPS.items():
         out.append(Box(name, "C", _knob_field_rects([by[n] for n in names])))
-    y0, y1 = _jack_row_band()
+    y0, y1 = JACK_BAND
     for n, side, x, w in _jack_row_cells():
         out.append(Box(n, side, [(x, x + w, y0, y1)]))
     return out
@@ -885,8 +944,8 @@ def group_texts():
     two-digit index in front of every name was struck. Rack does not render
     SVG text, so the plate lettering and the rehearsal lettering must both
     come from this table."""
-    return [(b.x + LEGEND_INSET, b.legend_y, LEGEND_SIZE, LEGEND_SPACING,
-             HW_LEGEND, "start", b.n) for b in BOXES if b.prints_legend]
+    return [(b.legend_x, b.legend_y, LEGEND_SIZE, LEGEND_SPACING,
+             HW_LEGEND, "middle", b.n) for b in BOXES if b.prints_legend]
 
 
 BRAND_TEXTS = [

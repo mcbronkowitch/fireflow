@@ -4264,6 +4264,13 @@ items 1 and 2 **failed** (the small caps stood 5.3 mm apart edge to edge), item
   (unchanged since `815dbe3a`, regenerated without a diff). `fab.py` under
   KiCad's Python reports `order_ready: yes`, and a fresh export matches the
   released package (gerbers byte-identical, BOM/CPL up to line endings).
+- **Print fields straightened (2026-10-13, after the freeze).** Every seam
+  between two group fields is now BOX_GAP (3.0 mm; was 3.00 .. 5.92), every
+  field fills its row's plate-wide band (CAPTURE as tall as its neighbours),
+  and the jack row's MOD A / CLOCK edges line up with the fields above.
+  Print layer only: `FireflowHW-print.svg`, the VCV panel and the legend
+  baselines changed; holes, cut file and every control position did not.
+  Guard: `test_every_seam_is_box_gap`. The print is not ordered yet.
 
 - **Boards ordered (2026-10-13).** JLCPCB, from the released package in
   `hardware/reva/fab/` (uploaded unchanged): 5 boards, 4 layers, 300.8 ×

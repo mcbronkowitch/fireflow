@@ -5,7 +5,7 @@ but can never violate size, keep-outs, footprints, or static lettering.
 No pytest in this environment -- plain asserts (and check() for the slot-map
 guard below), exit code says it all. Run from host/vcv/: python res/test_hw_panel.py
 """
-import os, re, sys
+import itertools, os, re, sys
 import gen_panel as gp
 import gen_hw_panel as hw
 
@@ -213,15 +213,48 @@ def test_fields_keep_box_gap():
           f"fields and GROUP_ORDER disagree: { {b.stem for b in boxes} ^ set(hw.GROUP_ORDER)}")
 
 
+def test_every_seam_is_box_gap():
+    """2026-10-13: every gap between two fields of different groups that face
+    each other is BOX_GAP exactly -- not merely at least BOX_GAP, which is
+    what test_fields_keep_box_gap holds. Before, the plate carried 3.00,
+    3.07, 3.15, 3.50, 3.77, 3.92, 4.30 and, above DIFF and WOBL, 5.92 mm.
+    And every field fills its row's whole band, so a group of shorter
+    controls (CAPTURE: one key) is not a shorter field."""
+    for a, b in itertools.combinations(hw.BOXES, 2):
+        for ra in a.rects:
+            for rb in b.rects:
+                ox = min(ra[1], rb[1]) - max(ra[0], rb[0])
+                oy = min(ra[3], rb[3]) - max(ra[2], rb[2])
+                for overlap, d in ((ox, max(ra[2] - rb[3], rb[2] - ra[3])),
+                                   (oy, max(ra[0] - rb[1], rb[0] - ra[1]))):
+                    if overlap > 1e-6 and 0 < d < 2 * hw.BOX_GAP:
+                        check(abs(d - hw.BOX_GAP) < 1e-6,
+                              f"{a.n}/{a.side} and {b.n}/{b.side} face each "
+                              f"other across {d:.3f} mm, not {hw.BOX_GAP}")
+    for c in hw.ALL_HW:
+        row = hw._row_of(c)
+        if row is None or hw.hw_class(c.enum) == "L":
+            continue
+        top, bot = hw.ROW_BANDS[row]
+        b = hw.box_of(c)
+        check(b is not None and b.contains_rect(c.x - 0.01, c.x + 0.01, top, bot),
+              f"{c.enum}: its field does not fill row {row + 1}'s band "
+              f"{top:.3f} .. {bot:.3f}")
+    check(abs(hw.CENTRE_L - hw.DECK_EDGE - hw.BOX_GAP) < 1e-9,
+          "the deck/centre seam is not BOX_GAP")
+
+
 def test_column_cells_follow_the_centre_pitch():
     """Spec §7 (amended 2026-10-08): the column cell's half-width, side by
     side, written here as literals. Between the centre columns (23.0 - 3.0)
     / 2 = 10.0; the outer centre columns' outward side (toward the deck) has
-    no column-cell minimum; deck column 6 keeps (20.2 - 3.0) / 2 = 8.6."""
+    no column-cell minimum; deck column 6 keeps (20.2 - 3.0) / 2 = 8.6 on
+    its outward side and reaches DECK_EDGE (121.1, BOX_GAP short of the
+    centre fields' 124.1) on its side toward the centre (2026-10-13)."""
     from types import SimpleNamespace as At
     want = {  # x: (left, right)
         129.4: (0.0, 10.0), 152.4: (10.0, 10.0), 175.4: (10.0, 0.0),
-        112.0: (8.6, 8.6), 192.8: (8.6, 8.6), 11.0: (8.6, 8.6),
+        112.0: (8.6, 9.1), 192.8: (9.1, 8.6), 11.0: (8.6, 8.6),
     }
     for x, (left, right) in want.items():
         got = (hw._cell_half(At(x=x), -1), hw._cell_half(At(x=x), +1))
@@ -968,9 +1001,14 @@ def test_legend_notches_clear_their_lettering():
             continue
         check(b.notch is not None, f"{b.n}: printed legend with no notch")
         n0, n1 = b.notch
-        x0, x1, ytop, ybase = hw.text_run(b.x + hw.LEGEND_INSET, b.legend_y,
+        x0, x1, ytop, ybase = hw.text_run(b.legend_x, b.legend_y,
                                           hw.LEGEND_SIZE, hw.LEGEND_SPACING,
-                                          "start", b.n)
+                                          "middle", b.n)
+        # Centred on the top edge (2026-10-13), notch and word alike, so a
+        # deck B field reads as its deck A twin's mirror image.
+        check(abs((n0 + n1) / 2.0 - (b.x + b.w / 2.0)) < 1e-9,
+              f"{b.n}/{b.side}: the notch is not centred on the top edge "
+              f"({n0:.2f}..{n1:.2f} on {b.x:.2f}..{b.x + b.w:.2f})")
         check(abs((x0 - n0) - hw.NOTCH_PAD) < 1e-9 and
               abs((n1 - x1) - hw.NOTCH_PAD) < 1e-9,
               f"{b.n}: the notch does not clear its lettering by NOTCH_PAD "
@@ -1001,6 +1039,19 @@ def test_legend_notches_clear_their_lettering():
               f"{b.n}: the drawn field does not step down at the notch")
         check(f"{hw.mm(n1)},{hw.mm(b.y + hw.NOTCH_DEPTH - hw.NOTCH_R)}" in d,
               f"{b.n}: the drawn field does not come back up after the notch")
+    # Mirrored legends: deck B's lettering row is deck A's reflected about the
+    # centre line, centre fields sit on it, and both print middle-anchored.
+    rows = {(t[6], round(t[0], 6)): t for t in hw.TEXTS}
+    by = {(b.n, b.side): b for b in hw.BOXES if b.prints_legend}
+    for (n, side), b in by.items():
+        t = rows.get((n, round(b.legend_x, 6)))
+        check(t is not None and t[5] == "middle",
+              f"{n}/{side}: no middle-anchored legend row at the field's centre")
+        if side == "A" and (n, "B") in by:
+            check(abs(hw.W - b.legend_x - by[(n, "B")].legend_x) < 1e-9,
+                  f"{n}: deck B's legend is not deck A's mirrored")
+        if side == "C":
+            check(abs(b.legend_x - hw.CX) < 1e-9, f"{n}: centre legend off the centre line")
 
 
 def test_caption_gap_is_one_number():
