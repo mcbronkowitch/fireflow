@@ -4305,6 +4305,27 @@ items 1 and 2 **failed** (the small caps stood 5.3 mm apart edge to edge), item
   months ahead of the master plan's 18 Dec, so the plate is in hand before
   the Rev A bring-up.
 
+- **Hardware spend so far (2026-10-13): about 620–630 €.** Paid amounts from
+  the entries above; dollars at the rate PayPal charged for Rev A
+  (136.58 $ = 128.22 €), pounds at 1.15–1.20 € (the order-day rate is not
+  recorded).
+
+  | Item | Amount |
+  |---|---|
+  | Daisy Patch Submodule | ~40 € |
+  | Coupon: JLCPCB, five bare boards ($22.02) | ~21 € |
+  | Coupon: Reichelt parts incl. shipping | 20.14 € |
+  | Coupon: Amazon RV09 pots, 2 × 10 | 13.98 € |
+  | Thonk panel parts (£179.01, DDU) | ~205–215 € |
+  | Formulor acrylic plate, 3 mm | 28.14 € |
+  | Formulor correction cut, 2 mm | 24.77 € |
+  | JLCPCB Rev A, five boards assembled | 128.22 € |
+  | Schaeffer aluminium plate | ~140 € |
+
+  The Thonk import VAT and FedEx fee have not been charged yet; if they come,
+  about 40–55 € more. Not counted: the Daisy Seed, the ST-Link, tools and the
+  measurement rig.
+
 **Next:** bring-up (P7) when the boards arrive. The hand-soldered parts of
 `bom-hand.csv` are on hand (Bastian, 2026-10-09) except `J_SD`, the Yamaichi
 microSD socket.
