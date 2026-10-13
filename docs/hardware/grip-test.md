@@ -18,7 +18,7 @@ deadline. Delivery dates go in the table when the parcels arrive.
 |---|---|---|---|
 | Thonk | One set of panel parts (below) | **£179.01 paid**: £164.51 parts excl. VAT + £14.50 FedEx International Connect Plus (4–7 days). DDU: import VAT and carrier fee still due on delivery | |
 | Formulor | The plate: `FireflowHW-cut.svg` as of commit `60fbc37e`, clear acrylic GS 3 mm, P2. Formulor read it as one part, 304.4 × 128.5 mm | **28.14 € paid** | |
-| Formulor | The correction cut (2026-10-09): `FireflowHW-cut.svg` as of commit `815dbe3a`, clear acrylic GS **2 mm**, P2. Formulor read it as one part, 304.4 × 128.5 mm, 116 paths (outline + 115 holes) | **24.77 € paid** incl. shipping | |
+| Formulor | The correction cut (2026-10-09): `FireflowHW-cut.svg` as of commit `815dbe3a`, clear acrylic GS **2 mm**, P2. Formulor read it as one part, 304.4 × 128.5 mm, 116 paths (outline + 115 holes) | **24.77 € paid** incl. shipping | 2026-10-13 |
 
 Thonk cart, 207 items, read back before checkout:
 
@@ -49,6 +49,11 @@ plate did. The cost is strength: the 1.4 mm web at the rail slots is weaker in
 2 mm acrylic, so this plate rests in the rails or is screwed only hand-tight
 with nylon washers.
 
+**The correction cut arrived on 2026-10-13, and with it Bastian released the
+PCB order (2026-10-13).** Its 73 knob positions are covered by the Thonk set
+above: 73 of 77 pots; small caps 23 of 23 green (no spare left), 13 of 14 dark
+blue, 23 of 24 orange; big caps 14 of 16.
+
 ## Measurements (spec §6)
 
 | Date | What | Result |
@@ -66,10 +71,10 @@ with nylon washers.
 
 | # | Check | Result | Fix (position / size / legend) |
 |---|---|---|---|
-| 1 | Pinch two neighbouring knobs at once, every group | **Failed** (2026-10-07): the small caps stand 5.3 mm apart edge to edge, measured from the generator (spec 2026-10-07 §2) | The 9 mm panel pass: every control on a 20.2 mm raster, no two caps closer than 9 mm (smallest gap 9.70 mm in the current generator). Spec [`2026-10-07-panel-nine-mm-raster-design.md`](../superpowers/specs/2026-10-07-panel-nine-mm-raster-design.md), plan [`2026-10-07-panel-nine-mm-raster.md`](../superpowers/plans/2026-10-07-panel-nine-mm-raster.md) |
-| 2 | Turn each knob without brushing a neighbour's cap | **Failed** (2026-10-07): same cause as 1 | Same pass |
+| 1 | Pinch two neighbouring knobs at once, every group | **Failed** (2026-10-07): the small caps stand 5.3 mm apart edge to edge, measured from the generator (spec 2026-10-07 §2). **Passed** on the correction cut (2026-10-13, Bastian) | The 9 mm panel pass: every control on a 20.2 mm raster, no two caps closer than 9 mm (smallest gap 9.70 mm in the current generator). Spec [`2026-10-07-panel-nine-mm-raster-design.md`](../superpowers/specs/2026-10-07-panel-nine-mm-raster-design.md), plan [`2026-10-07-panel-nine-mm-raster.md`](../superpowers/plans/2026-10-07-panel-nine-mm-raster.md) |
+| 2 | Turn each knob without brushing a neighbour's cap | **Failed** (2026-10-07): same cause as 1. **Passed** on the correction cut (2026-10-13, Bastian) | Same pass |
 | 3 | All 18 jacks patched with real cables: what gets covered | **Passed** (2026-10-07): "patching was fine" (Bastian) | none |
-| 4 | Every legend readable from playing distance, through the print | | |
+| 4 | Every legend readable from playing distance, through the print | **Passed** on the correction cut (2026-10-13, Bastian) | none |
 | 5 | All four keys: reach, accidental presses | moved to the first Rev A board — the keys sit on the board, not in the acrylic | |
 
 Every fix goes into `host/vcv/res/gen_hw_panel.py`, never into a generated
