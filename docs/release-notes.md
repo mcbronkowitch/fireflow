@@ -8,59 +8,43 @@
   Everything below the comment is public.
 -->
 
-## FireFlow 2.22.0
+## FireFlow 2.23.0
 
-**Each deck can now be placed in the stereo field.** A new bipolar `PAN` knob
-per deck, centre at noon, unity on both channels there — a centred PAN cannot
-move a render at all. The law is a plain balance: turn right and the left
-channel comes down, the right stays where it was. Nothing gets louder.
+**The hardware plate (`FireflowHW`) is the one going to the board.** Its
+layout is frozen: the Rev A boards are ordered, and the acrylic plate is cut
+from the same file this panel is drawn from. Every knob now sits on one 9 mm
+raster: at least 9 mm of air between any two caps, a three-column centre on its
+own wider pitch, and the jack row at the bottom of the plate.
 
-**The reverb stays in the middle.** PAN moves the dry signal only. The send
-into the room is taken before the balance, so panning a deck hard left leaves
-its reverb tail centred and the cloud intact, rather than dragging the whole
-space over with it. This was the decision, not an oversight.
+**Three new pots that do nothing yet.** `ROOT` on each deck (a per-deck scale
+root) and `WOBL` in `ROOM` (reverb tail wobble) are reserved: they have a hole,
+a caption and a pot on the board, but no function and no Rack widget. They show
+as dark discs on the plate.
 
-**PAN has a MOD ring, and the two decks mirror each other.** Latch MOD and the
-PAN knobs take a depth like any other wreathed control. Deck B reads deck A's
-lane **negated**, so the decks always move apart — one goes left as the other
-goes right — instead of drifting to the same side together.
+**Fifteen lamps, and they show timing, not modulation.** The TIMB, FILT and
+COLR excursion lamps and the limiter lamp are gone. New on the plate: a `TIME`
+lamp for the FLUX time period, `CLK` and `RST` beside their jacks, and the SHFT
+and MOD lamps between their key and jack. Every knob lamp sits beside its
+caption, toward its own group. **In Rack, `TIME`, `CLK`, `RST` and `SHFT` stay
+dark for now**: what they will show is designed but not wired yet. The MOD lamp
+now also takes over the old limiter lamp's job.
 
-That mirror is not cosmetic. Both decks reading their own lane was measured at
-a correlation of **+1.0000** whenever the two decks share a RATE: 98.7 % of the
-time on the same side, 0.0 % opposite. The modulation lane does not depend on
-the deck's seed, so two decks were producing one drift, twice, and the ring
-panned the whole mix rather than opening it up.
+**The plate is drawn evenly.** Every gap between two group fields is now
+3.0 mm. It ranged from 3.0 to 5.9 mm before, widest above DIFF and WOBL.
+Every field fills its row's full height, so CAPTURE is as tall as its
+neighbours, and every group name sits centred on its field's top edge. Deck B
+now reads as an exact mirror image of deck A.
 
-**What the mirror costs, said plainly:** `MOD B` no longer reaches `PAN B`.
-Deck B's pan modulation now runs off deck A's master, so `MOD A` down stills
-both pans, and you switch deck B's off at its own depth ring instead. PAN has
-had **no listening pass yet** — the balance law, the smoothing time, the lane
-it rides and the mirror itself are all first-try values.
+**Fixed: loading a patch onto a BBD deck no longer silences FLUX.** Restoring a
+patch over a running deck whose ENG is BBD made the plugin see a fresh switch
+to BBD. It then set FLUX to 0 and turned excite-other-deck on, over the patch
+you had just loaded. A restore now fires no switch; turning ENG yourself still
+does.
 
-**Neither panel borrows Rack's parts any more.** New house knobs, jacks and
-keys, drawn rather than pulled from the stock library: the knob caps now carry
-their deck's accent colour on collar and pointer, so the hand can tell deck A
-from deck B without reading a caption. Dragging, snapping, tooltips and the
-right-click menu are unchanged — they are still the framework's.
-
-**The lamps light in the colours the plates already printed.** Every LED bed on
-both plates has carried a zone tint for a long while, and a saturated yellow
-was painting over all of them. Deck A is teal now, deck B orange, the centre
-blue-grey. REC stays red, because on a record light that is the point.
-
-**The hardware plate (`FireflowHW`) is one flat surface.** The tinted zones,
-the printed ember silhouette, the fade overlays and the dashed drawing frames
-are all struck; zone identity moved into the group fields instead, which is
-also why the "DECK A" / "DECK B" legends are gone — the tint says it. `SEND`
-moved out of `ROOM` and into `LEVEL`, where it belongs, on a frame that now
-reaches past the deck edge to hold it. The jack row lost its group legends: the
-caption under each socket already names it.
-
-**One deliberate regression on that plate:** the accent rings marking which
-knobs accept modulation are no longer printed — they are drawn, and only while
-MOD is latched. Silkscreen cannot switch, and a real aluminium panel would have
-to carry them permanently or not at all. This release rehearses "not at all",
-so on the hardware draft, which knobs carry a depth is learned rather than read.
+**Under the hood:** the control law that turns knob positions into engine
+settings moved out of the Rack module into a shared, Rack-free layer. The
+firmware runs the same code. It now sends a setting only when its value
+changed. Nothing should sound different.
 
 This is a development alpha. Saved patches may break between releases.
 
