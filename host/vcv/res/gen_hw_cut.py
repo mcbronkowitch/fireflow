@@ -22,7 +22,8 @@ PLATE_W = hw.W - 0.4
 TRIM = (hw.W - PLATE_W) / 2
 # Mounting slots: DIY convention, 7.5 mm in from the plate's left edge and
 # 3.0 mm from top and bottom, horizontal pitch a whole number of HP.
-# ASSUMPTION until checked against the Palette's rails.
+# They fit the rails on the 2 mm correction cut (Bastian 2026-10-13,
+# docs/hardware/grip-test.md).
 MOUNT_X = (TRIM + 7.5, TRIM + 7.5 + (hw.HP - 3) * gp.MM_PER_HP)
 MOUNT_Y = (3.0, hw.Hh - 3.0)
 MOUNT_W, MOUNT_H = 5.2, 3.2

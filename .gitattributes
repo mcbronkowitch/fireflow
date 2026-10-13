@@ -45,3 +45,8 @@ hardware/lib/**  -text
 hardware/reva/bom-*.csv          text eol=lf
 hardware/reva/review.md          text eol=lf
 hardware/reva/kicad/*-lib-table  text eol=lf
+
+# 2026-10-13: res/gen_hw_alu.py writes its DXF with CRLF (the DXF convention)
+# and test_hw_alu.py compares the committed bytes with the generator's. Keep the
+# blob byte-exact so a checkout on any machine is what the generator writes.
+host/vcv/res/*.dxf  -text

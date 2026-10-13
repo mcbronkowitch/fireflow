@@ -65,6 +65,7 @@ blue, 23 of 24 orange; big caps 14 of 16.
 | | Panel-to-board height, pot and jack seated on a board | |
 | | Alpha anti-rotation tab: present? where? | |
 | | Actual plate width of a bought 60 HP blank, if one is at hand (the cut assumes 304.4 mm) | |
+| 2026-10-13 | Mounting slots in the case's rails (5.2 × 3.2 mm, 7.5 mm from the plate's left edge, 3.0 mm from top and bottom; `gen_hw_cut.py`) | **Fit** on the correction cut (Bastian). The aluminium plate keeps them unchanged (`gen_hw_alu.py`) |
 | | Kerf: measure one pot hole and one LED hole (expected ~0.1–0.2 mm over size); the narrowest webs in the file (`FireflowHW-holes.json`, 111 holes without the mounting slots, as printed by `web()` of `test_hw_cut.py`): the two satellite lamps `CLK_L` and `RST_L` to their jacks 2.15 mm; the cluster lamps 3.70 mm (`REC_A_L` / `REC_B_L` to their key) and 4.54 mm (the other pot-cluster lamps to their own pot); `SHIFTBTN_L` / `MODBTN_L` 4.85 mm to their key; `LVL_A_L` / `LVL_B_L` 6.14 mm. Measure the two satellite webs and one cluster web on the correction cut: with the kerf above they should come out about 0.1–0.2 mm below those figures | |
 
 ## Checklist (spec §5)
