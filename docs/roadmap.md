@@ -37,7 +37,9 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-10-09 (**the 9 mm panel pass re-placed every control
+- **Last updated:** 2026-10-13 (**the 2 mm correction cut arrived and passed
+  the grip test; the PCB order is released** — see the M6 Rev A entry and
+  `docs/hardware/grip-test.md`. Earlier, 2026-10-09: **the 9 mm panel pass re-placed every control
   and the Rev A board and firmware table follow it** — the 2026-10-08 M6
   entry; the grip test failed on spacing, the correction cut was ordered
   2026-10-09 in 2 mm clear GS, see `docs/hardware/grip-test.md`.
@@ -4249,10 +4251,17 @@ items 1 and 2 **failed** (the small caps stood 5.3 mm apart edge to edge), item
   parameter, 38 send nothing, `ROOT_A`, `ROOT_B` and `REV_MOD` among them
   (reason `reserved:`).
 
-**Next:** when the correction cut arrives, Bastian repeats grip-test items 1,
-2 and 4 on it, then the freeze tag; the board order uses the released
-package in `hardware/reva/fab/`. The hand-soldered parts of `bom-hand.csv` are
-on hand (Bastian, 2026-10-09) except `J_SD`, the Yamaichi microSD socket.
+- **Correction cut passed (2026-10-13).** The 2 mm plate arrived on
+  2026-10-13; grip-test items 1, 2 and 4 pass on it (Bastian), so every
+  item the acrylic can test has passed. The Thonk set covers the 73 knob
+  positions (73 of 77 pots; the green Micro Knobs have no spare left). With
+  that Bastian **released the PCB order** (2026-10-13). Record:
+  [`docs/hardware/grip-test.md`](hardware/grip-test.md).
+
+**Next:** order the boards from the released package in
+`hardware/reva/fab/`, then the freeze tag. The hand-soldered parts of
+`bom-hand.csv` are on hand (Bastian, 2026-10-09) except `J_SD`, the Yamaichi
+microSD socket.
 The three reserved pots (`ROOT_A`, `ROOT_B`, WOBL) still send nothing; making
 them parameters is its own round with its own spec, see "Reserved knobs become
 parameters" under "Planned".
