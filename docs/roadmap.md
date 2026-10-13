@@ -38,7 +38,8 @@ is actually built today, and what is still design-only.
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
 - **Last updated:** 2026-10-13 (**the 2 mm correction cut arrived and passed
-  the grip test; the PCB order is released** — see the M6 Rev A entry and
+  the grip test; the panel is frozen and the Rev A boards are ordered at
+  JLCPCB, 128.22 € paid** — see the M6 Rev A entry and
   `docs/hardware/grip-test.md`. Earlier, 2026-10-09: **the 9 mm panel pass re-placed every control
   and the Rev A board and firmware table follow it** — the 2026-10-08 M6
   entry; the grip test failed on spacing, the correction cut was ordered
@@ -4264,8 +4265,19 @@ items 1 and 2 **failed** (the small caps stood 5.3 mm apart edge to edge), item
   KiCad's Python reports `order_ready: yes`, and a fresh export matches the
   released package (gerbers byte-identical, BOM/CPL up to line endings).
 
-**Next:** order the boards from the released package in
-`hardware/reva/fab/`. The hand-soldered parts of
+- **Boards ordered (2026-10-13).** JLCPCB, from the released package in
+  `hardware/reva/fab/` (uploaded unchanged): 5 boards, 4 layers, 300.8 ×
+  110 mm, 1.6 mm, green, HASL with lead (PCB `Y3-13443227A`, 45.40 $), all
+  five assembled as Economic PCBA on the bottom side (33.99 $). The two
+  "multiple types" BOM rows (100 nF incl. C_SD1, SS14) were re-ticked by
+  hand: 95 and 10 parts; JLC flagged no stock shortfall. Shipping DHL
+  Express 35.38 $ with the 19 % VAT (21.81 $) collected by JLC at checkout
+  — DHL Express (DDP) would have added 38.14 $ instead. **136.58 $ total,
+  128.22 € paid via PayPal.** J_SD's footprint was checked against
+  Yamaichi's drawing first (`hardware/reva/review.md`); pin 1's side waits
+  for a socket in hand.
+
+**Next:** bring-up (P7) when the boards arrive. The hand-soldered parts of
 `bom-hand.csv` are on hand (Bastian, 2026-10-09) except `J_SD`, the Yamaichi
 microSD socket.
 The three reserved pots (`ROOT_A`, `ROOT_B`, WOBL) still send nothing; making
