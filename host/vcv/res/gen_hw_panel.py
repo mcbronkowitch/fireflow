@@ -74,15 +74,14 @@ FIELD_R = 1.5                     # the field's own corner radius
 NOTCH_R = 0.4                     # the bite's own corners -- minimal on purpose
 NOTCH_PAD = 1.0                   # air each side of the legend's ink
 NOTCH_DEPTH = 1.10                # clears the baseline (LEGEND_DY 0.75) by 0.35
-# The number that constrains the three above is how much frame is left to the
-# RIGHT of the longest legend in the tightest box. Measured on the 9 mm raster
-# plate (2026-10-09; CAPTURE re-measured 2026-10-13 after the equal-seam
-# pass), as the guard measures it, against the frame's bounding box: CAPTURE,
-# a 17.70 mm frame, has 1.15 mm to spare before the notch would reach its
-# rounded corner; then ENG, the narrowest frame at 17.20 mm, with 6.45 mm,
-# then ROOM 7.80, and every other frame has more (LEVEL 23.75, then up). So
-# LEGEND_INSET + NOTCH_PAD may grow by 1.15 mm between them before the guard
-# in test_hw_panel.py starts refusing a plate.
+# The number that constrains the three above is how much top edge is left on
+# EACH side of the legend's notch in the tightest box, now that the legend is
+# centred on that edge (2026-10-13; it started 4.0 mm in from the left before,
+# which put deck B's legends at the inner end of their fields and deck A's at
+# the outer one). Measured as the guard measures it, to the field's rounded
+# corner: CAPTURE, a 17.70 mm edge under a 9.65 mm word, has 1.125 mm to spare
+# each side; then ENG 3.775, ROOM 4.45, and every other field has more. So NOTCH_PAD may
+# grow by 1.125 mm before the guard in test_hw_panel.py refuses a plate.
 
 # Real hardware bodies, not the finger-clearance radius the layout is spaced
 # on. The fields are drawn against THESE. They are the real parts (spec
@@ -590,10 +589,9 @@ GROUP_ORDER = ("ENG", "SEQUENCE", "CAPTURE", "MOTION", "VOICE", "PITCH",
 
 LEGEND_SIZE, LEGEND_SPACING = 1.9, 0.5
 LEGEND_DY = 0.75                  # legend baseline below a frame's top edge
-LEGEND_INSET = 4.0                # legend's left edge, in from the frame's.
-                                  # It is where the struck index used to start,
-                                  # so the lettering did not move on 2026-08-30
-                                  # -- only the two digits in front of it went.
+# The legend is centred on its field's top edge (Box.legend_x), so deck B's
+# reads as deck A's mirror image. LEGEND_INSET -- a fixed 4.0 mm from the
+# left edge -- was struck for it on 2026-10-13.
 
 
 def body_r(c):
@@ -670,6 +668,12 @@ class Box(hw_fields.Field):
         return abs(self.y - JACK_ROW_Y) > 1e-9
 
     @property
+    def legend_x(self):
+        """Centre of the group legend: the middle of the top edge, which is
+        the edge it straddles (for an L or an arch, not of the bounding box)."""
+        return self.x + self.w / 2.0
+
+    @property
     def legend_y(self):
         """Baseline of the group legend -- always straddling the top edge."""
         return self.y + LEGEND_DY
@@ -680,9 +684,9 @@ class Box(hw_fields.Field):
         legend, or None where the field prints no legend to make room for."""
         if not self.prints_legend:
             return None
-        _, ink_r, _, _ = text_run(self.x + LEGEND_INSET, self.legend_y,
-                                  LEGEND_SIZE, LEGEND_SPACING, "start", self.n)
-        return (self.x + LEGEND_INSET - NOTCH_PAD, ink_r + NOTCH_PAD)
+        ink_l, ink_r, _, _ = text_run(self.legend_x, self.legend_y,
+                                      LEGEND_SIZE, LEGEND_SPACING, "middle", self.n)
+        return (ink_l - NOTCH_PAD, ink_r + NOTCH_PAD)
 
 
 def _ink(c):
@@ -940,8 +944,8 @@ def group_texts():
     two-digit index in front of every name was struck. Rack does not render
     SVG text, so the plate lettering and the rehearsal lettering must both
     come from this table."""
-    return [(b.x + LEGEND_INSET, b.legend_y, LEGEND_SIZE, LEGEND_SPACING,
-             HW_LEGEND, "start", b.n) for b in BOXES if b.prints_legend]
+    return [(b.legend_x, b.legend_y, LEGEND_SIZE, LEGEND_SPACING,
+             HW_LEGEND, "middle", b.n) for b in BOXES if b.prints_legend]
 
 
 BRAND_TEXTS = [

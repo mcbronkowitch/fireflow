@@ -1001,9 +1001,14 @@ def test_legend_notches_clear_their_lettering():
             continue
         check(b.notch is not None, f"{b.n}: printed legend with no notch")
         n0, n1 = b.notch
-        x0, x1, ytop, ybase = hw.text_run(b.x + hw.LEGEND_INSET, b.legend_y,
+        x0, x1, ytop, ybase = hw.text_run(b.legend_x, b.legend_y,
                                           hw.LEGEND_SIZE, hw.LEGEND_SPACING,
-                                          "start", b.n)
+                                          "middle", b.n)
+        # Centred on the top edge (2026-10-13), notch and word alike, so a
+        # deck B field reads as its deck A twin's mirror image.
+        check(abs((n0 + n1) / 2.0 - (b.x + b.w / 2.0)) < 1e-9,
+              f"{b.n}/{b.side}: the notch is not centred on the top edge "
+              f"({n0:.2f}..{n1:.2f} on {b.x:.2f}..{b.x + b.w:.2f})")
         check(abs((x0 - n0) - hw.NOTCH_PAD) < 1e-9 and
               abs((n1 - x1) - hw.NOTCH_PAD) < 1e-9,
               f"{b.n}: the notch does not clear its lettering by NOTCH_PAD "
@@ -1034,6 +1039,19 @@ def test_legend_notches_clear_their_lettering():
               f"{b.n}: the drawn field does not step down at the notch")
         check(f"{hw.mm(n1)},{hw.mm(b.y + hw.NOTCH_DEPTH - hw.NOTCH_R)}" in d,
               f"{b.n}: the drawn field does not come back up after the notch")
+    # Mirrored legends: deck B's lettering row is deck A's reflected about the
+    # centre line, centre fields sit on it, and both print middle-anchored.
+    rows = {(t[6], round(t[0], 6)): t for t in hw.TEXTS}
+    by = {(b.n, b.side): b for b in hw.BOXES if b.prints_legend}
+    for (n, side), b in by.items():
+        t = rows.get((n, round(b.legend_x, 6)))
+        check(t is not None and t[5] == "middle",
+              f"{n}/{side}: no middle-anchored legend row at the field's centre")
+        if side == "A" and (n, "B") in by:
+            check(abs(hw.W - b.legend_x - by[(n, "B")].legend_x) < 1e-9,
+                  f"{n}: deck B's legend is not deck A's mirrored")
+        if side == "C":
+            check(abs(b.legend_x - hw.CX) < 1e-9, f"{n}: centre legend off the centre line")
 
 
 def test_caption_gap_is_one_number():
