@@ -19,8 +19,12 @@ from gen import netlist as N        # noqa: E402
 
 OPEN_ITEMS = (
     "J_SD's footprint (Yamaichi PJS008U-3000-0) is generated from the EasyEDA footprint "
-    "of LCSC C3177022, a secondary source; check it against a socket in hand before the "
-    "order. The catalogue carries no LCSC number for J_SD: it is hand-soldered.",
+    "of LCSC C3177022, a secondary source. Checked against Yamaichi's PJS008U-300X-0 "
+    "drawing on 2026-10-13: shield legs 8.60 mm apart, signal rows 1.10 mm apart, shield "
+    "to near row 3.17 mm, body 12.80 mm wide, legs 0.40/0.60 mm into 0.70/0.90 mm drills "
+    "-- all match. The drawing does not number the pins, so pin 1's side is confirmed only "
+    "with a socket in hand; a mirror would cost the SD card, not the board. The catalogue "
+    "carries no LCSC number for J_SD: it is hand-soldered.",
     "P2's pin table calls C1 'CV out 1' and C10 'CV out 2'; the Patch SM datasheet "
     "names C1 CV_OUT_2 and C10 CV_OUT_1. The wiring (C1 = PITCH_A, C10 = PITCH_B) "
     "follows P2 by pin; P6's firmware table must follow the pins, not the names.",
