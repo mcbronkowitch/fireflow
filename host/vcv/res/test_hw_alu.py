@@ -1,6 +1,6 @@
 """Guard for the Rev A P5 aluminium plate files (gen_hw_alu.py): the hole DXF
 read back with its own parser against the hole list the board is placed from,
-the drilled webs, and the two print PDFs' page size and content.
+the drilled webs, and the print PDF's bled page size and content.
 
 No pytest in this environment -- plain checks, exit code says it all.
 Run from the repo root:  python host/vcv/res/test_hw_alu.py
@@ -108,35 +108,42 @@ def _pdf_page(name):
     return doc, doc[0]
 
 
-def test_print_pdfs_are_plate_sized_outlined_vectors():
-    for name, bleed in (("FireflowHW-alu-print.pdf", 0.0),
-                        ("FireflowHW-alu-print-full.pdf", alu.BLEED)):
-        doc, page = _pdf_page(name)
-        w, h = page.rect.width / PT_PER_MM, page.rect.height / PT_PER_MM
-        check(len(doc) == 1, f"{name}: {len(doc)} pages")
-        check(abs(w - (alu.PW + 2 * bleed)) < 0.01 and abs(h - (alu.PH + 2 * bleed)) < 0.01,
-              f"{name}: page {w:.3f} x {h:.3f} mm")
-        check(not page.get_fonts(), f"{name}: carries fonts -- text must be outlines")
-        check(not page.get_images(), f"{name}: carries raster images")
+def test_print_pdf_is_the_bled_plate_in_outlined_vectors():
+    name = "FireflowHW-alu-print.pdf"
+    doc, page = _pdf_page(name)
+    w, h = page.rect.width / PT_PER_MM, page.rect.height / PT_PER_MM
+    check(len(doc) == 1, f"{name}: {len(doc)} pages")
+    check(abs(w - (alu.PW + 2 * alu.BLEED)) < 0.01 and abs(h - (alu.PH + 2 * alu.BLEED)) < 0.01,
+          f"{name}: page {w:.3f} x {h:.3f} mm, want the plate plus {alu.BLEED} mm bleed")
+    check(not page.get_fonts(), f"{name}: carries fonts -- text must be outlines")
+    check(not page.get_images(), f"{name}: carries raster images")
+    plate = alu._hex(alu.PLATE_MID)
+    covers = [d for d in page.get_drawings() if d.get("fill") is not None
+              and _hexfill(d["fill"]) == plate
+              and d["rect"].contains(page.rect + (0.01, 0.01, -0.01, -0.01))]
+    check(len(covers) == 1, f"{name}: no plate-colour fill ({plate}) over the whole bled page")
+
+
+def _hexfill(f):
+    return "#" + "".join(f"{round(v * 255):02x}" for v in f)
 
 
 def test_print_carries_every_caption_and_field_ink():
     """Every word in the plate's SVG is a filled path in the PDF (counted by
     its fill), and each zone's field ink is used."""
-    import fitz
     words = re.findall(r"<text [^>]*fill=\"([^\"]+)\"[^>]*>[^<]*</text>", hw.svg())
-    for name in ("FireflowHW-alu-print.pdf", "FireflowHW-alu-print-full.pdf"):
-        _, page = _pdf_page(name)
-        fills = {}
-        for d in page.get_drawings():
-            if d.get("fill") is not None:
-                c = "#" + "".join(f"{round(v * 255):02x}" for v in d["fill"])
-                fills[c] = fills.get(c, 0) + 1
-        for side in sorted(hw.ACC):
-            check(fills.get(alu.field_ink(side), 0) > 0, f"{name}: no field in {alu.field_ink(side)}")
-        for col in set(words):
-            check(fills.get(col.lower(), 0) >= words.count(col),
-                  f"{name}: {fills.get(col.lower(), 0)} paths in {col}, {words.count(col)} words")
+    name = "FireflowHW-alu-print.pdf"
+    _, page = _pdf_page(name)
+    fills = {}
+    for d in page.get_drawings():
+        if d.get("fill") is not None:
+            c = _hexfill(d["fill"])
+            fills[c] = fills.get(c, 0) + 1
+    for side in sorted(hw.ACC):
+        check(fills.get(alu.field_ink(side), 0) > 0, f"{name}: no field in {alu.field_ink(side)}")
+    for col in set(words):
+        check(fills.get(col.lower(), 0) >= words.count(col),
+              f"{name}: {fills.get(col.lower(), 0)} paths in {col}, {words.count(col)} words")
 
 
 def main():

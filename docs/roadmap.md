@@ -4285,9 +4285,10 @@ items 1 and 2 **failed** (the small caps stood 5.3 mm apart edge to edge), item
   for a socket in hand.
 
 - **Aluminium plate files (P5, 2026-10-13).** `host/vcv/res/gen_hw_alu.py`
-  writes the Front Panel Designer inputs for Schaeffer AG: a hole DXF and two
-  UV-print PDFs (artwork on black anodise; or the full plate colour with 1 mm
-  bleed), text as Share Tech Mono outlines. Positions are the frozen
+  writes the Front Panel Designer inputs for Schaeffer AG: a hole DXF and the
+  UV-print PDF. The print covers the whole plate in the plate colour with
+  1 mm bleed (Bastian: the field tints would not read on bare anodise), text
+  as Share Tech Mono outlines. Positions are the frozen
   `FireflowHW-holes.json`; only the drilled diameters differ from the acrylic
   (pot 7.2, jack 6.2, LED 3.2, key 6.2 mm, Bastian). The mounting slots fit the
   rails on the correction cut and stay as they are. Guard `hw_alu_guard`. Not

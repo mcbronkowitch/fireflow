@@ -11,8 +11,11 @@ which fit the rails.
 
 Front Panel Designer: a 304.4 x 128.5 mm, 2 mm black anodised panel; import
 the DXF's HOLES and SLOTS layers (PLATE_OUTLINE is reference only); place
-FireflowHW-alu-print.pdf at 0/0, or FireflowHW-alu-print-full.pdf at
--1/-1 (it carries 1 mm bleed); switch the white underprint on.
+FireflowHW-alu-print.pdf at -1/-1 (it carries 1 mm bleed); switch the white
+underprint on.
+
+The print covers the whole plate (Bastian 2026-10-13): the field tints are
+a few levels off the plate colour and would not read against bare anodise.
 
 Run from the repo root:  python host/vcv/res/gen_hw_alu.py
 Needs fontTools and PyMuPDF (fitz).
@@ -118,9 +121,9 @@ def _mix(a, b, t): return tuple(x * (1 - t) + y * t for x, y in zip(a, b))
 def _hex(c): return "#" + "".join(f"{round(v):02x}" for v in c)
 
 
-# UV print has no transparency over a plate it cannot see, so each field's two
-# washes are flattened into one opaque ink against the design's plate colour,
-# taken at the middle of its top-to-bottom ramp.
+# The print is opaque ink, so each field's two washes are flattened into one
+# colour against the plate colour the print lays down: the design's ramp,
+# taken at its middle.
 PLATE_MID = _mix(_rgb(hw.PLATE_HI), _rgb(hw.PLATE_LO), 0.5)
 
 
@@ -163,24 +166,20 @@ class Outliner:
 TEXT_RE = re.compile(r"<text ([^>]*)>([^<]*)</text>")
 
 
-# The full-plate background runs to the plate edge, so it bleeds past it on
-# every side; its page is that much larger and is placed at -BLEED/-BLEED.
-# The anodise variant needs none: its ink stops 2.4 mm inside the edge.
+# The plate colour runs to the plate edge, so it bleeds past it on every
+# side; the page is that much larger and is placed at -BLEED/-BLEED.
 BLEED = 1.0
 
 
-def print_svg(full_plate, font):
-    """The artwork on a page the size of the trimmed plate. full_plate prints
-    the plate colour too (solid: the design's ramp is 4 levels deep and not
-    printable) on a page grown by BLEED; otherwise the anodised plate is the
-    background."""
-    bl = BLEED if full_plate else 0.0
+def print_svg(font):
+    """The artwork on the plate colour (solid: the design's ramp is 4 levels
+    deep and not printable), on a page the trimmed plate plus BLEED."""
+    bl = BLEED
     P = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{PW + 2 * bl:.3f}mm" '
          f'height="{PH + 2 * bl:.3f}mm" '
-         f'viewBox="{TRIM - bl:.3f} {-bl:.3f} {PW + 2 * bl:.3f} {PH + 2 * bl:.3f}">']
-    if full_plate:
-        P.append(f'<rect x="{-bl:.3f}" y="{-bl:.3f}" width="{hw.W + 2 * bl:.3f}" '
-                 f'height="{PH + 2 * bl:.3f}" fill="{_hex(PLATE_MID)}"/>')
+         f'viewBox="{TRIM - bl:.3f} {-bl:.3f} {PW + 2 * bl:.3f} {PH + 2 * bl:.3f}">',
+         f'<rect x="{-bl:.3f}" y="{-bl:.3f}" width="{hw.W + 2 * bl:.3f}" '
+         f'height="{PH + 2 * bl:.3f}" fill="{_hex(PLATE_MID)}"/>']
     for b in hw.BOXES:
         P.append(f'<path d="{hw._field_d(b)}" fill="{field_ink(b.side)}"/>')
     for attrs, txt in TEXT_RE.findall(hw.svg()):
@@ -204,8 +203,7 @@ def pdf(svg_text):
 def outputs():
     font = Outliner(FONT_PATH)
     return [("FireflowHW-alu-holes.dxf", dxf().encode("ascii")),
-            ("FireflowHW-alu-print.pdf", pdf(print_svg(False, font))),
-            ("FireflowHW-alu-print-full.pdf", pdf(print_svg(True, font)))]
+            ("FireflowHW-alu-print.pdf", pdf(print_svg(font)))]
 
 
 def write_all(here):
