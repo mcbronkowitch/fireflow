@@ -105,6 +105,7 @@ public:
     // The firmware callback profile's window onto the lanes (shell/
     // cb_profile.cpp, engine/util/probe_mark.h); compiled only into its image.
     const SuperModulator& probe_mod(int p) const { return _parts[p].mod(); }
+    int                   probe_voices(int p) const { return _parts[p].active_voices(); }
 #endif
 #ifdef SPKY_TESTING
     uint32_t song_position_for_test(int p) const {

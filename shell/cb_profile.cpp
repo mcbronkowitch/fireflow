@@ -20,6 +20,8 @@ uint32_t g_proc  = 0;    // process(), first stamp to last
 uint32_t g_maxs  = 0;    // the most expensive single sample
 int      g_maxi  = 0;    // its index in the block
 uint32_t g_med   = 0;    // the mean of the other samples of this block
+uint32_t g_deck[2] = {0, 0};  // deck A / deck B process(), summed over the block
+uint32_t g_mix   = 0;    // the rest of process(): CHOKE, mix, reverb, limiter
 
 uint32_t g_block = 0;    // blocks since StartAudio
 
@@ -35,6 +37,8 @@ constexpr uint32_t kHot = 930000u;
 struct Rec {
     uint32_t blk, cb, proc, law, led, maxs, med, ev;
     int      maxi;
+    uint32_t deck[2], mix;
+    int      voices[2];
 };
 constexpr int     kRing = 64;
 Rec               g_ring[kRing];
@@ -43,7 +47,7 @@ uint32_t          g_ring_r = 0;   // foreground: entries printed
 
 // Summary over warm blocks, and the histogram of the whole callback:
 // 10 000-cycle bins from 850 000, bin 0 below, the last at 1 060 000 and up.
-uint64_t           g_sum_cb = 0, g_sum_proc = 0;
+uint64_t           g_sum_cb = 0, g_sum_proc = 0, g_sum_deck[2] = {0, 0}, g_sum_mix = 0;
 uint32_t           g_max_cb = 0, g_max_proc = 0, g_max_maxs = 0;
 volatile uint32_t  g_n = 0;
 constexpr uint32_t kHistLo = 850000u, kHistStep = 10000u;
@@ -73,9 +77,20 @@ uint32_t lane_events(const spky::Instrument& inst)
 } // namespace
 
 namespace spky {
-void probe_block(const uint32_t* ts, int n)
+void probe_block(const uint32_t* ts, const uint32_t* d1, const uint32_t* d2,
+                 int n, int pri)
 {
     g_proc = ts[n] - ts[0];
+    uint32_t a = 0, b = 0, m = 0;
+    for(int i = 0; i < n; ++i)
+    {
+        a += d1[i] - ts[i];        // top of the sample + the priority deck
+        b += d2[i] - d1[i];        // the yielding deck
+        m += ts[i + 1] - d2[i];    // mix, reverb, limiter
+    }
+    g_deck[pri]     = a;
+    g_deck[1 - pri] = b;
+    g_mix           = m;
     uint32_t mx = 0;
     int      mi = 0;
     for(int i = 0; i < n; ++i)
@@ -104,6 +119,9 @@ void cb_profile_block_end(uint32_t cb, uint32_t law, uint32_t led, bool warm,
     if(!warm) return;
     g_sum_cb += cb;
     g_sum_proc += g_proc;
+    g_sum_deck[0] += g_deck[0];
+    g_sum_deck[1] += g_deck[1];
+    g_sum_mix += g_mix;
     if(cb > g_max_cb) g_max_cb = cb;
     if(g_proc > g_max_proc) g_max_proc = g_proc;
     if(g_maxs > g_max_maxs) g_max_maxs = g_maxs;
@@ -115,7 +133,9 @@ void cb_profile_block_end(uint32_t cb, uint32_t law, uint32_t led, bool warm,
     if(cb > kHot || (ev & wrap_mask) != 0u)
     {
         Rec& r = g_ring[g_ring_w % kRing];
-        r = Rec{blk, cb, g_proc, law, led, g_maxs, g_med, ev, g_maxi};
+        r = Rec{blk, cb, g_proc, law, led, g_maxs, g_med, ev, g_maxi,
+                {g_deck[0], g_deck[1]}, g_mix,
+                {inst.probe_voices(0), inst.probe_voices(1)}};
         std::atomic_signal_fence(std::memory_order_seq_cst);
         g_ring_w = g_ring_w + 1u;
     }
@@ -143,6 +163,9 @@ void cb_profile_report(bench::Board& hw)
                      static_cast<int>(r.proc), static_cast<int>(r.law),
                      static_cast<int>(r.led), static_cast<int>(r.maxs), r.maxi,
                      static_cast<int>(r.med), static_cast<unsigned>(r.ev));
+        hw.PrintLine("CBP_REC2 blk=%d a=%d b=%d mix=%d va=%d vb=%d", static_cast<int>(r.blk),
+                     static_cast<int>(r.deck[0]), static_cast<int>(r.deck[1]),
+                     static_cast<int>(r.mix), r.voices[0], r.voices[1]);
     }
     if(++g_calls % 20u != 0u) return;
     const uint32_t n = g_n;
@@ -152,6 +175,8 @@ void cb_profile_report(bench::Board& hw)
                  static_cast<int>(g_sum_cb / n), static_cast<int>(g_max_cb),
                  static_cast<int>(g_sum_proc / n), static_cast<int>(g_max_proc),
                  static_cast<int>(g_max_maxs));
+    hw.PrintLine("CBP_SUM2 a_mean=%d b_mean=%d mix_mean=%d", static_cast<int>(g_sum_deck[0] / n),
+                 static_cast<int>(g_sum_deck[1] / n), static_cast<int>(g_sum_mix / n));
     for(int h = 0; h < 3; ++h)
     {
         const uint32_t* p = g_hist + h * 8;
