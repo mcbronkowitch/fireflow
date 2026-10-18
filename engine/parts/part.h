@@ -15,6 +15,7 @@
 #include "fx/part_fx.h"
 #include "util/math.h"
 #include "util/fast_tanh.h"
+#include "util/probe_mark.h"
 #include "Utility/dcblock.h"
 
 // Movement 1's cross-deck bus, behind a switch so the bench can build the
@@ -335,7 +336,15 @@ public:
     __attribute__((always_inline)) inline
     void process(float inL, float inR, float& outL, float& outR,
                  float& sendL, float& sendR) {
+        SPKY_MARK(_probe_seg + (PSEG_A_MOD - PSEG_A_MOD));
         _mod.process();
+#if defined(SPKY_PROBE_MARKS)
+        for (int l = 0; l < LANE_COUNT; ++l) {
+            if (_mod.lane_wrapped(l)) SPKY_PROBE_EVENT(_probe_deck * 10 + l);
+            if (_mod.lane_fired(l))   SPKY_PROBE_EVENT(_probe_deck * 10 + 5 + l);
+        }
+#endif
+        SPKY_MARK(_probe_seg + (PSEG_A_TICK - PSEG_A_MOD));
 
         // click-free engine switch: fade out (4 ms) -> swap -> fade in (4 ms).
         // At hold the multiplier is exactly 1.0, so unswitched runs stay
@@ -391,11 +400,16 @@ public:
             _ctrl_ctr = SynthEngine::kCtrlInterval;
             _control_tick();
         } else if (fired) {
+            SPKY_PROBE_EVENT(kProbeEvFireTick + _probe_deck);
             _control_tick();
         }
         --_ctrl_ctr;
 
-        if (fired && !_note_suppressed) _fire_trigger();
+        SPKY_MARK(_probe_seg + (PSEG_A_TRIG - PSEG_A_MOD));
+        if (fired && !_note_suppressed) {
+            SPKY_PROBE_EVENT(kProbeEvTrigger + _probe_deck);
+            _fire_trigger();
+        }
 
         // Composed gate, forwarded on edges only (see engine_iface.h). Computed
         // after _gate_ctr has been advanced, so it reflects THIS sample.
@@ -413,6 +427,8 @@ public:
         // task-10-review.md finding 6). The one-control-block lag comes from the
         // read cadence, not from this guard.
         if (_ctrl_ctr == 0) _audio_in_tap = 0.5f * (inL + inR);
+
+        SPKY_MARK(_probe_seg + (PSEG_A_ENG - PSEG_A_MOD));
 
         // Skipped unless the engine actually implements process_in. The base
         // declares it with an empty body (engine_iface.h), so on every engine
@@ -445,7 +461,9 @@ public:
         outL *= fade;
         outR *= fade;
 
+        SPKY_MARK(_probe_seg + (PSEG_A_FX - PSEG_A_MOD));
         _fx.process(outL, outR, sendL, sendR, _fxv);
+        SPKY_MARK(PSEG_INST);
     }
     void process(float& outL, float& outR, float& sendL, float& sendR) {
         process(0.f, 0.f, outL, outR, sendL, sendR);
@@ -539,6 +557,13 @@ private:
     // pressed NEW three times always lands on the same third individual.
     uint32_t       _seed_base = 0;
     uint32_t       _new_ctr = 0;
+    // Callback profile only (util/probe_mark.h): which deck this is, set by
+    // Instrument::init. Unused unless SPKY_PROBE_MARKS is defined.
+    int            _probe_deck = 0;
+    int            _probe_seg  = PSEG_A_MOD;
+public:
+    void set_probe_deck(int d) { _probe_deck = d; _probe_seg = PSEG_A_MOD + d * kProbeDeckStride; }
+private:
 
     IPartEngine* _engine_for(EngineId e) {
         switch (e) {

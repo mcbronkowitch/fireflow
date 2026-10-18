@@ -154,6 +154,8 @@ void Instrument::init(float sample_rate, const FxMem& mem) {
                         mem.echo[PART_B][0], mem.echo[PART_B][1],
                         mem.sampler_buf[PART_B], mem.sampler_frames,
                         mem.bbd[PART_B][0], mem.bbd[PART_B][1]);
+    _parts[PART_A].set_probe_deck(PART_A);
+    _parts[PART_B].set_probe_deck(PART_B);
     if (_reverb) _reverb->init(sample_rate);
     for (int p = 0; p < PART_COUNT; ++p) {
         _rev_dry[p].init(sample_rate, kMixSmoothS);
@@ -244,7 +246,9 @@ void Instrument::process(const float* inL, const float* inR,
     for (size_t i = 0; i < n; ++i) {
         const float in_l = inL ? inL[i] : 0.f;
         const float in_r = inR ? inR[i] : 0.f;
+        SPKY_MARK(PSEG_INST);
         if (_ctrl_ctr == 0) {                 // control-rate center update (per 96 samples)
+            SPKY_MARK(PSEG_CENTER);
             _center.update(_parts[PART_A].mod(), _parts[PART_B].mod(),
                            _parts[PART_A], _parts[PART_B]);
             // Excitation bus, cross-deck hand-over (spec §6, Task 10): each
@@ -326,6 +330,7 @@ void Instrument::process(const float* inL, const float* inR,
                 _duck_target = new_duck_target;
             }
             _ctrl_ctr = Center::kCtrlInterval;
+            SPKY_MARK(PSEG_INST);
         }
         --_ctrl_ctr;
 
@@ -575,6 +580,7 @@ void Instrument::process(const float* inL, const float* inR,
             l = (al * ga * dga * pla * duck[PART_A] + bl * gb * dgb * plb * duck[PART_B]) * _duck_gain;
             r = (ar * ga * dga * pra * duck[PART_A] + br * gb * dgb * prb * duck[PART_B]) * _duck_gain;
             if (!_rev_asleep) {
+                SPKY_MARK(PSEG_REVERB);
                 // Per-deck send: the equal-power wet curve (sin) rides the SEND
                 // -- one shared room has only one return. MORPH fades the send
                 // too (M4 rule): a morphed-away deck injects no new reverb.
@@ -594,6 +600,7 @@ void Instrument::process(const float* inL, const float* inR,
                     _rev_return_gain += _rev_return_step;      // reopened mid-fade
                     if (_rev_return_gain > 1.f) _rev_return_gain = 1.f;
                 }
+                SPKY_MARK(PSEG_INST);
                 l += wl * _rev_return_gain;  // wl already carries kWetGain; the return joins at unity
                 r += wr * _rev_return_gain;
                 if (closing && _rev_return_gain == 0.f) {
@@ -604,6 +611,7 @@ void Instrument::process(const float* inL, const float* inR,
             }
             // asleep: dga/dgb have snapped to 1 (both decks mix 0), so l/r stay full dry
         }
+        SPKY_MARK(PSEG_LIMIT);
         _limiter.process(l, r);   // master ceiling (M6 engine delta 3, delivered early)
         outL[i] = l;
         outR[i] = r;

@@ -355,6 +355,7 @@ endif
 
 CPP_SOURCES = \
 	main.cpp \
+	cb_profile.cpp \
 	sdram_mem.cpp \
 	mux_plan.cpp \
 	coupon_expect.cpp \

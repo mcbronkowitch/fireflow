@@ -143,6 +143,7 @@ public:
     // _out exists to enforce -- see the comment on process().
     float lane_output_stepped(int i) const { return _out_stepped[i]; }
     bool  lane_fired(int i)  const { return _lanes[i].fired(); }
+    bool  lane_wrapped(int i) const { return _lanes[i].wrapped(); }
     bool  lane_frozen(int i) const { return _lanes[i].frozen(); }
     float lane_phase(int i)  const { return _lanes[i].phase(); }
     float pitch_phase()      const { return _lanes[LANE_PITCH].phase(); }

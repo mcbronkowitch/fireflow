@@ -9,6 +9,8 @@
 #include <cstdio>
 
 #include "control/led_law.hpp"
+#include "cb_profile.h"
+#include "util/probe_mark.h"
 #include "control_tick.h"
 #include "controls.h"
 #include "coupon_expect.h"
@@ -120,10 +122,12 @@ void panel_scan_init()
     // The DWT counter the law's cycle report reads; libDaisy never starts it,
     // and without this it reads zero forever (cycles.h).
     cycles_init();
+    cb_profile_init();
 }
 
 void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
 {
+    cb_profile_block_begin();
     const int step = g_scan.step(hw);
     // The return stream of the latch step() just clocked: the 165 loads on
     // the same edge, so the keys are read once per block.
@@ -165,11 +169,13 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
     // Once per block, the whole vector (spec 2026-10-09 section 4.2).
     const bool     warm = g_law_blocks >= kLawWarmupBlocks;
     if(!warm) ++g_law_blocks;
+    SPKY_MARK(spky::PSEG_LAW);
     const uint32_t c0 = cycles_now();
     const control::Events ev = control_tick(g_knobs, inst);
     const uint32_t dc = cycles_now() - c0;
     g_law_cycles_last = dc;
     if(warm && dc > g_law_cycles_max) g_law_cycles_max = dc;
+    SPKY_MARK(spky::PSEG_LED);
 
     // The law's events (spec 2026-10-18-rev-a-p6b2 section 5). On a genuine
     // entry into the BBD, FLUX drops to 0 as VCV's knob does, and the FLUX pot
@@ -209,6 +215,7 @@ void panel_scan_block_end(uint32_t c0)
     const uint32_t dc = cycles_now() - c0;
     g_cb_cycles_last  = dc;
     if(g_law_blocks >= kLawWarmupBlocks && dc > g_cb_cycles_max) g_cb_cycles_max = dc;
+    cb_profile_block_end(dc, g_law_blocks >= kLawWarmupBlocks);
 }
 
 void run_panel_scan_report(bench::Board& hw)
@@ -291,6 +298,7 @@ void run_panel_scan_report(bench::Board& hw)
                      static_cast<int>(g_led_cycles_max),
                      static_cast<int>(g_cb_cycles_last),
                      static_cast<int>(g_cb_cycles_max));
+        cb_profile_report(hw);
         hw.Delay(500);
     }
 }
