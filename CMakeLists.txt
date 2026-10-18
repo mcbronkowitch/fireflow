@@ -593,3 +593,11 @@ add_test(NAME scan_budget_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_scan_budget.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tools)
+
+# The click detector the CPU headroom round judges board recordings with
+# (spec 2026-10-18-cpu-headroom-design.md section 2.6): a dropped block is a
+# click, a clean tone and a quiet passage are not.
+add_test(NAME click_detect_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_click_detect.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tools)
