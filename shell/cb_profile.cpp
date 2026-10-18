@@ -24,6 +24,7 @@ uint32_t g_deck[2] = {0, 0};  // deck A / deck B process(), summed over the bloc
 uint32_t g_mix   = 0;    // the rest of process(): CHOKE, mix, reverb, limiter
 
 uint32_t g_block = 0;    // blocks since StartAudio
+int      g_eng[2] = {-1, -1};  // each deck's engine id at the last block end
 
 // Lane state at the previous block end, per deck and lane: a changed phrase
 // index (bit d*10+l, a wrap that advanced the song) or step index (bit
@@ -116,6 +117,8 @@ void cb_profile_block_end(uint32_t cb, uint32_t law, uint32_t led, bool warm,
 {
     const uint32_t blk = g_block++;
     const uint32_t ev  = lane_events(inst);
+    g_eng[0] = static_cast<int>(inst.engine_id(0));
+    g_eng[1] = static_cast<int>(inst.engine_id(1));
     if(!warm) return;
     g_sum_cb += cb;
     g_sum_proc += g_proc;
@@ -175,6 +178,14 @@ void cb_profile_report(bench::Board& hw)
                  static_cast<int>(g_sum_cb / n), static_cast<int>(g_max_cb),
                  static_cast<int>(g_sum_proc / n), static_cast<int>(g_max_proc),
                  static_cast<int>(g_max_maxs));
+    // Which patch ran: the stress patches differ from the init patch only in
+    // an engine (control_tick.cpp, SHELL_BOOT_PATCH).
+#if defined(SHELL_BOOT_PATCH)
+    const int patch = SHELL_BOOT_PATCH;
+#else
+    const int patch = 0;
+#endif
+    hw.PrintLine("CBP_BOOT patch=%d eng_a=%d eng_b=%d", patch, g_eng[0], g_eng[1]);
     hw.PrintLine("CBP_SUM2 a_mean=%d b_mean=%d mix_mean=%d", static_cast<int>(g_sum_deck[0] / n),
                  static_cast<int>(g_sum_deck[1] / n), static_cast<int>(g_sum_mix / n));
     for(int h = 0; h < 3; ++h)

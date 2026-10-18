@@ -46,3 +46,20 @@ TEST_CASE("wt_bank: frame zero is the sine anchor") {
         CHECK(p[i] / 32112.f == doctest::Approx(expected).epsilon(0.002));
     }
 }
+
+// CPU headroom round (spec 2026-10-18-cpu-headroom-design.md section 4.1): the
+// firmware copies the bank out of QSPI into D2 SRAM at boot and points the
+// engine at the copy; table() has to follow it, and nullptr goes back home.
+TEST_CASE("wt_bank: table() follows set_bank()") {
+    static int16_t copy[wt::kTotalSamples];
+    std::copy(wt::kBankSamples, wt::kBankSamples + wt::kTotalSamples, copy);
+    const int at = 5 * wt::kSamplesPerFrame + wt::kMipOffset[3];
+    copy[at] = 12345;
+    wt::set_bank(copy);
+    CHECK(wt::bank() == copy);
+    CHECK(wt::table(5, 3) == copy + at);
+    CHECK(wt::table(5, 3)[0] == 12345);
+    wt::set_bank(nullptr);
+    CHECK(wt::bank() == wt::kBankSamples);
+    CHECK(wt::table(0, 0) == wt::kBankSamples);
+}

@@ -62,8 +62,16 @@ tut:
 
 | Artefakt | Inhalt | Ziel |
 |---|---|---|
-| `build/shell-sram.bin` | everything except the bank and the boot-only code | DFU nach `0x90040000` |
-| `build/shell-qspi.bin` | the bank, then the boot-only code | `0x90100000`; flash whenever its md5 changed |
+| `build/shell-sram.bin` | everything except the bank, the boot-only code and the ITCM code | DFU nach `0x90040000` |
+| `build/shell-qspi.bin` | the bank, then the boot-only code, then the ITCM code's load image | `0x90100000`; flash whenever its md5 changed |
+
+Since the CPU headroom round (spec `2026-10-18-cpu-headroom-design.md` §4.2)
+the per-sample audio path runs from ITCM (`itcm_hot.ld`, `SHELL_ITCM=1`, the
+default): `shell::itcm_load()` copies it out of `shell-qspi.bin` at the top of
+`main()`. An SRAM image over another build's QSPI image therefore jumps into
+stale ITCM code — always flash the pair. `itcm_placement.py` refuses a link in
+which anything could run ITCM code before the copy. The wavetable bank is read
+from a copy in D2 SRAM (`wt_bank_d2.cpp`), not from QSPI.
 
 Belegung beim ersten grünen Build (2026-08-08, `-O2`):
 
@@ -311,6 +319,15 @@ too, `cyc_max` 13 905), so Plan B's trigger is met and is a round of its own
 (`docs/hardware/p6b2-led-and-touch-measured.md`, "Session 2"). Spec §6's own
 rule does not fire: 14 976 + 1 580 = 16 556, under the reserve of about 28 000.
 
+**The measured window's real deadline is about 945 000, not 960 000**
+(CPU headroom round, 2026-10-18, spec `2026-10-18-cpu-headroom-design.md`
+§2.1): recordings aligned to the probe log showed every click on a block with
+`cb` above ~945 k and none below ~947 k; roughly 12–15 k of every block run
+outside the window (interrupt entry, libDaisy's sample conversion, the other
+priority-0 interrupts). Quote callback targets against 945 000. Where the
+block goes, per deck, is the callback profile's job (below); its figures are in
+`docs/hardware/cpu-headroom-measured.md`.
+
 **Coupon session** (spec §7) on the coupon play image. The 2026-10-03 session
 ran checks 2 and 3 with the P6a gesture "SW1 held, LED_1 lit"; since P6b-2
 SW1 is MOD and LED_1 shows `MODBTN_L`, so they read:
@@ -433,6 +450,9 @@ written up under `docs/hardware/`:
 | `+ SHELL_POT_ROUND=1` (on settle or wait) | the pots at mid travel, both questions | `read_pots.py` | `pots-measured.md` |
 | `+ SHELL_SCAN_CHECK=1` | the panel scan's pattern: clean at one step per block, with the engine running | `read_scan_check.py` | `scan-measured.md` |
 | `SHELL_PANEL_SCAN=1` (± `SHELL_COUPON_PROBE=1`) | the playing image: the scan drives the engine through the board's control table | `SHELL_PLAY` line | — |
+| `+ C_USER_FLAGS=-DSPKY_PROBE_MARKS=1` (clean build) | the callback profile: per-deck and mix cycles per block, the worst blocks with their lane events, a histogram of the whole callback (`cb_profile.cpp`, `engine/util/probe_mark.h`) | `CBP_*` lines | `cpu-headroom-measured.md` |
+| `+ C_USER_FLAGS=-DSHELL_BOOT_PATCH=N` (clean build) | boots a stress patch instead of the init patch: 1 = W2 (both decks WAVE), 2 = F2 (both decks FEED); combinable with the probe flag | `CBP_BOOT` line | `cpu-headroom-measured.md` |
+| `SHELL_ITCM=0` | the hot set stays in SRAM: only the comparison image of the ITCM measurement | — | `cpu-headroom-measured.md` |
 
 The probe switches are mutually exclusive; the Makefile refuses a
 combination that makes no sense. Older switches still in the Makefile —

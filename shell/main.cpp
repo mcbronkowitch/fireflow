@@ -19,14 +19,13 @@
 #include "shell_panel_scan.h"
 #include "hw/board.h"
 #include "sdram_mem.h"
+#include "itcm_load.h"
 #include "instrument.h"
 
 static bench::Board    hw;
 static spky::Instrument inst;
 
-#if defined(SPKY_WT_BANK_RAM)
-namespace shell { void wt_bank_to_ram(); }   // wt_bank_ram.cpp, probe only
-#endif
+namespace shell { void wt_bank_to_d2(); }   // wt_bank_d2.cpp
 
 #if SHELL_MUX_PROBE
 #include "mux_scan.h"
@@ -276,6 +275,24 @@ int main(void)
     // ihren Zahlen wertlos.
     bench::board_init(hw);
 
+    // The per-sample audio path into ITCM (itcm_load.h; a no-op at
+    // SHELL_ITCM=0). FIRST after board_init(): the QSPI it copies from is
+    // memory-mapped from here on, and nothing before this line may run ITCM
+    // code -- itcm_placement.py checks that on every link. false means the
+    // QSPI image belongs to another build: running would jump into foreign
+    // code, so the board blinks its LED at 5 Hz instead, for ever. The cure
+    // is flashing this build's shell-qspi.bin, then its shell-sram.bin.
+    if(!shell::itcm_load())
+    {
+        while(1)
+        {
+            hw.SetLed(true);
+            hw.Delay(100);
+            hw.SetLed(false);
+            hw.Delay(100);
+        }
+    }
+
 #if defined(BENCH_BOARD_PATCH_SM)
     // Right after the board is up and before anything reads a control: the
     // ADC is already converting by then, so this is a restart, not a setup.
@@ -286,11 +303,10 @@ int main(void)
     // Zeigerarbeit, aber Instrument::init() laeuft bis in TapeEcho::Init und
     // BbdLine::Init durch, und die nullen ihre Puffer -- also echte Schreiber
     // in SDRAM, das vor board_init() noch keinen FMC hinter sich hat.
-#if defined(SPKY_WT_BANK_RAM)
-    // After board_init(): QSPI is memory-mapped from there on. Before init():
-    // nothing has read the bank yet.
-    shell::wt_bank_to_ram();
-#endif
+    // The wavetable bank into D2 SRAM (wt_bank_d2.cpp). After board_init():
+    // QSPI is memory-mapped from there on. Before init(): nothing has read the
+    // bank yet, and nothing reads it while the copy runs.
+    shell::wt_bank_to_d2();
     inst.init(shell::kSampleRate, shell::fx_mem());
 
 #if SHELL_XTALK_PROBE

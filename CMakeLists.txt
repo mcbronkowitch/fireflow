@@ -581,6 +581,13 @@ add_test(NAME shell_qspi_placement_guard
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_qspi_placement.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
 
+# The ITCM placement guard (spec 2026-10-18-cpu-headroom-design.md section
+# 4.2): nothing may run ITCM code before main() has copied it there.
+add_test(NAME shell_itcm_placement_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_itcm_placement.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
+
 # The two budget calculations under tools/. scan_budget imports settle_budget,
 # so a constant revised there reaches both guards; scan_budget also reads the
 # pot count from host/vcv/res/gen_hw_panel.py and goes red when the panel moves.
