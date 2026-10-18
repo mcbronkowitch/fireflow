@@ -370,6 +370,9 @@ struct Fireflow : Module {
     float curSr = 0.f;
     dsp::ClockDivider ctrlDiv;              // throttle param push to control rate
     dsp::SchmittTrigger clockTrig, resetTrig;
+    // A CLOCK / RESET edge since the last LED-law call. The law runs once in
+    // 64 samples and an edge is one sample long, so it is latched here.
+    bool clockSeen = false, resetSeen = false;
     float clkSamples = 0.f;                 // samples since last external clock edge
     // Rack quantises to the hardware's brightness raster (spkyled::kLedSteps,
     // the board's block-rate latch) -- and applies the same perceptual gamma
@@ -717,12 +720,16 @@ struct Fireflow : Module {
             if (clockTrig.process(inputs[CLOCK].getVoltage(), 0.1f, 1.f)) {
                 clkSamples = 0.f;
                 inst.clock_pulse();
+                clockSeen = true;            // for the CLK lamp, cleared after fill()
             }
         }
 
-        if ((inputs[RESET].isConnected() &&
-             resetTrig.process(inputs[RESET].getVoltage(), 0.1f, 1.f)) ||
-            resyncReq.exchange(false))
+        // The RESET lamp shows the jack only; the menu's "Resync to bar" also
+        // resets the transport but is not a pulse at the jack.
+        const bool resetEdge = inputs[RESET].isConnected() &&
+                               resetTrig.process(inputs[RESET].getVoltage(), 0.1f, 1.f);
+        if (resetEdge) resetSeen = true;
+        if (resetEdge || resyncReq.exchange(false))
             inst.reset_transport();
 
         if (ctrlDiv.process()) pushParams();
@@ -750,8 +757,12 @@ struct Fireflow : Module {
         // can is validating itself against the wrong instrument.
         if (ledDiv.process()) {
             const float dt = ledDiv.getDivision() * args.sampleTime;
-            spkyled::fill(inst, ledPanel, dt, spkyled::kLedSteps,
-                          params[MODBTN].getValue() > 0.5f, ledDuty);
+            spkyled::LedInputs in;
+            in.mod_latched = params[MODBTN].getValue() > 0.5f;
+            in.clock_pulse = clockSeen;
+            in.reset_pulse = resetSeen;
+            clockSeen = resetSeen = false;
+            spkyled::fill(inst, ledPanel, dt, spkyled::kLedSteps, in, ledDuty);
             for (int i = 0; i < NUM_LIGHTS; ++i)
                 lights[i].setBrightness(float(ledDuty[i]) / float(spkyled::kLedSteps - 1));
         }

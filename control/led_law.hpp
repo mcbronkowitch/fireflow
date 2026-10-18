@@ -185,30 +185,80 @@ inline bool mod_pulse_on(float blink) {
 // and 0.0040 (SYNTH FLOW). 1e-3 sits below both continuous minima.
 constexpr float kLvlFloor = 1e-3f;
 
+// The three single-shot flashes of the 2026-10-07 lamp meanings. All three
+// lengths are by-eye candidates (spec 2026-10-18 rev-a-p6b2 §4.2), not
+// invariants, and none has been seen on a lamp yet.
+//
+// kFtimeFlash: one FLUX time period elapsed. Short, so a period of a few
+//   hundred ms still reads as a tick and not as a steady light.
+// kSwitchPulse: an engine or a scale took effect, on the SHIFT lamp. ONE long
+//   flash on purpose: it has to read differently from the input level lit
+//   under it and from MOD's double pulse on the lamp next to it.
+// kJackFlash: a pulse at the CLOCK / RESET jack. As short as the FTIME tick;
+//   a clock in the audio range of tempos would otherwise hold the lamp on.
+// kInputFloor: below this input peak the SHIFT lamp's level display is dark
+//   (about -60 dBFS; IN is scaled so 1.0 is +-5 V). Needed because duty()
+//   lifts every positive value to one step and the peak follower only ever
+//   approaches zero.
+constexpr float kInputFloor  = 1e-3f;
+constexpr float kFtimeFlash  = 0.05f;   // s
+constexpr float kSwitchPulse = 0.25f;   // s
+constexpr float kJackFlash   = 0.04f;   // s
+
+// What the host knows and the law cannot read off the Instrument.
+struct LedInputs {
+    bool mod_latched   = false;
+    bool shift_latched = false;   // always false this round (SHFT reserved)
+    bool clock_pulse   = false;   // a CLOCK edge since the last fill()
+    bool reset_pulse   = false;   // a RESET edge since the last fill()
+};
+
 struct Panel {
-    // lamp[GATE_A_L] and lamp[GATE_B_L] are never touched: the gate lamps
-    // read inst.gate() straight through in fill(), bypassing the envelope on
-    // purpose (a hard on/off, not a breath -- see the comment at the GATE
-    // block below). Don't "fix" this by routing them through Lamp::follow.
-    Lamp  lamp[ffctl::NUM_LIGHTS];
     float blink = 0.f;                 // free-running 1 Hz, for REC
     bool    song_armed[2]  = {false, false};
     uint8_t song_pat[2]    = {0, 0};
     float   song_remain[2] = {0.f, 0.f};
+
+    // FTIME: the last FLUX phase read while engaged. `ftime_primed` is false
+    // whenever FLUX was idle on the previous call, so the first engaged read
+    // only records a phase -- the phase is frozen while FLUX is idle and a
+    // stale value must not read as a wrap.
+    float ftime_prev[2]   = {0.f, 0.f};
+    bool  ftime_primed[2] = {false, false};
+    float ftime_remain[2] = {0.f, 0.f};
+
+    // SHIFT's switch pulse: the epochs seen on the previous call. Both epochs
+    // tick once at boot (the init patch's first set_engine / set_scale), so the
+    // first fill() ARMS -- stores them, no pulse -- like song_armed above.
+    bool     epochs_armed = false;
+    uint32_t engine_seen[2] = {0, 0};
+    uint32_t scale_seen     = 0;
+    float    switch_remain  = 0.f;
+
+    float clk_remain = 0.f;
+    float rst_remain = 0.f;
 };
+
+// A single-shot flash: lit while `remain` > 0, then it counts down by dt.
+// Returns whether the lamp is lit on this call (the SONG lamp's pattern, so a
+// flash armed on a call is seen by that call).
+inline bool flash_step(float& remain, float dt) {
+    if (remain <= 0.f) return false;
+    remain -= dt;
+    if (remain < 0.f) remain = 0.f;
+    return true;
+}
 
 // The whole panel in one call, so a gate can assert that every light is
 // written -- six lamps sat on this plate for months with no LightId and
 // nothing noticed. Writes exactly NUM_LIGHTS entries of duty_out.
 inline void fill(const spky::Instrument& inst, Panel& p, float dt,
-                 int steps, bool mod_latched, int* duty_out) {
+                 int steps, const LedInputs& in, int* duty_out) {
     using namespace ffctl;
 
-    // Written, not skipped. These lamps are placed and wired, but what they
-    // show (FTIME: the FLUX time period, CLK/RST: the jack pulses, SHIFTBTN:
-    // latch / input level) is P6b (spec 2026-10-07 §5); FLOW has no lamp on
-    // the plate at all. MODBTN left this list on 2026-08-22: its latch exists.
-    for (int id : {FLOW_A_L, FLOW_B_L, CLK_L, RST_L, FTIME_A_L, FTIME_B_L, SHIFTBTN_L})
+    // Written, not skipped. FLOW has no lamp on the plate at all, but the id
+    // exists and a gate asserts that every light is written.
+    for (int id : {FLOW_A_L, FLOW_B_L})
         duty_out[id] = 0;
 
     // Metronome: a short pulse on the transport downbeat. Hard on/off, no
@@ -228,22 +278,75 @@ inline void fill(const spky::Instrument& inst, Panel& p, float dt,
     //
     // One lamp, two jobs: the latch while engaged, otherwise the master
     // limiter that the separate ceiling lamp used to show (spec 2026-10-07 §5).
-    duty_out[MODBTN_L] = mod_latched ? (mod_pulse_on(p.blink) ? steps - 1 : 0)
-                                     : duty(inst.limiter_squash(), steps);
+    duty_out[MODBTN_L] = in.mod_latched ? (mod_pulse_on(p.blink) ? steps - 1 : 0)
+                                        : duty(inst.limiter_squash(), steps);
 
-    // LVL keeps its LANE_LEVEL excursion for now; its meaning moves to "the
-    // deck delivers signal" in P6b (spec 2026-10-07 §5). The SOURCE/SIZE/
-    // MOTION excursion lamps left the plate with that spec.
-    struct Slot { int id; int lane; };
-    static const Slot kExc[2] = {
-        {LVL_A_L, spky::LANE_LEVEL},  {LVL_B_L, spky::LANE_LEVEL},
-    };
-    for (int i = 0; i < 2; ++i) {
-        const int part = i & 1;
-        const float e  = inst.lane_excursion(part, kExc[i].lane);
-        p.lamp[kExc[i].id].follow(e, dt);
-        duty_out[kExc[i].id] = duty(intensity(p.lamp[kExc[i].id].env, e), steps);
+    // LVL: this deck delivers signal at all (spec 2026-10-07 §5). Hard on/off
+    // against the floor, straight off the deck's level with no hold -- on a
+    // STEP deck it blinks with the notes, as the level does (Bastian,
+    // 2026-10-18). The old LANE_LEVEL envelope is gone; deck_out_level is
+    // already a peak follower with a 20 ms release, which is all the
+    // smoothing wanted here.
+    duty_out[LVL_A_L] = inst.deck_out_level(0) > kLvlFloor ? steps - 1 : 0;
+    duty_out[LVL_B_L] = inst.deck_out_level(1) > kLvlFloor ? steps - 1 : 0;
+
+    // FTIME: one flash per FLUX time period, only while FLUX is engaged
+    // (mix > 0 -- the gate that switches the block on). The phase runs free
+    // over the delay time, so a period is a phase that DECREASED since the
+    // last engaged read. It can read >= 1 for a moment right after the delay
+    // time shrinks, so wrap it on read. While FLUX is idle the phase is
+    // frozen: drop the priming so the first engaged read cannot see a stale
+    // value as a wrap.
+    const int ftimeId[2] = {FTIME_A_L, FTIME_B_L};
+    for (int part = 0; part < 2; ++part) {
+        if (!inst.flux_engaged(part)) {
+            p.ftime_primed[part] = false;
+            p.ftime_remain[part] = 0.f;
+            duty_out[ftimeId[part]] = 0;
+            continue;
+        }
+        float ph = inst.flux_repeat_phase(part);
+        ph -= std::floor(ph);
+        if (p.ftime_primed[part] && ph < p.ftime_prev[part])
+            p.ftime_remain[part] = kFtimeFlash;
+        p.ftime_prev[part]   = ph;
+        p.ftime_primed[part] = true;
+        duty_out[ftimeId[part]] = flash_step(p.ftime_remain[part], dt) ? steps - 1 : 0;
     }
+
+    // SHIFT: steady while latched (never this round); otherwise the input
+    // level, and over that one long flash when an engine (either deck) or the
+    // scale has taken effect. The epochs move when the new engine SOUNDS and
+    // when the scale changes, not while a knob turns. Both tick once at boot,
+    // so the first call arms and never pulses.
+    {
+        const uint32_t e0 = inst.engine_epoch(0);
+        const uint32_t e1 = inst.engine_epoch(1);
+        const uint32_t sc = inst.scale_epoch();
+        if (!p.epochs_armed) {
+            p.epochs_armed = true;
+        } else if (e0 != p.engine_seen[0] || e1 != p.engine_seen[1]
+                   || sc != p.scale_seen) {
+            p.switch_remain = kSwitchPulse;
+        }
+        p.engine_seen[0] = e0;
+        p.engine_seen[1] = e1;
+        p.scale_seen     = sc;
+        const bool pulse = flash_step(p.switch_remain, dt);
+        // The follower decays towards zero without ever reaching it, and
+        // duty() lifts any positive value to one step -- so without a floor
+        // the lamp would glow at step 1 for seconds after the input stops.
+        const float level = inst.input_peak();
+        duty_out[SHIFTBTN_L] = (in.shift_latched || pulse) ? steps - 1
+                             : level > kInputFloor        ? duty(level, steps)
+                                                          : 0;
+    }
+
+    // CLK / RST: a flash per jack pulse. Hard on/off, like the gate lamps.
+    if (in.clock_pulse) p.clk_remain = kJackFlash;
+    if (in.reset_pulse) p.rst_remain = kJackFlash;
+    duty_out[CLK_L] = flash_step(p.clk_remain, dt) ? steps - 1 : 0;
+    duty_out[RST_L] = flash_step(p.rst_remain, dt) ? steps - 1 : 0;
 
     const int songId[2] = {SONG_A_L, SONG_B_L};
     for (int part = 0; part < 2; ++part) {
