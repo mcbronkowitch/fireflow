@@ -101,6 +101,11 @@ public:
     // active (part.cpp). Until FEED there was no engine with an individual to
     // redraw, so the shortcut through mod() was harmless.
     void new_phrase(int p)                   { _parts[p].new_phrase(); }
+#if defined(SPKY_PROBE_MARKS)
+    // The firmware callback profile's window onto the lanes (shell/
+    // cb_profile.cpp, engine/util/probe_mark.h); compiled only into its image.
+    const SuperModulator& probe_mod(int p) const { return _parts[p].mod(); }
+#endif
 #ifdef SPKY_TESTING
     uint32_t song_position_for_test(int p) const {
         return _parts[p].mod().song_position_for_test();

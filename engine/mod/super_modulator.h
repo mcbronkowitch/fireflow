@@ -143,7 +143,10 @@ public:
     // _out exists to enforce -- see the comment on process().
     float lane_output_stepped(int i) const { return _out_stepped[i]; }
     bool  lane_fired(int i)  const { return _lanes[i].fired(); }
-    bool  lane_wrapped(int i) const { return _lanes[i].wrapped(); }
+    // Observers for the firmware callback profile (shell/cb_profile.cpp), read
+    // once per block: a changed phrase index or step says what the lane did.
+    uint32_t lane_song_position(int i) const { return _lanes[i].song_position(); }
+    int      lane_cur_step(int i)      const { return _lanes[i].cur_step(); }
     bool  lane_frozen(int i) const { return _lanes[i].frozen(); }
     float lane_phase(int i)  const { return _lanes[i].phase(); }
     float pitch_phase()      const { return _lanes[LANE_PITCH].phase(); }

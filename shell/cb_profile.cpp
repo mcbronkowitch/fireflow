@@ -6,45 +6,87 @@
 #include "cycles.h"
 #include "util/probe_mark.h"
 
+// The engine's stamp clock and its once-per-block hand-over
+// (engine/util/probe_mark.h).
+namespace spky {
+volatile uint32_t* probe_clock = &DWT->CYCCNT;
+} // namespace spky
+
 namespace {
 
-using spky::PSEG_COUNT;
+// This block's process() figures, written by probe_block() inside process()
+// and read by cb_profile_block_end() after it, both in the audio interrupt.
+uint32_t g_proc  = 0;    // process(), first stamp to last
+uint32_t g_maxs  = 0;    // the most expensive single sample
+int      g_maxi  = 0;    // its index in the block
+uint32_t g_med   = 0;    // the mean of the other samples of this block
 
-uint32_t g_block = 0;            // blocks since StartAudio
-uint32_t g_mark_cost = 0;        // cycles per mark, measured at init
+uint32_t g_block = 0;    // blocks since StartAudio
 
-// A block whose callback took more than kHot cycles.
+// Lane state at the previous block end, per deck and lane: a changed phrase
+// index (bit d*10+l, a wrap that advanced the song) or step index (bit
+// d*10+5+l) is this block's event.
+uint32_t g_wraps[2][spky::LANE_COUNT];
+int      g_step[2][spky::LANE_COUNT];
+bool     g_have_prev = false;
+
+// One ring entry: a block above kHot, or any block in which a phrase advanced.
 constexpr uint32_t kHot = 930000u;
-struct Hot {
-    uint32_t blk, cb, ev;
-    uint32_t seg[PSEG_COUNT];
+struct Rec {
+    uint32_t blk, cb, proc, law, led, maxs, med, ev;
+    int      maxi;
 };
-constexpr int     kRing = 32;
-Hot               g_ring[kRing];
-volatile uint32_t g_ring_w = 0;  // entries written, ever
-uint32_t          g_ring_r = 0;  // foreground: entries printed
+constexpr int     kRing = 64;
+Rec               g_ring[kRing];
+volatile uint32_t g_ring_w = 0;   // entries written, ever
+uint32_t          g_ring_r = 0;   // foreground: entries printed
 
-// Per-segment sum (mean = sum / n) and max over warm blocks, plus the
-// histogram of the whole callback: 10 000-cycle bins from 850 000, bin 0
-// below, the last bin at and above 1 060 000.
-uint64_t          g_sum[PSEG_COUNT];
-uint32_t          g_max[PSEG_COUNT];
-volatile uint32_t g_n = 0;
+// Summary over warm blocks, and the histogram of the whole callback:
+// 10 000-cycle bins from 850 000, bin 0 below, the last at 1 060 000 and up.
+uint64_t           g_sum_cb = 0, g_sum_proc = 0;
+uint32_t           g_max_cb = 0, g_max_proc = 0, g_max_maxs = 0;
+volatile uint32_t  g_n = 0;
 constexpr uint32_t kHistLo = 850000u, kHistStep = 10000u;
 constexpr int      kHist   = 23;
 uint32_t           g_hist[kHist];
 
+uint32_t lane_events(const spky::Instrument& inst)
+{
+    uint32_t ev = 0;
+    for(int p = 0; p < 2; ++p)
+    {
+        const spky::SuperModulator& m = inst.probe_mod(p);
+        for(int l = 0; l < spky::LANE_COUNT; ++l)
+        {
+            const uint32_t w = m.lane_song_position(l);
+            const int      s = m.lane_cur_step(l);
+            if(g_have_prev && w != g_wraps[p][l]) ev |= 1u << (p * 10 + l);
+            if(g_have_prev && s != g_step[p][l])  ev |= 1u << (p * 10 + 5 + l);
+            g_wraps[p][l] = w;
+            g_step[p][l]  = s;
+        }
+    }
+    g_have_prev = true;
+    return ev;
+}
+
 } // namespace
 
-// The marks' state (engine/util/probe_mark.h). Written by the audio
-// interrupt only; the foreground reads the ring and the summaries, and a torn
-// read is cosmetic (this is a log for a human).
 namespace spky {
-volatile uint32_t* probe_clock = &DWT->CYCCNT;
-uint32_t           probe_acc[PSEG_COUNT];
-int                probe_cur  = PSEG_IDLE;
-uint32_t           probe_last = 0;
-uint32_t           probe_ev   = 0;
+void probe_block(const uint32_t* ts, int n)
+{
+    g_proc = ts[n] - ts[0];
+    uint32_t mx = 0;
+    int      mi = 0;
+    for(int i = 0; i < n; ++i)
+    {
+        const uint32_t d = ts[i + 1] - ts[i];
+        if(d > mx) { mx = d; mi = i; }
+    }
+    g_maxs = mx;
+    g_maxi = mi;
+    g_med  = n > 1 ? (g_proc - mx) / static_cast<uint32_t>(n - 1) : g_proc;
+}
 } // namespace spky
 
 namespace shell {
@@ -52,70 +94,39 @@ namespace shell {
 void cb_profile_init()
 {
     cycles_init();
-    spky::probe_last = cycles_now();
-    const uint32_t t0 = cycles_now();
-    for(int i = 0; i < 1000; ++i) spky::probe_mark(spky::PSEG_IDLE);
-    g_mark_cost = (cycles_now() - t0) / 1000u;
-    for(auto& a : spky::probe_acc) a = 0;
 }
 
-void cb_profile_block_begin()
+void cb_profile_block_end(uint32_t cb, uint32_t law, uint32_t led, bool warm,
+                          const spky::Instrument& inst)
 {
-    for(auto& a : spky::probe_acc) a = 0;
-    spky::probe_ev     = 0;
-    spky::probe_last = cycles_now();
-    spky::probe_cur    = spky::PSEG_SCAN;
-}
-
-void cb_profile_block_end(uint32_t cb, bool warm)
-{
-    spky::probe_mark(spky::PSEG_IDLE);
     const uint32_t blk = g_block++;
+    const uint32_t ev  = lane_events(inst);
     if(!warm) return;
-    for(int s = 0; s < PSEG_COUNT; ++s)
-    {
-        g_sum[s] += spky::probe_acc[s];
-        if(spky::probe_acc[s] > g_max[s]) g_max[s] = spky::probe_acc[s];
-    }
+    g_sum_cb += cb;
+    g_sum_proc += g_proc;
+    if(cb > g_max_cb) g_max_cb = cb;
+    if(g_proc > g_max_proc) g_max_proc = g_proc;
+    if(g_maxs > g_max_maxs) g_max_maxs = g_maxs;
     g_n = g_n + 1u;
     int b = cb < kHistLo ? 0 : 1 + static_cast<int>((cb - kHistLo) / kHistStep);
     if(b > kHist - 1) b = kHist - 1;
     ++g_hist[b];
-    if(cb > kHot)
+    const uint32_t wrap_mask = 0x1Fu | (0x1Fu << 10);
+    if(cb > kHot || (ev & wrap_mask) != 0u)
     {
-        Hot& h = g_ring[g_ring_w % kRing];
-        h.blk = blk;
-        h.cb  = cb;
-        h.ev  = spky::probe_ev;
-        for(int s = 0; s < PSEG_COUNT; ++s) h.seg[s] = spky::probe_acc[s];
+        Rec& r = g_ring[g_ring_w % kRing];
+        r = Rec{blk, cb, g_proc, law, led, g_maxs, g_med, ev, g_maxi};
         std::atomic_signal_fence(std::memory_order_seq_cst);
         g_ring_w = g_ring_w + 1u;
     }
 }
 
 namespace {
-// Nine values per line: 18 segments in two lines, each under libDaisy's
-// 128-byte log buffer ("CBP_xxx n=9999999 h=1" plus nine " 9999999").
-void print_segs(bench::Board& hw, const char* tag, uint32_t n, const uint32_t* v)
-{
-    for(int h = 0; h < 2; ++h)
-    {
-        const uint32_t* p = v + h * 9;
-        hw.PrintLine("%s n=%d h=%d %d %d %d %d %d %d %d %d %d", tag,
-                     static_cast<int>(n), h,
-                     static_cast<int>(p[0]), static_cast<int>(p[1]),
-                     static_cast<int>(p[2]), static_cast<int>(p[3]),
-                     static_cast<int>(p[4]), static_cast<int>(p[5]),
-                     static_cast<int>(p[6]), static_cast<int>(p[7]),
-                     static_cast<int>(p[8]));
-    }
-}
 uint32_t g_calls = 0;
 } // namespace
 
 void cb_profile_report(bench::Board& hw)
 {
-    static_assert(PSEG_COUNT == 18, "print_segs prints exactly 18 segments");
     std::atomic_signal_fence(std::memory_order_seq_cst);
     const uint32_t w = g_ring_w;
     if(w - g_ring_r > static_cast<uint32_t>(kRing))
@@ -125,21 +136,22 @@ void cb_profile_report(bench::Board& hw)
     }
     for(; g_ring_r != w; ++g_ring_r)
     {
-        const Hot h = g_ring[g_ring_r % kRing];
-        hw.PrintLine("CBP_HOT n=%d blk=%d cb=%d ev=%08x", static_cast<int>(g_ring_r),
-                     static_cast<int>(h.blk), static_cast<int>(h.cb),
-                     static_cast<unsigned>(h.ev));
-        print_segs(hw, "CBP_HSEG", g_ring_r, h.seg);
+        const Rec r = g_ring[g_ring_r % kRing];
+        // At most ~110 bytes, inside libDaisy's 128-byte log buffer.
+        hw.PrintLine("CBP_REC blk=%d cb=%d proc=%d law=%d led=%d maxs=%d@%d med=%d ev=%x",
+                     static_cast<int>(r.blk), static_cast<int>(r.cb),
+                     static_cast<int>(r.proc), static_cast<int>(r.law),
+                     static_cast<int>(r.led), static_cast<int>(r.maxs), r.maxi,
+                     static_cast<int>(r.med), static_cast<unsigned>(r.ev));
     }
     if(++g_calls % 20u != 0u) return;
     const uint32_t n = g_n;
     if(n == 0) return;
-    uint32_t mean[PSEG_COUNT];
-    for(int s = 0; s < PSEG_COUNT; ++s) mean[s] = static_cast<uint32_t>(g_sum[s] / n);
-    hw.PrintLine("CBP_INFO blocks=%d warm=%d mark_cost=%d hot=%d", static_cast<int>(g_block),
-                 static_cast<int>(n), static_cast<int>(g_mark_cost), static_cast<int>(w));
-    print_segs(hw, "CBP_MEAN", n, mean);
-    print_segs(hw, "CBP_MAX", n, g_max);
+    hw.PrintLine("CBP_SUM blocks=%d warm=%d cb_mean=%d cb_max=%d proc_mean=%d proc_max=%d maxs_max=%d",
+                 static_cast<int>(g_block), static_cast<int>(n),
+                 static_cast<int>(g_sum_cb / n), static_cast<int>(g_max_cb),
+                 static_cast<int>(g_sum_proc / n), static_cast<int>(g_max_proc),
+                 static_cast<int>(g_max_maxs));
     for(int h = 0; h < 3; ++h)
     {
         const uint32_t* p = g_hist + h * 8;

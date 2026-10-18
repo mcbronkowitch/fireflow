@@ -493,7 +493,6 @@ void Part::_control_tick() {
 // which call of the ramp the swap lands on, and therefore how far apart
 // engine_id()'s flip and the fade's end are. Do not reorder the two.
 void Part::_engine_swap() {
-    SPKY_PROBE_EVENT(kProbeEvSwap + _probe_deck);
     _engine_id = _pending_engine;
     ++_engine_epoch;
     _engine = _engine_for(_engine_id);
