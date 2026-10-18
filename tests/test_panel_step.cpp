@@ -53,16 +53,18 @@ TEST_CASE("panel step: the move that takes a pot writes its current position") {
     CHECK(shell::pot_row_step(kFiltA, o, f, 30000, kSpan, k.v, &v));
     CHECK(k.v[ffctl::FILT_A] == before);
     // Past the hysteresis, inside the touch threshold: reported, not written.
-    CHECK(shell::pot_row_step(kFiltA, o, f, 30035, kSpan, k.v, &v));
+    constexpr int kNear = 30000 + kT - 14;
+    constexpr int kTake = 30000 + kT + 1;
+    CHECK(shell::pot_row_step(kFiltA, o, f, kNear, kSpan, k.v, &v));
     CHECK(k.v[ffctl::FILT_A] == before);
-    // ref + kT + 1 takes the pot. It is only 14 counts from the last reported
+    // ref + kT + 1 takes the pot. It is only 15 counts from the last reported
     // word, inside the filter's band: without the reset on Took the filter
     // would swallow it and the jump would wait for the next 16-count move.
-    REQUIRE(30049 - 30035 <= shell::kPotHysteresis);
-    REQUIRE(30049 - 30000 == kT + 1);
-    CHECK(shell::pot_row_step(kFiltA, o, f, 30049, kSpan, k.v, &v));
+    REQUIRE(kTake - kNear <= shell::kPotHysteresis);
+    REQUIRE(kTake - 30000 == kT + 1);
+    CHECK(shell::pot_row_step(kFiltA, o, f, kTake, kSpan, k.v, &v));
     CHECK(o.owned);
-    CHECK(k.v[ffctl::FILT_A] == doctest::Approx(knob_at(ffctl::FILT_A, 30049)));
+    CHECK(k.v[ffctl::FILT_A] == doctest::Approx(knob_at(ffctl::FILT_A, kTake)));
     CHECK(k.v[ffctl::FILT_A] != doctest::Approx(knob_at(ffctl::FILT_A, 30000)));
     // Owned: it follows.
     CHECK(shell::pot_row_step(kFiltA, o, f, 31000, kSpan, k.v, &v));

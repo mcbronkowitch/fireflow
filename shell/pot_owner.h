@@ -15,12 +15,12 @@
 
 namespace shell {
 
-// PROVISIONAL. 3 x kPotHysteresis (16). The coupon session that measures the
-// raw spread of an untouched pot with the LEDs switching has not happened yet
-// (docs/hardware/p6b2-led-and-touch-measured.md); its rule is
-//   max(2 x worst spread, 3 x kPotHysteresis), rounded up to a multiple of 16.
-// This value may change when that session records its numbers.
-inline constexpr int kPotTouch = 48;
+// MEASURED on the coupon, 2026-10-18 (docs/hardware/p6b2-led-and-touch-measured.md):
+// RV2/RV4/RV6 untouched for 20 minutes with LED_1 switching, worst raw
+// max-min per one-second window 60 / 67 / 29 counts. The rule, fixed before
+// the measurement, is max(2 x worst spread, 3 x kPotHysteresis) rounded up to
+// a multiple of 16 = max(134, 48) -> 144.
+inline constexpr int kPotTouch = 144;
 
 // A threshold at or below kPotHysteresis would count as a move a wander that
 // pot_filter() still treats as noise -- its band, and the snap regions at the

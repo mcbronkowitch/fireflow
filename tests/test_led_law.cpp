@@ -180,10 +180,11 @@ TEST_CASE("led G10: a light value survives the law unchanged") {
     CHECK(spkyled::duty_from_light(0.f, steps) == 0);
 }
 
-TEST_CASE("led: kLedSteps is the provisional step count, pinned until the coupon measures it") {
-    // PROVISIONAL, like the constant itself: 8 stands in until the coupon
-    // session writes docs/hardware/p6b2-led-and-touch-measured.md, and that
-    // session may change it. When it does, change this pin in the same commit.
+TEST_CASE("led: kLedSteps is the step count the coupon measured") {
+    // 8 is the largest N at which LED_1 at duty 1 of N showed no visible
+    // flicker on the coupon (docs/hardware/p6b2-led-and-touch-measured.md,
+    // 2026-10-18). A different value needs a new coupon session; change this
+    // pin and the constant together.
     CHECK(spkyled::kLedSteps == 8);
 }
 

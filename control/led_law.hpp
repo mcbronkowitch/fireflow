@@ -18,10 +18,10 @@ namespace spkyled {
 // finely than the panel can is validating itself against the wrong
 // instrument.
 //
-// PROVISIONAL: 8 stands in until the coupon session measures the step count
-// the lamps can really show (docs/hardware/p6b2-led-and-touch-measured.md,
-// not yet written), and that session may change it. tests/test_led_law.cpp
-// pins the value; change both together.
+// MEASURED on the coupon, 2026-10-18 (docs/hardware/p6b2-led-and-touch-measured.md):
+// LED_1 at duty 1 of N showed no visible flicker at N = 4, 6 and 8 and
+// flickered at N = 16; 8 is the largest N without visible flicker.
+// tests/test_led_law.cpp pins the value; change both together.
 constexpr int kLedSteps = 8;
 
 // UNUSED SINCE P6b-2: kFloor, kEnvFall, kEnvOff, Lamp and intensity() below

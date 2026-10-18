@@ -367,8 +367,9 @@ the pot's position and follows it. At boot every pot is released, so the init
 patch plays wherever the knobs stand. A pot whose target changes (MOD latched
 or unlatched, ATTACK ↔ STAGES) is released by `pot_own()` itself; a `bbd_edge`
 from the law sets FLUX to 0 and releases the FLUX pot, and the deck's
-`excite_other_deck` turns on, as in VCV. `kPotTouch` (48) is provisional until
-the coupon session measures the untouched-pot spread. The per-pot step
+`excite_other_deck` turns on, as in VCV. `kPotTouch` (144) is the coupon's
+untouched-pot spread through the plan's rule
+(`docs/hardware/p6b2-led-and-touch-measured.md`). The per-pot step
 (target, ownership, the jump on the taking move, filter, gated write) and the
 event application live in `panel_step.h` as pure functions, so ctest runs
 them (`tests/test_panel_step.cpp`); `panel_scan.cpp` only calls them.
@@ -384,7 +385,8 @@ LED word with `led_word()` (`led_out.h`): a lamp of duty d is on d blocks in
 every `kLedSteps - 1`, spread rather than bunched. The word reaches the 595s
 only through `set_leds()`, once per block. Rev A maps lamps with
 `kRevaLedBit`, the coupon puts `MODBTN_L` on LED_1 (`kCouponLedBit`).
-`kLedSteps` (8) is provisional until the coupon session picks the step count.
+`kLedSteps` (8) is the largest step count the coupon showed without visible
+flicker (`docs/hardware/p6b2-led-and-touch-measured.md`).
 
 **Memory** (2026-10-18, against the same tree before the wiring):
 `SRAM_EXEC` Rev A 246 360 → 250 852 B (12 028 B free, floor 8 192),
