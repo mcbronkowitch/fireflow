@@ -710,7 +710,7 @@ is actually built today, and what is still design-only.
 | **PAN** | A per-deck bipolar balance knob, `PAN_A`/`PAN_B`, placing each deck's dry signal in the stereo field — `gL = min(1, 1 − p)`, `gR = min(1, 1 + p)`, unity at centre — while the reverb send deliberately stays centred (folding PAN into `ga`/`gb` would have been the tidy-looking way to do it, and is exactly what the send-stays-still gate exists to catch). PAN fills two slots that were already being held open rather than claiming new ones: `FX_BOT[1]` on the big panel, free since MULT was retired, and `LEVEL_SLOTS[0]` on the hardware plate, kept empty by a guard written specifically for this knob. **No control moved and no row was re-pitched** | ✅ **done** (engine + both VCV panels; spec `docs/superpowers/specs/2026-08-30-pan-design.md`, plan `docs/superpowers/plans/2026-08-30-pan.md`; branch `feat/pan`; released in 2.22.0. **Amended the same day it shipped** (`3b9afd8`): `PAN_B`'s mod ring reads deck **A**'s `LANE_SIZE` through deck A's master, negated, because both decks reading their own lane measured r = +1.0000 at equal RATE — one drift, twice, walking the whole mix to one side instead of opening a stereo image. The price is that `MOD_B` no longer reaches `PAN_B`; deck B's pan is switched off at its own depth ring. The arithmetic is gated in `tests/test_mod_layer.cpp`; the wiring is not, and cannot be — Rack does not link into `spky_tests`. **PAN has had no listening pass at all** — the balance law itself (against equal-power and against mid/side rotation), the 30 ms smoothing time copied from LVL, and `LANE_SIZE` as the mod ring's lane are all first-try values, see `docs/by-ear-decisions.md`. **In Rack, only the drawing was checked**: both panels were rendered headlessly from the built plugin (`Rack.exe -u <throwaway> -t 2`), confirming PAN's placement — `LINK PAN GRIT LVL` on the big panel's FX row, `FB PAN GRIT SEND TONE` across the plate's bottom line — and that both knobs boot at centre. **Nobody has dragged the knob, exercised its MOD ring under the latch, or saved and reloaded a patch**, the three things a screenshot cannot show) |
 | **Lane crossover** | A deck's lane output (LEVEL/MOTION/…) becomes a selectable modulation source for a target on the *other* deck — the first direct mod-to-mod bridge between the decks (today only audio and the rhythm view cross over) | ⬜ **planned** (from the 2026-08-22 dual-deck brainstorm, `docs/superpowers/specs/2026-08-22-dual-deck-brainstorm.md`; no spec; not yet ordered into the milestone sequence; spec together with "Mirror lanes" — same mod-glue) |
 | **Mirror lanes** | A deck follows a chosen lane of the sibling inverted or phase-shifted — direct per-lane counter-motion, deterministic call-and-response, complementing DRIFT's stochastic anti-correlation | ⬜ **planned** (from the 2026-08-22 dual-deck brainstorm, same doc as above; no spec; not yet ordered into the milestone sequence) |
-| **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel layout redone 2026-10-08 after the failed grip test** — regrouping, redistribution and plate round 2a shipped in 2.21.1/2.21.2/2.21.3, then the 9 mm panel pass moved every control onto a raster (73 knob positions, 15 lamps) and the Rev A board and firmware table follow it; the correction cut was ordered 2026-10-09 and the freeze tag waits for the repeated grip test on it; **bring-up is under way on a test coupon** — built 2026-09-17, five measurement rounds through 2026-09-28 (settle, crosstalk, codec tone, wait, pots), each with its own spec, plan and write-up under `docs/hardware/`; Phase-0 step 5b is closed on real pots; the panel scan's part 1 is built and measured on the coupon — `scan-measured.md` — and P6a is built — the Rev A scan, the generated table (70 rows then, 73 since the 9 mm pass), 35 pots sending, four keys — and its coupon session passed 3 of 4 checks on 2026-10-03 (D8/D9 deferred to P7 by decision); P6b-1 (the shared control law: VCV and the firmware run one `control::ControlLaw`) is done as of 2026-10-09, board session done (QSPI execute-in-place confirmed, law cost measured, clean by ear at 11 800 cycles), Rack check done (one pre-existing VCV bug open, see the P6b-1 entry); P6b-2 (MOD, key functions, LED law) is next; **form factor decided 2026-08-21: one brain, one 60 HP module, desktop as a shell decision** — see below) |
+| **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel layout redone 2026-10-08 after the failed grip test** — regrouping, redistribution and plate round 2a shipped in 2.21.1/2.21.2/2.21.3, then the 9 mm panel pass moved every control onto a raster (73 knob positions, 15 lamps) and the Rev A board and firmware table follow it; the correction cut was ordered 2026-10-09 and the freeze tag waits for the repeated grip test on it; **bring-up is under way on a test coupon** — built 2026-09-17, five measurement rounds through 2026-09-28 (settle, crosstalk, codec tone, wait, pots), each with its own spec, plan and write-up under `docs/hardware/`; Phase-0 step 5b is closed on real pots; the panel scan's part 1 is built and measured on the coupon — `scan-measured.md` — and P6a is built — the Rev A scan, the generated table (70 rows then, 73 since the 9 mm pass), 35 pots sending, four keys — and its coupon session passed 3 of 4 checks on 2026-10-03 (D8/D9 deferred to P7 by decision); P6b-1 (the shared control law: VCV and the firmware run one `control::ControlLaw`) is done as of 2026-10-09, board session done (QSPI execute-in-place confirmed, law cost measured, clean by ear at 11 800 cycles), Rack check done (one pre-existing VCV bug open, see the P6b-1 entry); P6b-2 (knob ownership, MOD, the four keys, the LED law) is done as of 2026-10-18, coupon session passed (the clicks it surfaced predate it and trigger P6b-1's Plan B); next: the CPU headroom round (Plan B) and bring-up (P7); **form factor decided 2026-08-21: one brain, one 60 HP module, desktop as a shell decision** — see below) |
 
 Milestone order follows the design spec's build order (audible first, hardware
 last). The scale layer was inserted after M1 because it only touches the PITCH
@@ -4120,6 +4120,53 @@ the coupon has nothing else open.
 LEDs on the 595 — waits for the control PCB's pin map, which should give one
 spare channel to AGND and one to the rail (spec §8).
 
+**2026-10-18 — P6b-2: knob ownership, the four keys and the lamps run on the coupon.**
+Spec `docs/superpowers/specs/2026-10-18-rev-a-p6b2-mod-keys-leds-design.md`,
+plan `docs/superpowers/plans/2026-10-18-rev-a-p6b2-mod-keys-leds.md`; code on
+branch `feat/p6b2-mod-keys-leds`, not merged yet.
+- **What changed.** A pot owns its parameter only after it has been moved
+  (`shell/pot_owner.h`): at boot the init patch plays whatever the knobs stand
+  at, and a real turn jumps the parameter to the pot and follows from then on.
+  The four keys, read since P6a, now act: MOD latches a layer in which the pots
+  write the mod depths (a pot with a `kModLayer` row is released on every latch
+  or unlatch, so nothing jumps until a pot moves). SHFT has no function;
+  ROOT_A, ROOT_B and REV_MOD stay without a parameter. The LED law moved from
+  `host/vcv/src` into `control/led_law.hpp`, one raster for both hosts, with
+  six const observers in the engine (`e58ff032`; `docs/engine-map.md`,
+  "Lamp observers") and the 2026-10-07 lamp meanings on the 15 lamps. The
+  lamps change once per block, only through `MuxScan::set_leds()`.
+- **Measured on the coupon** (`docs/hardware/p6b2-led-and-touch-measured.md`):
+  **`kLedSteps` = 8** (LED_1 at duty 1 of N: no visible flicker at 4, 6 and 8,
+  flicker at 16) and **`kPotTouch` = 144** (worst untouched spread 67 counts in
+  1201 one-second windows, doubled and rounded up to a multiple of 16).
+- **Cycles** (`SHELL_PLAY_LAW`, about ten minutes, coupon, image `7aa0daad`):
+  `cyc_max` 14 976 (`cyc_last` about 11 900-12 600), `led_max` 1 580,
+  `cb_last` p50 889 912, p99 916 730, largest seen 922 220 of 960 000. `cb_max`
+  reached 1 020 977: at least three overruns past the block. Spec §6's own rule
+  does not fire (14 976 + 1 580 = 16 556, under the reserve of about 28 000).
+- **Rack verdict (Bastian, 2026-10-18):** all lamp checks OK, the 8-step raster
+  is acceptable.
+- **Board session (Bastian, 2026-10-18, by ear and eye):** checks 1-4 pass
+  (boot plays the init patch with pots away from their init positions; a nudge
+  below the threshold changes nothing, a real turn jumps and then follows; the
+  key latches MOD, LED_1 double-pulses and RV6 changes the filter's modulation
+  depth audibly with the base staying put; unlatching does not jump until a pot
+  moves). LED_1 outside MOD (the limiter display) stayed dark, consistent with
+  the init patch not driving the limiter; the limiter display is unobserved at
+  the board. Rig gotcha: with the coupon's 12 V supply off, USB alone powers the
+  board but the output distorts on every image.
+- **The clicks predate P6b-2.** About one every few minutes on this image. The
+  P6b-1 image (main `40c83e92`), same conditions, five minutes: **7 clicks**,
+  `cyc_max` 13 905. So P6b-1's Plan B trigger ("clicks, or `cyc_max` above 2.9
+  points on the Rev A board") is met. It is a round of its own, the CPU headroom
+  round, not part of P6b-2.
+- **P7 still checks:** all 73 pots, the four keys and the 15 lamps on the Rev A
+  board; the LED step count on Rev A's LEDs (the coupon's LED set 8; the
+  flicker threshold rises with brightness, so the darkest step, 1 of 7 blocks,
+  about 71 Hz, must be seen on the real lamps, and `kLedSteps` goes down if it
+  flickers); `kDepthDead` by hand.
+- **Next:** the CPU headroom round (P6b-1's Plan B), then bring-up (P7).
+
 **2026-10-09 — P6b-1: one control law for VCV and the firmware ✅ done: board session done (QSPI execute-in-place confirmed, law cost measured, clean by ear at 11 800 cycles), Rack check done.**
 Spec `docs/superpowers/specs/2026-10-09-rev-a-p6b1-shared-control-law-design.md`,
 plan `docs/superpowers/plans/2026-10-09-rev-a-p6b1-shared-control-law.md`; code
@@ -4203,7 +4250,7 @@ on branch `feat/p6b1-control-law` (base `042b78b6`).
     over a running SYNTH deck drops that deck's FLUX to 0 (Ruling 10) — fixed
     the same day, see above; Rack re-check passed (the load keeps FLUX, a hand
     turn to BBD still drops it and turns on excite-other-deck).
-- **Next:** P6b-2 (MOD, key functions, LED law).
+- **Next:** P6b-2, done 2026-10-18, see the entry above.
 
 **2026-10-08 — the grip test failed on spacing, and the 9 mm panel pass re-placed every control; the board and the firmware table follow it.**
 The acrylic plate arrived and Bastian ran

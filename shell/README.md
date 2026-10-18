@@ -300,6 +300,15 @@ cannot pin it). What each one covers:
 over the 9600 budget; the tick stays once per block by decision (spec §6,
 "Outcome"). Plan B is the two-block split, triggered by clicks or by
 `cyc_max` above 2.9 points on the Rev A board with the full panel.
+**Measured on the coupon, P6b-2 image (`7aa0daad`, 2026-10-18, about ten
+minutes of playing, `SHELL_PLAY_LAW`):** `cyc_max` 14 976, `cyc_last` about
+11 900-12 600; `led_max` 1 580, `led_last` about 1 140-1 280; `cb_last` p50
+889 912, p99 916 730, largest seen 922 220 of the 960 000-cycle block. `cb_max`
+climbed 945 665, 982 104, 985 308, 1 020 977: at least three overruns past
+960 000. The clicks that go with them predate P6b-2 (the P6b-1 image clicked
+too, `cyc_max` 13 905), so Plan B's trigger is met and is a round of its own
+(`docs/hardware/p6b2-led-and-touch-measured.md`, "Session 2"). Spec §6's own
+rule does not fire: 14 976 + 1 580 = 16 556, under the reserve of about 28 000.
 
 **Coupon session** (spec §7) on the coupon play image. The 2026-10-03 session
 ran checks 2 and 3 with the P6a gesture "SW1 held, LED_1 lit"; since P6b-2

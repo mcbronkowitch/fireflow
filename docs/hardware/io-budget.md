@@ -554,10 +554,13 @@ geschrieben** — die LED-Daten fahren mit.
 die Kette 16× pro Sweep, einmal je Adresse. Variiert man über diese 16
 Schreibvorgänge, welche LED-Bits gesetzt sind, ergibt das **16-stufiges PWM ohne
 einen einzigen zusätzlichen Schreibvorgang** — Auflösung = Adressschritte,
-Bildwiederholrate = Sweep-Rate. Die LED-Feedback-Runde hat genau darauf gebaut:
-`spkyled::duty()` nimmt die Stufenzahl als Parameter, weil die 8:1-gegen-16:1-Wahl
-(§6) sie bestimmt, und der Rack-Host quantisiert auf dieselben 16 Stufen, damit
-er nicht feiner atmet als das Panel je kann.
+Bildwiederholrate = Sweep-Rate. Die LED-Feedback-Runde hat darauf gebaut; P6b-2
+hat es am Board korrigiert: das Raster ist der Blocktakt-Latch (die Lampen
+ändern sich einmal je Block, im Latch, der die Mux-Adresse trägt), nicht die
+Mux-Breite. Die Stufenzahl ist `kLedSteps` (8, an der Coupon-LED gemessen,
+`docs/hardware/p6b2-led-and-touch-measured.md`), und der Rack-Host quantisiert
+auf dieselben Stufen, damit er nicht feiner atmet als das Panel je kann.
+`spkyled::duty()` nimmt die Stufenzahl nur noch als Testparameter.
 
 **Die Grenze, und sie ist scharf:** wer *feinere* Helligkeit als 16 Stufen will,
 muss das PWM vom Scan entkoppeln, und dann sind es echte zusätzliche
