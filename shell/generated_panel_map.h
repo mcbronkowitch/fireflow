@@ -110,5 +110,31 @@ inline constexpr MuxChannel kRevaCalRail{1, 5};  // CAL_3V3
 
 // REC_A, REC_B, MODBTN, SHIFTBTN on the 165's D0..D3; the first bit shifted out is D7.
 inline constexpr KeyPad kRevaKeys{4, {7, 6, 5, 4}};
+// What each key does on a press, in the same order (spec 2026-10-18-rev-a-p6b2
+// section 3). SHIFTBTN is reserved: read and counted, no function.
+inline constexpr KeyMap kRevaKeyMap{4, {KeyFn::RecA, KeyFn::RecB, KeyFn::Mod, KeyFn::Shift}};
+
+// ffctl::LightId -> bit in MuxScan's LED field (entry `index` of panel-map.json's
+// "leds"), -1 when the lamp is not on the plate. Written to the chain only by
+// MuxScan::set_leds() (P2 section 4).
+inline constexpr int8_t kRevaLedBit[ffctl::NUM_LIGHTS] = {
+    2,  // GATE_A_L
+    13,  // GATE_B_L
+    5,  // REC_A_L
+    9,  // REC_B_L
+    4,  // LVL_A_L
+    10,  // LVL_B_L
+    1,  // SONG_A_L
+    12,  // SONG_B_L
+    3,  // FTIME_A_L
+    11,  // FTIME_B_L
+    -1,  // FLOW_A_L -- not on the plate
+    -1,  // FLOW_B_L -- not on the plate
+    7,  // TEMPO_L
+    6,  // CLK_L
+    8,  // RST_L
+    14,  // MODBTN_L
+    0,  // SHIFTBTN_L
+};
 
 } // namespace shell

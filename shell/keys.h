@@ -26,6 +26,20 @@ struct KeyPad
 // what kCouponChain.button_bit has always said.
 inline constexpr KeyPad kCouponKeys{1, {7}};
 
+// What a key does on its debounced press (spec 2026-10-18-rev-a-p6b2 section 3).
+// Shift is read and counted like the others but has no function yet.
+enum class KeyFn : int8_t { RecA, RecB, Mod, Shift };
+
+// Key i of a KeyPad is KeyMap.fn[i]; same index as KeyState.pressed's bit.
+struct KeyMap
+{
+    int   count;
+    KeyFn fn[kMaxKeys];
+};
+
+// The coupon has one key and it is MOD (spec section 7, "the key toggles MOD").
+inline constexpr KeyMap kCouponKeyMap{1, {KeyFn::Mod}};
+
 struct KeyState
 {
     uint8_t  pressed           = 0;   // bit i = key i, debounced

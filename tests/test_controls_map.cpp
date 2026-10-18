@@ -292,3 +292,158 @@ TEST_CASE("controls: an ATTACK pot writes what FireflowHW shows -- STAGES on the
     k[ffctl::ENGINE_A] = 4.f;
     CHECK(shell::knob_target(shell::kCouponControls[0], k) == ffctl::RATE_A);
 }
+
+namespace {
+// The knob vector at the init patch, as the firmware boots it.
+void init_knobs(float* k) {
+    for(int i = 0; i < ffctl::NUM_PARAMS; ++i) k[i] = ffctl::kInitParamDefaults[i];
+}
+int mod_depth_of(int sound) {
+    for(const ffctl::ModTarget& m : ffctl::kModLayer)
+        if(m.soundId == sound) return m.depthId;
+    return -1;
+}
+} // namespace
+
+TEST_CASE("controls: MOD latched sends a wreathed pot to its depth") {
+    const shell::ControlEntry* e = attack_row(ffctl::FILT_A);
+    REQUIRE(e != nullptr);
+    const int depth = mod_depth_of(ffctl::FILT_A);
+    REQUIRE(depth >= 0);
+    float k[ffctl::NUM_PARAMS];
+    init_knobs(k);
+    k[ffctl::MODBTN] = 0.f;
+    CHECK(shell::pot_target(*e, k) == ffctl::FILT_A);
+    k[ffctl::MODBTN] = 1.f;
+    CHECK(shell::pot_target(*e, k) == depth);
+    CHECK(depth != ffctl::FILT_A);
+}
+
+TEST_CASE("controls: MOD latched leaves an unwreathed pot on its sound") {
+    const shell::ControlEntry* e = attack_row(ffctl::ENGINE_A);
+    REQUIRE(e != nullptr);
+    REQUIRE(mod_depth_of(ffctl::ENGINE_A) == -1);
+    float k[ffctl::NUM_PARAMS];
+    init_knobs(k);
+    k[ffctl::MODBTN] = 0.f;
+    CHECK(shell::pot_target(*e, k) == ffctl::ENGINE_A);
+    k[ffctl::MODBTN] = 1.f;
+    CHECK(shell::pot_target(*e, k) == ffctl::ENGINE_A);
+    // A reserved row (param -1) stays nowhere either way.
+    const shell::ControlEntry reserved{2, 4, -1, 0};
+    CHECK(shell::pot_target(reserved, k) == -1);
+}
+
+TEST_CASE("controls: ATTACK on a BBD deck writes nothing under MOD") {
+    for(int deck = 0; deck < 2; ++deck)
+    {
+        const int attack = deck ? ffctl::ATTACK_B : ffctl::ATTACK_A;
+        const int stages = deck ? ffctl::STAGES_B : ffctl::STAGES_A;
+        const int engine = deck ? ffctl::ENGINE_B : ffctl::ENGINE_A;
+        const shell::ControlEntry* e = attack_row(attack);
+        REQUIRE(e != nullptr);
+        REQUIRE(mod_depth_of(attack) >= 0);
+        float k[ffctl::NUM_PARAMS];
+        init_knobs(k);
+        k[engine] = static_cast<float>(shell::kEngineSlotBbd);
+        k[ffctl::MODBTN] = 0.f;
+        CHECK(shell::pot_target(*e, k) == stages);
+        k[ffctl::MODBTN] = 1.f;
+        CHECK(shell::pot_target(*e, k) == -1);
+        // Off the BBD the latch reaches ATTACK's depth.
+        k[engine] = 0.f;
+        CHECK(shell::pot_target(*e, k) == mod_depth_of(attack));
+        k[ffctl::MODBTN] = 0.f;
+        CHECK(shell::pot_target(*e, k) == attack);
+    }
+}
+
+TEST_CASE("controls: a press toggles, a release does nothing, SHFT does nothing") {
+    const shell::KeyMap& m = shell::kRevaKeyMap;
+    REQUIRE(m.count == 4);
+    CHECK(m.fn[0] == shell::KeyFn::RecA);
+    CHECK(m.fn[1] == shell::KeyFn::RecB);
+    CHECK(m.fn[2] == shell::KeyFn::Mod);
+    CHECK(m.fn[3] == shell::KeyFn::Shift);
+    float k[ffctl::NUM_PARAMS];
+    init_knobs(k);
+    k[ffctl::MODBTN] = 0.f; k[ffctl::REC_A] = 0.f; k[ffctl::REC_B] = 0.f;
+    float before[ffctl::NUM_PARAMS];
+
+    // MOD (key 2): 0 -> 1 -> 0, and the return value says MODBTN changed.
+    CHECK(shell::apply_key_edges(1u << 2, m, k) == true);
+    CHECK(k[ffctl::MODBTN] == 1.f);
+    CHECK(shell::apply_key_edges(1u << 2, m, k) == true);
+    CHECK(k[ffctl::MODBTN] == 0.f);
+
+    // REC A / REC B toggle their own latch, and do not report a MOD change.
+    CHECK(shell::apply_key_edges(1u << 0, m, k) == false);
+    CHECK(k[ffctl::REC_A] == 1.f);
+    CHECK(k[ffctl::REC_B] == 0.f);
+    CHECK(k[ffctl::MODBTN] == 0.f);
+    CHECK(shell::apply_key_edges(1u << 1, m, k) == false);
+    CHECK(k[ffctl::REC_B] == 1.f);
+    CHECK(shell::apply_key_edges(1u << 0, m, k) == false);
+    CHECK(k[ffctl::REC_A] == 0.f);
+
+    // SHFT changes no knob at all, and neither does an empty edge mask.
+    for(int i = 0; i < ffctl::NUM_PARAMS; ++i) before[i] = k[i];
+    CHECK(shell::apply_key_edges(1u << 3, m, k) == false);
+    CHECK(shell::apply_key_edges(0, m, k) == false);
+    for(int i = 0; i < ffctl::NUM_PARAMS; ++i) CHECK(k[i] == before[i]);
+
+    // Two keys in one pass, and a bit past the map is ignored.
+    CHECK(shell::apply_key_edges((1u << 0) | (1u << 2) | (1u << 6), m, k) == true);
+    CHECK(k[ffctl::REC_A] == 1.f);
+    CHECK(k[ffctl::MODBTN] == 1.f);
+
+    // The coupon's single key is MOD.
+    CHECK(shell::kCouponKeyMap.count == 1);
+    CHECK(shell::kCouponKeyMap.fn[0] == shell::KeyFn::Mod);
+    k[ffctl::MODBTN] = 0.f;
+    CHECK(shell::apply_key_edges(1u, shell::kCouponKeyMap, k) == true);
+    CHECK(k[ffctl::MODBTN] == 1.f);
+}
+
+TEST_CASE("controls: the key maps are as long as their pads") {
+    CHECK(shell::kRevaKeyMap.count == shell::kRevaKeys.count);
+    CHECK(shell::kCouponKeyMap.count == shell::kCouponKeys.count);
+}
+
+TEST_CASE("controls: the Rev A LED bits follow panel-map.json") {
+    const int8_t* b = shell::kRevaLedBit;
+    CHECK(b[ffctl::SHIFTBTN_L] == 0);
+    CHECK(b[ffctl::SONG_A_L] == 1);
+    CHECK(b[ffctl::GATE_A_L] == 2);
+    CHECK(b[ffctl::FTIME_A_L] == 3);
+    CHECK(b[ffctl::LVL_A_L] == 4);
+    CHECK(b[ffctl::REC_A_L] == 5);
+    CHECK(b[ffctl::CLK_L] == 6);
+    CHECK(b[ffctl::TEMPO_L] == 7);
+    CHECK(b[ffctl::RST_L] == 8);
+    CHECK(b[ffctl::REC_B_L] == 9);
+    CHECK(b[ffctl::LVL_B_L] == 10);
+    CHECK(b[ffctl::FTIME_B_L] == 11);
+    CHECK(b[ffctl::SONG_B_L] == 12);
+    CHECK(b[ffctl::GATE_B_L] == 13);
+    CHECK(b[ffctl::MODBTN_L] == 14);
+    // FLOW_A / FLOW_B are not on the plate.
+    CHECK(b[ffctl::FLOW_A_L] == -1);
+    CHECK(b[ffctl::FLOW_B_L] == -1);
+    // The 15 placed lamps are a permutation of the LED field 0..14.
+    std::set<int> seen;
+    for(int i = 0; i < ffctl::NUM_LIGHTS; ++i)
+        if(b[i] >= 0) seen.insert(b[i]);
+    CHECK(seen.size() == 15);
+    CHECK(*seen.begin() == 0);
+    CHECK(*seen.rbegin() == 14);
+    CHECK(shell::kRevaChain.led_bits == 15);
+}
+
+TEST_CASE("controls: the coupon has one lamp, MODBTN_L on bit 0") {
+    int placed = 0;
+    for(int i = 0; i < ffctl::NUM_LIGHTS; ++i)
+        if(shell::kCouponLedBit[i] >= 0) ++placed;
+    CHECK(placed == 1);
+    CHECK(shell::kCouponLedBit[ffctl::MODBTN_L] == 0);
+}
