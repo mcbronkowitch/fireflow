@@ -1405,6 +1405,13 @@ def control_params_header():
     for c in PARAMS:
         L.append(f"    {c.enum},")
     L += ["    NUM_PARAMS", "};", "",
+          "// The lamp ids the shared LED law (control/led_law.hpp) writes. Same",
+          "// names and order as spkyvcv::LightId in generated_panel.hpp (the VCV",
+          "// host static_asserts the two together)."]
+    L += ["enum LightId {"]
+    for c in LIGHTS + HW_ONLY_LIGHTS:
+        L.append(f"    {c.enum},")
+    L += ["    NUM_LIGHTS", "};", "",
           f"static constexpr int PART_STRIDE = {PART_STRIDE};", "",
           "// The tables below are inline: one copy per image however many",
           "// translation units read them (the firmware's knob mapping and its",

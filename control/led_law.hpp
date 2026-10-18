@@ -1,13 +1,28 @@
 #pragma once
 // The panel's LED display law. Rack-free on purpose so spky_tests can drive
-// it -- the same arrangement as bbd_edge_state.hpp. Fireflow.cpp keeps only
-// the wiring. Spec: docs/superpowers/specs/2026-08-16-led-feedback-design.md
+// it -- the same arrangement as bbd_edge_state.hpp -- and shared: the VCV
+// module (Fireflow.cpp keeps only the wiring) and the Daisy firmware both
+// include this one header. Spec: docs/superpowers/specs/2026-08-16-led-feedback-design.md
+// and, for the move to control/, 2026-10-18-rev-a-p6b2-mod-keys-leds-design.md.
 #include <algorithm>
 #include <cmath>
 #include "instrument.h"
-#include "generated_panel.hpp"
+#include "control/params.hpp"
 
 namespace spkyled {
+
+// The brightness raster: how many duty levels a lamp has (0 .. kLedSteps-1).
+// On the board it is the block-rate latch -- the lamps change once per block,
+// in the latch that carries the mux address (P2 §4) -- not the mux width.
+// Rack quantises to the same raster, because a module that breathes more
+// finely than the panel can is validating itself against the wrong
+// instrument.
+//
+// PROVISIONAL: 8 stands in until the coupon session measures the step count
+// the lamps can really show (docs/hardware/p6b2-led-and-touch-measured.md,
+// not yet written), and that session may change it. tests/test_led_law.cpp
+// pins the value; change both together.
+constexpr int kLedSteps = 8;
 
 // Trough of a breath, as a fraction of the envelope. A FIXED floor would make
 // an idle lane and a gently moving one look alike, and would push every
@@ -63,16 +78,50 @@ inline float intensity(float env, float excursion) {
     return env * (kFloor + (1.f - kFloor) * rel);
 }
 
-// Quantised duty, 0 .. steps-1. `steps` is the mux width -- 16 with 16:1
-// parts, 8 with 8:1, and that choice is still open, so it is a parameter.
+// The gamma quantiser without a pow per lamp. round(v^gamma * (steps-1)) >= k
+// exactly when v >= t_k = ((k - 0.5) / (steps - 1))^(1/gamma), so the whole
+// law is a comparison against steps-1 thresholds, computed once per step
+// count. The largest count the table holds; the 256 is the fine ladder
+// tests/test_led_law.cpp uses to test the curve rather than the raster.
+constexpr int kMaxSteps = 256;
+
+struct GammaTable {
+    float t[kMaxSteps] = {};   // t[k], k = 1 .. steps-1; t[0] unused
+    int   steps = 0;
+    void build(int n) {
+        for (int k = 1; k < n; ++k)
+            t[k] = std::pow((static_cast<float>(k) - 0.5f) / static_cast<float>(n - 1),
+                            1.f / kGamma);
+        steps = n;
+    }
+};
+
+// Two tables, so neither needs a lock. The shipped step count has its own,
+// built once on first use through a function-local static (thread-safe, and
+// two Rack modules may well run on two audio threads). Any other count --
+// only the unit tests ask -- shares one rebuilt-on-change cache, which is
+// single-threaded by that same fact.
+inline const GammaTable& gamma_table(int steps) {
+    static const GammaTable shipped = [] { GammaTable g; g.build(kLedSteps); return g; }();
+    if (steps == kLedSteps) return shipped;
+    static GammaTable other;
+    if (other.steps != steps) other.build(steps);
+    return other;
+}
+
+// Quantised duty, 0 .. steps-1 (steps in 2 .. kMaxSteps; kLedSteps in the
+// shipped hosts, a parameter so the tests can sweep it).
 // Every non-zero intensity must reach at least one step: naive quantisation
 // of a gamma curve sends the bottom third of every breath to zero, which
 // would read as "nothing is modulating" and destroy the whole distinction.
 inline int duty(float intens, int steps) {
     if (intens <= 0.f) return 0;
     const float v = std::min(1.f, intens);
-    const int   q = static_cast<int>(std::pow(v, kGamma) * (steps - 1) + 0.5f);
-    return q < 1 ? 1 : q;
+    steps = std::min(steps, kMaxSteps);          // never index past the table
+    const GammaTable& g = gamma_table(steps);
+    int q = 1;                                   // the lift: never below one step
+    for (int k = 2; k < steps && v >= g.t[k]; ++k) q = k;
+    return q;
 }
 
 // For values that were tuned as LIGHT output rather than as perceived
@@ -81,10 +130,13 @@ inline int duty(float intens, int steps) {
 // levels; duty() expects a perceptual value and applies the gamma, and
 // handing it one of these directly comes out visibly darker -- 0.15 and 0.25
 // collapse onto the same step and the fill meter goes flat over its lower
-// third. Lifting into perceptual space first makes duty() round-trip them.
+// third. A light level is already linear in duty, so it is just rounded onto
+// the raster (lifted to one step): algebraically the pow round trip this
+// replaces, duty(light^(1/gamma)), without the two pow calls.
 inline int duty_from_light(float light, int steps) {
     if (light <= 0.f) return 0;
-    return duty(std::pow(std::min(1.f, light), 1.f / kGamma), steps);
+    const int q = static_cast<int>(std::min(1.f, light) * static_cast<float>(steps - 1) + 0.5f);
+    return q < 1 ? 1 : q;
 }
 
 // Fraction of the transport beat the TEMPO lamp is on. Short on purpose: a
@@ -128,7 +180,7 @@ struct Panel {
     // read inst.gate() straight through in fill(), bypassing the envelope on
     // purpose (a hard on/off, not a breath -- see the comment at the GATE
     // block below). Don't "fix" this by routing them through Lamp::follow.
-    Lamp  lamp[spkyvcv::NUM_LIGHTS];
+    Lamp  lamp[ffctl::NUM_LIGHTS];
     float blink = 0.f;                 // free-running 1 Hz, for REC
     bool    song_armed[2]  = {false, false};
     uint8_t song_pat[2]    = {0, 0};
@@ -140,7 +192,7 @@ struct Panel {
 // nothing noticed. Writes exactly NUM_LIGHTS entries of duty_out.
 inline void fill(const spky::Instrument& inst, Panel& p, float dt,
                  int steps, bool mod_latched, int* duty_out) {
-    using namespace spkyvcv;
+    using namespace ffctl;
 
     // Written, not skipped. These lamps are placed and wired, but what they
     // show (FTIME: the FLUX time period, CLK/RST: the jack pulses, SHIFTBTN:

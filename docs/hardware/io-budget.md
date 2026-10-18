@@ -575,7 +575,7 @@ LED-Feedback-Runde hat zwei const-Beobachter ergänzt:
 `lane_excursion(part, lane)` für den Modulationsanteil allein
 (`engine/instrument.h:422`, aus `Part::target_raw` herausgezogen, damit Lampe und
 Audiopfad denselben Ausdruck lesen) und `limiter_squash()` für den Master-Former
-(`:306`). Die Zuordnung auf Lampen liegt in `host/vcv/src/led_law.hpp`, ist
+(`:306`). Die Zuordnung auf Lampen liegt in `control/led_law.hpp`, ist
 Rack-frei und damit für die Firmware wiederverwendbar — wo die Datei am Ende
 liegt, entscheidet die M6-Inbetriebnahme.
 
