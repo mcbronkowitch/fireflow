@@ -264,7 +264,9 @@ P6a's "safe"/"unmapped" split is retired. A pot added to the panel with no
 
 **Keys and LEDs.** Every step reads the 165 in the same pass as the write;
 keys debounce over three reads (6 ms). LED bits only ever travel in the latch
-that carries the mux address (P2 §4). On Rev A the keys have no function yet.
+that carries the mux address (P2 §4). Since P6b-2 the keys act on their
+debounced press and the lamps show the shared LED law (see "Knob ownership,
+keys and lamps" below).
 
 **The span** comes from CAL_GND and CAL_3V3 once per sweep; until a sweep has
 measured a valid one, no knob reaches the engine.
@@ -276,21 +278,47 @@ last line carries three (row order and names are in
 the generated header's comments; values ×1000, −1000 = never emitted: no valid span yet, i.e. calibration
 never succeeded) and one
 `SHELL_PLAY` summary line with key mask and press counts. Both images then
-print `SHELL_PLAY_LAW cyc_last=<n> cyc_max=<n>`: the shared control law's
-cost in DWT cycles, the last block's tick and the worst since the first
-second (the first 500 blocks are left out of the maximum, which reads 0
-until then, so a cold-cache boot tick cannot pin it) (spec
-2026-10-09-rev-a-p6b1 §6: above 9600 cycles, one point, the tick moves to
-every second block). **Measured on the coupon, init patch, `-O2`
+print `SHELL_PLAY_LAW cyc_last=<n> cyc_max=<n> led_last=<n> led_max=<n>
+cb_last=<n> cb_max=<n>`, three DWT cycle counters, each as the last block's
+value and the worst since the first second (the first 500 blocks are left
+out of every maximum, which reads 0 until then, so a cold-cache boot tick
+cannot pin it). What each one covers:
+
+- `cyc_*`: `control_tick()` alone, the shared control law (spec
+  2026-10-09-rev-a-p6b1 §6: above 9600 cycles, one point, the tick moves to
+  every second block).
+- `led_*` (since P6b-2): `led_tick()` (the LED law's `fill()`) plus
+  `led_word()` and `set_leds()`, counted apart from the law.
+- `cb_*` (since the P6b-2 review): the whole audio callback, from before
+  `panel_scan_tick()` to after `inst.process()`. It is the only counter that
+  sees the scan step and the pot loop (target, ownership, filter), the key
+  edges, the law's events, and everything inside `process()` — the engine
+  itself, the per-sample deck and input followers behind the lamp observers,
+  and FLUX's per-sample phase. `cb_* − cyc_* − led_*` is that remainder; it
+  does not include the callback's own entry and exit. **Measured on the coupon, init patch, `-O2`
 (2026-10-09): `cyc_last` 11 800, `cyc_max` 13 900** (1.23 and 1.45 points),
 over the 9600 budget; the tick stays once per block by decision (spec §6,
 "Outcome"). Plan B is the two-block split, triggered by clicks or by
 `cyc_max` above 2.9 points on the Rev A board with the full panel.
 
-**Coupon session** (spec §7) on the coupon play image:
+**Measured on the coupon, P6b-2 image (`7aa0daad`, 2026-10-18, about ten
+minutes of playing, `SHELL_PLAY_LAW`):** `cyc_max` 14 976, `cyc_last` about
+11 900-12 600; `led_max` 1 580, `led_last` about 1 140-1 280; `cb_last` p50
+889 912, p99 916 730, largest seen 922 220 of the 960 000-cycle block. `cb_max`
+climbed 945 665, 982 104, 985 308, 1 020 977: at least three overruns past
+960 000. The clicks that go with them predate P6b-2 (the P6b-1 image clicked
+too, `cyc_max` 13 905), so Plan B's trigger is met and is a round of its own
+(`docs/hardware/p6b2-led-and-touch-measured.md`, "Session 2"). Spec §6's own
+rule does not fire: 14 976 + 1 580 = 16 556, under the reserve of about 28 000.
+
+**Coupon session** (spec §7) on the coupon play image. The 2026-10-03 session
+ran checks 2 and 3 with the P6a gesture "SW1 held, LED_1 lit"; since P6b-2
+SW1 is MOD and LED_1 shows `MODBTN_L`, so they read:
 1. All three pots reach both stops; at rest their printed values do not change.
-2. Press SW1 five times: `presses=5`; LED_1 is lit while SW1 is held.
-3. Hold SW1, pots untouched: `rv2`/`rv4`/`rv6` do not change.
+2. Press SW1 five times: `presses=5`; each press toggles MOD, and LED_1 shows
+   MOD's double pulse while latched, otherwise the master limiter.
+3. MOD latched (LED_1 switching), pots untouched: `rv2`/`rv4`/`rv6` do not
+   change.
 4. Jumper `TP_ADC12` (D9) to `TP_AGND` and `TP_ADC11` (D8) to `TP_A3V3`:
    `adc11` reads near `zero`, `adc12` near `rail`. Swap the jumpers: they
    swap. (The coupon's test points carry its netlist's old D8/D9 names; P2 §2
@@ -323,19 +351,63 @@ two reorderings in `mv()` and the depth loop then cost 1 704 B, leaving
 17 888 B (2026-10-09). `-O2` for the law instead of `-Os` cost 960 B more
 and took the tick from 15 800 to 11 800 cycles: 16 928 B free (2026-10-09).
 
-**Known divergences from VCV (P6b-1)** — spec §8:
+**Known divergences from VCV (P6b-1, updated in P6b-2)** — spec §8:
 
-- Depths are the init patch's and cannot be edited (P6b-2).
-- After a BBD edge the hardware's FLUX stays at its pot value; VCV's knob
-  drops to zero. The law's events are ignored: a physical pot cannot be
-  turned back.
-- A Sampler deck is silent: no factory sample, no REC yet.
+- A Sampler deck is silent until REC has recorded something: no factory
+  sample. (Rev A's REC A/B keys toggle the record latch; the coupon has no
+  REC key.)
 - No CLOCK, RESET or CV on the hardware.
+- CLK/RST lamps dark until CLOCK/RESET are wired; SHFT has no function.
 - The ATTACK pot is two Rack knobs at one position: it writes STAGES
   ("BBD Bend") while its deck's ENGINE is on the BBD and ATTACK otherwise,
   as FireflowHW shows them. Turning ENGINE does not copy the pot's position
-  into the newly shown parameter: that one keeps its last value until the
-  pot moves, where Rack shows the other knob at its own value.
+  into the newly shown parameter: since P6b-2 that one keeps its last value
+  until the pot moves more than `kPotTouch` from where it stood (ownership,
+  see "Knob ownership, keys and lamps" below), where Rack shows the other
+  knob at its own value.
+
+## Knob ownership, keys and lamps (P6b-2)
+
+Spec: `docs/superpowers/specs/2026-10-18-rev-a-p6b2-mod-keys-leds-design.md`.
+
+**Ownership** (`pot_owner.h`). Every parameter has a stored value and the
+stored value sounds. A pot writes its knob only after it has moved more than
+`kPotTouch` raw counts from its reference reading; then the parameter jumps to
+the pot's position and follows it. At boot every pot is released, so the init
+patch plays wherever the knobs stand. A pot whose target changes (MOD latched
+or unlatched, ATTACK ↔ STAGES) is released by `pot_own()` itself; a `bbd_edge`
+from the law sets FLUX to 0 and releases the FLUX pot, and the deck's
+`excite_other_deck` turns on, as in VCV. `kPotTouch` (144) is the coupon's
+untouched-pot spread through the plan's rule
+(`docs/hardware/p6b2-led-and-touch-measured.md`). The per-pot step
+(target, ownership, the jump on the taking move, filter, gated write) and the
+event application live in `panel_step.h` as pure functions, so ctest runs
+them (`tests/test_panel_step.cpp`); `panel_scan.cpp` only calls them.
+
+**Keys** (`apply_key_edges()`), on the debounced press: MOD toggles
+`MODBTN`, and while it is latched a pot with a `kModLayer` row edits that
+row's depth; REC A / REC B toggle their latches; SHFT is counted and does
+nothing. The coupon's one key is MOD.
+
+**Lamps.** After `control_tick()` the firmware runs the shared LED law
+(`control/led_law.hpp`, through `led_tick()`) and turns its duties into the
+LED word with `led_word()` (`led_out.h`): a lamp of duty d is on d blocks in
+every `kLedSteps - 1`, spread rather than bunched. The word reaches the 595s
+only through `set_leds()`, once per block. Rev A maps lamps with
+`kRevaLedBit`, the coupon puts `MODBTN_L` on LED_1 (`kCouponLedBit`).
+`kLedSteps` (8) is the largest step count the coupon showed without visible
+flicker (`docs/hardware/p6b2-led-and-touch-measured.md`).
+
+**Memory** (2026-10-18, against the same tree before the wiring):
+`SRAM_EXEC` Rev A 246 360 → 250 852 B (12 028 B free, floor 8 192),
+coupon 245 840 → 248 964 B (13 916 B free); the LED law's `fill()` is about
+2.1 KB of it, and newlib's `powf` (about 1.1 KB) comes in only for the gamma
+table's one-time build (in `control_boot()`, before `StartAudio()`, since the
+P6b-2 review; it used to happen in the first audio block). `SRAM` Rev A 217 876 → 220 092 B. `.qspi_cold`
+16 168 → 16 320 B. The review fixes (`panel_step.cpp`, the depth table, the
+`cb_*` counters, the gamma table at boot) then took `SRAM_EXEC` to
+251 412 B on Rev A (11 468 B free) and 249 548 B on the coupon (13 332 B
+free); `.qspi_cold` 16 312 B (2026-10-18).
 
 ## Where the work stands, and where it goes next
 

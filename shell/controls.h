@@ -16,7 +16,9 @@
 // 2026-10-09-rev-a-p6b1-shared-control-law-design.md section 4.2).
 //
 // Spec: ../docs/superpowers/specs/2026-09-28-coupon-panel-scan-design.md
+#include <cstdint>
 #include "control/params.hpp"
+#include "keys.h"
 
 namespace shell {
 
@@ -86,5 +88,39 @@ inline constexpr int kEngineSlotBbd = 4;
 // every other engine), else `param`. The id not chosen keeps its last value,
 // as two separate Rack params do.
 int knob_target(const ControlEntry& e, const float* knobs);
+
+// The depthId of the first kModLayer row whose soundId is `param`, -1 when
+// there is none or `param` is outside the knob vector. A lookup in a table
+// built at compile time, not a walk over kModLayer: pot_target() asks it for
+// every pot reading while MOD is latched, inside the audio interrupt.
+int mod_depth_of(int param);
+
+// The id a pot writes right now (spec 2026-10-18-rev-a-p6b2 section 3). MOD not
+// latched (knobs[MODBTN] < 0.5): knob_target(). Latched: a pot whose row `param`
+// has a kModLayer row writes that row's depthId, but only while knob_target()
+// is still `param` -- ATTACK on a BBD deck targets STAGES, which has no depth
+// twin, so it writes nothing (-1), as VCV hides both halves of that knob under
+// the latch. A pot with no kModLayer row keeps knob_target(). Reserved rows
+// (param -1) stay -1.
+int pot_target(const ControlEntry& e, const float* knobs);
+
+// Debounced press edges, one bit per key in KeyMap order (bit i = key i, the
+// order of KeyState.pressed); the caller passes `pressed & ~last_pressed`. A set
+// bit toggles REC_A / REC_B / MODBTN between 0 and 1; Shift and bits past
+// map.count do nothing. Returns true if MODBTN changed.
+bool apply_key_edges(uint8_t edges, const KeyMap& map, float* knobs);
+
+// LightId -> bit in MuxScan's LED field, -1 when the lamp is not on the plate.
+// Rev A: kRevaLedBit in generated_panel_map.h (panel-map.json "leds" order).
+// The coupon has one lamp, LED_1 = bit 0 of its LED field, and it shows MODBTN_L.
+inline constexpr int8_t kCouponLedBit[ffctl::NUM_LIGHTS] = {
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,   // GATE_A_L .. FTIME_B_L
+    -1, -1, -1, -1, -1,                       // FLOW_A_L .. RST_L
+    0,                                        // MODBTN_L
+    -1,                                       // SHIFTBTN_L
+};
+static_assert(sizeof(kCouponLedBit) / sizeof(kCouponLedBit[0]) == ffctl::NUM_LIGHTS &&
+                  kCouponLedBit[ffctl::MODBTN_L] == 0,
+              "kCouponLedBit: one entry per LightId, MODBTN_L on bit 0");
 
 } // namespace shell

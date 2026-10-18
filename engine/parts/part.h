@@ -43,6 +43,10 @@ public:
     const Quantizer& quant() const { return _quant; }
     PartFx& fx() { return _fx; }
     const PartFx& fx() const { return _fx; }
+    // Counts the engine swaps that have TAKEN EFFECT (the end of the
+    // click-free fade-out), not the set_engine() calls that arm them. The LED
+    // law reads it to pulse once per new engine.
+    uint32_t engine_epoch() const { return _engine_epoch; }
 
     // Excitation bus source selection (spec 2026-07-26 body-resonator §6,
     // Task 10): patch state, not a performance control -- three checkboxes
@@ -498,6 +502,7 @@ private:
     // project settles cost with the bench, not by reading.
     bool           _last_gate = false;
     bool           _switching = false;
+    uint32_t       _engine_epoch = 0;          // ++ in _engine_swap; observer only
     bool           _note_suppressed = false;   // last fire was swallowed
     // Cached IPartEngine::consumes_input() for the engine _engine points at.
     // Written only where _engine is written -- Part::init and

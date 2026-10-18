@@ -508,3 +508,28 @@ Three values shipped first-try and none has been heard against an alternative:
   master is worth losing `MOD_B`'s reach over `PAN_B`.
 
 Do not "finish" any of these without a listening pass.
+
+## LED lamp meanings (2026-10-18) — NOT YET SEEN
+
+The 2026-10-07 lamp meanings are built (`control/led_law.hpp`, spec
+`2026-10-18-rev-a-p6b2-mod-keys-leds-design.md` §4.2). The meanings are
+Bastian's; the constants below are by-eye candidates that no one has watched on
+a lamp yet, in Rack or on the board:
+
+- **`kLvlFloor = 1e-3`** — the LVL lamp is lit while `deck_out_level(p)` is
+  above it. The probe in commit e58ff032's message found a clean gap (every silent state reads 0, the
+  quietest continuously playing deck 0.0022), but it also means the init
+  patch's deck B (WAVE, STEP) at decay 0.3 sits above the floor about 99.8 % of
+  the time: its LVL lamp is lit almost steadily and does not blink with the
+  notes the way a short-decay deck does. Raise the floor if you want it to
+  blink more.
+- **`kFtimeFlash = 0.05 s`** — one FLUX period elapsed.
+- **`kSwitchPulse = 0.25 s`** — the SHIFT lamp's single long flash when an
+  engine or the scale took effect. It must read differently from the input
+  level under it and from MOD's double pulse next door.
+- **`kJackFlash = 0.04 s`** — a CLOCK or RESET pulse.
+- **`kInputFloor = 1e-3`** (a fifth, added during the build) — the SHIFT lamp's
+  level display is dark below this input peak; without it `duty()`'s lift
+  holds the lamp at step 1 for seconds after the input stops.
+
+Do not "finish" any of these without watching them.

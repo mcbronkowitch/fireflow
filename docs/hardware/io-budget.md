@@ -173,9 +173,9 @@ sind vorerst dunkel — ihre Bedeutung ist P6b (`led_law.hpp`, `fill()`) —, ab
 jeden Block *geschrieben*, nicht übersprungen; ein Gate prüft das. Das
 gilt auch für `FLOW_A_L`/`FLOW_B_L`, die geschrieben werden, obwohl die
 Hardwareplatte sie nicht zeichnet. `TEMPO_L` tickt den Transport-Beat
-(Metronom-Puls, `kTempoPulse` der Beat-Phase). Herleitung, Platzierung und die offene
-Mux-Breite (8:1 gegen 16:1, deshalb nimmt `duty()` den Schrittzähler als
-Parameter): Spec
+(Metronom-Puls, `kTempoPulse` der Beat-Phase). Herleitung, Platzierung und die damals
+offene Mux-Breite (8:1 gegen 16:1; seit P6b-2 gilt das Raster des Blocktakt-Latches,
+`kLedSteps` 8, siehe §6): Spec
 [`2026-08-16-led-feedback-design.md`](../superpowers/specs/2026-08-16-led-feedback-design.md)
 §2–§3, und `docs/roadmap.md`.
 
@@ -552,14 +552,18 @@ geschrieben** — die LED-Daten fahren mit.
 
 **Daraus folgt, dass auch Helligkeit fast umsonst ist:** der Mux-Scan schreibt
 die Kette 16× pro Sweep, einmal je Adresse. Variiert man über diese 16
-Schreibvorgänge, welche LED-Bits gesetzt sind, ergibt das **16-stufiges PWM ohne
+Schreibvorgänge, welche LED-Bits gesetzt sind, ergibt das in der Herleitung **16-stufiges PWM ohne
 einen einzigen zusätzlichen Schreibvorgang** — Auflösung = Adressschritte,
-Bildwiederholrate = Sweep-Rate. Die LED-Feedback-Runde hat genau darauf gebaut:
-`spkyled::duty()` nimmt die Stufenzahl als Parameter, weil die 8:1-gegen-16:1-Wahl
-(§6) sie bestimmt, und der Rack-Host quantisiert auf dieselben 16 Stufen, damit
-er nicht feiner atmet als das Panel je kann.
+Bildwiederholrate = Sweep-Rate. Die LED-Feedback-Runde hat darauf gebaut; P6b-2
+hat es am Board korrigiert: das Raster ist der Blocktakt-Latch (die Lampen
+ändern sich einmal je Block, im Latch, der die Mux-Adresse trägt), nicht die
+Mux-Breite. Die Stufenzahl ist `kLedSteps` (8, an der Coupon-LED gemessen,
+`docs/hardware/p6b2-led-and-touch-measured.md`), und der Rack-Host quantisiert
+auf dieselben Stufen, damit er nicht feiner atmet als das Panel je kann.
+`spkyled::duty()` nimmt die Stufenzahl weiter als Parameter; beide Hosts übergeben
+immer `kLedSteps` (8).
 
-**Die Grenze, und sie ist scharf:** wer *feinere* Helligkeit als 16 Stufen will,
+**Die Grenze, und sie ist scharf:** wer *feinere* Helligkeit als das Raster (heute 8 Stufen) will,
 muss das PWM vom Scan entkoppeln, und dann sind es echte zusätzliche
 Kettenschreibvorgänge pro Block. Das kostet CPU und zahlt auf den Block-Artefakt
 ein (§6) — 32 → 40 Bit ist marginal, eine eigene PWM-Schleife wäre es nicht.
@@ -575,7 +579,7 @@ LED-Feedback-Runde hat zwei const-Beobachter ergänzt:
 `lane_excursion(part, lane)` für den Modulationsanteil allein
 (`engine/instrument.h:422`, aus `Part::target_raw` herausgezogen, damit Lampe und
 Audiopfad denselben Ausdruck lesen) und `limiter_squash()` für den Master-Former
-(`:306`). Die Zuordnung auf Lampen liegt in `host/vcv/src/led_law.hpp`, ist
+(`:306`). Die Zuordnung auf Lampen liegt in `control/led_law.hpp`, ist
 Rack-frei und damit für die Firmware wiederverwendbar — wo die Datei am Ende
 liegt, entscheidet die M6-Inbetriebnahme.
 

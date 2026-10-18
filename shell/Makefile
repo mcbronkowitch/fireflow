@@ -375,6 +375,9 @@ CPP_SOURCES = \
 	controls.cpp \
 	control_tick.cpp \
 	keys.cpp \
+	pot_owner.cpp \
+	panel_step.cpp \
+	led_out.cpp \
 	panel_scan.cpp \
 	mux_scan.cpp \
 	../engine/body/mode_bank.cpp \

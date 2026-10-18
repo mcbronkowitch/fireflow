@@ -134,6 +134,11 @@ constexpr float kChokeDepthTop     = 1.2f;    // depth at the top of the duck zo
 constexpr float kChokeDuckFloorHot = 0.02f;   // floor at 120 %: -34 dB, still not a mute
 constexpr float kChokeDuckAtkHotS  = 0.001f;  // attack at 120 % -- snaps onto the transient
 constexpr float kChokeDuckRelHotS  = 0.040f;  // release at 120 % -- lets go before the note does
+
+// Release of the lamp observers' peak followers (deck_out_level, input_peak),
+// seconds. Instant attack. Only enough to carry a lamp across one audio cycle
+// without flicker (spec 2026-10-18 §4.2) -- by-eye candidate, not an invariant.
+constexpr float kDeckLevelRelease = 0.02f;
 }
 
 void Instrument::init(float sample_rate) { init(sample_rate, FxMem{}); }
@@ -167,6 +172,9 @@ void Instrument::init(float sample_rate, const FxMem& mem) {
     _duck_keep_down = std::exp(-1.f / (kDuckDownS * sample_rate));
     _duck_keep_up   = std::exp(-1.f / (kDuckUpS * sample_rate));
     _choke_env = 0.f;
+    _deck_level[PART_A] = _deck_level[PART_B] = 0.f;
+    _in_peak = 0.f;
+    _level_release = 1.f - std::exp(-1.f / (kDeckLevelRelease * sample_rate));
     _choke_atk = 1.f - std::exp(-1.f / (kChokeDuckAtkS * sample_rate));
     _choke_rel = 1.f - std::exp(-1.f / (kChokeDuckRelS * sample_rate));
     // The overdrive pair, precomputed for the same reason the pair above is:
@@ -448,6 +456,23 @@ void Instrument::process(const float* inL, const float* inR,
             _parts[yld].set_inhibit(false);
         }
         _parts[yld].process(in_l, in_r, pl[yld], prr[yld], psl[yld], psr[yld]);
+
+        // Lamp observers: peak followers, instant attack, one-pole release.
+        // Written here and read by nothing below -- no branch or value in the
+        // mix depends on them.
+        {
+            const float lv[PART_COUNT] = {
+                std::max(std::fabs(pl[PART_A]), std::fabs(prr[PART_A])) * ga,
+                std::max(std::fabs(pl[PART_B]), std::fabs(prr[PART_B])) * gb };
+            for (int p = 0; p < PART_COUNT; ++p)
+                _deck_level[p] += (lv[p] > _deck_level[p] ? 1.f : _level_release)
+                                  * (lv[p] - _deck_level[p]);
+            const float lin = std::max(std::fabs(in_l), std::fabs(in_r));
+            _in_peak += (lin > _in_peak ? 1.f : _level_release) * (lin - _in_peak);
+            // A decaying follower would otherwise walk into denormals.
+            for (float& v : _deck_level) if (v < 1e-12f) v = 0.f;
+            if (_in_peak < 1e-12f) _in_peak = 0.f;
+        }
 
         const float al = pl[PART_A],  ar = prr[PART_A];
         const float bl = pl[PART_B],  br = prr[PART_B];

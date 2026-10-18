@@ -140,6 +140,30 @@ enum ParamId {
     NUM_PARAMS
 };
 
+// The lamp ids the shared LED law (control/led_law.hpp) writes. Same
+// names and order as spkyvcv::LightId in generated_panel.hpp (the VCV
+// host static_asserts the two together).
+enum LightId {
+    GATE_A_L,
+    GATE_B_L,
+    REC_A_L,
+    REC_B_L,
+    LVL_A_L,
+    LVL_B_L,
+    SONG_A_L,
+    SONG_B_L,
+    FTIME_A_L,
+    FTIME_B_L,
+    FLOW_A_L,
+    FLOW_B_L,
+    TEMPO_L,
+    CLK_L,
+    RST_L,
+    MODBTN_L,
+    SHIFTBTN_L,
+    NUM_LIGHTS
+};
+
 static constexpr int PART_STRIDE = 20;
 
 // The tables below are inline: one copy per image however many

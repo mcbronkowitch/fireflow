@@ -1788,9 +1788,15 @@ if (_songRung[p].tick(songNorm, spky::kSongLadderCount)) {
     # The one seam this round is about: process() must actually drive the
     # panel through the law, not just declare the members that could.
     process_n = compact_cpp(process)
-    if ("spkyled::fill(inst,ledPanel,dt,kLedSteps,"
-            "params[MODBTN].getValue()>0.5f,ledDuty);") not in process_n:
+    if ("spkyled::fill(inst,ledPanel,dt,spkyled::kLedSteps,in,ledDuty);"
+            ) not in process_n:
         issues.append("process must drive the panel through the LED law")
+    # The CLK / RST lamps are fed by the jack edges, nothing else.
+    for want in ("in.mod_latched=params[MODBTN].getValue()>0.5f;",
+                 "in.clock_pulse=clockSeen;", "in.reset_pulse=resetSeen;",
+                 "clockSeen=true;"):
+        if want not in process_n:
+            issues.append("process must hand the jack pulses to the LED law: " + want)
 
     ring_n = compact_cpp(ring)
     if ring_n.count("if(module&&module->inst.engine_id(part)==spky::ENGINE_SAMPLER){") != 1:
@@ -1811,7 +1817,7 @@ def test_engine_cycle_host_wiring():
     cpp = host_source()
     with open(os.path.join(here, "..", "Makefile")) as f:
         makefile = f.read()
-    with open(os.path.join(here, "..", "src", "led_law.hpp")) as f:
+    with open(os.path.join(here, "..", "..", "..", "control", "led_law.hpp")) as f:
         led_law = f.read()
 
     for issue in engine_cycle_wiring_issues(cpp, makefile, led_law):
@@ -1824,7 +1830,7 @@ def test_engine_cycle_guard_rejects_representative_regressions():
     cpp = host_source()
     with open(os.path.join(here, "..", "Makefile")) as f:
         makefile = f.read()
-    with open(os.path.join(here, "..", "src", "led_law.hpp")) as f:
+    with open(os.path.join(here, "..", "..", "..", "control", "led_law.hpp")) as f:
         led_law = f.read()
 
     mutations = [
@@ -1843,11 +1849,13 @@ def test_engine_cycle_guard_rejects_representative_regressions():
         ("inst.new_phrase(p);          // turn the knob, get a new melody",
          "if (!samplerPart) inst.new_phrase(p);          // turn the knob, get a new melody",
          "SONG phrase rebuild"),
-        ("spkyled::fill(inst, ledPanel, dt, kLedSteps,\n"
-         "                          params[MODBTN].getValue() > 0.5f, ledDuty);",
-         "spkyledFillDisabled(inst, ledPanel, dt, kLedSteps,\n"
-         "                          params[MODBTN].getValue() > 0.5f, ledDuty);",
+        ("spkyled::fill(inst, ledPanel, dt, spkyled::kLedSteps, in, ledDuty);",
+         "spkyledFillDisabled(inst, ledPanel, dt, spkyled::kLedSteps, in, ledDuty);",
          "process no longer drives the panel through the LED law"),
+        ("in.clock_pulse = clockSeen;", "in.clock_pulse = false;",
+         "process no longer hands the CLOCK edge to the LED law"),
+        ("in.reset_pulse = resetSeen;", "in.reset_pulse = false;",
+         "process no longer hands the RESET edge to the LED law"),
     ]
     for before, after, label in mutations:
         mutated = cpp.replace(before, after, 1)

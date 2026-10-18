@@ -57,6 +57,23 @@ check("exactly the two ATTACK rows carry STAGES as their alternate",
 check("the header validates every id at compile time",
       "static_assert(entries_valid(kRevaControls," in TEXT)
 check("no stale Fireflow.cpp line citation", "Fireflow.cpp" not in TEXT)
+# P6b-2 spec section 3: the 165's D0..D3 are REC_A, REC_B, MODBTN, SHIFTBTN, and a
+# press does RecA, RecB, Mod, nothing -- in exactly that order.
+check("the emitted key map is RecA, RecB, Mod, Shift",
+      "kRevaKeyMap{4, {KeyFn::RecA, KeyFn::RecB, KeyFn::Mod, KeyFn::Shift}};" in TEXT)
+LED_LINES = [line for line in TEXT.splitlines() if line.startswith("    ") and "  // " in line
+             and line.split("//")[0].strip().rstrip(",").lstrip("-").isdigit()
+             and ("_L" in line)]
+check("the LED table has one line per LightId", len(LED_LINES) == len(BASE["lights"]))
+check("the LED table names every LightId in enum order",
+      [l.split("//")[1].split()[0] for l in LED_LINES] == BASE["lights"])
+check("15 lamps are placed and are a permutation of 0..14",
+      sorted(int(l.split(",")[0]) for l in LED_LINES if not l.strip().startswith("-1"))
+      == list(range(15)))
+check("SHIFTBTN_L is bit 0, MODBTN_L bit 14, FLOW_A_L and FLOW_B_L are off the plate",
+      "    0,  // SHIFTBTN_L" in TEXT and "    14,  // MODBTN_L" in TEXT
+      and "    -1,  // FLOW_A_L -- not on the plate" in TEXT
+      and "    -1,  // FLOW_B_L -- not on the plate" in TEXT)
 check("a CRLF checkout is not stale",
       g.check_text(TEXT.replace("\n", "\r\n"), TEXT))
 
@@ -137,6 +154,18 @@ sabotage("mux list out of order",
 sabotage("more keys than the firmware holds",
          lambda i: i["tables"]["keys"].append("EXTRA"),
          "keys: 5")
+sabotage("a lamp that is no LightId",
+         lambda i: i["panel_map"]["leds"][0].__setitem__("id", "NOPE_L"),
+         "led NOPE_L: no ffctl::LightId")
+sabotage("a lamp listed twice",
+         lambda i: i["panel_map"]["leds"][1].__setitem__("id", "SHIFTBTN_L"),
+         "led SHIFTBTN_L listed twice")
+sabotage("two lamps on one bit",
+         lambda i: i["panel_map"]["leds"][1].__setitem__("index", 0),
+         "led indices are not 0..14")
+sabotage("a key with no function",
+         lambda i: i["tables"]["keys"].__setitem__(3, "EXTRA"),
+         "keys: EXTRA has no KeyFn")
 sabotage("calibration channel renamed",
          lambda i: i["panel_map"]["calibration"][0].__setitem__("id", "CAL_X"),
          "calibration")

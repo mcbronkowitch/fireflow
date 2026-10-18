@@ -18,7 +18,7 @@
 #include "control/bbd_edge_state.hpp"  // ENG->BBD edge detector (dependency-free, unit-tested)
 #include "control/song_rung_state.hpp"  // SONG rung tracker (dependency-free, unit-tested)
 #include "control/drift_settle_state.hpp"  // DRIFT left-stop edge detector (dependency-free, unit-tested)
-#include "led_law.hpp"           // the panel's LED display law (Rack-free, unit-tested)
+#include "control/led_law.hpp"   // the panel's LED display law (Rack-free, unit-tested, shared with the firmware)
 #include "control/mod_layer.hpp"         // the MOD latch layer's host-computed math (Rack-free, unit-tested)
 #include "control/control_law.h"       // the control law pushParams() runs (Rack-free, shared with the firmware)
 
@@ -314,6 +314,9 @@ static_assert(MODBTN > REC_B, "mod-layer params must stay appended after REC");
 static_assert(NUM_PARAMS == MODBTN + 51, "mod layer is 51 params: MODBTN + 50 depths");
 static_assert((int)ffctl::NUM_PARAMS == (int)NUM_PARAMS, "control/params.hpp is stale");
 static_assert((int)ffctl::MODBTN == (int)MODBTN, "control/params.hpp is stale");
+static_assert((int)ffctl::NUM_LIGHTS == (int)NUM_LIGHTS, "control/params.hpp is stale");
+static_assert((int)ffctl::MODBTN_L == (int)MODBTN_L, "control/params.hpp is stale");
+static_assert((int)ffctl::SHIFTBTN_L == (int)SHIFTBTN_L, "control/params.hpp is stale");
 
 // configControls() reads every range from the generated table, so the panel
 // and the firmware's pot scaling cannot drift apart.
@@ -367,13 +370,15 @@ struct Fireflow : Module {
     float curSr = 0.f;
     dsp::ClockDivider ctrlDiv;              // throttle param push to control rate
     dsp::SchmittTrigger clockTrig, resetTrig;
+    // A CLOCK / RESET edge since the last LED-law call. The law runs once in
+    // 64 samples and an edge is one sample long, so it is latched here.
+    bool clockSeen = false, resetSeen = false;
     float clkSamples = 0.f;                 // samples since last external clock edge
-    // The mux scan gives the hardware 16 brightness steps for free, so Rack
-    // quantises to the same raster -- and applies the same perceptual gamma
-    // curve on the way there (led_law.hpp's duty()) -- because a module that
-    // breathes more finely, or more linearly, than the panel ever can is
-    // validating itself against the wrong instrument.
-    static constexpr int kLedSteps = 16;
+    // Rack quantises to the hardware's brightness raster (spkyled::kLedSteps,
+    // the board's block-rate latch) -- and applies the same perceptual gamma
+    // curve on the way there (control/led_law.hpp's duty()) -- because a
+    // module that breathes more finely, or more linearly, than the panel ever
+    // can is validating itself against the wrong instrument.
     spkyled::Panel ledPanel;
     dsp::ClockDivider ledDiv;               // throttle the LED law; 750 Hz at 48 kHz, scales with sample rate
     int ledDuty[NUM_LIGHTS] = {0};
@@ -715,12 +720,16 @@ struct Fireflow : Module {
             if (clockTrig.process(inputs[CLOCK].getVoltage(), 0.1f, 1.f)) {
                 clkSamples = 0.f;
                 inst.clock_pulse();
+                clockSeen = true;            // for the CLK lamp, cleared after fill()
             }
         }
 
-        if ((inputs[RESET].isConnected() &&
-             resetTrig.process(inputs[RESET].getVoltage(), 0.1f, 1.f)) ||
-            resyncReq.exchange(false))
+        // The RESET lamp shows the jack only; the menu's "Resync to bar" also
+        // resets the transport but is not a pulse at the jack.
+        const bool resetEdge = inputs[RESET].isConnected() &&
+                               resetTrig.process(inputs[RESET].getVoltage(), 0.1f, 1.f);
+        if (resetEdge) resetSeen = true;
+        if (resetEdge || resyncReq.exchange(false))
             inst.reset_transport();
 
         if (ctrlDiv.process()) pushParams();
@@ -741,17 +750,21 @@ struct Fireflow : Module {
         outputs[GATE_A].setVoltage(inst.gate(0) ? 10.f : 0.f);
         outputs[GATE_B].setVoltage(inst.gate(1) ? 10.f : 0.f);
 
-        // One law, one call, every LightId -- host/vcv/src/led_law.hpp. Quantised
-        // to kLedSteps AND run through the same perceptual gamma even here:
-        // that is what the mux scan gives the hardware for free, and a Rack
-        // module that breathes more finely, or more linearly, than the panel
-        // ever can is validating itself against the wrong instrument.
+        // One law, one call, every LightId -- control/led_law.hpp. Quantised
+        // to spkyled::kLedSteps AND run through the same perceptual gamma even
+        // here: that is the raster the hardware lamps get, and a Rack module
+        // that breathes more finely, or more linearly, than the panel ever
+        // can is validating itself against the wrong instrument.
         if (ledDiv.process()) {
             const float dt = ledDiv.getDivision() * args.sampleTime;
-            spkyled::fill(inst, ledPanel, dt, kLedSteps,
-                          params[MODBTN].getValue() > 0.5f, ledDuty);
+            spkyled::LedInputs in;
+            in.mod_latched = params[MODBTN].getValue() > 0.5f;
+            in.clock_pulse = clockSeen;
+            in.reset_pulse = resetSeen;
+            clockSeen = resetSeen = false;
+            spkyled::fill(inst, ledPanel, dt, spkyled::kLedSteps, in, ledDuty);
             for (int i = 0; i < NUM_LIGHTS; ++i)
-                lights[i].setBrightness(float(ledDuty[i]) / float(kLedSteps - 1));
+                lights[i].setBrightness(float(ledDuty[i]) / float(spkyled::kLedSteps - 1));
         }
     }
 

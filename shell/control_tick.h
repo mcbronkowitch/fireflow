@@ -2,25 +2,36 @@
 
 // The shared control law (control/control_law.h) as the firmware runs it:
 // one ControlLaw instance over a knob vector in VCV's units, ticked once per
-// audio block. Its own translation unit so that it alone builds with -Os
-// (shell/Makefile): at -O3 the law costs about 14 KB of SRAM_EXEC and the
-// Rev A image keeps 2.7 KB free, under spec 2026-10-09-rev-a-p6b1 section 5's
-// 8 KB floor.
+// audio block, and the shared LED law (control/led_law.hpp) after it. Its own
+// translation unit so that it alone builds with -O2 (shell/Makefile): at -O3
+// the law costs about 14 KB of SRAM_EXEC and the Rev A image keeps 2.7 KB
+// free, under spec 2026-10-09-rev-a-p6b1 section 5's 8 KB floor.
 //
 // Spec: ../docs/superpowers/specs/2026-10-09-rev-a-p6b1-shared-control-law-design.md
-// sections 4.2 and 5.
+// sections 4.2 and 5; ../docs/superpowers/specs/2026-10-18-rev-a-p6b2-mod-keys-leds-design.md
+// sections 4 and 5.
 #include "instrument.h"
+#include "control/control_law.h"
 
 namespace shell {
 
 // Boot: knobs[0..ffctl::NUM_PARAMS) become the init patch
-// (ffctl::kInitParamDefaults) -- depths included, which P6b-1 does not let the
-// panel edit yet -- and the law is re-armed as for a patch restore, so the
-// init patch's SONG rung and DRIFT position are a baseline, not a turn.
+// (ffctl::kInitParamDefaults), depths included, and the law is re-armed as for
+// a patch restore, so the init patch's SONG rung and DRIFT position are a
+// baseline, not a turn. It also builds the LED law's gamma table, so that
+// one-time build does not happen inside the audio interrupt.
 void control_boot(float* knobs);
 
-// Once per block, the whole vector (spec section 4.2). Events are not
-// applied: a physical FLUX pot cannot be turned back (spec section 8).
-void control_tick(const float* knobs, spky::Instrument& inst);
+// Once per block, the whole vector (spec 2026-10-09 section 4.2). Returns the
+// law's events for the caller to apply to the knob vector (P6b-2 spec section
+// 5). On bbd_edge[p] this function itself sets deck p's excite_other_deck in
+// the persistent control::Options it passes the law, as VCV does; it takes
+// effect from the next tick on, as in VCV.
+control::Events control_tick(const float* knobs, spky::Instrument& inst);
+
+// Once per block, after control_tick(): the LED law, NUM_LIGHTS duties of
+// 0..spkyled::kLedSteps-1 into duty_out. SHIFT is never latched and the CLOCK
+// and RESET jacks are not wired on the hardware, so their inputs are false.
+void led_tick(const spky::Instrument& inst, bool mod_latched, float dt, int* duty_out);
 
 } // namespace shell

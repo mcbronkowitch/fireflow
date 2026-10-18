@@ -1584,3 +1584,26 @@ went (a scratch board image, cold tick about 30 500, warm second tick about
 27 100): deck A 12 100, deck B 10 700, the depth loop 2 300, the tail (centre,
 reverb, tempo) 5 000, framing about 500; the setter rows (`set_rate` ..
 `set_pan`, libm `powf`/`expf`) were about 60 %.
+
+## Lamp observers (2026-10-18)
+
+The six const observers the P6b-2 lamp law reads (`Instrument::deck_out_level`,
+`input_peak`, `flux_engaged`, `flux_repeat_phase`, `engine_epoch`,
+`scale_epoch`; commit `e58ff032`) are the engine's side of the lamp law. The two
+peak followers (`deck_out_level`, `input_peak`) are written in the mix loop and
+read by nothing inside the engine, as that commit states; the render-hash gates
+guard that none of the six leaks into audio. Two facts about them are not visible
+from the source and were measured by a throwaway probe (48 kHz, plain
+`Instrument::init`, the full printout is in the commit message):
+
+- **`deck_out_level` has a clean gap between silent and playing.** Every silent
+  state reads exactly 0 (`set_part_level` 0, FILT closed, an empty Sampler),
+  a STEP deck's rests read below 1e-5, and the quietest continuously playing
+  deck read 0.0022 (FEED at LVL 0.05; a SYNTH deck read 0.0040). The LVL lamp's
+  `kLvlFloor` (1e-3, `control/led_law.hpp`) sits in that gap. It is a by-eye
+  candidate from this probe, not an invariant.
+- **`flux_repeat_phase` runs over `delay_time()`, not over the repeat counter.**
+  It reads a free-running, observer-only phase in `Flux` (`period_phase()`, one
+  period of `delay_time()`), because `_repeat_phase_samples` advances only while
+  THIN is thinning (LINK > 0 with a valid rhythm) and would leave the FTIME lamp
+  dark at the factory LINK = 0.
