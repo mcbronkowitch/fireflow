@@ -1589,8 +1589,10 @@ reverb, tempo) 5 000, framing about 500; the setter rows (`set_rate` ..
 
 The six const observers the P6b-2 lamp law reads (`Instrument::deck_out_level`,
 `input_peak`, `flux_engaged`, `flux_repeat_phase`, `engine_epoch`,
-`scale_epoch`; commit `e58ff032`) are written by the engine and read by nothing
-inside it, so they cannot change audio. Two facts about them are not visible
+`scale_epoch`; commit `e58ff032`) are the engine's side of the lamp law. The two
+peak followers (`deck_out_level`, `input_peak`) are written in the mix loop and
+read by nothing inside the engine, as that commit states; the render-hash gates
+guard that none of the six leaks into audio. Two facts about them are not visible
 from the source and were measured by a throwaway probe (48 kHz, plain
 `Instrument::init`, the full printout is in the commit message):
 

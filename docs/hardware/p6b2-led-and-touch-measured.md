@@ -1,5 +1,7 @@
 # P6b-2 on the coupon: lamp step count and pot-touch threshold
 
+## Session 1 - the probe image
+
 Measured on **2026-10-18**, one session, one coupon board, with the probe image
 built from commit **`356458f5`** (Task 1's dim demo plus `SHELL_SPREAD`).
 Spec: [`2026-10-18-rev-a-p6b2-mod-keys-leds-design.md`](../superpowers/specs/2026-10-18-rev-a-p6b2-mod-keys-leds-design.md).
@@ -8,7 +10,7 @@ Both numbers below were read off the board; neither is derived from a model.
 **Result:** `kLedSteps = 8` (`control/led_law.hpp`), `kPotTouch = 144`
 (`shell/pot_owner.h`).
 
-## 1. LED step count
+### 1. LED step count
 
 **Procedure.** LED_1 held at duty 1 of N (the dimmest non-zero level of an
 N-step raster), with N cycled through the probe's presets. Bastian looked at the
@@ -21,11 +23,11 @@ lamp directly and in peripheral vision, where flicker shows first.
 | 8 | no visible flicker |
 | 16 (the darkest preset) | flickers |
 
-**Rule:** `kLedSteps` is the largest N without visible flicker. That is **8**,
+**Rule:** `kLedSteps` is the largest tested N (4, 6, 8, 16) without visible flicker. That is **8**,
 the same as the provisional value the code carried; the measurement confirms it.
 The verdict is by eye, on one lamp at its dimmest level.
 
-## 2. Pot-touch threshold
+### 2. Pot-touch threshold
 
 **Procedure.** RV2, RV4 and RV6 were left untouched for 20 minutes (1201
 one-second windows) while LED_1 switched at duty 1 of 4, so the lamp switching
@@ -72,8 +74,8 @@ before judging any sound.
 | 5 | LED_1 outside MOD (limiter display) stayed dark | not a failure |
 | 6 | Clicks | about one every few minutes |
 
-Check 5: the init patch does not drive the limiter, so a dark lamp is what the
-law should show. The lamp path itself is proven by check 3. The limiter display
+Check 5: the init patch does not drive the limiter, so a dark lamp is consistent
+with the law. The lamp path itself is proven by check 3. The limiter display
 is unobserved at the board.
 
 ### 4. Cycle counters

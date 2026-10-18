@@ -300,6 +300,7 @@ cannot pin it). What each one covers:
 over the 9600 budget; the tick stays once per block by decision (spec §6,
 "Outcome"). Plan B is the two-block split, triggered by clicks or by
 `cyc_max` above 2.9 points on the Rev A board with the full panel.
+
 **Measured on the coupon, P6b-2 image (`7aa0daad`, 2026-10-18, about ten
 minutes of playing, `SHELL_PLAY_LAW`):** `cyc_max` 14 976, `cyc_last` about
 11 900-12 600; `led_max` 1 580, `led_last` about 1 140-1 280; `cb_last` p50
