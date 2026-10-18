@@ -24,6 +24,12 @@ namespace spkyled {
 // pins the value; change both together.
 constexpr int kLedSteps = 8;
 
+// UNUSED SINCE P6b-2: kFloor, kEnvFall, kEnvOff, Lamp and intensity() below
+// belong to the excursion-envelope lamps of the 2026-08-16 LED spec. The
+// 2026-10-07 lamp meanings replaced every one of those lamps, and fill() calls
+// none of this; only tests/test_led_law.cpp's G-tests do. Kept, with those
+// tests, for a future lane lamp; the by-ear status below is as it was.
+//
 // Trough of a breath, as a fraction of the envelope. A FIXED floor would make
 // an idle lane and a gently moving one look alike, and would push every
 // breath's bottom through the same dark band -- which at this instrument's
@@ -47,7 +53,7 @@ constexpr float kEnvFall = 2.0f;
 // Envelope floor: below this a lamp is off, not merely dim. It has to exist and
 // it has to be well above a denormal guard, because duty()'s lift holds any
 // positive intensity at one step -- so this constant, not the release, is what
-// makes "dark" reachable. At 1e-6 a lamp would sit at one step of fifteen for
+// makes "dark" reachable. At 1e-6 a lamp would sit at its lowest step for
 // 27 s after modulation stopped. 0.02 is 3.9 release constants, about 8 s, and
 // stays an order of magnitude below the shallowest breath the lift protects.
 // By-ear candidate, not an invariant.
@@ -194,8 +200,9 @@ constexpr float kLvlFloor = 1e-3f;
 // kSwitchPulse: an engine or a scale took effect, on the SHIFT lamp. ONE long
 //   flash on purpose: it has to read differently from the input level lit
 //   under it and from MOD's double pulse on the lamp next to it.
-// kJackFlash: a pulse at the CLOCK / RESET jack. As short as the FTIME tick;
-//   a clock in the audio range of tempos would otherwise hold the lamp on.
+// kJackFlash: a pulse at the CLOCK / RESET jack. As short as the FTIME tick:
+//   a 40 ms flash per pulse merges into a continuous light only above
+//   1 / 0.04 s = 25 pulses per second (~25 Hz); a slower clock blinks.
 // kInputFloor: below this input peak the SHIFT lamp's level display is dark
 //   (about -60 dBFS; IN is scaled so 1.0 is +-5 V). Needed because duty()
 //   lifts every positive value to one step and the peak follower only ever

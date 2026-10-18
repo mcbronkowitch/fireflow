@@ -517,7 +517,7 @@ Bastian's; the constants below are by-eye candidates that no one has watched on
 a lamp yet, in Rack or on the board:
 
 - **`kLvlFloor = 1e-3`** — the LVL lamp is lit while `deck_out_level(p)` is
-  above it. The Task 3 probe found a clean gap (every silent state reads 0, the
+  above it. The probe in commit e58ff032's message found a clean gap (every silent state reads 0, the
   quietest continuously playing deck 0.0022), but it also means the init
   patch's deck B (WAVE, STEP) at decay 0.3 sits above the floor about 99.8 % of
   the time: its LVL lamp is lit almost steadily and does not blink with the
