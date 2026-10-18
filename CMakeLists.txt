@@ -581,6 +581,13 @@ add_test(NAME shell_qspi_placement_guard
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_qspi_placement.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
 
+# The ITCM placement guard (spec 2026-10-18-cpu-headroom-design.md section
+# 4.2): nothing may run ITCM code before main() has copied it there.
+add_test(NAME shell_itcm_placement_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_itcm_placement.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
+
 # The two budget calculations under tools/. scan_budget imports settle_budget,
 # so a constant revised there reaches both guards; scan_budget also reads the
 # pot count from host/vcv/res/gen_hw_panel.py and goes red when the panel moves.
@@ -592,4 +599,12 @@ add_test(NAME settle_budget_guard
 add_test(NAME scan_budget_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_scan_budget.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tools)
+
+# The click detector the CPU headroom round judges board recordings with
+# (spec 2026-10-18-cpu-headroom-design.md section 2.6): a dropped block is a
+# click, a clean tone and a quiet passage are not.
+add_test(NAME click_detect_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_click_detect.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tools)

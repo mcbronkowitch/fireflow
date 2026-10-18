@@ -353,8 +353,22 @@ $(error SHELL_PANEL_SCAN=1 excludes SHELL_MUX_PROBE)
 endif
 endif
 
+# The per-sample audio path in ITCM (spec 2026-10-18-cpu-headroom-design.md
+# section 4.2): itcm_hot.ld places it, itcm_load.cpp copies it out of QSPI at
+# the top of main(), itcm_placement.py refuses a link that could run it first.
+# On by default; 0 keeps the hot set in SRAM -- the comparison image of the
+# ITCM measurement, and nothing else.
+SHELL_ITCM ?= 1
+
+ifneq ($(filter $(SHELL_ITCM),0 1),$(SHELL_ITCM))
+$(error SHELL_ITCM must be 0 or 1)
+endif
+
 CPP_SOURCES = \
 	main.cpp \
+	cb_profile.cpp \
+	itcm_load.cpp \
+	wt_bank_d2.cpp \
 	sdram_mem.cpp \
 	mux_plan.cpp \
 	coupon_expect.cpp \
@@ -445,6 +459,12 @@ $(BUILD_DIR)/control_tick.o: override OPT := -O2
 # edit to the list relink.
 LDFLAGS += -Wl,-T,qspi_cold.ld
 $(BUILD_DIR)/$(TARGET).elf: qspi_cold.ld
+# The ITCM hot set, read after qspi_cold.ld: its load address lies in the
+# QSPI_COLD region that script declares.
+ifeq ($(SHELL_ITCM),1)
+LDFLAGS += -Wl,-T,itcm_hot.ld
+$(BUILD_DIR)/$(TARGET).elf: itcm_hot.ld
+endif
 NM := $(CP:objcopy=nm)
 OBJDUMP := $(CP:objcopy=objdump)
 
@@ -458,7 +478,7 @@ OBJDUMP := $(CP:objcopy=objdump)
 # Fehler zurueck, und er sieht wie eine Messung aus.
 C_INCLUDES += -I$(BUILD_DIR)
 
-SWITCH_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/probe_adc.o $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/scan_check.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o
+SWITCH_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/itcm_load.o $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/probe_adc.o $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/scan_check.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o
 
 # ZUR PARSE-ZEIT, nicht als Regel, und das ist der Kern der Reparatur vom
 # 2026-08-23. Als Regel mit FORCE hat es ZWEIMAL nicht gehalten:
@@ -488,12 +508,16 @@ SWITCH_HEADERS := \
   $(shell python write_shell_pot_round.py $(BUILD_DIR)/shell_pot_round.h $(SHELL_POT_ROUND) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_scan_check.py $(BUILD_DIR)/shell_scan_check.h $(SHELL_SCAN_CHECK) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_panel_scan.py $(BUILD_DIR)/shell_panel_scan.h $(SHELL_PANEL_SCAN) $(SWITCH_OBJECTS)) \
+  $(shell python write_shell_itcm.py $(BUILD_DIR)/shell_itcm.h $(SHELL_ITCM) $(SWITCH_OBJECTS)) \
+  $(shell python write_shell_link_stamp.py $(BUILD_DIR)/shell_link_stamp.h $(BUILD_DIR)/itcm_load.o) \
   $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/pot_report.o $(BUILD_DIR)/scan_check.o)
 
 # The git stamp deletes only xtalk_probe.o, tone_probe.o, wait_probe.o, pot_report.o and scan_check.o, because those are the only objects that read it. Listing the whole SWITCH_OBJECTS there would
 # force a full rebuild of seven objects on every commit for a string in one
 # format argument.
 
+$(BUILD_DIR)/main.o $(BUILD_DIR)/itcm_load.o: $(BUILD_DIR)/shell_itcm.h
+$(BUILD_DIR)/itcm_load.o: $(BUILD_DIR)/shell_link_stamp.h
 $(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_selftest.h $(BUILD_DIR)/shell_cpu_probe.h $(BUILD_DIR)/shell_mux_probe.h $(BUILD_DIR)/shell_idle_fill.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_xtalk_probe.h $(BUILD_DIR)/shell_tone_probe.h $(BUILD_DIR)/shell_wait_probe.h $(BUILD_DIR)/shell_scan_check.h $(BUILD_DIR)/shell_panel_scan.h
 $(BUILD_DIR)/wait_probe.o: $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/shell_coupon_probe.h
 $(BUILD_DIR)/xtalk_probe.o: $(BUILD_DIR)/shell_xtalk_probe.h $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/shell_coupon_probe.h
@@ -527,6 +551,11 @@ FORCE:
 # All three travel as one image, shell-qspi.bin, which pairs with the
 # shell-sram.bin of the same build: always flash both, QSPI first.
 QSPI_SECTIONS = .qspiflash_text .qspiflash_data .qspi_cold
+# The ITCM code travels in shell-qspi.bin too, behind .qspi_cold: the SRAM
+# image of an ITCM build is only ever correct with its own QSPI image.
+ifeq ($(SHELL_ITCM),1)
+QSPI_SECTIONS += .itcm_hot
+endif
 
 # FORCE an allen drei Ableitungen, und das ist kein Schluderfix. Make hat auf
 # diesem Rechner Sekundenaufloesung und vergleicht mit "echt neuer": werden
@@ -546,8 +575,12 @@ images: $(BUILD_DIR)/$(TARGET)-sram.bin $(BUILD_DIR)/$(TARGET)-qspi.bin
 # depend on it, so a refused link yields no fresh image; the old ones are
 # deleted too, so nothing stale is left to flash. One shell line on purpose: a
 # failing nm or objdump takes the same deleting branch as a refusal.
+# The ITCM placement guard (itcm_placement.py) joins the same chain when the
+# hot set is linked: it reads the undemangled nm, because itcm_hot.ld names
+# its functions mangled.
+ITCM_GUARD = $(if $(filter 1,$(SHELL_ITCM)),&& $(NM) -S $< > $(BUILD_DIR)/$(TARGET).rawnm && python itcm_placement.py $(BUILD_DIR)/$(TARGET).rawnm $(BUILD_DIR)/$(TARGET).dis itcm_hot.ld)
 $(BUILD_DIR)/$(TARGET).nm: $(BUILD_DIR)/$(TARGET).elf FORCE
-	( $(NM) -C -S $< > $@ && $(OBJDUMP) -d -C --no-show-raw-insn $< > $(BUILD_DIR)/$(TARGET).dis && python qspi_placement.py $@ $(BUILD_DIR)/$(TARGET).dis $< ) || (rm -f $@ $(BUILD_DIR)/$(TARGET).dis $(BUILD_DIR)/$(TARGET)-sram.bin $(BUILD_DIR)/$(TARGET)-qspi.bin && exit 1)
+	( $(NM) -C -S $< > $@ && $(OBJDUMP) -d -C --no-show-raw-insn $< > $(BUILD_DIR)/$(TARGET).dis && python qspi_placement.py $@ $(BUILD_DIR)/$(TARGET).dis $< $(ITCM_GUARD) ) || (rm -f $@ $(BUILD_DIR)/$(TARGET).dis $(BUILD_DIR)/$(TARGET)-sram.bin $(BUILD_DIR)/$(TARGET)-qspi.bin && exit 1)
 
 $(BUILD_DIR)/$(TARGET)-sram.elf: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).nm FORCE
 	$(CP) $(foreach s,$(QSPI_SECTIONS),--remove-section=$(s)) $< $@

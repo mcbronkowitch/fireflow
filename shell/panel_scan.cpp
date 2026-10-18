@@ -9,6 +9,7 @@
 #include <cstdio>
 
 #include "control/led_law.hpp"
+#include "cb_profile.h"
 #include "control_tick.h"
 #include "controls.h"
 #include "coupon_expect.h"
@@ -95,6 +96,9 @@ volatile uint32_t g_cb_cycles_last = 0;
 // first tick or an interrupt during boot would otherwise pin them for good.
 constexpr uint32_t kLawWarmupBlocks = 500;
 uint32_t           g_law_blocks = 0;
+// The instrument the callback passes to panel_scan_tick(), for the callback
+// profile (cb_profile.h) at the block end.
+const spky::Instrument* g_inst = nullptr;
 
 // The LED law's duties and the block counter the lamp word's duty pattern
 // runs on. The block period comes from the board (AudioBlockSize /
@@ -120,10 +124,12 @@ void panel_scan_init()
     // The DWT counter the law's cycle report reads; libDaisy never starts it,
     // and without this it reads zero forever (cycles.h).
     cycles_init();
+    cb_profile_init();
 }
 
 void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
 {
+    g_inst = &inst;
     const int step = g_scan.step(hw);
     // The return stream of the latch step() just clocked: the 165 loads on
     // the same edge, so the keys are read once per block.
@@ -209,6 +215,9 @@ void panel_scan_block_end(uint32_t c0)
     const uint32_t dc = cycles_now() - c0;
     g_cb_cycles_last  = dc;
     if(g_law_blocks >= kLawWarmupBlocks && dc > g_cb_cycles_max) g_cb_cycles_max = dc;
+    if(g_inst != nullptr)
+        cb_profile_block_end(dc, g_law_cycles_last, g_led_cycles_last,
+                             g_law_blocks >= kLawWarmupBlocks, *g_inst);
 }
 
 void run_panel_scan_report(bench::Board& hw)
@@ -291,6 +300,7 @@ void run_panel_scan_report(bench::Board& hw)
                      static_cast<int>(g_led_cycles_max),
                      static_cast<int>(g_cb_cycles_last),
                      static_cast<int>(g_cb_cycles_max));
+        cb_profile_report(hw);
         hw.Delay(500);
     }
 }

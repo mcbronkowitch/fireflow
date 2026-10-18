@@ -8,6 +8,7 @@
                               // unnamed transitive dependency costs when the
                               // chain ever changes).
 #include "util/math.h"
+#include "util/probe_mark.h"
 #include <algorithm>
 #include <cmath>
 
@@ -241,7 +242,9 @@ void Instrument::_apply_tempo() {
 
 void Instrument::process(const float* inL, const float* inR,
                          float* outL, float* outR, size_t n) {
+    SPKY_PROBE_DECL;
     for (size_t i = 0; i < n; ++i) {
+        SPKY_PROBE_STAMP(i);
         const float in_l = inL ? inL[i] : 0.f;
         const float in_r = inR ? inR[i] : 0.f;
         if (_ctrl_ctr == 0) {                 // control-rate center update (per 96 samples)
@@ -361,6 +364,7 @@ void Instrument::process(const float* inL, const float* inR,
         float psl[PART_COUNT], psr[PART_COUNT];
         _parts[pri].set_inhibit(false);   // knob flips must never strand a part
         _parts[pri].process(in_l, in_r, pl[pri], prr[pri], psl[pri], psr[pri]);
+        SPKY_PROBE_DECK1(i, pri);
 
         // The duck stage, read straight after the priority deck ran so it
         // answers THIS sample. One follower, always on whichever deck has
@@ -456,6 +460,7 @@ void Instrument::process(const float* inL, const float* inR,
             _parts[yld].set_inhibit(false);
         }
         _parts[yld].process(in_l, in_r, pl[yld], prr[yld], psl[yld], psr[yld]);
+        SPKY_PROBE_DECK2(i);
 
         // Lamp observers: peak followers, instant attack, one-pole release.
         // Written here and read by nothing below -- no branch or value in the
@@ -608,4 +613,6 @@ void Instrument::process(const float* inL, const float* inR,
         outL[i] = l;
         outR[i] = r;
     }
+    SPKY_PROBE_STAMP(n);
+    SPKY_PROBE_END(n);
 }

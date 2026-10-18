@@ -635,3 +635,24 @@ invisible from reading the scripts, and each cost real time.
   real values. Use the raw DMA word, `hw.adc.Get(i)`. And never put
   `AnalogControl`'s slew filter behind a mux: it would average across channel
   changes.
+
+- **The audio deadline in `SHELL_PLAY_LAW`'s `cb` window is ~930–960 k
+  cycles, not 960 000, and not a fixed number.** Measured 2026-10-18 by
+  aligning coupon recordings to the probe log
+  ([`cpu-headroom-measured.md`](hardware/cpu-headroom-measured.md) §3): a
+  block at 932 214 clicked, blocks at 934–945 k did not, 945 388 clicked
+  once. 12–30 k of every block run outside the window (interrupt entry,
+  libDaisy's sample conversion, the other priority-0 interrupts, USB), and
+  how much varies. Quote callback targets against ~930 k, never against the
+  block length.
+
+- **A global store inside the per-sample loop costs far more than its
+  instructions.** Two callback-profile designs on 2026-10-18 booked time to
+  segments through global counters written inside `Instrument::process`'s
+  sample loop (a call per mark, `20c46513`; inline marks, `37830e2d`): both
+  pushed every block over budget and starved the USB log, although the
+  added instruction count was a few percent. **The mechanism is not
+  measured** (a likely one: the compiler must assume the store aliases engine
+  state and reloads it). What is measured: stamps into a stack array whose
+  address does not escape until the loop is over (`engine/util/probe_mark.h`)
+  cost almost nothing. Instrument the hot loop that way or not at all.
