@@ -36,6 +36,15 @@ public:
     void set_bpm(float bpm);
     void set_rate(int slice_idx);
     float delay_time() const { return _delay_time; }
+    // Where the FLUX time period stands, in [0, 1): a free-running phase over
+    // delay_time() for the FTIME lamp. Observer only -- nothing in process()
+    // reads it. It is NOT _repeat_phase_samples: that counter runs only while
+    // THIN is thinning (LINK > 0 with a valid rhythm) and sits at 0 otherwise,
+    // which would leave the lamp dark at LINK = 0, the factory value.
+    float period_phase() const {
+        const float period = _delay_time * _sr;
+        return period > 0.f ? _period_phase_samples / period : 0.f;
+    }
     void set_feedback(float norm);
     void set_mix(float norm);
     void set_time_mod(float norm);
@@ -86,6 +95,7 @@ private:
     float _link = 0.f;
     float _repeat_phase_samples = 0.f;
     float _repeat_period_samples = 0.f;
+    float _period_phase_samples = 0.f;   // observer only, see period_phase()
 
     float _thin = 0.f;
     float _rhythm_pace = 1.f;

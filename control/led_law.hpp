@@ -175,6 +175,16 @@ inline bool mod_pulse_on(float blink) {
             && t <  2.f * kModPulseOn + kModPulseGap);
 }
 
+// The LVL lamp's floor: a deck whose output into the mix (Instrument::
+// deck_out_level) is above this delivers signal. By-eye candidate derived from
+// a probe, not an invariant; the printout is in the commit message of
+// "feat(engine): const observers for the lamp law" (git log -S kLvlFloor).
+// The probe found a clean gap: every silent state (LVL 0, FILT closed, empty
+// sampler) reads exactly 0, a STEP deck's rests spend 24 % of 40 s below 1e-5,
+// while the quietest continuously playing deck read 0.0022 (FEED at LVL 0.05)
+// and 0.0040 (SYNTH FLOW). 1e-3 sits below both continuous minima.
+constexpr float kLvlFloor = 1e-3f;
+
 struct Panel {
     // lamp[GATE_A_L] and lamp[GATE_B_L] are never touched: the gate lamps
     // read inst.gate() straight through in fill(), bypassing the envelope on

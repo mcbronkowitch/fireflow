@@ -180,6 +180,18 @@ void Flux::process(float& l, float& r) {
         return;
     }
 
+    // Observer phase for period_phase(): written here, read by nothing in this
+    // function. A delay_time change can leave it past the new period; it wraps
+    // on the next sample.
+    _period_phase_samples += 1.f;
+    {
+        const float period = _delay_time * _sr;
+        if (_period_phase_samples >= period) {
+            _period_phase_samples -= period;
+            if (_period_phase_samples >= period) _period_phase_samples = 0.f;
+        }
+    }
+
     const bool thinning = _thin > 0.f && _rhy_valid;
     if (thinning) {
         _repeat_phase_samples += 1.f;

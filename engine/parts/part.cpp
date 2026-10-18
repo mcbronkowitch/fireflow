@@ -494,6 +494,7 @@ void Part::_control_tick() {
 // engine_id()'s flip and the fade's end are. Do not reorder the two.
 void Part::_engine_swap() {
     _engine_id = _pending_engine;
+    ++_engine_epoch;
     _engine = _engine_for(_engine_id);
     _engine_wants_in = _engine->consumes_input();   // pairs with _engine
     // On a SAMPLER deck the PITCH lane is a read position, and on a BBD deck in

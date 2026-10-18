@@ -182,6 +182,10 @@ public:
         if (scale_idx < 0) scale_idx = 0;
         if (scale_idx >= SCALE_LIST_COUNT) scale_idx = SCALE_LIST_COUNT - 1;
         for (auto& part : _parts) part.quant().set_scale(SCALE_MASKS[scale_idx]);
+        if (scale_idx != _last_scale_idx) {   // the LED law pulses on a real change
+            _last_scale_idx = scale_idx;
+            ++_scale_epoch;
+        }
     }
     void set_quant_mode(int p, QuantMode m) { _parts[p].quant().set_mode(m); }
     void set_root(int p, int semis)         { _parts[p].quant().set_root(semis); }
@@ -460,6 +464,28 @@ public:
     float target_value(int p, int s) const { return _parts[p].target_value(s); }
     bool  lane_fired(int p, int s)   const { return _parts[p].lane_fired(s); }
     bool  gate(int p)  const { return _parts[p].gate(); }
+
+    // --- Lamp observers (spec 2026-10-18 rev-a-p6b2 §4.2) ---
+    // const reads for control/led_law.hpp; nothing here feeds back into the
+    // audio path. The two followers are written in process(); the rest read
+    // state the engine already keeps.
+    //
+    // The deck's own contribution to the mix: max(|L|, |R|) of the deck's
+    // output times its MORPH/LEVEL gain (the same tap, and the same
+    // exclusion of PAN, as the CHOKE detector), instant attack, one-pole
+    // release of kDeckLevelRelease. The CHOKE duck is not folded in, so a
+    // ducked deck still reads as delivering.
+    float deck_out_level(int p) const { return _deck_level[p]; }
+    // The same follower over max(|IN L|, |IN R|).
+    float input_peak() const { return _in_peak; }
+    // FLUX is on (or fading) on this deck.
+    bool  flux_engaged(int p) const { return _parts[p].fx().flux().engaged(); }
+    // Where the FLUX time period stands, [0, 1). See Flux::period_phase().
+    float flux_repeat_phase(int p) const { return _parts[p].fx().flux().period_phase(); }
+    // Counts engine swaps that have taken effect, per deck.
+    uint32_t engine_epoch(int p) const { return _parts[p].engine_epoch(); }
+    // Counts set_scale() calls that changed the scale index.
+    uint32_t scale_epoch() const { return _scale_epoch; }
     float pitch_cv(int p) const { return _parts[p].pitch_cv(); }
     bool  pitch_gate(int p) const { return _parts[p].mod().pitch_gate(); }
     // The bank's own published rhythm (see mod/rhythm_view.h). Read again by
@@ -630,6 +656,13 @@ private:
                                // (boots true: the FLOW drone predates any fire)
     float _pull = 0.f;         // -1..+1 chord-gravity knob (dead zone at noon)
     float _sr = 48000.f;
+    // Lamp-observer state (see deck_out_level() and friends). Written in
+    // process() / set_scale(); read by nothing on the audio path.
+    float    _deck_level[PART_COUNT] = { 0.f, 0.f };
+    float    _in_peak = 0.f;
+    float    _level_release = 1.f;   // per-sample coefficient, set in init()
+    uint32_t _scale_epoch = 0;
+    int      _last_scale_idx = -1;
     float _bpm = 120.f;
     float _pace = 1.f;
 };
