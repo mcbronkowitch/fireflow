@@ -24,6 +24,9 @@ import numpy as np
 
 # How many windows on each side form a window's neighbourhood.
 _NEIGHBOURS = 5
+# Events this close to either end are the capture starting or stopping, not
+# the board: every 2026-10-18 recording opened with one at t = 0.
+_EDGE_S = 0.1
 
 
 def find_clicks(x, sr, k=12.0, win_s=0.02):
@@ -49,7 +52,9 @@ def find_clicks(x, sr, k=12.0, win_s=0.02):
             continue
         clicks.append([w, score[w], w])
     # +1: the second difference at index i sits on sample i + 1.
-    return [((w * win + int(np.argmax(seg[w])) + 1) / sr, float(s)) for _, s, w in clicks]
+    found = [((w * win + int(np.argmax(seg[w])) + 1) / sr, float(s)) for _, s, w in clicks]
+    end = len(x) / sr
+    return [(t, s) for t, s in found if _EDGE_S <= t <= end - _EDGE_S]
 
 
 def read_wav(path, channel=0):

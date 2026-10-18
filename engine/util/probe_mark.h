@@ -11,9 +11,9 @@
 // Why so little: the first two profile images (20c46513, 37830e2d) booked
 // time to segments through global counters written inside the sample loop,
 // and both overran on every block -- the global stores cost far more than
-// their instruction count (the hot loop has to re-load engine state across
-// them). A store into a stack array whose address never escapes until the
-// loop is over does not have that effect.
+// their instruction count (why is not measured; docs/gotchas.md). A store
+// into a stack array whose address never escapes until the loop is over
+// measured cheap (cbc0545c).
 
 #if defined(SPKY_PROBE_MARKS)
 #include <cstdint>

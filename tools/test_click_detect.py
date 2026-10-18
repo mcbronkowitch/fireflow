@@ -41,4 +41,10 @@ ramp[i0:i1] *= np.linspace(1.0, 0.01, i1 - i0)
 ramp[i1:] *= 0.01
 check("a quiet passage is not a click", cd.find_clicks(ramp, SR) == [])
 
+# ffmpeg's capture starts on whatever the converter holds: every board
+# recording of 2026-10-18 opened with an "event" at t = 0.
+cut_in = tone.copy()
+cut_in[:5] = 0.0
+check("the recording's first moment is not a click", cd.find_clicks(cut_in, SR) == [])
+
 sys.exit(1 if FAILS else 0)
