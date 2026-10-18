@@ -51,6 +51,42 @@ Span g_span{0, 0, false};
 // order, and this image scans in kCouponPlayChain's (spec section 3.2).
 constexpr int kCouponSteps = scan_steps(kCouponChain);
 uint16_t      g_step_raw[kCouponSteps];
+
+// P6b-2 Task 1 probe, removed in Task 7. Two questions for the coupon's LED
+// and pots (spec 2026-10-18-rev-a-p6b2-mod-keys-leds-design.md sections 2, 4.3):
+// how finely may LED_1 be dimmed before it visibly flickers, and how far does
+// an untouched pot's raw word wander while the LED switches.
+struct DimPreset
+{
+    int n; // steps; the pattern repeats every n-1 blocks
+    int d; // on-blocks per period, 0..n-1
+};
+// Duty 1 of N for N = 4, 6, 8, 16, then full on, then off. The last two use
+// N = 16 only so that the report line has a value to print.
+constexpr DimPreset kDimPresets[] = {{4, 1}, {6, 1}, {8, 1}, {16, 1}, {16, 15}, {16, 0}};
+constexpr int       kDimCount     = static_cast<int>(sizeof(kDimPresets) / sizeof(kDimPresets[0]));
+constexpr int       kProbePots    = 3;  // RV2, RV4, RV6: kCouponControls order
+constexpr uint32_t  kSpreadBlocks = 500; // one second at 500 blocks/s
+
+volatile int      g_dim_preset = 0;
+uint16_t          g_last_presses = 0;
+uint32_t          g_dim_frame = 0;
+int               g_pot_step[kProbePots];       // index into g_step_raw
+uint16_t          g_win_min[kProbePots];
+uint16_t          g_win_max[kProbePots];
+uint32_t          g_win_blocks = 0;
+volatile uint16_t g_spread[kProbePots];         // last full window
+volatile uint32_t g_spread_seq = 0;             // bumps when g_spread is new
+
+void spread_window_reset()
+{
+    for(int i = 0; i < kProbePots; ++i)
+    {
+        g_win_min[i] = 0xFFFFu;
+        g_win_max[i] = 0u;
+    }
+    g_win_blocks = 0;
+}
 #else
 uint16_t g_cal_zero = 0;
 uint16_t g_cal_rail = 0;
@@ -77,6 +113,13 @@ void panel_scan_init()
     g_scan.set_walk_leds(false);
     g_scan.set_read_keys(true);
     for(int c = 0; c < kChannels; ++c) g_value[c] = -1.0f;
+#if SHELL_COUPON_PROBE
+    // P6b-2 Task 1 probe, removed in Task 7.
+    for(int i = 0; i < kProbePots; ++i)
+        g_pot_step[i] = step_of(kCouponChain, kCouponControls[i].group,
+                                kCouponControls[i].ch);
+    spread_window_reset();
+#endif
     // The firmware's boot is a patch restore of the init patch (spec 4.1).
     control_boot(g_knobs);
     // The DWT counter the law's cycle report reads; libDaisy never starts it,
@@ -91,10 +134,38 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
     // the same edge, so the keys are read once per block.
     key_update(g_keys, kKeys, g_scan.last_return());
 #if SHELL_COUPON_PROBE
-    // Key held, LED_1 lit: the key path, the LED field and the latch rule in
-    // one gesture (spec section 3.7). It reaches the 595s with the NEXT
-    // step's latch, never on its own.
-    g_scan.set_leds((g_keys.pressed & 1u) != 0u ? 1u : 0u);
+    // P6b-2 Task 1 probe, removed in Task 7: each key press advances the dim
+    // preset, and LED_1 follows the preset's duty pattern. This replaces the
+    // earlier "key held, LED_1 lit" gesture (spec 2026-10-02 section 3.7) in
+    // this image; the key path is still exercised by the press counter. The
+    // word still reaches the 595s with the NEXT step's latch, never on its
+    // own, and changes only here, once per block.
+    if(g_keys.presses[0] != g_last_presses)
+    {
+        g_last_presses = g_keys.presses[0];
+        g_dim_preset   = (g_dim_preset + 1) % kDimCount;
+    }
+    {
+        // Task 7's spread rule: on in block f iff
+        // floor((f+1)*d/(n-1)) > floor(f*d/(n-1)).
+        const DimPreset p = kDimPresets[g_dim_preset];
+        const uint32_t  m = static_cast<uint32_t>(p.n - 1);
+        const uint32_t  f = g_dim_frame % m;
+        const uint32_t  d = static_cast<uint32_t>(p.d);
+        g_dim_frame       = g_dim_frame + 1u;
+        g_scan.set_leds(((f + 1u) * d) / m > (f * d) / m ? 1u : 0u);
+    }
+    // One window = one second of blocks; the foreground only prints it. A pot
+    // that saw no sample in the window reports 0xFFFF (never a real spread).
+    if(++g_win_blocks >= kSpreadBlocks)
+    {
+        for(int i = 0; i < kProbePots; ++i)
+            g_spread[i] = g_win_max[i] >= g_win_min[i]
+                              ? static_cast<uint16_t>(g_win_max[i] - g_win_min[i])
+                              : 0xFFFFu;
+        g_spread_seq = g_spread_seq + 1u;
+        spread_window_reset();
+    }
 #endif
     if(step < 0) return;
 
@@ -107,7 +178,16 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
         const int      idx = mux_channel(kActiveChain, step, s);
         const uint16_t raw = g_mux_raw[idx];
 #if SHELL_COUPON_PROBE
-        g_step_raw[step_of(kCouponChain, g, ch)] = raw;
+        const int craw_step = step_of(kCouponChain, g, ch);
+        g_step_raw[craw_step] = raw;
+        // P6b-2 Task 1 probe, removed in Task 7: min and max of each pot's
+        // raw word over the current one-second window.
+        for(int i = 0; i < kProbePots; ++i)
+        {
+            if(craw_step != g_pot_step[i]) continue;
+            if(raw < g_win_min[i]) g_win_min[i] = raw;
+            if(raw > g_win_max[i]) g_win_max[i] = raw;
+        }
 #else
         if(g == kRevaCalZero.group && ch == kRevaCalZero.ch) g_cal_zero = raw;
         if(g == kRevaCalRail.group && ch == kRevaCalRail.ch) g_cal_rail = raw;
@@ -151,6 +231,10 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
 void run_panel_scan_report(bench::Board& hw)
 {
     hw.StartLog(false);
+#if SHELL_COUPON_PROBE
+    int      last_dim        = -1;
+    uint32_t last_spread_seq = 0;
+#endif
     while(1)
     {
         // The span is copied field by field from the ISR's variable; a torn
@@ -163,6 +247,9 @@ void run_panel_scan_report(bench::Board& hw)
         const int valid = g_span.valid ? 1 : 0;
         const int keys  = g_keys.pressed;
 #if SHELL_COUPON_PROBE
+        const int      dim        = g_dim_preset;
+        const uint32_t spread_seq = g_spread_seq;
+        const int      spread[kProbePots] = {g_spread[0], g_spread[1], g_spread[2]};
         int v[3];
         for(int i = 0; i < 3; ++i)
         {
@@ -182,6 +269,22 @@ void run_panel_scan_report(bench::Board& hw)
                      static_cast<int>(g_keys.presses[0]),
                      static_cast<int>(hw.adc.Get(daisy::patch_sm::ADC_11)),
                      static_cast<int>(hw.adc.Get(daisy::patch_sm::ADC_12)));
+        // P6b-2 Task 1 probe, removed in Task 7. SHELL_DIM prints on every
+        // preset change (and once at boot); SHELL_SPREAD once per finished
+        // one-second window. The loop wakes twice a second, so a change that
+        // is undone inside one wake-up would go unprinted.
+        if(dim != last_dim)
+        {
+            last_dim = dim;
+            hw.PrintLine("SHELL_DIM n=%d d=%d", kDimPresets[dim].n,
+                         kDimPresets[dim].d);
+        }
+        if(spread_seq != last_spread_seq)
+        {
+            last_spread_seq = spread_seq;
+            hw.PrintLine("SHELL_SPREAD rv2=%d rv4=%d rv6=%d", spread[0],
+                         spread[1], spread[2]);
+        }
 #else
         // Up to ten values per line, in generated_panel_map.h's row order:
         // seventy in one line would overrun libDaisy's 128-byte log buffer.
