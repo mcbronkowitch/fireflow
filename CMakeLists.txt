@@ -109,6 +109,8 @@ add_executable(spky_tests
     tests/test_pot_plan.cpp
     shell/scan_value.cpp
     tests/test_scan_value.cpp
+    shell/pot_owner.cpp
+    tests/test_pot_owner.cpp
     shell/keys.cpp
     tests/test_keys.cpp
     shell/scan_check_plan.cpp
