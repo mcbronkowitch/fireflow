@@ -1,6 +1,7 @@
 # CPU headroom — removing the clicks on the Daisy firmware
 
 **Date:** 2026-10-18
+**Status:** approved by Bastian, 2026-10-18 ("passt").
 **Phase:** between P6b-2 and bring-up (P7). This is the "CPU headroom round"
 that P6b-1's Plan B trigger opened (P6b-1 spec §6; roadmap, 2026-10-18 P6b-2
 entry: "Next: the CPU headroom round").
@@ -160,8 +161,8 @@ this board.
 **The click detector** becomes a committed tool (`tools/`, name the builder's
 call) with the 2026-10-18 method and threshold (§2.6). Its test synthesises a
 tone with one dropped 96-sample block and a clean tone: one click found, none
-found; proven red once. It runs as a plain script, like the other `tools/`
-guards (they have no runner).
+found; proven red once. It is wired into ctest the way
+`tools/test_scan_budget.py` is.
 
 The figures and the outcome of every decision rule go into the roadmap's entry
 for this round and into `shell/README.md`, with the shell's real deadline
