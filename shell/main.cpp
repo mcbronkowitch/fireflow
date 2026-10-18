@@ -24,6 +24,10 @@
 static bench::Board    hw;
 static spky::Instrument inst;
 
+#if defined(SPKY_WT_BANK_RAM)
+namespace shell { void wt_bank_to_ram(); }   // wt_bank_ram.cpp, probe only
+#endif
+
 #if SHELL_MUX_PROBE
 #include "mux_scan.h"
 static shell::MuxScan g_mux;
@@ -282,6 +286,11 @@ int main(void)
     // Zeigerarbeit, aber Instrument::init() laeuft bis in TapeEcho::Init und
     // BbdLine::Init durch, und die nullen ihre Puffer -- also echte Schreiber
     // in SDRAM, das vor board_init() noch keinen FMC hinter sich hat.
+#if defined(SPKY_WT_BANK_RAM)
+    // After board_init(): QSPI is memory-mapped from there on. Before init():
+    // nothing has read the bank yet.
+    shell::wt_bank_to_ram();
+#endif
     inst.init(shell::kSampleRate, shell::fx_mem());
 
 #if SHELL_XTALK_PROBE
