@@ -95,10 +95,14 @@ place.
 free** (11 384 B without ITCM); coupon probe image 203 100 B. `ITCM_HOT`
 49 952 B of 65 280 B. `RAM_D2CACHE` 65 024 B (the bank).
 
-## 5. Open
+## 5. By ear
 
-- **By ear** (plan Task 9 step 4): Bastian, init patch over several pattern
-  cycles, the P6b-2 checks 1–4, the coupon pots through their range.
+**Bastian, 2026-10-18, shipping image E on the coupon:** "klingt sauber" —
+clean over several pattern cycles — and the P6b-2 checks (ownership, MOD
+latch with LED_1, unlatch) pass.
+
+## 6. Open
+
 - **VCV** is unaffected: the only engine change, `wt::set_bank()`, is never
   called there, and `table()` reads `kBankSamples` by default (desktop test
   "wt_bank: table() follows set_bank()"; render hashes unchanged). No Rack

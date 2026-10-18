@@ -4146,8 +4146,9 @@ Bastian), plan `docs/superpowers/plans/2026-10-18-cpu-headroom.md`, record
 - **Memory.** Rev A `SRAM_EXEC` free: **60 656 B** (11 384 B without ITCM).
 - **Not needed:** Plan B (the law across two blocks) and WAVE's
   transition-cost change (plan Tasks 7 and 8).
-- **Open:** Bastian's listening pass on the shipping image; the full-panel
-  Rev A re-measure at P7 (spec §6).
+- **By ear (Bastian, 2026-10-18, shipping image):** clean; the P6b-2
+  checks pass.
+- **Open:** the full-panel Rev A re-measure at P7 (spec §6).
 - **Next:** merge, then bring-up (P7).
 
 **2026-10-18 — P6b-2: knob ownership, the four keys and the lamps run on the coupon.**
