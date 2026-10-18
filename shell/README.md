@@ -392,7 +392,10 @@ coupon 245 840 → 248 964 B (13 916 B free); the LED law's `fill()` is about
 2.1 KB of it, and newlib's `powf` (about 1.1 KB) comes in only for the gamma
 table's one-time build (in `control_boot()`, before `StartAudio()`, since the
 P6b-2 review; it used to happen in the first audio block). `SRAM` Rev A 217 876 → 220 092 B. `.qspi_cold`
-16 168 → 16 320 B.
+16 168 → 16 320 B. The review fixes (`panel_step.cpp`, the depth table, the
+`cb_*` counters, the gamma table at boot) then took `SRAM_EXEC` to
+251 412 B on Rev A (11 468 B free) and 249 548 B on the coupon (13 332 B
+free); `.qspi_cold` 16 312 B (2026-10-18).
 
 ## Where the work stands, and where it goes next
 
