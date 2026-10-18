@@ -6,8 +6,8 @@
 // is, the parameter jumps to the pot's position and follows it. No pickup.
 //
 // Pure data logic, no hardware type, host tested (tests/test_pot_owner.cpp).
-// The firmware wiring sits in panel_scan.cpp, between pot_filter() and the
-// knob vector.
+// The firmware wiring is pot_row_step() (panel_step.h), between pot_filter()
+// and the knob vector; panel_scan.cpp calls it once per pot reading.
 //
 // Spec: ../docs/superpowers/specs/2026-10-18-rev-a-p6b2-mod-keys-leds-design.md
 #include <cstdint>

@@ -15,6 +15,7 @@
 //
 // Spec: ../docs/superpowers/specs/2026-09-28-coupon-panel-scan-design.md
 // section 5.
+#include <cstdint>
 #include "hw/board.h"
 #include "instrument.h"
 
@@ -24,6 +25,11 @@ void panel_scan_init();
 
 // Call FIRST in the audio callback, before process() (spec section 2).
 void panel_scan_tick(bench::Board& hw, spky::Instrument& inst);
+
+// Call LAST in the audio callback, after process(), with the DWT count read
+// before panel_scan_tick(): records the whole callback's cycles for
+// SHELL_PLAY_LAW's cb_last / cb_max (same warm-up rule as cyc_max).
+void panel_scan_block_end(uint32_t c0);
 
 // Starts the log and prints SHELL_PLAY twice a second. Never returns.
 [[noreturn]] void run_panel_scan_report(bench::Board& hw);

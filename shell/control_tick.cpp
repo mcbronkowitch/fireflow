@@ -21,6 +21,10 @@ void control_boot(float* knobs)
 {
     for(int i = 0; i < ffctl::NUM_PARAMS; ++i) knobs[i] = ffctl::kInitParamDefaults[i];
     g_law.on_restore();
+    // The LED law's gamma table (kLedSteps - 1 powf calls) is a function-local
+    // static built on first use. Built here, before StartAudio(), so the first
+    // fill() inside the audio interrupt finds it ready.
+    (void)spkyled::gamma_table(spkyled::kLedSteps);
 }
 
 control::Events control_tick(const float* knobs, spky::Instrument& inst)

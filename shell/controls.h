@@ -89,6 +89,12 @@ inline constexpr int kEngineSlotBbd = 4;
 // as two separate Rack params do.
 int knob_target(const ControlEntry& e, const float* knobs);
 
+// The depthId of the first kModLayer row whose soundId is `param`, -1 when
+// there is none or `param` is outside the knob vector. A lookup in a table
+// built at compile time, not a walk over kModLayer: pot_target() asks it for
+// every pot reading while MOD is latched, inside the audio interrupt.
+int mod_depth_of(int param);
+
 // The id a pot writes right now (spec 2026-10-18-rev-a-p6b2 section 3). MOD not
 // latched (knobs[MODBTN] < 0.5): knob_target(). Latched: a pot whose row `param`
 // has a kModLayer row writes that row's depthId, but only while knob_target()

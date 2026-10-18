@@ -16,6 +16,7 @@
 #include "keys.h"
 #include "led_out.h"
 #include "mux_scan.h"
+#include "panel_step.h"
 #include "pot_owner.h"
 #include "scan_value.h"
 #if !SHELL_COUPON_PROBE
@@ -85,9 +86,13 @@ volatile uint32_t g_law_cycles_last = 0;
 // p6b2 section 6: the LED law's cost alone and together with the law).
 volatile uint32_t g_led_cycles_max = 0;
 volatile uint32_t g_led_cycles_last = 0;
-// Both worst cases ignore the first second (500 blocks): a cold-cache first
-// tick, the LED law's one-time gamma table, or an interrupt during boot would
-// otherwise pin them for good.
+// The whole audio callback, panel_scan_tick() through inst.process(): the scan
+// and pot loop, the law, the lamps, and the engine with its per-sample
+// observer followers and FLUX phase, none of which the two windows above see.
+volatile uint32_t g_cb_cycles_max = 0;
+volatile uint32_t g_cb_cycles_last = 0;
+// All three worst cases ignore the first second (500 blocks): a cold-cache
+// first tick or an interrupt during boot would otherwise pin them for good.
 constexpr uint32_t kLawWarmupBlocks = 500;
 uint32_t           g_law_blocks = 0;
 
@@ -108,18 +113,8 @@ void panel_scan_init()
     for(int c = 0; c < kChannels; ++c) g_value[c] = -1.0f;
     // The FLUX rows' channels, found the way panel_scan_tick() walks a step
     // (group_at / channel_at per sense pin), so the index is the one its
-    // g_owner[] entry has.
-    for(int r = 0; r < kTable.count; ++r)
-    {
-        const ControlEntry& e = kTable.entries[r];
-        const int p = e.param == ffctl::FLUX_A ? 0 : e.param == ffctl::FLUX_B ? 1 : -1;
-        if(p < 0) continue;
-        const int step = step_of(kActiveChain, e.group, e.ch);
-        for(int s = 0; s < kActiveChain.sense_pins; ++s)
-            if(group_at(kActiveChain, step, s) == e.group
-               && channel_at(kActiveChain, step, s) == e.ch)
-                g_flux_idx[p] = mux_channel(kActiveChain, step, s);
-    }
+    // g_owner[] entry has (flux_channels(), host tested against kRevaTable).
+    flux_channels(kTable, kActiveChain, g_flux_idx);
     // The firmware's boot is a patch restore of the init patch (spec 4.1).
     control_boot(g_knobs);
     // The DWT counter the law's cycle report reads; libDaisy never starts it,
@@ -158,23 +153,13 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
 #endif
         const ControlEntry* e = find_control(kTable, g, ch);
         if(e == nullptr) continue;
-        // The id this pot writes right now: MOD-aware, and ATTACK writes
-        // STAGES while its deck is on the BBD (pot_target, knob_target). -1
-        // for a reserved row, or ATTACK-on-BBD under the latch: nothing.
-        const int target = pot_target(*e, g_knobs);
-        // A pot takes its target only by being moved (spec 2026-10-18-rev-a-
-        // p6b2 section 2); a changed target releases it inside pot_own().
-        const Own own = pot_own(g_owner[idx], raw, target, g_span.valid, kPotTouch);
-        // The jump: on the move that takes the target, the filter emits this
-        // reading, the pot's current position, whatever it emitted before.
-        if(own == Own::Took) g_filter[idx].emitted = false;
+        // Target (MOD-aware, ATTACK -> STAGES on the BBD), ownership (spec
+        // 2026-10-18-rev-a-p6b2 section 2), the jump to the pot's current
+        // position on the move that takes it, the filter, and the write by
+        // an owner only: pot_row_step(), host tested.
         float v;
-        if(pot_filter(g_filter[idx], raw, g_span, kPotHysteresis, &v))
-        {
-            g_value[idx] = v;               // every row is reported ...
-            if(own != Own::Idle && target >= 0)
-                g_knobs[target] = knob_from_pot(target, v);   // ... an owner writes
-        }
+        if(pot_row_step(*e, g_owner[idx], g_filter[idx], raw, g_span, g_knobs, &v))
+            g_value[idx] = v;               // every row is reported
     }
 
     // Once per block, the whole vector (spec 2026-10-09 section 4.2).
@@ -191,12 +176,7 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
     // is released: FLUX stays at 0 until that pot is moved. control_tick()
     // has already turned the deck's excite_other_deck on. rec_started is
     // ignored: the hardware has no sample path to clear (spec section 3).
-    for(int p = 0; p < 2; ++p)
-    {
-        if(!ev.bbd_edge[p]) continue;
-        g_knobs[p ? ffctl::FLUX_B : ffctl::FLUX_A] = 0.0f;
-        if(g_flux_idx[p] >= 0) pot_release(g_owner[g_flux_idx[p]]);
-    }
+    apply_law_events(ev, g_knobs, g_owner, g_flux_idx);
 
     // The lamps (spec section 4): the LED law, then its duties as this
     // block's lamp word. set_leds() only stores the word; it reaches the 595s
@@ -222,6 +202,13 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
         if(sp.valid) g_span = sp;
         g_sweeps = g_sweeps + 1u;
     }
+}
+
+void panel_scan_block_end(uint32_t c0)
+{
+    const uint32_t dc = cycles_now() - c0;
+    g_cb_cycles_last  = dc;
+    if(g_law_blocks >= kLawWarmupBlocks && dc > g_cb_cycles_max) g_cb_cycles_max = dc;
 }
 
 void run_panel_scan_report(bench::Board& hw)
@@ -292,12 +279,18 @@ void run_panel_scan_report(bench::Board& hw)
         // above 9600 cycles, one point, it moves to every second block).
         // led_max is the LED law plus the lamp word, the worst after the
         // first second, counted apart from the law (spec 2026-10-18-rev-a-
-        // p6b2 section 6).
-        hw.PrintLine("SHELL_PLAY_LAW cyc_last=%d cyc_max=%d led_last=%d led_max=%d",
+        // p6b2 section 6). cb_max is the whole callback, scan through
+        // process(), under the same rule. Six counters of at most seven
+        // digits (a 2 ms block is 960 000 cycles) keep the line at 111 bytes
+        // or less, inside libDaisy's 128-byte log buffer.
+        hw.PrintLine("SHELL_PLAY_LAW cyc_last=%d cyc_max=%d led_last=%d led_max=%d "
+                     "cb_last=%d cb_max=%d",
                      static_cast<int>(g_law_cycles_last),
                      static_cast<int>(g_law_cycles_max),
                      static_cast<int>(g_led_cycles_last),
-                     static_cast<int>(g_led_cycles_max));
+                     static_cast<int>(g_led_cycles_max),
+                     static_cast<int>(g_cb_cycles_last),
+                     static_cast<int>(g_cb_cycles_max));
         hw.Delay(500);
     }
 }

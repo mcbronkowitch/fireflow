@@ -4,6 +4,38 @@
 
 namespace shell {
 
+namespace {
+
+// kModLayer inverted once, at compile time: depth[param] is the depthId of
+// the first kModLayer row whose soundId is param, -1 for none. pot_target()
+// runs for every pot reading inside the audio interrupt; with MOD latched it
+// used to walk all kModLayer rows per reading.
+struct DepthTable
+{
+    int16_t depth[ffctl::NUM_PARAMS];
+};
+
+constexpr DepthTable make_depth_table()
+{
+    DepthTable t{};
+    for(int i = 0; i < ffctl::NUM_PARAMS; ++i) t.depth[i] = -1;
+    for(const ffctl::ModTarget& m : ffctl::kModLayer)
+        if(m.soundId >= 0 && m.soundId < ffctl::NUM_PARAMS && t.depth[m.soundId] < 0)
+            t.depth[m.soundId] = static_cast<int16_t>(m.depthId);
+    return t;
+}
+
+static_assert(ffctl::NUM_PARAMS <= 32767, "DepthTable stores ids as int16_t");
+constexpr DepthTable kDepth = make_depth_table();
+
+} // namespace
+
+int mod_depth_of(int param)
+{
+    if(param < 0 || param >= ffctl::NUM_PARAMS) return -1;
+    return kDepth.depth[param];
+}
+
 const ControlEntry* find_control(const ControlTable& t, int group, int ch)
 {
     for(int i = 0; i < t.count; ++i)
@@ -32,10 +64,9 @@ int pot_target(const ControlEntry& e, const float* knobs)
 {
     const int target = knob_target(e, knobs);
     if(e.param < 0 || knobs[ffctl::MODBTN] < 0.5f) return target;
-    for(const ffctl::ModTarget& m : ffctl::kModLayer)
-        if(m.soundId == e.param)
-            return target == e.param ? m.depthId : -1;
-    return target;
+    const int depth = mod_depth_of(e.param);
+    if(depth < 0) return target;
+    return target == e.param ? depth : -1;
 }
 
 bool apply_key_edges(uint8_t edges, const KeyMap& map, float* knobs)

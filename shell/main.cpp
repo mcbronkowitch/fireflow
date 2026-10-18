@@ -61,6 +61,7 @@ volatile uint32_t g_block_tick = 0;
 #endif
 
 #if SHELL_PANEL_SCAN
+#include "cycles.h"
 #include "panel_scan.h"
 #endif
 
@@ -173,11 +174,18 @@ static void AudioCallback(daisy::AudioHandle::InputBuffer  in,
 #endif
 
 #if SHELL_PANEL_SCAN
+    // The whole callback's cost, scan + law + lamps + process(), for
+    // SHELL_PLAY_LAW's cb_last / cb_max (panel_scan_block_end()).
+    const uint32_t cb0 = shell::cycles_now();
     // FIRST, before process(), for the same reason as the scan check above.
     shell::panel_scan_tick(hw, inst);
 #endif
 
     inst.process(in[0], in[1], out[0], out[1], size);
+
+#if SHELL_PANEL_SCAN
+    shell::panel_scan_block_end(cb0);
+#endif
 
 #if SHELL_MUX_PROBE == 1
     g_mux.step(hw);

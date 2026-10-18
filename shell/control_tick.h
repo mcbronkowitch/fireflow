@@ -18,7 +18,8 @@ namespace shell {
 // Boot: knobs[0..ffctl::NUM_PARAMS) become the init patch
 // (ffctl::kInitParamDefaults), depths included, and the law is re-armed as for
 // a patch restore, so the init patch's SONG rung and DRIFT position are a
-// baseline, not a turn.
+// baseline, not a turn. It also builds the LED law's gamma table, so that
+// one-time build does not happen inside the audio interrupt.
 void control_boot(float* knobs);
 
 // Once per block, the whole vector (spec 2026-10-09 section 4.2). Returns the

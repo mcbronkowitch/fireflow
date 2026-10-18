@@ -111,6 +111,8 @@ add_executable(spky_tests
     tests/test_scan_value.cpp
     shell/pot_owner.cpp
     tests/test_pot_owner.cpp
+    shell/panel_step.cpp
+    tests/test_panel_step.cpp
     shell/keys.cpp
     tests/test_keys.cpp
     shell/led_out.cpp

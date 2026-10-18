@@ -358,6 +358,30 @@ TEST_CASE("controls: ATTACK on a BBD deck writes nothing under MOD") {
     }
 }
 
+TEST_CASE("controls: the precomputed depth table is the kModLayer walk") {
+    for(int id = -2; id < ffctl::NUM_PARAMS + 2; ++id)
+    {
+        CAPTURE(id);
+        const int want = (id >= 0 && id < ffctl::NUM_PARAMS) ? mod_depth_of(id) : -1;
+        CHECK(shell::mod_depth_of(id) == want);
+    }
+}
+
+TEST_CASE("controls: MOD re-points exactly the Rev A pots with a kModLayer row") {
+    float k[ffctl::NUM_PARAMS];
+    init_knobs(k);   // no deck on the BBD: every ATTACK row targets ATTACK
+    for(int i = 0; i < shell::kRevaTable.count; ++i)
+    {
+        const shell::ControlEntry& e = shell::kRevaTable.entries[i];
+        CAPTURE(i);
+        k[ffctl::MODBTN] = 0.f;
+        const int off = shell::pot_target(e, k);
+        k[ffctl::MODBTN] = 1.f;
+        const int on = shell::pot_target(e, k);
+        CHECK((on != off) == (e.param >= 0 && mod_depth_of(e.param) >= 0));
+    }
+}
+
 TEST_CASE("controls: a press toggles, a release does nothing, SHFT does nothing") {
     const shell::KeyMap& m = shell::kRevaKeyMap;
     REQUIRE(m.count == 4);
