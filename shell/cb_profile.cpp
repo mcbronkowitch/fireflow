@@ -10,13 +10,6 @@ namespace {
 
 using spky::PSEG_COUNT;
 
-// Written by the audio interrupt only. The foreground reads the ring and the
-// summaries; a torn read is cosmetic (this is a log for a human).
-uint32_t g_acc[PSEG_COUNT];
-int      g_cur    = spky::PSEG_IDLE;
-uint32_t g_t_last = 0;
-uint32_t g_ev     = 0;
-
 uint32_t g_block = 0;            // blocks since StartAudio
 uint32_t g_mark_cost = 0;        // cycles per mark, measured at init
 
@@ -43,15 +36,15 @@ uint32_t           g_hist[kHist];
 
 } // namespace
 
+// The marks' state (engine/util/probe_mark.h). Written by the audio
+// interrupt only; the foreground reads the ring and the summaries, and a torn
+// read is cosmetic (this is a log for a human).
 namespace spky {
-void probe_mark(int seg)
-{
-    const uint32_t t = DWT->CYCCNT;
-    g_acc[g_cur] += t - g_t_last;
-    g_t_last = t;
-    g_cur    = seg;
-}
-void probe_event(int bit) { g_ev |= 1u << bit; }
+volatile uint32_t* probe_clock = &DWT->CYCCNT;
+uint32_t           probe_acc[PSEG_COUNT];
+int                probe_cur  = PSEG_IDLE;
+uint32_t           probe_last = 0;
+uint32_t           probe_ev   = 0;
 } // namespace spky
 
 namespace shell {
@@ -59,19 +52,19 @@ namespace shell {
 void cb_profile_init()
 {
     cycles_init();
-    g_t_last = cycles_now();
+    spky::probe_last = cycles_now();
     const uint32_t t0 = cycles_now();
     for(int i = 0; i < 1000; ++i) spky::probe_mark(spky::PSEG_IDLE);
     g_mark_cost = (cycles_now() - t0) / 1000u;
-    for(auto& a : g_acc) a = 0;
+    for(auto& a : spky::probe_acc) a = 0;
 }
 
 void cb_profile_block_begin()
 {
-    for(auto& a : g_acc) a = 0;
-    g_ev     = 0;
-    g_t_last = cycles_now();
-    g_cur    = spky::PSEG_SCAN;
+    for(auto& a : spky::probe_acc) a = 0;
+    spky::probe_ev     = 0;
+    spky::probe_last = cycles_now();
+    spky::probe_cur    = spky::PSEG_SCAN;
 }
 
 void cb_profile_block_end(uint32_t cb, bool warm)
@@ -81,8 +74,8 @@ void cb_profile_block_end(uint32_t cb, bool warm)
     if(!warm) return;
     for(int s = 0; s < PSEG_COUNT; ++s)
     {
-        g_sum[s] += g_acc[s];
-        if(g_acc[s] > g_max[s]) g_max[s] = g_acc[s];
+        g_sum[s] += spky::probe_acc[s];
+        if(spky::probe_acc[s] > g_max[s]) g_max[s] = spky::probe_acc[s];
     }
     g_n = g_n + 1u;
     int b = cb < kHistLo ? 0 : 1 + static_cast<int>((cb - kHistLo) / kHistStep);
@@ -93,8 +86,8 @@ void cb_profile_block_end(uint32_t cb, bool warm)
         Hot& h = g_ring[g_ring_w % kRing];
         h.blk = blk;
         h.cb  = cb;
-        h.ev  = g_ev;
-        for(int s = 0; s < PSEG_COUNT; ++s) h.seg[s] = g_acc[s];
+        h.ev  = spky::probe_ev;
+        for(int s = 0; s < PSEG_COUNT; ++s) h.seg[s] = spky::probe_acc[s];
         std::atomic_signal_fence(std::memory_order_seq_cst);
         g_ring_w = g_ring_w + 1u;
     }

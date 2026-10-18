@@ -344,7 +344,7 @@ public:
             if (_mod.lane_fired(l))   SPKY_PROBE_EVENT(_probe_deck * 10 + 5 + l);
         }
 #endif
-        SPKY_MARK(_probe_seg + (PSEG_A_TICK - PSEG_A_MOD));
+        SPKY_MARK2(_probe_seg + (PSEG_A_TICK - PSEG_A_MOD));
 
         // click-free engine switch: fade out (4 ms) -> swap -> fade in (4 ms).
         // At hold the multiplier is exactly 1.0, so unswitched runs stay
@@ -405,7 +405,7 @@ public:
         }
         --_ctrl_ctr;
 
-        SPKY_MARK(_probe_seg + (PSEG_A_TRIG - PSEG_A_MOD));
+        SPKY_MARK2(_probe_seg + (PSEG_A_TRIG - PSEG_A_MOD));
         if (fired && !_note_suppressed) {
             SPKY_PROBE_EVENT(kProbeEvTrigger + _probe_deck);
             _fire_trigger();
@@ -428,7 +428,7 @@ public:
         // read cadence, not from this guard.
         if (_ctrl_ctr == 0) _audio_in_tap = 0.5f * (inL + inR);
 
-        SPKY_MARK(_probe_seg + (PSEG_A_ENG - PSEG_A_MOD));
+        SPKY_MARK2(_probe_seg + (PSEG_A_ENG - PSEG_A_MOD));
 
         // Skipped unless the engine actually implements process_in. The base
         // declares it with an empty body (engine_iface.h), so on every engine
@@ -461,7 +461,7 @@ public:
         outL *= fade;
         outR *= fade;
 
-        SPKY_MARK(_probe_seg + (PSEG_A_FX - PSEG_A_MOD));
+        SPKY_MARK2(_probe_seg + (PSEG_A_FX - PSEG_A_MOD));
         _fx.process(outL, outR, sendL, sendR, _fxv);
         SPKY_MARK(PSEG_INST);
     }
