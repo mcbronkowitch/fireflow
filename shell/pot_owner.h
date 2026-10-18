@@ -11,6 +11,7 @@
 //
 // Spec: ../docs/superpowers/specs/2026-10-18-rev-a-p6b2-mod-keys-leds-design.md
 #include <cstdint>
+#include "scan_value.h"   // kPotHysteresis, for the static_assert below
 
 namespace shell {
 
@@ -20,6 +21,13 @@ namespace shell {
 //   max(2 x worst spread, 3 x kPotHysteresis), rounded up to a multiple of 16.
 // This value may change when that session records its numbers.
 inline constexpr int kPotTouch = 48;
+
+// A threshold at or below kPotHysteresis would count as a move a wander that
+// pot_filter() still treats as noise -- its band, and the snap regions at the
+// stops, are kPotHysteresis counts wide -- and a pot nobody touched could take
+// its parameter. Whatever the coupon session measures, it must stay above.
+static_assert(kPotTouch > kPotHysteresis,
+              "kPotTouch must sit above kPotHysteresis (spec section 2)");
 
 struct PotOwner
 {

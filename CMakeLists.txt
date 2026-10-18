@@ -113,6 +113,8 @@ add_executable(spky_tests
     tests/test_pot_owner.cpp
     shell/keys.cpp
     tests/test_keys.cpp
+    shell/led_out.cpp
+    tests/test_led_out.cpp
     shell/scan_check_plan.cpp
     tests/test_scan_check_plan.cpp
     tests/test_seed_audition_init.cpp

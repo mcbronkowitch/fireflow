@@ -4,7 +4,10 @@
 // callback, and every mapped channel it reads goes through the value path
 // (scan_value.h) into a knob vector in VCV's units (controls.h), which the
 // shared control law (control/control_law.h) turns into engine calls once
-// per block -- the same law FireflowHW runs.
+// per block -- the same law FireflowHW runs. A pot writes its knob only once
+// it is moved (pot_owner.h), the keys toggle their latches, and the shared LED
+// law lights the lamps through the LightId -> chain-bit table (spec
+// 2026-10-18-rev-a-p6b2-mod-keys-leds-design.md).
 // On the coupon, RV2/RV4/RV6 drive RATE_A/DENSITY_A/FILT_A over Rev A's step
 // model (kCouponPlayChain); on Rev A, every pot of the generated table but
 // the three reserved ones drives its FireflowHW twin's parameter (spec
