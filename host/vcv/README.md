@@ -732,11 +732,31 @@ once per sample. Spec:
   the 1. A RESET up to 10 ms after a pulse counts for that pulse. A RESET and a
   pulse in the same sample make that pulse the 1. Without a running clock, the
   RESET restarts at once. If the clock is lost while a reset is armed, the
-  restart happens on FireFlow's own next beat.
+  first CLOCK edge that comes back is the 1 (it restarts on that edge; the
+  clock still needs a second edge to run). Until then the fallback is
+  FireFlow's own next beat, and that beat carries PACE: at the factory PACE
+  x1/16 it can be up to 16 quarters away.
 - **"Resync to bar"** (the context-menu item) is unchanged: it calls plain
   `reset_transport()` and does not restart the song.
 - **Known limitation:** a source that sends RESET on every loop keeps the song
   near phrase 0 (spec §2.2).
+- **Known limitation: a clock that starts far from FireFlow's tempo can put the
+  bar a quarter off.** When the clock starts from "not running", RESET (sent
+  with edge 1) restarts at once, but edge 1 is only a reference: the beat up to
+  edge 2 runs at the stale tempo (the held one, or the knob's). At edge 2
+  `clock_pulse()` rounds the beat to the nearest pace multiple, so a stale tempo
+  below about 0.5x or at/above about 1.5x of the source's lands on 0 or 2
+  instead of 1, and the bar stays a quarter off until the next RESET. Probe,
+  final review 2026-10-19 (real `Transport` + `ClockLaw` in firmware block
+  order, 48 kHz, 96-sample blocks, PACE x1, knob at the init 79.5 BPM, RESET
+  with edge 1): a 120 BPM clock puts edges 1-4 on quarters 0, 1, 2, 3; 170 BPM
+  on 0, 0, 1, 2 (a quarter late); 50 BPM on 0, 2, 3, 4 (a quarter early; at
+  PACE x1/16 and 50 BPM the same). A normal stop/start under the held tempo
+  (ratio near 1) is fine. It bites at first patch-up with a far-off tempo,
+  after a TEMPO takeover, and after a reinit (patch open, sample-rate change,
+  Initialize), which drops the held tempo. The remedy (count, not round, the clock's first pulse after a restart) touches
+  `clock_pulse()`'s rounding, a non-goal of the spec (§5), and is Bastian's
+  call.
 - **Checked so far:** the law and the engine restart by desktop tests
   (`clock law*`, `restart*`), and the wiring by `res/test_panel.py`. It has not
   been run in Rack. At the factory PACE x1/16 the TEMPO lamp flashes only every 16

@@ -416,6 +416,25 @@ by ear are a different list: [`docs/by-ear-decisions.md`](by-ear-decisions.md).
   setters and `set_drift` (see `docs/engine-map.md`, "Control-law tick rate"),
   and the events. (2026-10-09, P6b-1.)
 
+- **A clock that starts far from FireFlow's tempo lands RESET's 1 a quarter
+  off, in both hosts.** Starting from "not running", `control::ClockLaw`
+  restarts at once on a RESET that comes with edge 1, but edge 1 is only a
+  reference; the beat up to edge 2 runs at the stale tempo (the held one, or
+  the knob's). At edge 2 `Transport::clock_pulse()` rounds the beat count to
+  the nearest pace multiple, so a stale tempo below about 0.5x or at/above
+  about 1.5x of the source's snaps to 0 or 2 instead of 1, and the bar stays a
+  quarter off until the next RESET. Probe, final review 2026-10-19 (real
+  `spky::Transport` + `control::ClockLaw` in firmware block order, 48 kHz,
+  96-sample blocks, PACE x1, knob at the VCV init 79.5 BPM, RESET with edge 1):
+  a 120 BPM clock puts edges 1-4 on quarters 0, 1, 2, 3; 170 BPM on 0, 0, 1, 2;
+  50 BPM on 0, 2, 3, 4, and PACE x1/16 at 50 BPM the same. A normal stop/start
+  under the held tempo (ratio near 1) is fine; first patch-up with a far-off
+  tempo, a TEMPO takeover, and a reinit or boot (no held tempo) are the cases.
+  Known limitation, not a bug to fix in passing: the remedy (count instead of
+  round the clock's starting pulse after a restart) changes `clock_pulse()`'s
+  rounding, which spec `2026-10-19-clock-and-reset-jacks-design.md` §5 makes a
+  non-goal, so it is Bastian's call. (2026-10-19.)
+
 ## Hardware generators (`pcbnew`, `hardware/coupon/scripts/`)
 
 Measured 2026-09-02 while generating the test coupon's PCB. All three are

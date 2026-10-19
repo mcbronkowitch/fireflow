@@ -581,14 +581,15 @@ from centre.
 
 Spec `2026-10-19-clock-and-reset-jacks-design.md` §3 holds the originals. Setups
 first, since a number without one is a claim: desktop probes, `clang++ -O2`, main
-at `18d6fe01`, 48 kHz, probes in the session scratchpad (the first four items and
-the block-exact one are those probes; the numbers tagged `test_restart.cpp`,
-`test_clock_law.cpp` and `probe_clock.cpp` were printed on the branch
-`claude/clock-reset-jacks`). Nothing here was run in Rack or on a board.
+at `18d6fe01`, 48 kHz, probes in the session scratchpad (the first four items are
+those probes; the block-exact item's single-period values are computed, as spec
+§3 marks them; the numbers tagged `test_restart.cpp`, `test_clock_law.cpp` and
+`probe_clock.cpp` were printed on the branch `claude/clock-reset-jacks`).
+Nothing here was run in Rack or on a board.
 
 - **`reset_transport()` jumps the lanes hard and does not touch the song.**
   `Instrument` in STEP, sync on, 120 BPM, 8 steps, reset at 10.30 s, 10.55 s and
-  10.80 s. Each time deck A's pitch lane stands at phase **0.0042** two
+  10.80 s. Each time deck A's pitch lane stands at phase **0.004** two
   milliseconds after the reset (**0.001** wanted); the route is
   `Instrument::reset_transport` -> `SuperModulator::reset_phases`. The song
   position keeps counting (20 -> 39 over the next ~10 s), so the song does not
@@ -628,13 +629,15 @@ the block-exact one are those probes; the numbers tagged `test_restart.cpp`,
   every 24000 samples: the VCV formula counts **32.0000** beats at PACE x1 and
   **2.0000** at x1/16 (16 pulses), the shared law **16.0000** and **1.0000**.
   Whether Rack shows the double tempo is open until Bastian's check.
-- **Block-exact test tempos hide quantization.** 60, 120 and 240 BPM are exactly
-  500, 250 and 125 blocks of 96 samples. 130 BPM is 230.77 blocks, so a
-  single-period measurement alternates **130.435 / 129.870** BPM. Every
-  `set_tempo_bpm` change moves FLUX's delay target (`flux.cpp:41-67`), which
-  slews with 30 ms (`flux.cpp:22`, `:205`). The clock law's window of 9 edges
-  (8 periods) brings the largest per-pulse step at 130 BPM, 96-sample stamping,
-  to **0.0704** BPM (`tests/test_clock_law.cpp`; probe bound 0.0705).
+- **Block-exact test tempos hide quantization** (computed, spec §3). 60, 120 and
+  240 BPM are exactly 500, 250 and 125 blocks of 96 samples. 130 BPM is 230.77
+  blocks, so a single-period measurement alternates **130.435 / 129.870** BPM
+  (60 * 48000 / (230 * 96) and / (231 * 96)). Every `set_tempo_bpm` change moves
+  FLUX's delay target (`flux.cpp:41-67`), which slews with 30 ms (`flux.cpp:22`,
+  `:205`). The clock law's window of 9 edges (8 periods) brings the largest
+  per-pulse step at 130 BPM, 96-sample stamping, to **0.0704** BPM (printed by
+  probe `probe_clock.cpp`; `tests/test_clock_law.cpp` asserts only that the step
+  stays below the bound 0.0705).
 - **The averaging window and the band** (`control/clock_law.hpp`, probe
   `probe_clock.cpp`). Stamp quantization q bounds a k-period mean by
   `bpm * q / (k * P - q)`: at 130 BPM, q = 96, **0.5658 / 0.1410 / 0.0705 /

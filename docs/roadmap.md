@@ -4166,7 +4166,8 @@ No sound result is claimed: nothing was run in Rack and nothing on a board.
   - **Reset.** An armed reset fires on the next pulse. A reset up to 10 ms
     (480 samples at 48 kHz, inclusive) after a pulse counts for that pulse and
     is back-dated by the samples elapsed. With no running clock it restarts at
-    once.
+    once. A reset armed when the clock is lost fires on the first CLOCK edge
+    that comes back, or else on FireFlow's own next beat (which carries PACE).
   - **Engine.** `Instrument::restart(age)` does today's `reset_transport()` (bar
     and both decks' lanes to 0) and in addition sends every STEP deck's song to
     phrase 0, pattern A. With no deck in STEP it returns false and changes
@@ -4174,7 +4175,7 @@ No sound result is claimed: nothing was run in Rack and nothing on a board.
     calls plain `reset_transport()`.
   - **VCV.** `Fireflow.cpp` calls the law per sample, with no `isConnected()`
     test on either jack; `onUnBypass` and `reinit()` call its discontinuity and
-    init entries. `FireflowHW` shares the path. `res/test_panel.py` guards the
+    init entries and reset both Schmitt triggers. `FireflowHW` shares the path. `res/test_panel.py` guards the
     wiring.
   - **Firmware.** Gate In 1/2 (B10 = CLOCK, B9 = RESET) are latched in the EXTI
     pending bits of lines 13/14 (`shell/gate_latch.cpp`), read and cleared once
@@ -4192,8 +4193,25 @@ No sound result is claimed: nothing was run in Rack and nothing on a board.
 - **Open.**
   - **Spec §8.7, Rack, Bastian:** Pamela's clock and reset into FireFlow at
     PACE x1; the tempo matches and is not double; the 1 lands with Pamela's 1; a
-    stop keeps the tempo; turning TEMPO takes over. The VCV double-tempo finding
-    is a replay of the host code and is unconfirmed in Rack.
+    stop keeps the tempo; turning TEMPO takes over; and start Pamela's at a
+    tempo far from FireFlow's (e.g. 170 BPM against the 79.5 BPM init) and see
+    whether the 1 lands (the limitation below predicts a quarter late). The VCV
+    double-tempo finding is a replay of the host code and is unconfirmed in
+    Rack.
+  - **Start-from-stop limitation, Bastian's call:** when the clock starts from
+    "not running", RESET with edge 1 restarts at once, but the beat up to edge 2
+    runs at the stale tempo (held or knob), and at edge 2 `clock_pulse()` rounds
+    to the nearest pace multiple. A stale tempo below about 0.5x or at/above
+    about 1.5x of the source's lands on 0 or 2 instead of 1, and the bar stays a
+    quarter off until the next RESET. Probe, final review 2026-10-19 (real
+    `Transport` + `ClockLaw` in firmware block order, 48 kHz, 96-sample blocks,
+    PACE x1, knob at 79.5 BPM, RESET with edge 1): 120 BPM -> quarters 0, 1, 2,
+    3; 170 BPM -> 0, 0, 1, 2; 50 BPM -> 0, 2, 3, 4 (PACE x1/16 the same). It hits
+    first patch-up, a TEMPO takeover and a reinit (no held tempo); a normal
+    stop/start is fine. The remedy (count instead of round the clock's starting
+    pulse after a restart) changes `clock_pulse()`'s rounding, a non-goal of
+    spec §5, so it is left open for Bastian to decide. `docs/gotchas.md` has the
+    entry.
   - **Spec §8.8, P7 on Rev A, not a gate:** the CLK lamp flashing with a clock
     patched (CPUIMR1 is unmasked with the NVIC line disabled, so the pending bit
     should latch under either reading of the reference manual; no board has
