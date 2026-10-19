@@ -61,6 +61,9 @@ TEST_CASE("restart: a STEP deck restarts its song") {
     Instrument inst;
     setup(inst, /*a_step=*/false, /*b_step=*/true);
     run_until_b_past_phrase_2(inst);
+    const int pat = inst.active_pattern_for_test(PART_B);
+    std::printf("[restart] deck B active pattern before restart: %d\n", pat);
+    REQUIRE(pat != 0);    // a pattern of 0 could not show a restart
 
     CHECK(inst.restart(0));
     CHECK(inst.song_position_for_test(PART_B) == 0);
