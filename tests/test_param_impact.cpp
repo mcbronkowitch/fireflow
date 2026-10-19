@@ -347,9 +347,9 @@ TEST_CASE("param impact: a live parameter works in both operating modes") {
     //   melody-reachable makes _compute_raw() return the phrase directly on
     //   any note deck, in STEP as in FLOW (_note_lane()), and FORM_A now moves
     //   audio in both modes -- measured 0.797 at a FLOW point and 0.143 at a
-    //   STEP one -- so it drops off this list exactly as DENSITY did. FORM_B
-    //   moves in both modes too; see SAMPLE-BOUND below for why this gate
-    //   still reports it as mode-exclusive.
+    //   STEP one -- so it drops off this list exactly as DENSITY did. FORM_A
+    //   and FORM_B move in both modes; see SAMPLE-BOUND below for why this
+    //   gate still reports both as mode-exclusive.
     bool expected_proven[P_COUNT] = {};
     for (int p : { P_STEPS_A, P_STEPS_B, P_SHUFFLE, P_TEMPO_BPM, P_COUPLE })
         expected_proven[p] = true;
@@ -402,8 +402,30 @@ TEST_CASE("param impact: a live parameter works in both operating modes") {
     //   The asymmetry is deliberate and is the whole difference between this
     //   group and UNTRACED above: WIDENING the sample may retire an entry,
     //   NARROWING it to keep one is the abuse UNTRACED names.
+    //
+    // FORM_A: joined 2026-10-19 with the song offset (spec 2026-10-18
+    //   root-and-wobl-knobs §2.1). Both FLOW points carry ROOT_A 6, and since
+    //   the offset a song rebuilt there -- here on the first sample, the
+    //   preroll rebuild after apply_patch() -- is the C song moved +6. Two
+    //   consequences, both measured with this rig's compare() at the two FLOW
+    //   points, sweeping ROOT_A 0..11 and holding everything else:
+    //   - master 2 now reads exactly 0.0 at EVERY root. Away from the span
+    //     edges the offset makes a song sit in its key the same way whatever
+    //     the root (spec §3), and here its slow FLOW drift (RATE_A 0.069) stays
+    //     on one note for the whole window under both FORM settings (traced at
+    //     the frozen root 6: quantized pitch 28.0 throughout on lo and hi,
+    //     pre-quantize 27.77..28.98). Before the offset the unmoved song on
+    //     F#'s grid straddled a note edge and read 0.966.
+    //   - master 1 reads 0.656 .. 0.793 at nine roots (0..3, 7..11) and 0.0 at
+    //     roots 4, 5 and 6, where the offset lifts the lane onto the top of the
+    //     36-semitone span (traced at root 5: pre-quantize 36.0 throughout, on
+    //     both FORM settings). Root 6 is one of the three, and it read 0.0
+    //     before the offset as well.
+    //   So FORM_A is alive in FLOW wherever the sample allows; "dead in FLOW"
+    //   here is the frozen ROOT_A 6 meeting these two draws, the same kind of
+    //   accident as FORM_B's. STEP still sees it (master 3, 0.214).
     bool expected_sample_bound[P_COUNT] = {};
-    for (int p : { P_FORM_B })
+    for (int p : { P_FORM_A, P_FORM_B })
         expected_sample_bound[p] = true;
 
     bool expected[P_COUNT] = {};

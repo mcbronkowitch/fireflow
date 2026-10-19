@@ -71,6 +71,16 @@ public:
     uint8_t active_pattern() const { return _song.active_pattern; }
     void set_principle(Principle p) { set_form(p); }
     void new_phrase();                 // audition a fresh phrase at the next STEP-mode wrap
+    // How often _apply_pending_song_work() has rebuilt the phrase from scratch
+    // (both patterns regenerated). The one outward signal of "a new song
+    // starts here": Part latches its song offset when this moves (spec
+    // 2026-10-18 root-and-wobl-knobs §2.1). Incremented in exactly one place,
+    // that function's `if (rebuild)` branch -- not by init's own generation
+    // (Part latches at init separately) and not by the partial RENEW
+    // renewals, which must not re-latch. Monotonic, never reset: a reader
+    // compares it against the count it last saw, so a reset would be a
+    // missed or a phantom rebuild.
+    uint32_t phrase_builds() const { return _phrase_builds; }
 #ifdef SPKY_TESTING
     const MelodyPattern& pattern_for_test(uint8_t index) const {
         return _song.patterns[index & 1u];
@@ -381,6 +391,7 @@ private:
     bool      _melodic   = false;
     bool      _flow_melody = false;
     bool      _melodic_at_init = false;
+    uint32_t  _phrase_builds = 0;   // see phrase_builds()
     float     _density   = 1.f;
     float _target = 0.f;     // pre-smooth held value
     float _stepped_out  = 0.f;   // S&H twin of the return value

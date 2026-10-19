@@ -325,6 +325,7 @@ void ModLane::_apply_pending_song_work() {
         _generate_pattern_a();
         _derive_pattern_b();
         _clear_fresh_phrase_state();
+        ++_phrase_builds;   // the only increment; see phrase_builds() (lane.h)
     }
 
     _song.phrase_index = 0;
