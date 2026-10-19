@@ -68,6 +68,7 @@ add_executable(spky_tests
     tests/test_mod_layer.cpp
     tests/test_control_params.cpp
     tests/test_control_law.cpp
+    tests/test_clock_law.cpp
     tests/test_law_cache.cpp
     tests/test_step.cpp
     tests/test_shuffle_grid.cpp
