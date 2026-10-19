@@ -4148,7 +4148,8 @@ spare channel to AGND and one to the rail (spec §8).
 **2026-10-19 — CLOCK and RESET jacks: one clock law for VCV and the firmware ✅ built; Rack check (spec §8.7) and Rev A bring-up (§8.8) open.**
 Spec `docs/superpowers/specs/2026-10-19-clock-and-reset-jacks-design.md`,
 plan `docs/superpowers/plans/2026-10-19-clock-and-reset-jacks.md`; code on
-branch `claude/clock-reset-jacks` (`cf4a9966`..`6c082ce0`), not merged yet.
+branch `claude/clock-reset-jacks` (`cf4a9966`..`926e079b`), merged into main
+2026-10-19 (`4c7b8a8a`).
 No sound result is claimed: nothing was run in Rack and nothing on a board.
 - **What was built.**
   - **`control/clock_law.hpp`**: one header-only law that takes the CLOCK and
