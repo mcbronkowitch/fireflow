@@ -21,6 +21,8 @@
 #include "pot_owner.h"
 #include "scan_value.h"
 #if !SHELL_COUPON_PROBE
+#include "control/clock_law.hpp"
+#include "gate_latch.h"
 #include "generated_panel_map.h"
 #endif
 
@@ -55,6 +57,14 @@ uint8_t  g_last_pressed = 0;
 // The mux channel of the FLUX_A / FLUX_B row, -1 when the board has none (the
 // coupon): a bbd_edge event releases that pot (spec section 5).
 int      g_flux_idx[2] = {-1, -1};
+#if !SHELL_COUPON_PROBE
+// CLOCK and RESET (spec 2026-10-19-clock-and-reset-jacks): the shared clock
+// law, fed once per block from the EXTI pending bits (gate_latch.h). Rev A
+// only: the coupon's gate pins float. g_tempo_idx is the TEMPO row's mux
+// channel, whose pot is released on clock loss (apply_clock_events()).
+control::ClockLaw g_clock;
+int               g_tempo_idx = -1;
+#endif
 
 // Last emitted value per channel, -1 = never emitted. Read by the
 // foreground for SHELL_PLAY only.
@@ -102,14 +112,16 @@ const spky::Instrument* g_inst = nullptr;
 
 // The LED law's duties and the block counter the lamp word's duty pattern
 // runs on. The block period comes from the board (AudioBlockSize /
-// AudioSampleRate), read on the first tick.
+// AudioSampleRate), read on the first tick, and so is the block's sample
+// count the clock law advances by.
 int      g_duty[ffctl::NUM_LIGHTS];
-uint32_t g_led_frame = 0;
-float    g_block_dt  = 0.0f;
+uint32_t g_led_frame     = 0;
+float    g_block_dt      = 0.0f;
+uint32_t g_block_samples = 0;
 
 } // namespace
 
-void panel_scan_init()
+void panel_scan_init(bench::Board& hw)
 {
     g_scan.init();
     g_scan.set_walk_leds(false);
@@ -119,6 +131,17 @@ void panel_scan_init()
     // (group_at / channel_at per sense pin), so the index is the one its
     // g_owner[] entry has (flux_channels(), host tested against kRevaTable).
     flux_channels(kTable, kActiveChain, g_flux_idx);
+#if !SHELL_COUPON_PROBE
+    // The TEMPO row's channel, the same way (tempo_channel(), host tested).
+    g_tempo_idx = tempo_channel(kTable, kActiveChain);
+    // Boot is the clock law's discontinuity: no period history, the knob owns
+    // the tempo (spec section 6). Then the EXTI edge detector on Gate In 1/2;
+    // main() clears its pending bits right before StartAudio().
+    g_clock.init(hw.AudioSampleRate());
+    gate_latch_init();
+#else
+    (void)hw;
+#endif
     // The firmware's boot is a patch restore of the init patch (spec 4.1).
     control_boot(g_knobs);
     // The DWT counter the law's cycle report reads; libDaisy never starts it,
@@ -168,11 +191,41 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
             g_value[idx] = v;               // every row is reported
     }
 
+    // The block period and size come from the board (AudioBlockSize /
+    // AudioSampleRate), read on the first tick.
+    if(g_block_dt <= 0.0f)
+    {
+        g_block_samples = static_cast<uint32_t>(hw.AudioBlockSize());
+        g_block_dt      = static_cast<float>(g_block_samples) / hw.AudioSampleRate();
+    }
+
+#if SHELL_COUPON_PROBE
+    // The coupon reads no gate pin (spec 2026-10-19-clock-and-reset-jacks
+    // section 6): the knob sets the tempo and the jack lamps stay dark.
+    const float measured_bpm = 0.0f;
+    const bool  clock_lamp   = false;
+    const bool  reset_lamp   = false;
+#else
+    // CLOCK and RESET (spec 2026-10-19-clock-and-reset-jacks section 6): this
+    // block's latched edges into the shared clock law, stamped at the block's
+    // end; its pulse and restart go to the engine before the control law
+    // runs, as VCV does per sample. Pulse first: a reset in the same block
+    // counts as arriving before its pulse, so that pulse is the 1.
+    const GateEdges         gates = gate_latch_take();
+    const control::ClockOut clk   = g_clock.step(g_block_samples, gates.clock, gates.reset,
+                                                 g_knobs[ffctl::TEMPO], inst.beat_phase());
+    if(clk.pulse) inst.clock_pulse();
+    if(clk.restart) (void)inst.restart(clk.restart_age);
+    const float measured_bpm = clk.measured_bpm;
+    const bool  clock_lamp   = clk.clock_lamp;
+    const bool  reset_lamp   = clk.reset_lamp;
+#endif
+
     // Once per block, the whole vector (spec 2026-10-09 section 4.2).
     const bool     warm = g_law_blocks >= kLawWarmupBlocks;
     if(!warm) ++g_law_blocks;
     const uint32_t c0 = cycles_now();
-    const control::Events ev = control_tick(g_knobs, inst);
+    const control::Events ev = control_tick(g_knobs, inst, measured_bpm);
     const uint32_t dc = cycles_now() - c0;
     g_law_cycles_last = dc;
     if(warm && dc > g_law_cycles_max) g_law_cycles_max = dc;
@@ -183,15 +236,19 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
     // has already turned the deck's excite_other_deck on. rec_started is
     // ignored: the hardware has no sample path to clear (spec section 3).
     apply_law_events(ev, g_knobs, g_owner, g_flux_idx);
+#if !SHELL_COUPON_PROBE
+    // On clock loss the TEMPO pot is released, so its idle noise cannot count
+    // as a turn: the knob takes the tempo back only once the pot moves past
+    // kPotTouch (spec 2026-10-19-clock-and-reset-jacks section 6).
+    apply_clock_events(clk, g_owner, g_tempo_idx);
+#endif
 
     // The lamps (spec section 4): the LED law, then its duties as this
     // block's lamp word. set_leds() only stores the word; it reaches the 595s
     // with the NEXT step's latch, never on its own (P2 section 4), and this
     // is the one place it changes, once per block.
-    if(g_block_dt <= 0.0f)
-        g_block_dt = static_cast<float>(hw.AudioBlockSize()) / hw.AudioSampleRate();
     const uint32_t c1 = cycles_now();
-    led_tick(inst, g_knobs[ffctl::MODBTN] > 0.5f, g_block_dt, g_duty);
+    led_tick(inst, g_knobs[ffctl::MODBTN] > 0.5f, g_block_dt, g_duty, clock_lamp, reset_lamp);
     g_scan.set_leds(led_word(g_duty, spkyled::kLedSteps, g_led_frame, kLedBit));
     const uint32_t dl = cycles_now() - c1;
     g_led_frame       = g_led_frame + 1u;

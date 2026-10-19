@@ -2,21 +2,23 @@
 
 // The playing image's per-block glue, lifted out of panel_scan.cpp so it can
 // be tested: one pot reading from its row to the knob vector, the law's events
-// applied to the knob vector and the owners, and the FLUX rows' mux channels.
+// applied to the knob vector and the owners, the clock law's TEMPO release,
+// and the FLUX and TEMPO rows' mux channels.
 // No hardware type, host tested (tests/test_panel_step.cpp) -- the same
 // arrangement as scan_value.h, controls.h and pot_owner.h. panel_scan.cpp
 // (firmware only, under SHELL_PANEL_SCAN) calls these and nothing else does
 // the work.
 //
 // Spec: ../docs/superpowers/specs/2026-10-18-rev-a-p6b2-mod-keys-leds-design.md
-// sections 2, 3 and 5.
+// sections 2, 3 and 5; ../docs/superpowers/specs/2026-10-19-clock-and-reset-jacks-design.md
+// section 6.
 #include <cstdint>
 #include "controls.h"
 #include "mux_plan.h"
 #include "pot_owner.h"
 #include "scan_value.h"
 
-namespace control { struct Events; }
+namespace control { struct Events; struct ClockOut; }
 
 namespace shell {
 
@@ -48,5 +50,16 @@ void apply_law_events(const control::Events& ev, float* knobs, PotOwner* owners,
 // the way panel_scan_tick() walks a step -- group_at() / channel_at() per
 // sense pin -- so it is the index that row's owner has.
 void flux_channels(const ControlTable& t, const ChainProfile& p, int out[2]);
+
+// The mux channel of the TEMPO row, found the same way; -1 where the table has
+// none (the coupon).
+int tempo_channel(const ControlTable& t, const ChainProfile& p);
+
+// The clock law's events for the pots (spec 2026-10-19-clock-and-reset-jacks
+// section 6, "Knob takeover"): on `lost` the TEMPO pot (owners[tempo_idx],
+// skipped when -1) is released, so the pot's idle noise cannot count as a
+// turn -- it must move past kPotTouch before the knob vector's TEMPO changes
+// and the knob takes the tempo back. The same release a bbd_edge gives FLUX.
+void apply_clock_events(const control::ClockOut& o, PotOwner* owners, int tempo_idx);
 
 } // namespace shell

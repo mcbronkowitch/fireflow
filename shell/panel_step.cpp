@@ -1,6 +1,7 @@
 // The playing image's per-block glue: see panel_step.h.
 #include "panel_step.h"
 
+#include "control/clock_law.hpp"
 #include "control/control_law.h"
 
 namespace shell {
@@ -29,20 +30,42 @@ void apply_law_events(const control::Events& ev, float* knobs, PotOwner* owners,
     }
 }
 
-void flux_channels(const ControlTable& t, const ChainProfile& p, int out[2])
+namespace {
+
+// The mux channel of the row that sends `param`, -1 if none: found the way
+// panel_scan_tick() walks a step (group_at / channel_at per sense pin).
+int param_channel(const ControlTable& t, const ChainProfile& p, int param)
 {
-    out[0] = out[1] = -1;
+    int out = -1;
     for(int r = 0; r < t.count; ++r)
     {
         const ControlEntry& e = t.entries[r];
-        const int d = e.param == ffctl::FLUX_A ? 0 : e.param == ffctl::FLUX_B ? 1 : -1;
-        if(d < 0) continue;
+        if(e.param != param) continue;
         const int step = step_of(p, e.group, e.ch);
         if(step < 0) continue;
         for(int s = 0; s < p.sense_pins; ++s)
             if(group_at(p, step, s) == e.group && channel_at(p, step, s) == e.ch)
-                out[d] = mux_channel(p, step, s);
+                out = mux_channel(p, step, s);
     }
+    return out;
+}
+
+} // namespace
+
+void flux_channels(const ControlTable& t, const ChainProfile& p, int out[2])
+{
+    out[0] = param_channel(t, p, ffctl::FLUX_A);
+    out[1] = param_channel(t, p, ffctl::FLUX_B);
+}
+
+int tempo_channel(const ControlTable& t, const ChainProfile& p)
+{
+    return param_channel(t, p, ffctl::TEMPO);
+}
+
+void apply_clock_events(const control::ClockOut& o, PotOwner* owners, int tempo_idx)
+{
+    if(o.lost && tempo_idx >= 0) pot_release(owners[tempo_idx]);
 }
 
 } // namespace shell

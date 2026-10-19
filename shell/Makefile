@@ -417,6 +417,16 @@ CPP_SOURCES = \
 	../engine/synth/synth_engine.cpp \
 	../engine/synth/wt_bank.cpp
 
+# The CLOCK / RESET edge latch on Gate In 1/2 (gate_latch.h), in the Rev A
+# play image alone: the coupon's B9/B10 float, and its images must not read
+# them (spec 2026-10-19-clock-and-reset-jacks section 6). Its only callers,
+# panel_scan.cpp and main.cpp, sit under the same condition, so any other image
+# that called it would fail to link. The file reads no build switch, so it
+# needs no place in SWITCH_OBJECTS. shell/test_clock_wiring.py holds this.
+ifeq ($(SHELL_PANEL_SCAN)$(SHELL_COUPON_PROBE),10)
+CPP_SOURCES += gate_latch.cpp
+endif
+
 # -O3, und das ist nicht optional. libDaisys core/Makefile setzt `OPT ?= -O2`,
 # und mit dem Default lief dieser Shell am 8. August hoerbar in den Ueberlauf:
 # ein Stoerton mit konstanter Amplitude auf 48000/96 = 500 Hz, dazu Zerren.

@@ -27,11 +27,16 @@ void control_boot(float* knobs);
 // 5). On bbd_edge[p] this function itself sets deck p's excite_other_deck in
 // the persistent control::Options it passes the law, as VCV does; it takes
 // effect from the next tick on, as in VCV.
-control::Events control_tick(const float* knobs, spky::Instrument& inst);
+// measured_bpm is control::ClockOut::measured_bpm from this block's clock law
+// step (control/clock_law.hpp), 0 = the TEMPO knob sets the tempo; the coupon,
+// which reads no gate pin, passes 0.
+control::Events control_tick(const float* knobs, spky::Instrument& inst, float measured_bpm);
 
 // Once per block, after control_tick(): the LED law, NUM_LIGHTS duties of
-// 0..spkyled::kLedSteps-1 into duty_out. SHIFT is never latched and the CLOCK
-// and RESET jacks are not wired on the hardware, so their inputs are false.
-void led_tick(const spky::Instrument& inst, bool mod_latched, float dt, int* duty_out);
+// 0..spkyled::kLedSteps-1 into duty_out. SHIFT is never latched. clock_lamp /
+// reset_lamp are the clock law's lamp flags for this block (a CLOCK / RESET
+// edge at the jack); the coupon passes false.
+void led_tick(const spky::Instrument& inst, bool mod_latched, float dt, int* duty_out,
+              bool clock_lamp, bool reset_lamp);
 
 } // namespace shell
