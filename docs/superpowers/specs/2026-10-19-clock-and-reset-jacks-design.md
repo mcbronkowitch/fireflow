@@ -1,7 +1,8 @@
 # CLOCK and RESET jacks — one clock law for VCV and the firmware
 
-Date: 2026-10-19. Status: approved by Bastian 2026-10-19 (after a builder
-check and a completeness review); plan
+Date: 2026-10-19. Status: built 2026-10-19 on branch `claude/clock-reset-jacks`
+(approved by Bastian 2026-10-19, after a builder check and a completeness
+review); acceptance 7 (Rack) and 8 (P7) are still open; plan
 `docs/superpowers/plans/2026-10-19-clock-and-reset-jacks.md`.
 Follows: the Rev A master plan (`2026-09-28-rev-a-master-plan-design.md`, P6 →
 P7), P2's pin map (`2026-09-29-rev-a-p2-pin-map-design.md`), and the P6b-1

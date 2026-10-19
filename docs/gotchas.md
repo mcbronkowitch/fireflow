@@ -656,3 +656,33 @@ invisible from reading the scripts, and each cost real time.
   state and reloads it). What is measured: stamps into a stack array whose
   address does not escape until the loop is over (`engine/util/probe_mark.h`)
   cost almost nothing. Instrument the hot loop that way or not at all.
+
+- **libDaisy's EXTI layer cannot serve both transport jacks, and enabling
+  `EXTI15_10_IRQn` in the NVIC turns the latch into an interrupt storm.**
+  Read from the source on 2026-10-19 (spec
+  [`2026-10-19-clock-and-reset-jacks-design.md`](superpowers/specs/2026-10-19-clock-and-reset-jacks-design.md)
+  §3), not seen on a board. CLOCK is on B10 = PG13 and RESET on B9 = PG14
+  (`daisy_patch_sm.h`), and both lines share `EXTI15_10`.
+  `GPIOInterruptHandler` (`lib/libDaisy/src/per/gpio.cpp`) keeps **one pin per
+  EXTI channel**, so a second `RegisterPin` on the same channel overwrites the
+  first; its `HandleInterrupt` clears only the stored pin, the IRQ runs at
+  priority 0,0, and libDaisy defines `EXTI15_10_IRQHandler` itself, so a handler
+  of your own collides at link time. `GateIn::Init` configures a plain input
+  and does not touch the EXTI, which is why polling `GateIn::Trig()` is the
+  only supported path and can miss a trigger shorter than the polling interval.
+
+  `shell/gate_latch.cpp` therefore sets up edge detection on lines 13/14
+  itself and leaves the NVIC alone: `SYSCFG->EXTICR[3]` to port G, falling edge
+  (`GateIn` inverts), `EXTI->IMR1` unmasked so the pending bit latches, and
+  `NVIC_DisableIRQ(EXTI15_10_IRQn)` written **first and explicitly**, so the
+  "no interrupt" does not depend on a reset default. Each block reads
+  `EXTI->PR1` and clears only the bits it read. **The trap:** if later code
+  enables `EXTI15_10_IRQn` (for example a libDaisy `GPIO` in
+  `Mode::INTERRUPT_*` on any pin 10..15, whose `GPIO::Init()` calls
+  `HAL_NVIC_EnableIRQ`), libDaisy's handler runs, clears only its own
+  registered pin, and lines 13/14 re-fire at priority 0 forever. A guard in
+  `shell/test_clock_wiring.py` (`shell_clock_wiring_guard`) fails on an
+  `EXTI15_10_IRQHandler` in `shell/` or any enable of that NVIC line. Whether
+  `PR1` latches an edge while the line is masked in `IMR1` was not settled from
+  the reference manual; the unmask sidesteps the question, and the P7 bring-up
+  has to show the CLK lamp flash.

@@ -577,6 +577,75 @@ the root while gravity is on, `pitch/quantizer.h:138`), and how often an offset 
 same sign pins part of a song at the span edge (0 or 36 semitones) when TUNE is far
 from centre.
 
+### Measured: CLOCK and RESET (2026-10-19)
+
+Spec `2026-10-19-clock-and-reset-jacks-design.md` §3 holds the originals. Setups
+first, since a number without one is a claim: desktop probes, `clang++ -O2`, main
+at `18d6fe01`, 48 kHz, probes in the session scratchpad (the first four items and
+the block-exact one are those probes; the numbers tagged `test_restart.cpp`,
+`test_clock_law.cpp` and `probe_clock.cpp` were printed on the branch
+`claude/clock-reset-jacks`). Nothing here was run in Rack or on a board.
+
+- **`reset_transport()` jumps the lanes hard and does not touch the song.**
+  `Instrument` in STEP, sync on, 120 BPM, 8 steps, reset at 10.30 s, 10.55 s and
+  10.80 s. Each time deck A's pitch lane stands at phase **0.0042** two
+  milliseconds after the reset (**0.001** wanted); the route is
+  `Instrument::reset_transport` -> `SuperModulator::reset_phases`. The song
+  position keeps counting (20 -> 39 over the next ~10 s), so the song does not
+  restart. `Instrument::restart(age)` (2026-10-19) is the call that does: it
+  runs `reset_transport()`'s work and sends every STEP deck's song to phrase 0,
+  pattern A (`tests/test_restart.cpp`: deck B song position 3 -> 0, pattern 1 ->
+  0, pitch phase **0.004201** one block later). With no deck in STEP it returns
+  false and changes nothing.
+- **Resetting only one deck's lanes drags the other.** Probe `rv_flow_drag.cpp`:
+  transport plus the STEP deck's lanes reset, the FLOW deck's phase kept,
+  compared against a run without a reset. The cause is `Center::update`:
+  it servos both decks onto the transport in the GRID world with no STEP check
+  (`center.cpp:166-181`) and couples them by Kuramoto and grid gravity in the
+  FREE world (`center.cpp:185-236`). Factory patch (COUPLE 1.0, deck A FLOW/FEED,
+  deck B STEP 8, PACE x1/16): deck A's pitch scale sits at the 0.35 cap and is
+  still **0.21** cycles off after 120 s. PACE x1, 120 BPM: up to **0.32** for
+  about 4 s. FREE zone: **0.375** at COUPLE 0.45, **0.795** at 0.4999, **0.10**
+  at 0.2, **0** at COUPLE 0. So a restart resets both decks' lanes. The gate in
+  `test_restart.cpp` ("a FLOW deck is not dragged") reads **0** in GRID and in
+  FREE (knob 0.45, engine couple 0.9) against a bound of 1e-3; with only the STEP
+  deck's lanes reset it reads **0.395** (GRID) and **0.113** (FREE).
+- **Pulses outside 20..400 BPM still phase-snap in the engine.** Probe
+  `rv_range.cpp`. `Transport::clock_pulse` rounds to the nearest pace multiple
+  whatever the period (`transport.h:36-41`). 480 BPM pulses (80 in 10 s) leave
+  the transport at **0.000 beats**, at PACE x1 and x1/16 alike: it stands still.
+  15 BPM pulses make it lurch about 0.3 beat backwards on every pulse. The clock
+  law therefore drops such a pulse before the engine sees it.
+- **VCV's old tempo formula, replayed (not a Rack run).** `Fireflow.cpp` zeroed
+  `clkSamples` on every edge and computed `60 * sr / clkSamples` on every
+  control push (every 16 samples), which is the time since the last edge, not
+  the period. On a 120 BPM clock, 1350 of 4500 law ticks fall outside 20..400
+  and fall back to the TEMPO knob; the accepted values run from 120 to 400 BPM.
+  `Transport` at 500 Hz, `clock_pulse(1.0)` per edge, knob 140 BPM: **30.6**
+  beats for 16 pulses at a 120 BPM clock, **32.3** at 60 BPM, **15.9** at 240
+  BPM. Replayed again through the real `Instrument` in `test_restart.cpp`
+  ("clock law drives the transport one pace step per pulse"), 120 BPM, edges
+  every 24000 samples: the VCV formula counts **32.0000** beats at PACE x1 and
+  **2.0000** at x1/16 (16 pulses), the shared law **16.0000** and **1.0000**.
+  Whether Rack shows the double tempo is open until Bastian's check.
+- **Block-exact test tempos hide quantization.** 60, 120 and 240 BPM are exactly
+  500, 250 and 125 blocks of 96 samples. 130 BPM is 230.77 blocks, so a
+  single-period measurement alternates **130.435 / 129.870** BPM. Every
+  `set_tempo_bpm` change moves FLUX's delay target (`flux.cpp:41-67`), which
+  slews with 30 ms (`flux.cpp:22`, `:205`). The clock law's window of 9 edges
+  (8 periods) brings the largest per-pulse step at 130 BPM, 96-sample stamping,
+  to **0.0704** BPM (`tests/test_clock_law.cpp`; probe bound 0.0705).
+- **The averaging window and the band** (`control/clock_law.hpp`, probe
+  `probe_clock.cpp`). Stamp quantization q bounds a k-period mean by
+  `bpm * q / (k * P - q)`: at 130 BPM, q = 96, **0.5658 / 0.1410 / 0.0705 /
+  0.0352** BPM for k = 1 / 4 / 8 / 16. A tempo step of 120 -> 90 BPM settles by
+  the 2nd pulse (outside the 1.2 band); the in-band step 120 -> 105 reaches 105.00
+  at the 8th. A 55/45 swing at 120 BPM measures **0.00000** BPM error once the
+  window is full. The cost: swing beyond about 59/41 is held at the window value.
+- **The reset window.** `double(0.010f) * 48000.f` printed **479.99998927**, so
+  the first window test missed a reset exactly 10 ms after the pulse. The law
+  now uses the whole-sample threshold 480, compared inclusively.
+
 ---
 
 ## 7. Reachability: where the melody lives on the axes

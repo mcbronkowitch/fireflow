@@ -374,8 +374,9 @@ and took the tick from 15 800 to 11 800 cycles: 16 928 B free (2026-10-09).
 - A Sampler deck is silent until REC has recorded something: no factory
   sample. (Rev A's REC A/B keys toggle the record latch; the coupon has no
   REC key.)
-- No CLOCK, RESET or CV on the hardware.
-- CLK/RST lamps dark until CLOCK/RESET are wired; SHFT has no function.
+- No CV on the hardware. CLOCK and RESET are read in the Rev A play image
+  only, see "CLOCK and RESET (Gate In 1/2)" below; the coupon images read no
+  gate pin and their CLK/RST lamps stay dark. SHFT has no function.
 - The ATTACK pot is two Rack knobs at one position: it writes STAGES
   ("BBD Bend") while its deck's ENGINE is on the BBD and ATTACK otherwise,
   as FireflowHW shows them. Turning ENGINE does not copy the pot's position
@@ -426,6 +427,61 @@ P6b-2 review; it used to happen in the first audio block). `SRAM` Rev A 217 876 
 `cb_*` counters, the gamma table at boot) then took `SRAM_EXEC` to
 251 412 B on Rev A (11 468 B free) and 249 548 B on the coupon (13 332 B
 free); `.qspi_cold` 16 312 B (2026-10-18).
+
+## CLOCK and RESET (Gate In 1/2)
+
+Spec: `docs/superpowers/specs/2026-10-19-clock-and-reset-jacks-design.md`.
+Built 2026-10-19; **not yet tried on a board.** Rev A's CLOCK is on B10 (Gate In
+1) and RESET on B9 (Gate In 2).
+
+**Rev A play image only.** `gate_latch.cpp` is in the Makefile only under
+`SHELL_PANEL_SCAN=1` without `SHELL_COUPON_PROBE`. The coupon leaves B9/B10
+unconnected with no pull resistor, so a gate read there would turn floating
+pins into tempos and restarts; the coupon images link no `gate_latch` symbol
+(checked in the ELFs, 2026-10-19) and pass `measured_bpm = 0` and false lamps.
+
+**The edges are latched, not polled.** `gate_latch_init()` routes EXTI lines 13
+and 14 to port G, selects the falling edge (`GateIn` inverts: falling at the
+pin is rising at the jack, a P7 check), unmasks CPUIMR1 and leaves
+`EXTI15_10_IRQn` **disabled in the NVIC**, written first. Nothing takes an
+interrupt. Once per block `gate_latch_take()` reads `EXTI->PR1` and clears the
+bits it read, so a trigger that rose and fell between two blocks (1 ms
+included) is still caught. `gate_latch_arm()` clears the pending bits as the
+last statement before `StartAudio`, so boot glitches are no edges. An edge is
+stamped at the block that sees it, so edge times are quantized to 2 ms.
+Why not `GateIn::Trig()` or libDaisy's EXTI layer, and the trap that waits if
+anything enables `EXTI15_10_IRQn`: `docs/gotchas.md`.
+
+**Per block** (`panel_scan_tick`, in this order, pinned by
+`shell_clock_wiring_guard`): take the edges; `ClockLaw::step()` with the block
+length from `AudioBlockSize()` and the TEMPO knob; `clock_pulse()` on a pulse,
+then `restart(age)` on a restart; `control_tick()` with the law's
+`measured_bpm`; the law events; `apply_clock_events()`; the LED law with the
+CLK/RST lamps. The shared law is the only clock logic in `shell/`; the guard
+fails on a second one. The behaviour (tempo from the period across 8 periods, a
+held tempo after 2 periods without a pulse, RESET armed until the next pulse or
+restarting at once with no clock, STEP decks only) is described in
+`host/vcv/README.md`, "CLOCK and RESET".
+
+**TEMPO pot on clock loss.** When the law reports the loss,
+`apply_clock_events()` releases the TEMPO pot's ownership (the same release the
+BBD/FLUX event uses). The pot then has to move past `kPotTouch` before its value
+reaches the knob, so the noise an owned pot passes above `kPotHysteresis` cannot
+take the tempo back.
+
+**Boot.** `panel_scan_init(hw)` calls the law's init, which makes the boot the
+first discontinuity. The first audio block returns before the law runs (no mux
+reading yet), so an edge latched in it is taken in block 2.
+
+**Memory** (2026-10-19): Rev A `SRAM_EXEC` 205 780 B used, **57 100 B free** of
+262 880 B (60 656 B in the CPU headroom record); `g_clock` is 0xa8 B of SRAM.
+The cycle cost of the law is not measured.
+
+**For P7** (spec §8.8): the CLK lamp flashing with a clock patched (whether the
+pending bit latches with the line unmasked and the NVIC line off is unconfirmed
+on a board), the edge polarity, the input threshold, a 1 ms trigger caught, and
+the 2 ms edge jitter by ear and on the CLK lamp. If the lamp never flashes,
+the latch is the first suspect.
 
 ## Where the work stands, and where it goes next
 

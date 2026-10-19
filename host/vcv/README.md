@@ -695,11 +695,52 @@ plate, so it is also the honest picture of what a user sees.
 | Port | Meaning |
 |------|---------|
 | IN L/R | audio in (feeds the per-part FX chain and, while REC is latched on a Sampler part, that part's record buffer; optional) |
-| CLOCK | one pulse per beat → sets tempo (overrides the TEMPO knob) and phase-aligns the transport on each pulse |
-| RESET | resets the transport downbeat (bar/beat phase) |
+| CLOCK | one pulse per quarter note → sets the tempo while pulses arrive (see "CLOCK and RESET" below) and phase-aligns the transport on each pulse |
+| RESET | restarts the music on STEP decks, armed until the next CLOCK pulse when a clock is running (see "CLOCK and RESET" below) |
 | OUT L/R | main mix |
 | PIT A/B | per-part pitch modulation CV (±5 V, not strict V/Oct) |
 | GAT A/B | per-part gate (10 V) |
+
+### CLOCK and RESET
+
+Both jacks go through `control/clock_law.hpp`, the same law the firmware runs
+on Gate In 1/2, and `Fireflow` and `FireflowHW` share the path. The edge
+thresholds are VCV's Schmitt trigger at 0.1 / 1 V, as before. The law is called
+once per sample. Spec:
+`docs/superpowers/specs/2026-10-19-clock-and-reset-jacks-design.md`.
+
+- **No connection test.** `inputs[CLOCK].isConnected()` is no longer asked. An
+  unplugged jack reads 0 V, never edges, and times out like the hardware does.
+- **CLOCK, one pulse per quarter note.** The tempo is measured from the period
+  between edges, across the last 9 edges (8 periods), and changes only at a
+  pulse. A period outside 20..400 BPM is ignored completely (no tempo, no phase
+  snap, no arming). The first interval after Initialize, a sample-rate change or
+  an un-bypass is not taken as a period, and one edge alone is not a running
+  clock. Each valid pulse also phase-aligns the transport, as before.
+- **When the pulses stop**, FireFlow keeps running at the last measured tempo.
+  The clock counts as gone after 2 x the measured period. The TEMPO knob takes
+  the tempo back on its first move (the tempo jumps to the knob, no pickup;
+  the knob reaches 40..240 BPM only), and returning pulses take over again.
+- **RESET restarts the music on STEP decks only** (`Instrument::restart`):
+  the transport bar and both decks' lanes go to 0, and every STEP deck's song
+  goes to phrase 0, pattern A. A FLOW deck keeps its song position. With no
+  deck in STEP, RESET does nothing (the RST lamp still flashes, because the
+  lamp shows the jack). VARY's mutations and the EVOLVE walk are not rewound;
+  the current state plays from phrase 0, and pending SONG / FORM / STEPS work is
+  applied at the restart.
+- **Timing.** With a clock running, a RESET arms and the next CLOCK pulse is
+  the 1. A RESET up to 10 ms after a pulse counts for that pulse. A RESET and a
+  pulse in the same sample make that pulse the 1. Without a running clock, the
+  RESET restarts at once. If the clock is lost while a reset is armed, the
+  restart happens on FireFlow's own next beat.
+- **"Resync to bar"** (the context-menu item) is unchanged: it calls plain
+  `reset_transport()` and does not restart the song.
+- **Known limitation:** a source that sends RESET on every loop keeps the song
+  near phrase 0 (spec §2.2).
+- **Checked so far:** the law and the engine restart by desktop tests
+  (`clock law*`, `restart*`), and the wiring by `res/test_panel.py`. It has not
+  been run in Rack. At the factory PACE x1/16 the TEMPO lamp flashes only every 16
+  beats, so use PACE x1 for the check (spec §8.7).
 
 ## Verifying against the reference engine
 
