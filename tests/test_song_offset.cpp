@@ -102,6 +102,46 @@ int compare_distance(Instrument& x, Instrument& y, float want, float s, Rest&...
     return compared;
 }
 
+// The pitch-level half of spec §5's first anti-goal: a ROOT turn is not a
+// transpose. `turned` is a deck turned to D WITHOUT a rebuild, `c_song` the
+// root-0 C song on the same phrase. The turn may only re-snap each note onto
+// D's grid -- at most one semitone away from the C song -- and must never sit
+// the full root distance (2) above it, which is what a transpose would do.
+// song_offset_for_test() alone cannot see this: it reports the latch, not
+// what pitch_pre_quant() reads, so an _offset_norm() regressed to the LIVE
+// root would leave every offset check green while each turn moved the melody.
+// Same span-edge skip as compare_distance(). Returns the blocks compared.
+// Measured 2026-10-19 in this rig (boot scale Dorian, the first SYNTH leg of
+// both loop iterations below): worst
+// |Y - Z| exactly 1 semitone, 0 of 2000 ticks at +2. With _offset_norm()
+// sabotaged to read the live root: 2000 of 2000 ticks at exactly +2.
+template <typename... Rest>
+int check_turn_is_not_transpose(Instrument& turned, Instrument& c_song, float s,
+                                Rest&... rest) {
+    const int n = static_cast<int>(s * kBlocksPerSec);
+    int compared = 0, over = 0, transposed = 0;
+    float worst = 0.f;
+    for (int b = 0; b < n; ++b) {
+        block(turned);
+        block(c_song);
+        (block(rest), ...);
+        const float pt = semis(turned), pc = semis(c_song);
+        if (pt < 1.f || pt > 35.f || pc < 1.f || pc > 35.f) continue;
+        ++compared;
+        const float d = pt - pc;
+        if (std::fabs(d) > worst) worst = std::fabs(d);
+        if (std::fabs(d) > 1.f + kEps) ++over;
+        if (std::fabs(d - 2.f) < kEps) ++transposed;
+    }
+    CAPTURE(worst);
+    CAPTURE(over);
+    CAPTURE(transposed);
+    CAPTURE(compared);
+    CHECK(over == 0);
+    CHECK(transposed < compared);
+    return compared;
+}
+
 } // namespace
 
 TEST_CASE("song offset: fold table") {
@@ -195,6 +235,9 @@ TEST_CASE("song offset: applies only on note engines") {
 
         render_s(0.5f, *x, *y, *z);
         CHECK(compare_distance(*x, *z, 2.f, 4.f, *y) >= 100);
+        // Y, the turned-not-rebuilt deck, against the C song: a re-snap, not
+        // a transpose (see check_turn_is_not_transpose above).
+        CHECK(check_turn_is_not_transpose(*y, *z, 4.f, *x) >= 100);
 
         // On BBD (in STEP, where it does quantize) and on SAMPLER (where it
         // does not, and is silent here for want of a record buffer, but

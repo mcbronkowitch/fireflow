@@ -278,7 +278,7 @@ static const PanelCtl kParamCtls[] = {
     {PAN_B, WK_SMKNOB, {158.610f, 89.400f}, "PAN", {158.610f, 95.000f}, 0, 1.90f, 0x171713, "Deck balance"},
     {ROOT_A, WK_KNOBI, {96.180f, 78.000f}, "ROOT", {96.180f, 83.600f}, 0, 1.90f, 0x171713, "ROOT"},
     {ROOT_B, WK_KNOBI, {117.180f, 78.000f}, "ROOT", {117.180f, 83.600f}, 0, 1.90f, 0x171713, "ROOT"},
-    {REV_MOD, WK_SMKNOB, {117.180f, 104.500f}, "WOBL", {117.180f, 110.100f}, 0, 1.90f, 0x171713, "WOBL"},
+    {REV_MOD, WK_SMKNOB, {117.180f, 104.500f}, "WOBL", {117.180f, 110.100f}, 0, 1.90f, 0x171713, "Reverb wobble"},
 };
 // Knob accent, parallel to kParamCtls, same order. Green left,
 // copper right, muted in the centre strip -- side_accent().

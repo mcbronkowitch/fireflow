@@ -535,8 +535,17 @@ deck's root folded to the nearest signed distance from C
 reduced mod 12 first). It is latched in exactly two places and nowhere else:
 
 - `Part::init`, `part.cpp:109-110` — init regenerates the phrase outside the lane's
-  rebuild counter (`lane.cpp:86`), so it latches from the root the quantizer still
-  holds.
+  rebuild counter (`lane.cpp:86`), so it latches from the root the quantizer
+  holds at that moment; neither `Instrument::init` nor `Quantizer::init` resets
+  it. A host that re-inits a running instrument therefore pushes the CURRENT root
+  with `set_root` before `init`: the VCV site is `Fireflow::reinit()`
+  (`host/vcv/src/Fireflow.cpp:639-641`, guarded by `test_panel.py`'s
+  `test_reinit_pushes_the_root_before_init`). Without the push, Rack's Initialize
+  (params reset first, then `onReset` → `reinit`) latched the pre-Initialize root,
+  and the next tick's `set_root(0)` only moved the grid — measured by the final
+  review: from ROOT_A = D / ROOT_B = G, offsets stayed +2/−5 at roots 0/0. With it,
+  Initialize latches 0, and an SR change or a patch open latches the patch's own
+  root. `shell/` and `host/render/` init once, on a fresh instrument at root 0.
 - the top of `Part::_control_tick`, `part.cpp:289-292` — when
   `ModLane::phrase_builds()` (`lane.h:83`) has moved since the last look. That
   counter is bumped only in the `if (rebuild)` branch of `_apply_pending_song_work`
@@ -558,7 +567,10 @@ quantizer and before the 0..1 clamp, on note engines only; BBD and SAMPLER read 
 (their PITCH lane is the delay clock or a scan, not a note — owner ruling
 2026-08-07, `lane.h:293`). Measured in `tests/test_song_offset.cpp`: a song
 rebuilt at root 2 sits **exactly +2 semitones** from the root-0 song, and a ROOT
-turn alone does not re-latch.
+turn alone does not re-latch. At pitch level, a deck turned to D without a
+rebuild sits at most **1 semitone** from the C song (a grid re-snap, boot scale
+Dorian) and on **0 of 2000** ticks at +2; with `_offset_norm()` sabotaged to read
+the live root it sat at +2 on 2000 of 2000 (`check_turn_is_not_transpose`).
 
 Not measured, open: what the offset does under PULL gravity (the quantizer ignores
 the root while gravity is on, `pitch/quantizer.h:138`), and how often an offset of the

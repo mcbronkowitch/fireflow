@@ -84,7 +84,7 @@ static const PanelCtl kParamCtls[] = {
     {PAN_B, WK_SMKNOB, {192.800f, 74.875f}, "PAN", {192.800f, 82.325f}, 0, 2.20f, 0xB9CDD7, "Deck balance"},
     {ROOT_A, WK_KNOBI, {11.000f, 95.000f}, "ROOT", {11.000f, 102.450f}, 0, 2.20f, 0xB9CDD7, "ROOT"},
     {ROOT_B, WK_KNOBI, {293.800f, 95.000f}, "ROOT", {293.800f, 102.450f}, 0, 2.20f, 0xB9CDD7, "ROOT"},
-    {REV_MOD, WK_SMKNOB, {175.400f, 95.000f}, "WOBL", {175.400f, 102.450f}, 0, 2.20f, 0xB9CDD7, "WOBL"},
+    {REV_MOD, WK_SMKNOB, {175.400f, 95.000f}, "WOBL", {175.400f, 102.450f}, 0, 2.20f, 0xB9CDD7, "Reverb wobble"},
     {MODBTN, WK_LATCH, {290.800f, 112.750f}, "MOD", {290.800f, 119.450f}, 0, 2.20f, 0xB9CDD7, "MOD layer latch"},
 };
 // 1 = big cap, 0 = small. Parallel to kParamCtls, same order.

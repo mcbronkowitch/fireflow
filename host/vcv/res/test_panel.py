@@ -137,10 +137,11 @@ PARAM_TIPS = [
     # rather than left to default-to-label, same reason DPTH's is -- "PAN"
     # alone would not say what the knob does.
     'Deck balance', 'Deck balance',
-    # ROOT/WOBL (spec 2026-10-18 root-and-wobl-knobs): tip-defaults-to-label.
-    # ROOT's Rack tooltip is the configSwitch name "Root" with the note names
-    # (Fireflow.cpp), not this tip.
-    'ROOT', 'ROOT', 'WOBL',
+    # ROOT/WOBL (spec 2026-10-18 root-and-wobl-knobs). ROOT: tip-defaults-
+    # to-label; its Rack tooltip is the configSwitch name "Root" with the note
+    # names (Fireflow.cpp), not this tip. WOBL: a real tip, like PAN's, since
+    # "WOBL" alone does not say what the knob does.
+    'ROOT', 'ROOT', 'Reverb wobble',
     # MOD latch layer: MODBTN carries a real tooltip; the 50 depth knobs are
     # unlabelled widgetless-in-Rack SMKNOBs (Task 5/6 draw them on the HW
     # panel only), so Ctl's tip-defaults-to-label rule leaves every one of
@@ -452,7 +453,7 @@ def test_param_runtime_tip_contract():
           "PAN's tooltip moved out of its slot ahead of ROOT/WOBL")
     # ROOT/WOBL now sit directly ahead of the mod layer. MODBTN's distance
     # from the end did NOT move this time: none of the three has a depth.
-    check(PARAM_TIPS[-54:-51] == ['ROOT', 'ROOT', 'WOBL'],
+    check(PARAM_TIPS[-54:-51] == ['ROOT', 'ROOT', 'Reverb wobble'],
           "ROOT/WOBL's tooltips moved out of their slot ahead of the mod layer")
     # MOD latch layer (spec 2026-08-22) is appended after ROOT/WOBL, so its
     # own tips (MODBTN's real tooltip, then 50 blank SMKNOB tips) are now the
@@ -1243,6 +1244,37 @@ def test_root_tooltip_names_the_note():
     # The branch must sit ahead of the STEPS fallback, or it is unreachable.
     check(cpp.index(head) < cpp.index('init, "Steps")'),
           "the ROOT branch sits after the STEPS fallback")
+
+
+def test_reinit_pushes_the_root_before_init():
+    """Part::init latches the song offset from the root the quantizer holds
+    (spec 2026-10-18 root-and-wobl-knobs §2.1), and Instrument::init does not
+    reset that root. So reinit() must push each deck's ROOT from the CURRENT
+    params before inst.init(): on Initialize Rack has already reset the params,
+    and without the push init latched the pre-Initialize root -- the factory
+    patch then played transposed until the next rebuild (final review,
+    finding 1: from D/G, offsets +2/-5 at roots 0/0). An SR change or a patch
+    open latches the patch's own root the same way."""
+    cpp = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "..", "src", "Fireflow.cpp"), encoding="utf-8").read()
+    body = cpp_scope(cpp, "void reinit(float sr)")
+    check(body is not None, "Fireflow.cpp: no reinit(float sr) found")
+    if body is None:
+        return
+    body = compact_cpp(body)
+    init = "inst.init(sr,fxmem);"
+    check(body.count(init) == 1,
+          f"reinit(): expected exactly one {init}, found {body.count(init)}")
+    if body.count(init) != 1:
+        return
+    for deck, param in (("PART_A", "ROOT_A"), ("PART_B", "ROOT_B")):
+        push = (f"inst.set_root(spky::{deck},"
+                f"(int)std::round(params[{param}].getValue()));")
+        check(push in body, f"reinit() does not push {param}: want {push}")
+        if push in body:
+            check(body.index(push) < body.index(init),
+                  f"reinit() pushes {param} after inst.init() -- init has "
+                  f"already latched the stale root by then")
 
 
 def test_center_group_boxes():

@@ -570,6 +570,19 @@ def test_formerly_reserved_pots_stay_put():
         check(hw.hw_class(enum) == "S", f"{enum} is class {hw.hw_class(enum)}, not a small pot")
         check(c.label == caption, f"{enum} prints {c.label!r}, the plate says {caption!r}")
         check(enum not in hw_only, f"{enum} is still HW_ONLY as well")
+    # The positions above are derived from DECK_CELLS/CENTRE_CELLS, so an
+    # edit to those tables would move the knob AND the expectation together
+    # and stay green. The plate is frozen, so pin its pots literally too
+    # (mm, read from the Rev A plate's generated header).
+    frozen = {"ROOT_A": (11.0, 95.0), "ROOT_B": (293.8, 95.0),
+              "REV_MOD": (175.4, 95.0)}
+    for enum, (x, y) in frozen.items():
+        c = by.get(enum)
+        if c is None:
+            continue   # already reported above
+        check(abs(c.x - x) < 1e-6 and abs(c.y - y) < 1e-6,
+              f"{enum} at ({c.x:.3f},{c.y:.3f}), the frozen Rev A plate has its "
+              f"pot at ({x:.3f},{y:.3f})")
 
 
 def test_mod_wreaths():

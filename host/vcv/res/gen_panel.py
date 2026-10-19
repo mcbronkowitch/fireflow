@@ -525,7 +525,8 @@ SHARED = [
     # pad was drift-to-zero plus a glide, which is just DRIFT's own left
     # stop. SPOT and MASTER_DRIVE (PUSH) retired here (task 9): SPOT is a
     # genuine feature loss (the owner never uses it), PUSH is fixed by ear
-    # at 0.40 in Fireflow.cpp's pushParams -- "push steht immer auf 0.4".
+    # at 0.40 in the control law's fixed-value block -- "push steht immer
+    # auf 0.4".
     # The freed ROW_DUO2 row was not regrouped; it was filled, by appended
     # controls (APPENDED_PANEL_PARAMS below): PULL took its centre slot and
     # ROOT_A/ROOT_B its two outer ones (spec 2026-10-18 root-and-wobl-knobs).
@@ -700,8 +701,9 @@ APPENDED_PANEL_PARAMS = [
     Ctl("ROOT_A", KNOBI, L, ROW_DUO2, "ROOT"),
     Ctl("ROOT_B", KNOBI, R, ROW_DUO2, "ROOT"),
     # WOBL is the reverb's tail-delay LFO depth (P_REV_MOD), a constant 0.15
-    # in the law until now. It takes back its own freed ROOM slot.
-    Ctl("REV_MOD", SMKNOB, R, ROW_ROOM2, "WOBL"),
+    # in the law until now. It takes back its own freed ROOM slot. The tip
+    # spells the short label out, like PAN's.
+    Ctl("REV_MOD", SMKNOB, R, ROW_ROOM2, "WOBL", "Reverb wobble"),
 ]
 
 # --- MOD latch layer (spec 2026-08-22-mod-latch-layer-design.md) ----------
