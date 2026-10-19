@@ -32,8 +32,9 @@ struct GateEdges
 
 // Once at boot, after the board is up (DaisyPatchSM::Init() has made B9/B10
 // inputs): routes EXTI lines 13 and 14 to port G and arms falling-edge
-// detection on them. The lines' interrupt and event masks stay closed, so no
-// IRQ is ever requested and the NVIC is not touched.
+// detection on them. The lines' interrupt request is unmasked so the pending
+// bits latch, and EXTI15_10_IRQn is disabled in the NVIC so it is never taken
+// (the reason and the trap are in gate_latch.cpp). No event.
 void gate_latch_init();
 
 // Clears both pending bits. Call immediately before StartAudio(), so edges

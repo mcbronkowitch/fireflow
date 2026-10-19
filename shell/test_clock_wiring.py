@@ -15,6 +15,10 @@ What it holds, on the source text of shell/:
   - panel_scan_tick() runs the block in the brief's order: take the edges,
     step the shared law, pulse and restart, the control law with the measured
     tempo, the TEMPO release, the lamps;
+  - gate_latch_init() disables EXTI15_10_IRQn in the NVIC explicitly, before
+    it unmasks lines 13/14 in CPUIMR1, and nothing in shell/ defines an
+    EXTI15_10_IRQHandler or enables that NVIC line (libDaisy owns the handler
+    and clears only its own pin, so lines 13/14 would re-fire it forever);
   - control::ClockLaw is the only clock logic in shell/: nothing else calls
     clock_pulse() / restart() / reset_transport(), nothing polls GateIn, and
     no measured_bpm is computed (only the law's value or 0 is assigned).
@@ -235,6 +239,31 @@ def clock_calls_only_in_tick(sources):
     return "control::ClockLaw" in sources.get("panel_scan.cpp", "")
 
 
+def nvic_disabled_before_unmask(latch_text):
+    """gate_latch_init() disables EXTI15_10_IRQn in the NVIC explicitly, before
+    it unmasks lines 13/14 in CPUIMR1 -- the pair that latches the pending
+    bits under either reading of RM0433 and still takes no interrupt."""
+    body = "\n".join(strip_comment(l) for l in
+                     function_body(latch_text, "void gate_latch_init(").splitlines())
+    off = body.find("NVIC_DisableIRQ(EXTI15_10_IRQn)")
+    on = body.find("EXTI->IMR1 |= kLines")
+    return off >= 0 and on >= 0 and off < on
+
+
+def no_exti15_10_isr(sources):
+    """libDaisy owns EXTI15_10_IRQHandler and clears only its own pin; nothing
+    in shell/ may define one, and nothing may enable the NVIC line that would
+    make libDaisy's run (lines 13/14 would re-fire it forever)."""
+    for text in sources.values():
+        if mentions(text, "EXTI15_10_IRQHandler"):
+            return False
+        for line in text.splitlines():
+            code = strip_comment(line)
+            if "EnableIRQ" in code and "EXTI15_10_IRQn" in code:
+                return False
+    return True
+
+
 def run_checks(scan, main, make, tick, sources):
     results = {}
     results["gate_latch is referenced in panel_scan.cpp only under !SHELL_COUPON_PROBE"] = \
@@ -257,6 +286,10 @@ def run_checks(scan, main, make, tick, sources):
         all_coupon_free(scan, "g_clock")
     results["control_tick() hands measured_bpm to the law's options"] = \
         "g_opt.measured_bpm = measured_bpm" in tick
+    results["gate_latch_init() disables EXTI15_10_IRQn before it unmasks lines 13/14"] = \
+        nvic_disabled_before_unmask(sources.get("gate_latch.cpp", ""))
+    results["shell/ defines no EXTI15_10_IRQHandler and never enables its NVIC line"] = \
+        no_exti15_10_isr(sources)
     return results
 
 
@@ -326,6 +359,27 @@ sabotage("the law outside the guard",
          "the clock law is compiled only under !SHELL_COUPON_PROBE",
          scan=SCAN.replace("namespace shell {",
                            "namespace shell {\nvoid z() { g_clock.init(1.f); }", 1))
+
+LATCH = SOURCES.get("gate_latch.cpp", "")
+NVIC_CHECK = "gate_latch_init() disables EXTI15_10_IRQn before it unmasks lines 13/14"
+ISR_CHECK = "shell/ defines no EXTI15_10_IRQHandler and never enables its NVIC line"
+sabotage("no NVIC_DisableIRQ", NVIC_CHECK,
+         sources=dict(SOURCES, **{"gate_latch.cpp": LATCH.replace(
+             "NVIC_DisableIRQ(EXTI15_10_IRQn);", "", 1)}))
+sabotage("NVIC disabled only after the unmask", NVIC_CHECK,
+         sources=dict(SOURCES, **{"gate_latch.cpp": LATCH.replace(
+             "NVIC_DisableIRQ(EXTI15_10_IRQn);", "", 1).replace(
+             "EXTI->IMR1 |= kLines;",
+             "EXTI->IMR1 |= kLines;\n    NVIC_DisableIRQ(EXTI15_10_IRQn);", 1)}))
+sabotage("lines left masked", NVIC_CHECK,
+         sources=dict(SOURCES, **{"gate_latch.cpp": LATCH.replace(
+             "EXTI->IMR1 |= kLines;", "EXTI->IMR1 &= ~kLines;", 1)}))
+sabotage("an EXTI15_10_IRQHandler in shell/", ISR_CHECK,
+         sources=dict(SOURCES, **{"gate_latch.cpp": LATCH +
+             '\nextern "C" void EXTI15_10_IRQHandler(void) { EXTI->PR1 = kLines; }\n'}))
+sabotage("the NVIC line enabled", ISR_CHECK,
+         sources=dict(SOURCES, **{"main.cpp": MAIN +
+             "\nstatic void e(){ HAL_NVIC_EnableIRQ(EXTI15_10_IRQn); }\n"}))
 
 print("%d failed" % len(FAILS) if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

@@ -46,13 +46,26 @@ void gate_latch_init()
     EXTI->RTSR1 &= ~kLines;
     EXTI->FTSR1 |= kLines;
 
-    // No interrupt and no event: CPUIMR1 and CPUEMR1 masked for these lines,
-    // written here so the state depends neither on reset values nor on
-    // whoever ran before. The NVIC's EXTI15_10 line is
-    // left as it is: nothing in this firmware enables it, and with the line
-    // masked no request reaches it.
-    EXTI->IMR1 &= ~kLines;
+    // The interrupt request is UNMASKED (CPUIMR1) and the NVIC line is
+    // disabled -- that pair, not a masked line, is what keeps this ISR-free.
+    // Why: it is unconfirmed whether CPUPR1 latches an edge while CPUIMR1
+    // masks the line (RM0433 could not be checked, and the sources found
+    // disagree). With the line unmasked the pending bit is set under either
+    // reading; with EXTI15_10_IRQn disabled the request is never taken. The
+    // NVIC line is disabled explicitly, first, so the property depends on no
+    // default and no interrupt can slip in between the two writes. No event
+    // (CPUEMR1 masked).
+    //
+    // THE TRAP: if anything later enables EXTI15_10_IRQn in the NVIC -- e.g.
+    // a libDaisy GPIO in Mode::INTERRUPT_* on any pin 10..15, whose
+    // GPIO::Init() calls HAL_NVIC_EnableIRQ -- libDaisy's EXTI15_10_IRQHandler
+    // (per/gpio.cpp) runs and clears only its own registered pin. Lines 13/14
+    // would stay pending and re-fire the IRQ forever, at priority 0, and the
+    // board hangs in the handler. Never define EXTI15_10_IRQHandler here
+    // either: libDaisy owns it. shell/test_clock_wiring.py holds both.
+    NVIC_DisableIRQ(EXTI15_10_IRQn);
     EXTI->EMR1 &= ~kLines;
+    EXTI->IMR1 |= kLines;
 
     // CPUPR1 is write-1-to-clear.
     EXTI->PR1 = kLines;
