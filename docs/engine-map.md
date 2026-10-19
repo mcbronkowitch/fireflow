@@ -648,6 +648,16 @@ Nothing here was run in Rack or on a board.
 - **The reset window.** `double(0.010f) * 48000.f` printed **479.99998927**, so
   the first window test missed a reset exactly 10 ms after the pulse. The law
   now uses the whole-sample threshold 480, compared inclusively.
+- **Start from stop rounds a stale beat a whole step off** (spec §10, branch
+  `claude/mystifying-fermi-73e377`). `tests/test_restart.cpp` "start from
+  stop": real `Instrument` with deck B in STEP + `ClockLaw` in 96-sample blocks,
+  knob 79.5 BPM, RESET with edge 1, transport beats right after edges 1..5.
+  Rounded (before): 120 BPM **0, 1, 2, 3, 4**; 170 BPM **0, 0, 1, 2, 3**; 50 BPM
+  **0, 2, 3, 4, 5**; 50 BPM at PACE x1/16 **0, 0.125, 0.188, 0.250, 0.312**.
+  Counted (`ClockOut::counted` -> `clock_pulse_counted()`): all four land on
+  **0, 1, 2, 3, 4** pace steps. Without a RESET the probe (`probe_start.cpp`,
+  same setup, edge 1 at 1.015 beats) still rounds: 170 BPM goes 1.015 -> 1.000,
+  50 BPM 1.015 -> 3.000.
 
 ---
 

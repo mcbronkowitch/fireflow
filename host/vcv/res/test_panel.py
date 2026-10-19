@@ -1319,13 +1319,17 @@ def clock_law_wiring_issues(cpp):
                           f"hosts run the law with no connection test (spec 6)")
 
     # The law's events drive the engine, pulse before restart so a same-call
-    # pulse is the 1 the restart lands on.
-    pulse = re.search(r"if\((\w+)\.pulse\)inst\.clock_pulse\(\);", process)
+    # pulse is the 1 the restart lands on. The flag's counted pulse (the
+    # start from stop after a RESET, §10) takes clock_pulse_counted(), the
+    # firmware's line exactly.
+    pulse = re.search(r"if\((\w+)\.pulse\)\1\.counted\?inst\.clock_pulse_counted\(\)"
+                      r":inst\.clock_pulse\(\);", process)
     restart = re.search(
         r"if\((\w+)\.restart\)inst\.restart\(\1\.restart_age\);", process)
     if not pulse:
         issues.append("process() does not call inst.clock_pulse() from the "
-                      "law's pulse flag")
+                      "law's pulse flag, or clock_pulse_counted() when it is "
+                      "counted")
     if not restart:
         issues.append("process() does not call inst.restart(restart_age) from "
                       "the law's restart flag")
@@ -1382,6 +1386,9 @@ def test_clock_law_guard_rejects_representative_regressions():
              "inputs[CLOCK].isConnected() && clockTrig.process("),
             ("a missing restart",
              "inst.restart(", "inst.restart_unused("),
+            ("the counted flag ignored",
+             "lastClockOut.counted ? inst.clock_pulse_counted() : inst.clock_pulse()",
+             "inst.clock_pulse()"),
             ("no un-bypass discontinuity",
              "clockLaw.discontinuity();", ""),
             ("no law reset in reinit",

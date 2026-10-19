@@ -592,6 +592,143 @@ TEST_CASE("clock law: armed reset at loss fires on the first returning edge") {
     }
 }
 
+// ------------------------------------------------------ start from stop ----
+// Spec §10: the pulse that makes the clock run is counted when a restart's 1
+// lies within the reset window of the reference edge, on either side; no other
+// pulse is.
+
+TEST_CASE("clock law: RESET with the first edge counts the running pulse") {
+    for (uint32_t q : {1u, kBlock}) {
+        CAPTURE(q);
+        const double P = period_of(170.0);
+        Rig rig(q);
+        rig.idle_until(4800.0);
+        const auto a = rig.edge_at(5000.0, true, true);
+        CHECK(a.restart);
+        CHECK_FALSE(a.pulse);
+        CHECK_FALSE(a.counted);
+        const auto b = rig.clock_at(5000.0 + P);
+        CHECK(b.pulse);
+        CHECK(b.counted);
+        for (int k = 2; k < 6; ++k) {
+            const auto c = rig.clock_at(5000.0 + k * P);
+            CHECK(c.pulse);
+            CHECK_FALSE(c.counted);
+        }
+    }
+}
+
+TEST_CASE("clock law: a RESET just before or after the first edge counts") {
+    for (uint32_t q : {1u, kBlock}) {
+        CAPTURE(q);
+        const double P = period_of(50.0);
+        {
+            Rig rig(q);
+            CHECK(rig.reset_at(5000.0 - 0.003 * kSr).restart);   // 3 ms early
+            CHECK_FALSE(rig.clock_at(5000.0).pulse);
+            CHECK(rig.clock_at(5000.0 + P).counted);
+        }
+        {
+            Rig rig(q);
+            CHECK_FALSE(rig.clock_at(5000.0).pulse);
+            CHECK(rig.reset_at(5000.0 + 0.005 * kSr).restart);   // 5 ms late
+            CHECK(rig.clock_at(5000.0 + P).counted);
+        }
+    }
+}
+
+TEST_CASE("clock law: the counted window is the reset window") {
+    // The reference edge's stamp and the restart's call end are both whole
+    // calls, so the distance is exact: 480 samples counts, one call more not.
+    for (uint32_t q : {1u, kBlock}) {
+        CAPTURE(q);
+        const double P = period_of(120.0);
+        {
+            Rig rig(q);
+            rig.clock_at(4800.0);
+            const double ref = double(rig.now);
+            CHECK(rig.reset_at(ref + 480.0).restart);
+            CHECK(rig.clock_at(4800.0 + P).counted);
+        }
+        {
+            Rig rig(q);
+            rig.clock_at(4800.0);
+            const double ref = double(rig.now);
+            CHECK(rig.reset_at(ref + 480.0 + q).restart);
+            const auto b = rig.clock_at(4800.0 + P);
+            CHECK(b.pulse);
+            CHECK_FALSE(b.counted);
+        }
+        {
+            Rig rig(q);
+            const auto r = rig.reset_at(4800.0);
+            CHECK(r.restart);
+            const double one = double(rig.now);
+            rig.clock_at(one + 480.0 + q);
+            const auto b = rig.clock_at(one + 480.0 + q + P);
+            CHECK(b.pulse);
+            CHECK_FALSE(b.counted);
+        }
+    }
+}
+
+TEST_CASE("clock law: no RESET, no count") {
+    for (uint32_t q : {1u, kBlock}) {
+        CAPTURE(q);
+        Rig rig(q);
+        const auto v = rig.train(5000.0, 120.0, 6);
+        for (const auto& o : v) CHECK_FALSE(o.counted);
+        // A RESET long before the clock starts is no 1 for it.
+        Rig old(q);
+        CHECK(old.reset_at(1000.0).restart);
+        const auto w = old.train(48000.0, 120.0, 3);
+        CHECK(w[1].pulse);
+        CHECK_FALSE(w[1].counted);
+    }
+}
+
+TEST_CASE("clock law: an armed restart on the returning edge counts") {
+    for (uint32_t q : {1u, kBlock}) {
+        CAPTURE(q);
+        const double P = period_of(120.0);
+        Rig rig(q);
+        rig.phase = 0.1f;
+        rig.train(400.0, 120.0, 10);
+        const double last = 400.0 + 9 * P;
+        CHECK_FALSE(rig.reset_at(last + 0.05 * kSr).restart);   // armed
+        rig.phase = 0.3f;                                       // no wrap
+        rig.idle_until(last + 2.2 * P);
+        REQUIRE(rig.lost_count() == 1);
+        const double back = double(rig.now) + 3000.0;
+        CHECK(rig.clock_at(back).restart);                      // the 1
+        const auto b = rig.clock_at(back + P);
+        CHECK(b.pulse);
+        CHECK(b.counted);
+    }
+}
+
+TEST_CASE("clock law: the beat-wrap fallback far from the edge rounds") {
+    for (uint32_t q : {1u, kBlock}) {
+        CAPTURE(q);
+        const double P = period_of(120.0);
+        Rig rig(q);
+        rig.phase = 0.1f;
+        rig.train(400.0, 120.0, 10);
+        const double last = 400.0 + 9 * P;
+        CHECK_FALSE(rig.reset_at(last + 0.05 * kSr).restart);   // armed
+        rig.phase = 0.3f;
+        rig.idle_until(last + 2.2 * P);
+        REQUIRE(rig.lost_count() == 1);
+        rig.phase = 0.05f;
+        CHECK(rig.tick().restart);                              // the wrap is the 1
+        const double back = double(rig.now) + 0.1 * kSr;        // 100 ms later
+        CHECK_FALSE(rig.clock_at(back).restart);
+        const auto b = rig.clock_at(back + P);
+        CHECK(b.pulse);
+        CHECK_FALSE(b.counted);
+    }
+}
+
 // ---------------------------------------------------------------- lamps ----
 
 TEST_CASE("clock law: lamps show every edge") {

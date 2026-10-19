@@ -4196,23 +4196,20 @@ No sound result is claimed: nothing was run in Rack and nothing on a board.
     PACE x1; the tempo matches and is not double; the 1 lands with Pamela's 1; a
     stop keeps the tempo; turning TEMPO takes over; and start Pamela's at a
     tempo far from FireFlow's (e.g. 170 BPM against the 79.5 BPM init) and see
-    whether the 1 lands (the limitation below predicts a quarter late). The VCV
+    whether the 1 lands (the counted start pulse below predicts it does). The VCV
     double-tempo finding is a replay of the host code and is unconfirmed in
     Rack.
-  - **Start-from-stop limitation, Bastian's call:** when the clock starts from
-    "not running", RESET with edge 1 restarts at once, but the beat up to edge 2
-    runs at the stale tempo (held or knob), and at edge 2 `clock_pulse()` rounds
-    to the nearest pace multiple. A stale tempo below about 0.5x or at/above
-    about 1.5x of the source's lands on 0 or 2 instead of 1, and the bar stays a
-    quarter off until the next RESET. Probe, final review 2026-10-19 (real
-    `Transport` + `ClockLaw` in firmware block order, 48 kHz, 96-sample blocks,
-    PACE x1, knob at 79.5 BPM, RESET with edge 1): 120 BPM -> quarters 0, 1, 2,
-    3; 170 BPM -> 0, 0, 1, 2; 50 BPM -> 0, 2, 3, 4 (PACE x1/16 the same). It hits
-    first patch-up, a TEMPO takeover and a reinit (no held tempo); a normal
-    stop/start is fine. The remedy (count instead of round the clock's starting
-    pulse after a restart) changes `clock_pulse()`'s rounding, a non-goal of
-    spec §5, so it is left open for Bastian to decide. `docs/gotchas.md` has the
-    entry.
+  - **Start from stop, fixed 2026-10-19 (spec §10, Bastian chose "count after
+    RESET"):** when the clock starts from "not running" with RESET at edge 1,
+    the beat up to edge 2 ran at the stale tempo and edge 2 was rounded, so a
+    stale tempo under about 0.5x or from about 1.5x of the source's put the bar
+    a quarter off (79.5 BPM knob: 170 BPM -> 0, 0, 1, 2; 50 BPM -> 0, 2, 3, 4).
+    The law now marks that pulse `counted` and both hosts call
+    `clock_pulse_counted()`; all three cases and PACE x1/16 land on 0, 1, 2, 3
+    (`tests/test_restart.cpp` "start from stop", red before). Rev A
+    `SRAM_EXEC` with the fix: 205 908 B used, 56 972 B free. Remaining, by
+    design: a clock started without a RESET still rounds at edge 2.
+    `docs/gotchas.md` has the entry.
   - **Spec §8.8, P7 on Rev A, not a gate:** the CLK lamp flashing with a clock
     patched (CPUIMR1 is unmasked with the NVIC line disabled, so the pending bit
     should latch under either reading of the reference manual; no board has

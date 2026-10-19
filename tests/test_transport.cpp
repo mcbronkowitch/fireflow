@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 #include <cmath>
+#include <initializer_list>
 #include <limits>
 #include "center/transport.h"
 using namespace spky;
@@ -33,6 +34,42 @@ TEST_CASE("transport: reset zeroes the downbeat") {
     t.reset();
     CHECK(t.beats() == doctest::Approx(0.0));
     CHECK(t.beat_phase() == doctest::Approx(0.f));
+}
+
+TEST_CASE("transport: a counted pulse lands one pace step after a reset") {
+    // Spec 2026-10-19-clock-and-reset-jacks §10. 0.47 and 1.59 beats are the
+    // stale-tempo runs that rounding snapped to 0 and 2.
+    for (double ran : {0.47, 1.59}) {
+        CAPTURE(ran);
+        Transport t;
+        t.init(500.f);
+        t.set_bpm(120.f);
+        for (int i = 0; i < 777; ++i) t.tick();
+        t.reset();
+        t.advance(ran * 250.0);   // 250 ticks per beat at 120 BPM
+        t.clock_pulse_counted(1.f);
+        CHECK(t.beats() == doctest::Approx(1.0));
+        // Only the first pulse after the reset counts: the next one rounds.
+        t.advance(0.4 * 250.0);
+        t.clock_pulse_counted(1.f);
+        CHECK(t.beats() == doctest::Approx(1.0));
+    }
+}
+
+TEST_CASE("transport: a counted pulse without a reset rounds") {
+    // With no STEP deck restart() leaves the transport alone: the anchor is a
+    // stale pulse, not a 1, and counting from it would throw the beat.
+    Transport t;
+    t.init(500.f);
+    t.set_bpm(120.f);
+    t.advance(2.16 * 250.0);
+    t.clock_pulse_counted(1.f);
+    CHECK(t.beats() == doctest::Approx(2.0));
+    t.reset();
+    t.clock_pulse(1.f);           // a pulse since the reset spends it
+    t.advance(1.59 * 250.0);
+    t.clock_pulse_counted(1.f);
+    CHECK(t.beats() == doctest::Approx(2.0));
 }
 
 TEST_CASE("transport: set_bpm rejects non-positive and non-finite values") {

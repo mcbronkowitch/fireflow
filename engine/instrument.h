@@ -537,6 +537,10 @@ public:
     void set_pull(float p) { _pull = clampf(p, -1.f, 1.f); }
     static constexpr float kPullDead = 0.03f;
     void clock_pulse()     { _center.clock_pulse(_pace); }
+    // The pulse control::ClockOut marks counted: the clock starting after a
+    // RESET at its first edge lands one pace step after that restart instead
+    // of rounding (Transport::clock_pulse_counted, spec 2026-10-19 §10).
+    void clock_pulse_counted() { _center.clock_pulse_counted(_pace); }
     // RST = bar resync: zero the downbeat, drop the grid offsets a live STEPS
     // turn left behind, and restart the loops at phase 0 — everything lands on
     // the fresh bar start together (no servo drag).

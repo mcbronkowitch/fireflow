@@ -740,23 +740,22 @@ once per sample. Spec:
   `reset_transport()` and does not restart the song.
 - **Known limitation:** a source that sends RESET on every loop keeps the song
   near phrase 0 (spec §2.2).
-- **Known limitation: a clock that starts far from FireFlow's tempo can put the
-  bar a quarter off.** When the clock starts from "not running", RESET (sent
-  with edge 1) restarts at once, but edge 1 is only a reference: the beat up to
-  edge 2 runs at the stale tempo (the held one, or the knob's). At edge 2
-  `clock_pulse()` rounds the beat to the nearest pace multiple, so a stale tempo
-  below about 0.5x or at/above about 1.5x of the source's lands on 0 or 2
-  instead of 1, and the bar stays a quarter off until the next RESET. Probe,
-  final review 2026-10-19 (real `Transport` + `ClockLaw` in firmware block
-  order, 48 kHz, 96-sample blocks, PACE x1, knob at the init 79.5 BPM, RESET
-  with edge 1): a 120 BPM clock puts edges 1-4 on quarters 0, 1, 2, 3; 170 BPM
-  on 0, 0, 1, 2 (a quarter late); 50 BPM on 0, 2, 3, 4 (a quarter early; at
-  PACE x1/16 and 50 BPM the same). A normal stop/start under the held tempo
-  (ratio near 1) is fine. It bites at first patch-up with a far-off tempo,
-  after a TEMPO takeover, and after a reinit (patch open, sample-rate change,
-  Initialize), which drops the held tempo. The remedy (count, not round, the clock's first pulse after a restart) touches
-  `clock_pulse()`'s rounding, a non-goal of the spec (§5), and is Bastian's
-  call.
+- **Start from stop: the second edge is counted after a RESET (spec §10).**
+  When the clock starts from "not running", RESET with edge 1 restarts at once,
+  but edge 1 is only a reference, so the beat up to edge 2 runs at the stale
+  tempo (the held one, or the knob's). The law marks the pulse at edge 2
+  `counted` when a restart's 1 lay within 10 ms of edge 1 (either side), and
+  `process()` then calls `clock_pulse_counted()`: the bar lands exactly one
+  beat (one pace step) after the restart, whatever the stale tempo was. Before
+  this, edge 2 was rounded to the nearest pace multiple, and a stale tempo under
+  about 0.5x or from about 1.5x of the source's put the bar a quarter off
+  (79.5 BPM knob: a 170 BPM clock landed edges 1-4 on 0, 0, 1, 2, a 50 BPM one
+  on 0, 2, 3, 4; now both land on 0, 1, 2, 3, `tests/test_restart.cpp` "start
+  from stop").
+- **Known limitation:** a clock that starts *without* a RESET still rounds at
+  edge 2, so a stale tempo far from the source's repeats or skips one beat
+  there. Without a RESET there is no bar to keep; rounding at edge 1 instead
+  was rejected because one stray edge would then move the beat (spec §10).
 - **Checked so far:** the law and the engine restart by desktop tests
   (`clock law*`, `restart*`), and the wiring by `res/test_panel.py`. It has not
   been run in Rack. At the factory PACE x1/16 the TEMPO lamp flashes only every 16

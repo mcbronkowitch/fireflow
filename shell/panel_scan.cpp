@@ -210,11 +210,13 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
     // block's latched edges into the shared clock law, stamped at the block's
     // end; its pulse and restart go to the engine before the control law
     // runs, as VCV does per sample. Pulse first: a reset in the same block
-    // counts as arriving before its pulse, so that pulse is the 1.
+    // counts as arriving before its pulse, so that pulse is the 1. The pulse
+    // that starts a clock whose first edge came with a RESET is counted, not
+    // rounded (section 10).
     const GateEdges         gates = gate_latch_take();
     const control::ClockOut clk   = g_clock.step(g_block_samples, gates.clock, gates.reset,
                                                  g_knobs[ffctl::TEMPO], inst.beat_phase());
-    if(clk.pulse) inst.clock_pulse();
+    if(clk.pulse) clk.counted ? inst.clock_pulse_counted() : inst.clock_pulse();
     if(clk.restart) (void)inst.restart(clk.restart_age);
     const float measured_bpm = clk.measured_bpm;
     const bool  clock_lamp   = clk.clock_lamp;
