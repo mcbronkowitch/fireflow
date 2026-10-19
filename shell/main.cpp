@@ -66,6 +66,9 @@ volatile uint32_t g_block_tick = 0;
 #if SHELL_PANEL_SCAN
 #include "cycles.h"
 #include "panel_scan.h"
+#if !SHELL_COUPON_PROBE
+#include "gate_latch.h"
+#endif
 #endif
 
 #if defined(SHELL_CPU_PROBE)
@@ -376,7 +379,14 @@ int main(void)
     // shared control law sets every parameter from the init patch's knob
     // vector (spec 2026-10-09-rev-a-p6b1 section 4.2), and a pot takes its
     // knob only once it is moved (spec 2026-10-18-rev-a-p6b2 section 2).
-    shell::panel_scan_init();
+    shell::panel_scan_init(hw);
+#if !SHELL_COUPON_PROBE
+    // The CLOCK / RESET pending bits cleared as the very last thing before
+    // audio starts, so boot glitches on Gate In 1/2 never arrive as edges
+    // (spec 2026-10-19-clock-and-reset-jacks section 6). Rev A only: the
+    // coupon reads no gate pin.
+    shell::gate_latch_arm();
+#endif
     hw.StartAudio(AudioCallback);
     shell::run_panel_scan_report(hw);   // never returns
 #endif

@@ -68,6 +68,8 @@ add_executable(spky_tests
     tests/test_mod_layer.cpp
     tests/test_control_params.cpp
     tests/test_control_law.cpp
+    tests/test_clock_law.cpp
+    tests/test_restart.cpp
     tests/test_law_cache.cpp
     tests/test_step.cpp
     tests/test_shuffle_grid.cpp
@@ -575,6 +577,15 @@ add_test(NAME read_scan_check_guard
 add_test(NAME shell_panel_map_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_gen_panel_map.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
+
+# The firmware's CLOCK and RESET wiring (spec 2026-10-19-clock-and-reset-jacks
+# sections 6 and 8.5): the gate latch stays out of the coupon image, the
+# pending bits are cleared right before StartAudio(), the block runs in order,
+# and control::ClockLaw is the only clock logic in shell/.
+add_test(NAME shell_clock_wiring_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_clock_wiring.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
 
 add_test(NAME shell_qspi_placement_guard

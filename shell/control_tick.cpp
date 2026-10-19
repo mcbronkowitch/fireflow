@@ -39,18 +39,24 @@ void control_boot(float* knobs)
     (void)spkyled::gamma_table(spkyled::kLedSteps);
 }
 
-control::Events control_tick(const float* knobs, spky::Instrument& inst)
+control::Events control_tick(const float* knobs, spky::Instrument& inst, float measured_bpm)
 {
+    // The law takes it in 20..400 BPM and otherwise uses the TEMPO knob
+    // (control_law.h); the clock law hands over 0 when the knob owns the tempo.
+    g_opt.measured_bpm = measured_bpm;
     const control::Events ev = g_law.tick(knobs, g_opt, inst);
     for(int p = 0; p < 2; ++p)
         if(ev.bbd_edge[p]) g_opt.deck[p].excite_other_deck = true;
     return ev;
 }
 
-void led_tick(const spky::Instrument& inst, bool mod_latched, float dt, int* duty_out)
+void led_tick(const spky::Instrument& inst, bool mod_latched, float dt, int* duty_out,
+              bool clock_lamp, bool reset_lamp)
 {
     spkyled::LedInputs in;
     in.mod_latched = mod_latched;
+    in.clock_pulse = clock_lamp;
+    in.reset_pulse = reset_lamp;
     spkyled::fill(inst, g_panel, dt, spkyled::kLedSteps, in, duty_out);
 }
 

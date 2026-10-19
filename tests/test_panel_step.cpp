@@ -4,6 +4,7 @@
 // Spec: docs/superpowers/specs/2026-10-18-rev-a-p6b2-mod-keys-leds-design.md
 // sections 2, 3, 5 and 7.
 #include <doctest/doctest.h>
+#include <cmath>
 #include <cstdint>
 #include "../shell/controls.h"
 #include "../shell/generated_panel_map.h"
@@ -11,6 +12,7 @@
 #include "../shell/panel_step.h"
 #include "../shell/pot_owner.h"
 #include "../shell/scan_value.h"
+#include "control/clock_law.hpp"
 #include "control/control_law.h"
 #include "control/params.hpp"
 
@@ -214,4 +216,88 @@ TEST_CASE("panel step: the FLUX channels of kRevaTable are the FLUX_A and FLUX_B
     }
     CHECK(rows[0] == 1);
     CHECK(rows[1] == 1);
+}
+
+// CLOCK and RESET (spec 2026-10-19-clock-and-reset-jacks §6, "Knob takeover"):
+// the firmware releases the TEMPO pot when the clock is lost, so the pot must
+// move past kPotTouch before the knob vector's TEMPO changes and hands the
+// tempo back to the knob.
+TEST_CASE("panel step: TEMPO channel found") {
+    const int tempo = shell::tempo_channel(shell::kRevaTable, shell::kRevaChain);
+    REQUIRE(tempo >= 0);
+    const shell::ChainProfile& p = shell::kRevaChain;
+    // The scan reads index `tempo` at exactly one live (step, sense) pair, and
+    // the row it finds there -- as panel_scan_tick() looks it up -- is TEMPO.
+    int hits = 0;
+    for (int step = 0; step < shell::scan_steps(p); ++step)
+        for (int s = 0; s < p.sense_pins; ++s) {
+            if (!shell::sense_live(p, step, s)) continue;
+            if (shell::mux_channel(p, step, s) != tempo) continue;
+            ++hits;
+            const shell::ControlEntry* e = shell::find_control(
+                shell::kRevaTable, shell::group_at(p, step, s), shell::channel_at(p, step, s));
+            REQUIRE(e != nullptr);
+            CHECK(e->param == ffctl::TEMPO);
+        }
+    CHECK(hits == 1);
+    int rows = 0;
+    for (int i = 0; i < shell::kRevaTable.count; ++i)
+        rows += shell::kRevaTable.entries[i].param == ffctl::TEMPO;
+    CHECK(rows == 1);
+    // The coupon has no TEMPO row.
+    CHECK(shell::tempo_channel(shell::kCouponTable, shell::kCouponPlayChain) == -1);
+}
+
+TEST_CASE("panel step: clock loss releases the TEMPO pot") {
+    const int tempo = shell::tempo_channel(shell::kRevaTable, shell::kRevaChain);
+    REQUIRE(tempo >= 0);
+    constexpr int kN = shell::mux_total(shell::kRevaChain);
+    static shell::PotOwner  owners[kN];
+    static shell::PotFilter filters[kN];
+    for (int i = 0; i < kN; ++i) { owners[i] = {}; filters[i] = {}; }
+    const shell::ControlEntry& e = reva_row(ffctl::TEMPO);
+    shell::PotOwner&  o = owners[tempo];
+    shell::PotFilter& f = filters[tempo];
+    Knobs k;
+    float v = -1.f;
+
+    // TEMPO owned and turning; every other pot owned too.
+    shell::pot_row_step(e, o, f, 20000, kSpan, k.v, &v);
+    shell::pot_row_step(e, o, f, 20000 + kT + 1, kSpan, k.v, &v);
+    REQUIRE(o.owned);
+    for (int i = 0; i < kN; ++i)
+        if (i != tempo) { owners[i].owned = true; owners[i].has_ref = true; }
+
+    // No loss: nothing is touched.
+    control::ClockOut out;
+    out.pulse = out.clock_lamp = true;
+    out.measured_bpm = 120.f;
+    shell::apply_clock_events(out, owners, tempo);
+    for (int i = 0; i < kN; ++i) { CAPTURE(i); CHECK(owners[i].owned); }
+
+    // Loss: TEMPO alone is released.
+    out = control::ClockOut{};
+    out.lost = true;
+    out.measured_bpm = 120.f;
+    shell::apply_clock_events(out, owners, tempo);
+    CHECK_FALSE(o.owned);
+    for (int i = 0; i < kN; ++i)
+        if (i != tempo) { CAPTURE(i); CHECK(owners[i].owned); }
+
+    // Released, the pot's noise does not reach the knob vector: TEMPO holds
+    // until the pot moves past kPotTouch, then jumps to the pot's position.
+    const float held = k.v[ffctl::TEMPO];
+    for (int raw : {20000 + kT + 1, 20000 + kT + 1 + (kT - 1), 20000 + kT + 1 - (kT - 1)}) {
+        CAPTURE(raw);
+        shell::pot_row_step(e, o, f, static_cast<uint16_t>(raw), kSpan, k.v, &v);
+        CHECK(k.v[ffctl::TEMPO] == held);
+    }
+    constexpr int kMove = 20000 + kT + 1 + 2 * kT + 2;
+    shell::pot_row_step(e, o, f, kMove, kSpan, k.v, &v);
+    CHECK(o.owned);
+    CHECK(std::fabs(k.v[ffctl::TEMPO] - knob_at(ffctl::TEMPO, kMove)) < 1e-6f);
+    CHECK(k.v[ffctl::TEMPO] != held);
+
+    // A board without a TEMPO row (-1) touches no owner on a loss.
+    shell::apply_clock_events(out, nullptr, -1);
 }

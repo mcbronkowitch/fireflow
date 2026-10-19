@@ -710,7 +710,7 @@ is actually built today, and what is still design-only.
 | **PAN** | A per-deck bipolar balance knob, `PAN_A`/`PAN_B`, placing each deck's dry signal in the stereo field — `gL = min(1, 1 − p)`, `gR = min(1, 1 + p)`, unity at centre — while the reverb send deliberately stays centred (folding PAN into `ga`/`gb` would have been the tidy-looking way to do it, and is exactly what the send-stays-still gate exists to catch). PAN fills two slots that were already being held open rather than claiming new ones: `FX_BOT[1]` on the big panel, free since MULT was retired, and `LEVEL_SLOTS[0]` on the hardware plate, kept empty by a guard written specifically for this knob. **No control moved and no row was re-pitched** | ✅ **done** (engine + both VCV panels; spec `docs/superpowers/specs/2026-08-30-pan-design.md`, plan `docs/superpowers/plans/2026-08-30-pan.md`; branch `feat/pan`; released in 2.22.0. **Amended the same day it shipped** (`3b9afd8`): `PAN_B`'s mod ring reads deck **A**'s `LANE_SIZE` through deck A's master, negated, because both decks reading their own lane measured r = +1.0000 at equal RATE — one drift, twice, walking the whole mix to one side instead of opening a stereo image. The price is that `MOD_B` no longer reaches `PAN_B`; deck B's pan is switched off at its own depth ring. The arithmetic is gated in `tests/test_mod_layer.cpp`; the wiring is not, and cannot be — Rack does not link into `spky_tests`. **PAN has had no listening pass at all** — the balance law itself (against equal-power and against mid/side rotation), the 30 ms smoothing time copied from LVL, and `LANE_SIZE` as the mod ring's lane are all first-try values, see `docs/by-ear-decisions.md`. **In Rack, only the drawing was checked**: both panels were rendered headlessly from the built plugin (`Rack.exe -u <throwaway> -t 2`), confirming PAN's placement — `LINK PAN GRIT LVL` on the big panel's FX row, `FB PAN GRIT SEND TONE` across the plate's bottom line — and that both knobs boot at centre. **Nobody has dragged the knob, exercised its MOD ring under the latch, or saved and reloaded a patch**, the three things a screenshot cannot show) |
 | **Lane crossover** | A deck's lane output (LEVEL/MOTION/…) becomes a selectable modulation source for a target on the *other* deck — the first direct mod-to-mod bridge between the decks (today only audio and the rhythm view cross over) | ⬜ **planned** (from the 2026-08-22 dual-deck brainstorm, `docs/superpowers/specs/2026-08-22-dual-deck-brainstorm.md`; no spec; not yet ordered into the milestone sequence; spec together with "Mirror lanes" — same mod-glue) |
 | **Mirror lanes** | A deck follows a chosen lane of the sibling inverted or phase-shifted — direct per-lane counter-motion, deterministic call-and-response, complementing DRIFT's stochastic anti-correlation | ⬜ **planned** (from the 2026-08-22 dual-deck brainstorm, same doc as above; no spec; not yet ordered into the milestone sequence) |
-| **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel layout redone 2026-10-08 after the failed grip test** — regrouping, redistribution and plate round 2a shipped in 2.21.1/2.21.2/2.21.3, then the 9 mm panel pass moved every control onto a raster (73 knob positions, 15 lamps) and the Rev A board and firmware table follow it; the correction cut was ordered 2026-10-09 and the freeze tag waits for the repeated grip test on it; **bring-up is under way on a test coupon** — built 2026-09-17, five measurement rounds through 2026-09-28 (settle, crosstalk, codec tone, wait, pots), each with its own spec, plan and write-up under `docs/hardware/`; Phase-0 step 5b is closed on real pots; the panel scan's part 1 is built and measured on the coupon — `scan-measured.md` — and P6a is built — the Rev A scan, the generated table (70 rows then, 73 since the 9 mm pass), 35 pots sending, four keys — and its coupon session passed 3 of 4 checks on 2026-10-03 (D8/D9 deferred to P7 by decision); P6b-1 (the shared control law: VCV and the firmware run one `control::ControlLaw`) is done as of 2026-10-09, board session done (QSPI execute-in-place confirmed, law cost measured, clean by ear at 11 800 cycles), Rack check done (one pre-existing VCV bug open, see the P6b-1 entry); P6b-2 (knob ownership, MOD, the four keys, the LED law) is done as of 2026-10-18, coupon session passed (the clicks it surfaced predate it and trigger P6b-1's Plan B); the CPU headroom round removed the clicks on the coupon on 2026-10-18 (wavetable bank in D2 SRAM, audio path in ITCM; worst block 958 k → 873 k on the shipping image, Plan B not needed; merged 2026-10-18); next: bring-up (P7); **form factor decided 2026-08-21: one brain, one 60 HP module, desktop as a shell decision** — see below) |
+| **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel layout redone 2026-10-08 after the failed grip test** — regrouping, redistribution and plate round 2a shipped in 2.21.1/2.21.2/2.21.3, then the 9 mm panel pass moved every control onto a raster (73 knob positions, 15 lamps) and the Rev A board and firmware table follow it; the correction cut was ordered 2026-10-09 and the freeze tag waits for the repeated grip test on it; **bring-up is under way on a test coupon** — built 2026-09-17, five measurement rounds through 2026-09-28 (settle, crosstalk, codec tone, wait, pots), each with its own spec, plan and write-up under `docs/hardware/`; Phase-0 step 5b is closed on real pots; the panel scan's part 1 is built and measured on the coupon — `scan-measured.md` — and P6a is built — the Rev A scan, the generated table (70 rows then, 73 since the 9 mm pass), 35 pots sending, four keys — and its coupon session passed 3 of 4 checks on 2026-10-03 (D8/D9 deferred to P7 by decision); P6b-1 (the shared control law: VCV and the firmware run one `control::ControlLaw`) is done as of 2026-10-09, board session done (QSPI execute-in-place confirmed, law cost measured, clean by ear at 11 800 cycles), Rack check done (one pre-existing VCV bug open, see the P6b-1 entry); P6b-2 (knob ownership, MOD, the four keys, the LED law) is done as of 2026-10-18, coupon session passed (the clicks it surfaced predate it and trigger P6b-1's Plan B); the CPU headroom round removed the clicks on the coupon on 2026-10-18 (wavetable bank in D2 SRAM, audio path in ITCM; worst block 958 k → 873 k on the shipping image, Plan B not needed; merged 2026-10-18); the CLOCK and RESET jacks are built in VCV and the firmware as of 2026-10-19 (one shared clock law; Rack check and Rev A check open, see the entry in the M6 section); next: bring-up (P7); **form factor decided 2026-08-21: one brain, one 60 HP module, desktop as a shell decision** — see below) |
 
 Milestone order follows the design spec's build order (audible first, hardware
 last). The scale layer was inserted after M1 because it only touches the PITCH
@@ -4145,6 +4145,82 @@ the coupon has nothing else open.
 LEDs on the 595 — waits for the control PCB's pin map, which should give one
 spare channel to AGND and one to the rail (spec §8).
 
+**2026-10-19 — CLOCK and RESET jacks: one clock law for VCV and the firmware ✅ built; Rack check (spec §8.7) and Rev A bring-up (§8.8) open.**
+Spec `docs/superpowers/specs/2026-10-19-clock-and-reset-jacks-design.md`,
+plan `docs/superpowers/plans/2026-10-19-clock-and-reset-jacks.md`; code on
+branch `claude/clock-reset-jacks` (`cf4a9966`..`6c082ce0`), not merged yet.
+No sound result is claimed: nothing was run in Rack and nothing on a board.
+- **What was built.**
+  - **`control/clock_law.hpp`**: one header-only law that takes the CLOCK and
+    RESET edges and a sample count and returns the tempo and the pulse/restart
+    events. VCV calls it per sample, the firmware per 96-sample block.
+  - **Tempo.** It comes from the period across the last 9 edges (8 periods) and
+    changes only at a pulse. At 130 BPM and 96-sample stamping the largest
+    per-pulse step is 0.0704 BPM (single-period measuring: 130.435 / 129.870).
+    A period outside a two-sided band of 1.2x the window mean is held aside, and
+    two agreeing ones on the same side are taken as a tempo change. Periods
+    outside 20..400 BPM are ignored completely.
+  - **Clock loss.** The tempo is held after 2 x the measured period, and the
+    TEMPO knob takes it back on its first move. The firmware releases the TEMPO
+    pot's ownership at the loss.
+  - **Reset.** An armed reset fires on the next pulse. A reset up to 10 ms
+    (480 samples at 48 kHz, inclusive) after a pulse counts for that pulse and
+    is back-dated by the samples elapsed. With no running clock it restarts at
+    once. A reset armed when the clock is lost fires on the first CLOCK edge
+    that comes back, or else on FireFlow's own next beat (which carries PACE).
+  - **Engine.** `Instrument::restart(age)` does today's `reset_transport()` (bar
+    and both decks' lanes to 0) and in addition sends every STEP deck's song to
+    phrase 0, pattern A. With no deck in STEP it returns false and changes
+    nothing. A FLOW deck keeps its song position. "Resync to bar" in VCV still
+    calls plain `reset_transport()`.
+  - **VCV.** `Fireflow.cpp` calls the law per sample, with no `isConnected()`
+    test on either jack; `onUnBypass` and `reinit()` call its discontinuity and
+    init entries and reset both Schmitt triggers. `FireflowHW` shares the path. `res/test_panel.py` guards the
+    wiring.
+  - **Firmware.** Gate In 1/2 (B10 = CLOCK, B9 = RESET) are latched in the EXTI
+    pending bits of lines 13/14 (`shell/gate_latch.cpp`), read and cleared once
+    per block, with no ISR and the NVIC line `EXTI15_10_IRQn` disabled
+    explicitly (a libDaisy trap, `docs/gotchas.md`). The CLK/RST lamps are filled
+    for the first time. The gate read is compiled into the Rev A play image only;
+    the coupon images contain no gate symbol. `shell_clock_wiring_guard` pins
+    the wiring.
+- **Measured** (full numbers and setups: `docs/engine-map.md` §6, "Measured:
+  CLOCK and RESET"). VCV's old tempo formula replayed against the transport
+  counts 32.0 beats for 16 pulses at PACE x1; the shared law counts 16.0. Rev A
+  `SRAM_EXEC`: 205 780 B used, **57 100 B free** (the CPU headroom record had
+  60 656 B; this round took 3 556 B). The law's cycle cost is unmeasured; that
+  needs a board.
+- **Open.**
+  - **Spec §8.7, Rack, Bastian:** Pamela's clock and reset into FireFlow at
+    PACE x1; the tempo matches and is not double; the 1 lands with Pamela's 1; a
+    stop keeps the tempo; turning TEMPO takes over; and start Pamela's at a
+    tempo far from FireFlow's (e.g. 170 BPM against the 79.5 BPM init) and see
+    whether the 1 lands (the limitation below predicts a quarter late). The VCV
+    double-tempo finding is a replay of the host code and is unconfirmed in
+    Rack.
+  - **Start-from-stop limitation, Bastian's call:** when the clock starts from
+    "not running", RESET with edge 1 restarts at once, but the beat up to edge 2
+    runs at the stale tempo (held or knob), and at edge 2 `clock_pulse()` rounds
+    to the nearest pace multiple. A stale tempo below about 0.5x or at/above
+    about 1.5x of the source's lands on 0 or 2 instead of 1, and the bar stays a
+    quarter off until the next RESET. Probe, final review 2026-10-19 (real
+    `Transport` + `ClockLaw` in firmware block order, 48 kHz, 96-sample blocks,
+    PACE x1, knob at 79.5 BPM, RESET with edge 1): 120 BPM -> quarters 0, 1, 2,
+    3; 170 BPM -> 0, 0, 1, 2; 50 BPM -> 0, 2, 3, 4 (PACE x1/16 the same). It hits
+    first patch-up, a TEMPO takeover and a reinit (no held tempo); a normal
+    stop/start is fine. The remedy (count instead of round the clock's starting
+    pulse after a restart) changes `clock_pulse()`'s rounding, a non-goal of
+    spec §5, so it is left open for Bastian to decide. `docs/gotchas.md` has the
+    entry.
+  - **Spec §8.8, P7 on Rev A, not a gate:** the CLK lamp flashing with a clock
+    patched (CPUIMR1 is unmasked with the NVIC line disabled, so the pending bit
+    should latch under either reading of the reference manual; no board has
+    shown it yet), the edge polarity (falling at the pin should be rising at the
+    jack), the input threshold, a 1 ms trigger caught, and the 2 ms edge jitter
+    by ear and on the CLK lamp.
+- **Known limitation, accepted by Bastian:** a source that resets on every loop
+  keeps the song near phrase 0 (spec §2.2).
+
 **2026-10-18 — CPU headroom round: the clicks are gone on the coupon.**
 Spec `docs/superpowers/specs/2026-10-18-cpu-headroom-design.md` (approved by
 Bastian), plan `docs/superpowers/plans/2026-10-18-cpu-headroom.md`, record
@@ -4180,7 +4256,7 @@ Bastian), plan `docs/superpowers/plans/2026-10-18-cpu-headroom.md`, record
 **2026-10-18 — P6b-2: knob ownership, the four keys and the lamps run on the coupon.**
 Spec `docs/superpowers/specs/2026-10-18-rev-a-p6b2-mod-keys-leds-design.md`,
 plan `docs/superpowers/plans/2026-10-18-rev-a-p6b2-mod-keys-leds.md`; code on
-branch `feat/p6b2-mod-keys-leds`, not merged yet.
+branch `feat/p6b2-mod-keys-leds`, merged into main 2026-10-18 (`8c1a37f1`).
 - **What changed.** A pot owns its parameter only after it has been moved
   (`shell/pot_owner.h`): at boot the init patch plays whatever the knobs stand
   at, and a real turn jumps the parameter to the pot and follows from then on.
@@ -4278,7 +4354,8 @@ on branch `feat/p6b1-control-law` (base `042b78b6`).
 - **Known divergences from VCV** (`shell/README.md`, "Known divergences", spec
   §8): the depths are the init patch's and cannot be edited (P6b-2); after a BBD
   edge the hardware's FLUX stays at its pot value; a Sampler deck is silent;
-  no CLOCK, RESET or CV on the hardware; turning ENGINE does not copy the
+  no CLOCK, RESET or CV on the hardware (CLOCK and RESET are wired in the
+  firmware since 2026-10-19, see the CLOCK and RESET entry; CV is not); turning ENGINE does not copy the
   ATTACK/STAGES pot's position into the newly shown parameter.
 - **Fixed the same day: BBD edge on a restore.** Restoring onto the BBD over a
   live non-BBD deck fired the BBD edge a few blocks later (the engine switch

@@ -1,5 +1,6 @@
 #pragma once
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include "mod/lane.h"
 #include "mod/lane_id.h"
@@ -73,6 +74,8 @@ public:
     uint8_t active_pattern() const { return _lanes[LANE_PITCH].active_pattern(); }
     void set_principle(Principle p) { set_form(p); }
     void new_phrase() { _lanes[LANE_PITCH].new_phrase(); }
+    // RESET's song restart: phrase 0, first pattern. See ModLane::restart_song.
+    void restart_song() { _lanes[LANE_PITCH].restart_song(); }
     // How often the PITCH lane has rebuilt its phrase from scratch -- see
     // ModLane::phrase_builds. Part's song offset latches when it moves.
     uint32_t pitch_phrase_builds() const { return _lanes[LANE_PITCH].phrase_builds(); }
@@ -179,16 +182,27 @@ public:
     // happen here alongside it, the same way it used to happen inside
     // ModLane::reset() for every lane (even though only LANE_PITCH's ring
     // was ever read).
-    void reset_phases() {
-        for (auto& l : _lanes) l.reset(0.f);
+    //
+    // `age` back-dates the reset (spec 2026-10-19 clock-and-reset-jacks §6, a
+    // RESET just after a clock edge): each lane lands where it would stand
+    // `age` samples after phase 0 at its own current increment. age == 0 is
+    // the plain RST above, phase exactly 0.
+    void reset_phases(uint32_t age = 0) {
+        for (auto& l : _lanes) {
+            const double ph = l.phase_step() * static_cast<double>(age);
+            l.reset(age ? static_cast<float>(ph - std::floor(ph)) : 0.f);
+        }
         // Every follower derives its slot from THIS counter, not from any
         // state ModLane::reset() clears -- resetting the lanes without also
         // resetting the deck clock leaves each texture lane re-arming at
         // slot_of(_deck_step, slots) on its next follow(), an arbitrary slot
         // that depends on how long the deck had been running, while PITCH
         // restarts at phase 0. RST is the resync gesture for the whole
-        // deck's clock, not just the lanes' own state.
-        _deck_step = 0;
+        // deck's clock, not just the lanes' own state. A back-dated reset can
+        // land PITCH past its first step; the deck clock starts on that step,
+        // or every follower sits behind the melody until the next reset.
+        _deck_step = (_step_on && age)
+            ? _lanes[LANE_PITCH].step_at_phase(_lanes[LANE_PITCH].phase()) : 0;
         _last_pitch_step = -1;
         _since_onset = 0;
         _onsets = 0;

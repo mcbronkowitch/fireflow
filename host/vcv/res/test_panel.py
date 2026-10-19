@@ -1277,6 +1277,128 @@ def test_reinit_pushes_the_root_before_init():
                   f"already latched the stale root by then")
 
 
+def clock_law_wiring_issues(cpp):
+    """Return the ways Fireflow.cpp strays from the shared CLOCK/RESET law
+    (spec 2026-10-19 clock-and-reset-jacks §6, §7, §8.4). The module used to
+    time CLOCK itself: 60 * sampleRate / clkSamples counted samples between
+    Schmitt edges, so a 120 BPM clock read as double (§3), and the tempo came
+    from a jack connection test the board cannot make. Now control::ClockLaw
+    owns tempo, pulses and the restart, and the hosts only forward its events.
+    """
+    issues = []
+    process = cpp_scope(cpp, "void process(const ProcessArgs& args) override")
+    reinit = cpp_scope(cpp, "void reinit(float sr)")
+    push = cpp_scope(cpp, "void pushParams()")
+    unbypass = cpp_scope(cpp, "void onUnBypass(const UnBypassEvent& e) override")
+    for label, block in (("process()", process), ("reinit(float sr)", reinit),
+                         ("pushParams()", push),
+                         ("onUnBypass(const UnBypassEvent&)", unbypass)):
+        if block is None:
+            issues.append(f"Fireflow.cpp: no {label} found")
+    # A missing scope fails its own checks below as well, so one run lists
+    # everything that is wrong.
+    flat = compact_cpp(cpp)
+    process, reinit = compact_cpp(process or ""), compact_cpp(reinit or "")
+    push, unbypass = compact_cpp(push or ""), compact_cpp(unbypass or "")
+
+    # The old measurement is gone, not merely unused.
+    if "clkSamples" in flat:
+        issues.append("clkSamples is still in Fireflow.cpp: the sample count "
+                      "between Schmitt edges belongs to control::ClockLaw")
+    if "60.f*curSr/clkSamples" in flat:
+        issues.append("the old tempo formula 60.f * curSr / clkSamples is back")
+
+    # One law call per sample, with the Schmitt edges and the knob going in.
+    if "clockLaw.step(1," not in process:
+        issues.append("process() does not call clockLaw.step(1, ...) per sample")
+    # No connection test: an unplugged jack reads 0 V, never edges, and times
+    # out exactly like the board. The test may not gate the clock or the reset.
+    for jack in ("CLOCK", "RESET"):
+        if f"inputs[{jack}].isConnected()" in flat:
+            issues.append(f"inputs[{jack}].isConnected() gates the law: both "
+                          f"hosts run the law with no connection test (spec 6)")
+
+    # The law's events drive the engine, pulse before restart so a same-call
+    # pulse is the 1 the restart lands on.
+    pulse = re.search(r"if\((\w+)\.pulse\)inst\.clock_pulse\(\);", process)
+    restart = re.search(
+        r"if\((\w+)\.restart\)inst\.restart\(\1\.restart_age\);", process)
+    if not pulse:
+        issues.append("process() does not call inst.clock_pulse() from the "
+                      "law's pulse flag")
+    if not restart:
+        issues.append("process() does not call inst.restart(restart_age) from "
+                      "the law's restart flag")
+    if pulse and restart and pulse.start() > restart.start():
+        issues.append("process() restarts before it pulses: the restart must "
+                      "follow the pulse it belongs to")
+    # "Resync to bar" stays the bar-only reset (§5).
+    if "resyncReq.exchange(false))inst.reset_transport();" not in process:
+        issues.append("the menu's Resync to bar no longer calls "
+                      "inst.reset_transport()")
+    # (The CLK / RST lamps come from the law's lamp flags; that wiring is
+    # pinned in engine_cycle_wiring_issues, beside the rest of the LED seam.)
+
+    # Tempo: the law's latched measurement reaches the control law unchanged.
+    if "opt.measured_bpm=lastClockOut.measured_bpm;" not in push:
+        issues.append("pushParams() does not hand lastClockOut.measured_bpm "
+                      "to Options")
+
+    # A discontinuity drops the period history: reinit (boot, sample-rate
+    # change, patch open) and un-bypass.
+    if "clockLaw.init(sr);" not in reinit:
+        issues.append("reinit() does not call clockLaw.init(sr)")
+    if "clockLaw.discontinuity();" not in unbypass:
+        issues.append("onUnBypass() does not call clockLaw.discontinuity()")
+    # The Schmitt triggers forget their level at both discontinuities too, or
+    # a jack that went high while the module was bypassed (or before reinit)
+    # reads as an edge on the first sample: a RESET there restarts at once.
+    for trig in ("clockTrig", "resetTrig"):
+        if f"{trig}.reset();" not in reinit:
+            issues.append(f"reinit() does not call {trig}.reset()")
+        if f"{trig}.reset();" not in unbypass:
+            issues.append(f"onUnBypass() does not call {trig}.reset()")
+    return issues
+
+
+def test_clock_and_reset_run_through_the_shared_law():
+    cpp = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "..", "src", "Fireflow.cpp"), encoding="utf-8").read()
+    for issue in clock_law_wiring_issues(cpp):
+        check(False, issue)
+
+
+def test_clock_law_guard_rejects_representative_regressions():
+    cpp = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "..", "src", "Fireflow.cpp"), encoding="utf-8").read()
+    if clock_law_wiring_issues(cpp):
+        return          # the wiring test reports it; mutating a bad file proves nothing
+    for label, old, new in (
+            ("the old tempo measurement",
+             "opt.measured_bpm = lastClockOut.measured_bpm;",
+             "opt.measured_bpm = 60.f * curSr / clkSamples;"),
+            ("a connection test on CLOCK",
+             "clockTrig.process(",
+             "inputs[CLOCK].isConnected() && clockTrig.process("),
+            ("a missing restart",
+             "inst.restart(", "inst.restart_unused("),
+            ("no un-bypass discontinuity",
+             "clockLaw.discontinuity();", ""),
+            ("no law reset in reinit",
+             "clockLaw.init(sr);", ""),
+            ("a RESET trigger that keeps its level across reinit",
+             "resetTrig.reset();\n        // init() put", "// init() put"),
+            ("a CLOCK trigger that keeps its level across un-bypass",
+             "clockLaw.discontinuity();\n        clockTrig.reset();",
+             "clockLaw.discontinuity();")):
+        check(old in cpp, f"guard self-test: {label}: anchor not found in "
+                          f"Fireflow.cpp: {old!r}")
+        if old not in cpp:
+            continue
+        check(clock_law_wiring_issues(cpp.replace(old, new, 1)) != [],
+              f"clock-law guard accepts {label}")
+
+
 def test_center_group_boxes():
     want = [(13.0, 19.5, 'BLEND'), (35.0, 25.0, 'TIMING'),
             (62.5, 22.5, 'DUO'), (87.5, 23.7, 'ROOM')]
@@ -1887,7 +2009,10 @@ if (_songRung[p].tick(songNorm, spky::kSongLadderCount)) {
     # The CLK / RST lamps are fed by the jack edges, nothing else.
     for want in ("in.mod_latched=params[MODBTN].getValue()>0.5f;",
                  "in.clock_pulse=clockSeen;", "in.reset_pulse=resetSeen;",
-                 "clockSeen=true;"):
+                 # latched from the shared clock law's lamp flags, one per
+                 # jack (spec 2026-10-19 clock-and-reset-jacks §2.3)
+                 "clockSeen|=lastClockOut.clock_lamp;",
+                 "resetSeen|=lastClockOut.reset_lamp;"):
         if want not in process_n:
             issues.append("process must hand the jack pulses to the LED law: " + want)
 

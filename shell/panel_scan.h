@@ -23,7 +23,10 @@
 
 namespace shell {
 
-void panel_scan_init();
+// Before StartAudio(). On Rev A it also arms the CLOCK / RESET edge latch
+// (gate_latch.h) and resets the clock law; main() then calls
+// gate_latch_arm() as the last thing before StartAudio().
+void panel_scan_init(bench::Board& hw);
 
 // Call FIRST in the audio callback, before process() (spec section 2).
 void panel_scan_tick(bench::Board& hw, spky::Instrument& inst);
