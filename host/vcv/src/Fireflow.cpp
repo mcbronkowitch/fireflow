@@ -21,6 +21,7 @@
 #include "control/led_law.hpp"   // the panel's LED display law (Rack-free, unit-tested, shared with the firmware)
 #include "control/mod_layer.hpp"         // the MOD latch layer's host-computed math (Rack-free, unit-tested)
 #include "control/control_law.h"       // the control law pushParams() runs (Rack-free, shared with the firmware)
+#include "control/clock_law.hpp"       // CLOCK/RESET tempo, pulse and restart (Rack-free, shared with the firmware)
 
 // The portable engine core -- exactly the same headers the desktop render host
 // and (later) the Daisy firmware use. No hardware type crosses this boundary.
@@ -373,7 +374,12 @@ struct Fireflow : Module {
     // A CLOCK / RESET edge since the last LED-law call. The law runs once in
     // 64 samples and an edge is one sample long, so it is latched here.
     bool clockSeen = false, resetSeen = false;
-    float clkSamples = 0.f;                 // samples since last external clock edge
+    // The CLOCK and RESET jack law (control/clock_law.hpp), called once per
+    // sample. lastClockOut keeps its most recent result: the measured tempo
+    // only changes on a pulse or on a knob takeover, so pushParams() reads it
+    // from here at control rate.
+    control::ClockLaw clockLaw;
+    control::ClockOut lastClockOut;
     // Rack quantises to the hardware's brightness raster (spkyled::kLedSteps,
     // the board's block-rate latch) -- and applies the same perceptual gamma
     // curve on the way there (control/led_law.hpp's duty()) -- because a
@@ -639,6 +645,12 @@ struct Fireflow : Module {
         inst.set_root(spky::PART_A, (int)std::round(params[ROOT_A].getValue()));
         inst.set_root(spky::PART_B, (int)std::round(params[ROOT_B].getValue()));
         inst.init(sr, fxmem);
+        // A new rate, a patch open or Initialize is a discontinuity for the
+        // clock too: init() drops the period history, any held external tempo
+        // and a pending reset, and the knob owns the tempo again (spec
+        // 2026-10-19 clock-and-reset-jacks §6).
+        clockLaw.init(sr);
+        lastClockOut = control::ClockOut{};
         // init() put every value the law ever sent back to its default; the
         // law's sent-value cache must forget them, or the next tick would
         // skip them as unchanged (control_law.h). Re-arms no edge detector.
@@ -670,6 +682,14 @@ struct Fireflow : Module {
 
     void onSampleRateChange(const SampleRateChangeEvent& e) override {
         reinit(e.sampleRate);
+    }
+
+    // A bypassed module is not called, so the clock law saw no samples while
+    // CLOCK kept running: the first interval after the gap is not a period.
+    // Drop the history; the clock counts as running again after two new valid
+    // edges (spec 2026-10-19 clock-and-reset-jacks §6).
+    void onUnBypass(const UnBypassEvent& e) override {
+        clockLaw.discontinuity();
     }
 
     // The host side of control/control_law.h: what needs Rack or a file.
@@ -716,8 +736,8 @@ struct Fireflow : Module {
                            smp[p].testTone, smp[p].exciteTape,
                            smp[p].exciteOtherDeck, smp[p].exciteAudioIn};
         }
-        if (inputs[CLOCK].isConnected() && clkSamples > 1.f && curSr > 0.f)
-            opt.measured_bpm = 60.f * curSr / clkSamples;
+        // 0 = no external clock, the TEMPO knob sets the tempo.
+        opt.measured_bpm = lastClockOut.measured_bpm;
         VcvHooks hooks{this};
         const control::Events ev = law.tick(knobs, opt, inst, hooks);
         for (int p = 0; p < spky::PART_COUNT; ++p) {
@@ -735,22 +755,28 @@ struct Fireflow : Module {
     void process(const ProcessArgs& args) override {
         if (args.sampleRate != curSr) reinit(args.sampleRate);
 
-        // external clock edge -> remember the period, and phase-align the transport
-        if (inputs[CLOCK].isConnected()) {
-            clkSamples += 1.f;
-            if (clockTrig.process(inputs[CLOCK].getVoltage(), 0.1f, 1.f)) {
-                clkSamples = 0.f;
-                inst.clock_pulse();
-                clockSeen = true;            // for the CLK lamp, cleared after fill()
-            }
-        }
-
-        // The RESET lamp shows the jack only; the menu's "Resync to bar" also
-        // resets the transport but is not a pulse at the jack.
-        const bool resetEdge = inputs[RESET].isConnected() &&
-                               resetTrig.process(inputs[RESET].getVoltage(), 0.1f, 1.f);
-        if (resetEdge) resetSeen = true;
-        if (resetEdge || resyncReq.exchange(false))
+        // CLOCK and RESET go through control::ClockLaw, the same law the
+        // firmware runs (spec 2026-10-19 clock-and-reset-jacks §6). There is
+        // deliberately no isConnected() test on either jack: the board cannot
+        // tell a plugged cable from an open input, so an unplugged jack here
+        // reads 0 V, never edges, and times out exactly as it does there.
+        // Identical behaviour in both hosts beats a VCV-only shortcut. The
+        // Schmitt thresholds stay at 0.1 / 1 V. An unpatched input's voltage
+        // is 0, so the triggers see no edge.
+        const bool clockEdge = clockTrig.process(inputs[CLOCK].getVoltage(), 0.1f, 1.f);
+        const bool resetEdge = resetTrig.process(inputs[RESET].getVoltage(), 0.1f, 1.f);
+        lastClockOut = clockLaw.step(1, clockEdge, resetEdge,
+                                     params[TEMPO].getValue(), inst.beat_phase());
+        // Pulse first: a reset in the same call counts as arriving before its
+        // pulse, and the restart then lands on that pulse as the 1.
+        if (lastClockOut.pulse) inst.clock_pulse();
+        if (lastClockOut.restart) inst.restart(lastClockOut.restart_age);
+        // The lamps show the jack, not the effect: latched here, cleared after
+        // fill(). The menu's "Resync to bar" also resets the transport but is
+        // not a pulse at the jack, and stays a bar-only reset.
+        clockSeen |= lastClockOut.clock_lamp;
+        resetSeen |= lastClockOut.reset_lamp;
+        if (resyncReq.exchange(false))
             inst.reset_transport();
 
         if (ctrlDiv.process()) pushParams();
