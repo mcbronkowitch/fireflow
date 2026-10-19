@@ -3219,7 +3219,7 @@ carries its own transcription of the same preset, which is the point of the
 second copy — see the open item about that guard's missing converse under
 "Planned".
 
-### Reserved knobs become parameters ✅ built (2026-10-19), ⏳ no listening pass
+### Reserved knobs become parameters ✅ built and merged (2026-10-19), listening pass ok
 
 The 9 mm panel pass (M6, 2026-10-08) put three knobs on the plate and the board
 that sent nothing. They are parameters now (spec
@@ -3247,10 +3247,9 @@ that sent nothing. They are parameters now (spec
   positions, `HW_ONLY` holds only SHIFTBTN, and the firmware map's `RESERVED`
   list is empty: 73 of 73 pot rows send a parameter.
 
-**Open, and Bastian's to judge by ear** (nothing here has been listened to):
-the spec §8.7 pass (init patch sounds as before; ROOT changes the key without
-moving the register; the next SONG rung (a `new_phrase` detent) brings a song in the new key; WOBL
-wobbles; both modules show the three knobs). Two questions the build left open:
+**Listening pass (Bastian, 2026-10-19): "erstmal alles ok"** -- the spec §8.7
+pass is accepted. Fine-tuning of the note sequencer and the quantizer follows in
+a later round of its own, and carries the two questions this build left open:
 with TUNE far from centre an offset of the same sign can pin part of a song at
 the span edge (0 or 36 semitones), realistically init deck B (TUNE_B 0.175) with
 ROOT_B on G..B; and the offset under PULL gravity is unprobed (the quantizer
