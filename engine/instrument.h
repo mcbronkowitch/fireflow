@@ -170,6 +170,9 @@ public:
     // which is the raw value PACE never touches. A gate written against _bpm
     // would be measuring something this control cannot move.
     float transport_bpm_for_test() const { return _center.transport().bpm(); }
+    // The transport's running beat count (paced beats), whole beats included --
+    // beat_phase() drops them, and a clock gate counts beats across pulses.
+    double transport_beats_for_test() const { return _center.transport().beats(); }
     // A window for the PULL gates (tests/test_pull.cpp): they have to see
     // which deck ended up bound, which is per-Part state with no host-facing
     // reason to exist. Same idiom as accent_for_test() in synth_engine.h --
@@ -540,6 +543,28 @@ public:
     void reset_transport() {
         _center.reset_transport();
         for (auto& p : _parts) p.mod().reset_phases();
+    }
+    // RESET at the jack (spec 2026-10-19 clock-and-reset-jacks §2.2): restart
+    // the music, not only the bar. Returns false and changes nothing when no
+    // deck is in STEP; otherwise it is RST plus a song restart:
+    //  - Both decks' lanes go back to phase 0, the FLOW deck's too. Center
+    //    couples both decks to the transport (GRID servo) and to each other
+    //    (FREE Kuramoto), so resetting only the STEP deck's lanes would drag
+    //    the FLOW deck for seconds to minutes afterwards (§3).
+    //  - Only a STEP deck restarts its song (phrase 0, pattern A). A FLOW
+    //    deck keeps its song position, as Bastian decided ("nur in STEP").
+    // `age` back-dates the restart to a clock edge that many samples ago
+    // (control::ClockLaw's post-edge window): the bar and every lane stand
+    // where they would have reached by now. "Resync to bar" stays
+    // reset_transport() and does not restart the song (§5).
+    bool restart(uint32_t age) {
+        if (!step_on(PART_A) && !step_on(PART_B)) return false;
+        _center.reset_transport();
+        _center.advance_transport(age);
+        for (auto& p : _parts) p.mod().reset_phases(age);
+        for (auto& p : _parts)
+            if (p.mod().step_mode()) p.mod().restart_song();
+        return true;
     }
     void spot()   { _center.spot(_parts[PART_A].mod(),   _parts[PART_B].mod()); }
     void settle() { _center.settle(_parts[PART_A].mod(), _parts[PART_B].mod()); }

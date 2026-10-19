@@ -279,6 +279,12 @@ void ModLane::new_phrase() {
     if (_melodic) _song.new_pending = true;
 }
 
+void ModLane::restart_song() {
+    if (!_melodic) return;
+    _song.phrase_index = 0;
+    _song.active_pattern = song_symbol_at(_song.selected_song, 0);
+}
+
 int ModLane::_effective_length() const {
     if (_flow_melody_on()) return kFlowPhraseSlots;
     int n = _steps < 1 ? 1 : _steps;

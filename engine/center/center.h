@@ -67,6 +67,10 @@ public:
     // RST = bar resync: zero the downbeat AND drop any grid offsets a live
     // STEPS turn left behind, so the servo pulls the loops back onto the bar.
     void reset_transport()        { _transport.reset(); _grid_off[0] = _grid_off[1] = 0.f; }
+    // Move the transport on by `samples` audio samples at its tempo.
+    void advance_transport(uint32_t samples) {
+        _transport.advance(static_cast<double>(samples) / static_cast<double>(kCtrlInterval));
+    }
     const Transport& transport() const { return _transport; }
 
     // one control tick: read both banks, write hooks, advance weather + morph

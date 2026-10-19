@@ -42,6 +42,11 @@ public:
     // PACE moved: re-anchor so the grid follows the knob instead of lagging it.
     void set_pace_anchor() { _anchor = _beats; }
     void reset()       { _beats = 0.0; _anchor = 0.0; }
+    // A fractional number of control ticks at the current tempo: a back-dated
+    // restart puts the bar where it would stand that long after its 1.
+    void advance(double ticks) {
+        _beats += ticks * static_cast<double>(_bpm) / (60.0 * static_cast<double>(_cr));
+    }
 
     double beats() const     { return _beats; }
     float beat_phase() const { return static_cast<float>(_beats - std::floor(_beats)); }

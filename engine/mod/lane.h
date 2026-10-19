@@ -71,6 +71,13 @@ public:
     uint8_t active_pattern() const { return _song.active_pattern; }
     void set_principle(Principle p) { set_form(p); }
     void new_phrase();                 // audition a fresh phrase at the next STEP-mode wrap
+    // RESET on a STEP deck (spec 2026-10-19 clock-and-reset-jacks §2.2, §6):
+    // the song goes back to phrase 0 and its first pattern -- song_symbol_at(
+    // mode, 0) is 0 in every mode, so no cadence binding is owed. Melodic
+    // lanes only. Touches no pending flag and no pattern: pending work is
+    // applied by the reset's own pre-roll (reset() leaves _cur_step = -1),
+    // and VARY's mutations and the EVOLVE walk are not rewound (§2.2, §5).
+    void restart_song();
     // How often _apply_pending_song_work() has rebuilt the phrase from scratch
     // (both patterns regenerated). The one outward signal of "a new song
     // starts here": Part latches its song offset when this moves (spec
@@ -155,6 +162,9 @@ public:
     // writer of _note_accent.
     float note_accent() const { return _step_mode ? _note_accent : 0.f; }
     float phase()  const { return static_cast<float>(_phase); }
+    // What process() adds to the phase per sample right now, EVOLVE's rate
+    // walk included (lane.cpp: _phase += _phase_inc * (1 + _ev_rate)).
+    double phase_step() const { return _phase_inc * (1.0 + double(_ev_rate)); }
     // Step-clock factor on the cycle rate (spec 2026-07-17): 8/steps in STEP,
     // 1 in FLOW. The grid servo scales its transport target by this so a
     // synced bank locks its S-step cycle across S/8 divisions.
