@@ -153,8 +153,10 @@ old constant.
 **ROOT_A / ROOT_B** are the per-deck key knobs: 12 zones, C at the left stop
 to B at the right, and the tooltip shows the note name (C, C#, D ... B). A turn
 moves the scale grid under the running melody; it does not re-latch the song.
-A song rebuilt afterwards (SONG rung, FORM, STEPS, entering STEP) starts from
-the new root. On `Fireflow` the three knobs sit in the centre column (ROOT_A
+A song rebuilt afterwards starts from
+the new root. What rebuilds: a SONG knob detent (the control law calls
+`new_phrase`), a FORM change, a STEPS length change, or entering STEP on a melodic
+deck whose B pattern is still empty; a bare engine `set_song` does not rebuild. On `Fireflow` the three knobs sit in the centre column (ROOT_A
 and ROOT_B side by side at y = 78, WOBL under the right one at y = 104.5); on
 `FireflowHW` they are ordinary knobs at their frozen plate positions, and
 `HW_ONLY` holds only the SHIFT key.

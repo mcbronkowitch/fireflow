@@ -514,8 +514,9 @@ you.
 
 Setup, since a number without it is a claim: the `test_param_impact.cpp` rig (two
 `Instrument`s, static echo/BBD memory, 48 kHz, first 0.5 s skipped, relative RMS
-difference), main @ `c7daab04`, offset not yet wired. Deck A on BBD, deck B muted,
-based on STEP point 0, root 0 against root 5, 6 s.
+difference), main @ `c7daab04`, offset not yet wired. The four frozen-point numbers
+below ran 4 s each. The BBD probe: deck A on BBD, deck B muted, based on STEP point 0,
+root 0 against root 5, 6 s.
 
 | Mode | ROOT 0 vs 5 on a BBD deck |
 |---|---|
@@ -539,9 +540,17 @@ reduced mod 12 first). It is latched in exactly two places and nowhere else:
 - the top of `Part::_control_tick`, `part.cpp:289-292` — when
   `ModLane::phrase_builds()` (`lane.h:83`) has moved since the last look. That
   counter is bumped only in the `if (rebuild)` branch of `_apply_pending_song_work`
-  (`lane.cpp:328`), i.e. a full rebuild of pattern A: a SONG rung change, a FORM
-  change, a STEPS length change, or entering STEP. Partial RENEW renewals do not
-  count.
+  (`lane.cpp:328`), i.e. a full rebuild of pattern A. The `rebuild` condition
+  (`lane.cpp:314-317`) is `form_pending || new_pending || length_pending ||`
+  the B pattern's groove length is 0, and what raises those is:
+  `ModLane::new_phrase` (`lane.cpp:279`, which the panel's SONG knob issues once
+  per rung detent via `inst.new_phrase(p)`, `control_law.h:843`); a FORM change
+  (`lane.cpp:144`); a change of the effective phrase length, i.e. STEPS
+  (`lane.cpp:262`); and entering STEP, but only when the lane is melodic at init
+  and the B pattern's groove length is 0 (`lane.cpp:263-265`), so it is not
+  unconditional. A bare engine `set_song` only sets `song_pending`, which is not
+  in the `rebuild` condition: it does not rebuild and does not re-latch. Partial
+  RENEW renewals do not count.
 
 A ROOT turn alone moves the quantizer's grid and re-latches nothing. The offset
 is *applied* by `_offset_norm()` (`part.h:822`), added to the pitch before the
