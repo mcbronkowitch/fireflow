@@ -224,6 +224,7 @@ private:
         D_FLUX_MIX, D_FLUX_RATE, D_LINK, D_LEVEL, D_COMP, D_PAN,
         D_ENGINE, D_EXCITE, D_SPEED_MODE, D_REVERSE, D_FEEDBACK, D_OVERLAP,
         D_VARIATION, D_SCAN, D_GRIT_MODE, D_GRIT_MIX, D_FORM, D_SONG, D_REV_MIX,
+        D_ROOT,
         // The slotted setters, one entry per lane / FX target / FX block.
         D_FX_ON,
         D_TBASE    = D_FX_ON + 2,                    // FxBlock::Flux, ::Grit
@@ -334,6 +335,7 @@ private:
         void set_part_level(int p, float v)      { if (law.deck(p, D_LEVEL, v))     to.set_part_level(p, v); }
         void set_comp(int p, float v)            { if (law.deck(p, D_COMP, v))      to.set_comp(p, v); }
         void set_pan(int p, float v)             { if (law.deck(p, D_PAN, v))       to.set_pan(p, v); }
+        void set_root(int p, int v)              { if (law.deck(p, D_ROOT, v))      to.set_root(p, v); }
         void set_engine(int p, spky::EngineId e) { if (law.deck(p, D_ENGINE, int(e))) to.set_engine(p, e); }
         void set_excitation_sources(int p, bool tape, bool other, bool in) {
             if (law.deck(p, D_EXCITE, int(tape) | int(other) << 1 | int(in) << 2))
@@ -926,15 +928,28 @@ private:
         inst.set_reverb_mix(spky::PART_B, prm(REV_MIX_B));
         // Fixed by ear (spec 2026-08-09 hw-control-reduction task 9): PUSH
         // sat at 0.40 in every patch, and once the limiter rides, DRIVE
-        // stops controlling dirt anyway. SMEAR ("smear ... 0.3 sowas") and
-        // WOBL/MOD ("wobbel fest auf .1 - .2") are the same kind of decision
-        // -- the owner never moved them either. The engine API (set_master_
-        // drive/set_reverb_smear/set_reverb_mod) is unchanged so the render
-        // host and its scenarios can still drive them.
+        // stops controlling dirt anyway. SMEAR ("smear ... 0.3 sowas") is
+        // the same kind of decision -- the owner never moved it either. The
+        // engine API (set_master_drive/set_reverb_smear) is unchanged so the
+        // render host and its scenarios can still drive them.
+        //
+        // WOBL/MOD ("wobbel fest auf .1 - .2") was the third constant here
+        // until Bastian reversed that decision on 2026-10-07: it has its
+        // knob back (spec 2026-10-18 root-and-wobl-knobs §2.2) and boots at
+        // 0.15, the constant it replaces, so the factory patch does not move.
         inst.set_master_drive(0.40f);
         inst.set_reverb_smear(0.30f);
-        inst.set_reverb_mod(0.15f);
+        inst.set_reverb_mod(prm(REV_MOD));
         inst.set_scale((int)std::round(prm(SCALE)));
+        // ROOT per deck (spec 2026-10-18 root-and-wobl-knobs §2.1), rounded
+        // like SCALE. An appended pair, so prm(ROOT_A)/prm(ROOT_B) -- never
+        // mvp(ROOT_A, p), which adds PART_STRIDE (see PAN above). Pushed
+        // every tick through the sent-value cache; the quantizer's
+        // set_root() is change-only anyway, and the song offset latches the
+        // root only at a full rebuild, so a turn snaps the running melody to
+        // the new key and nothing else.
+        inst.set_root(spky::PART_A, (int)std::round(prm(ROOT_A)));
+        inst.set_root(spky::PART_B, (int)std::round(prm(ROOT_B)));
 
         // Tempo: an external clock (one pulse per beat) overrides the knob.
         float bpm = 40.f + prm(TEMPO) * 200.f;

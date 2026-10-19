@@ -54,4 +54,6 @@ TEST_CASE("params: ranges are configControls()'s") {
     is(ENGINE_B, 0.f, 5.f, true);  is(REC_A, 0.f, 1.f, true);
     is(MODBTN, 0.f, 1.f, true);    is(MODD_RATE_A, -1.f, 1.f, false);
     is(TEMPO, 0.f, 1.f, false);    is(DRIFT, 0.f, 1.f, false);
+    is(ROOT_A, 0.f, 11.f, true);   is(ROOT_B, 0.f, 11.f, true);
+    is(REV_MOD, 0.f, 1.f, false);
 }

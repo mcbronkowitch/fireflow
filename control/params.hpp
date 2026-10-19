@@ -86,6 +86,9 @@ enum ParamId {
     PULL,
     PAN_A,
     PAN_B,
+    ROOT_A,
+    ROOT_B,
+    REV_MOD,
     MODBTN,
     MODD_SOURCE_A,
     MODD_SOURCE_B,
@@ -299,6 +302,9 @@ inline constexpr float kInitParamDefaults[] = {
     0.0f, // PULL
     0.0f, // PAN_A
     0.0f, // PAN_B
+    0.0f, // ROOT_A
+    0.0f, // ROOT_B
+    0.15f, // REV_MOD
     0.0f, // MODBTN
     1.0f, // MODD_SOURCE_A
     1.0f, // MODD_SOURCE_B
@@ -430,6 +436,9 @@ inline constexpr ParamRange kParamRange[] = {
     {-1.f, 1.f, false}, // PULL
     {-1.f, 1.f, false}, // PAN_A
     {-1.f, 1.f, false}, // PAN_B
+    {0.f, 11.f, true}, // ROOT_A
+    {0.f, 11.f, true}, // ROOT_B
+    {0.f, 1.f, false}, // REV_MOD
     {0.f, 1.f, true}, // MODBTN
     {-1.f, 1.f, false}, // MODD_SOURCE_A
     {-1.f, 1.f, false}, // MODD_SOURCE_B

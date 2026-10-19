@@ -88,8 +88,12 @@ TEST_CASE("Seed audition shares the complete generated VCV parameter snapshot")
     // APPENDED_PANEL_PARAMS by res/gen_panel.py, plus MODD_PAN_A/B, a new
     // MOD_DECK_TARGETS row -- the pair appended to APPENDED_PANEL_PARAMS
     // also shifts every MOD-layer id up by two slots.
-    CHECK_MESSAGE(spkyvcv::NUM_PARAMS == 125,
-                  "NUM_PARAMS is " << spkyvcv::NUM_PARAMS << ", want 125 -- "
+    // 125 -> 128 on 2026-10-19: ROOT_A/B, REV_MOD -- the three reserved
+    // plate pots become parameters (spec 2026-10-18 root-and-wobl-knobs),
+    // appended last in APPENDED_PANEL_PARAMS after PAN_B, so every MOD-layer
+    // id shifts up by three. None of them has a MOD depth.
+    CHECK_MESSAGE(spkyvcv::NUM_PARAMS == 128,
+                  "NUM_PARAMS is " << spkyvcv::NUM_PARAMS << ", want 128 -- "
                   "if the panel inventory genuinely changed, update this "
                   "literal to match");
     // The factory patch pairs FEED (5) on deck A with WAVE (2) on deck B --
@@ -220,6 +224,41 @@ TEST_CASE("Seed audition dispatcher routes generated STAGES by generated engine"
     // and the full mechanism trace.
     CHECK(inst.pitch_cv(spky::PART_A) == doctest::Approx(0.8125f));
     CHECK(inst.pitch_cv(spky::PART_B) == doctest::Approx(0.5f));
+}
+
+TEST_CASE("Seed audition pushes ROOT per deck and WOBL from the snapshot")
+{
+    // ROOT_A/ROOT_B and REV_MOD became parameters (spec 2026-10-18
+    // root-and-wobl-knobs). The bench mirror must read them from the table,
+    // not leave the deck's root where it was or push WOBL as a literal.
+    // Both halves start the instrument somewhere ELSE first: the quantizer
+    // boots at root 0, so "root 0 after the init patch" alone would pass
+    // with no set_root call at all.
+    static spky::AmbientReverb reverb;
+    spky::FxMem mem;
+    mem.reverb = &reverb;
+
+    spky::Instrument inst;
+    inst.init(48000.f, mem);
+    inst.set_root(spky::PART_A, 3);
+    inst.set_root(spky::PART_B, 9);
+    inst.set_reverb_mod(0.9f);
+    audition::apply_init_patch(inst);
+    // The factory patch: C on both decks, WOBL at its old constant.
+    CHECK(inst.part(spky::PART_A).quant().root_semis() == 0);
+    CHECK(inst.part(spky::PART_B).quant().root_semis() == 0);
+    CHECK(std::fabs(inst.reverb_mod_for_test() - 0.15f) < 1e-6f);
+
+    std::array<float, spkyvcv::NUM_PARAMS> snapshot{};
+    std::copy(std::begin(spkyvcv::kInitParamDefaults),
+              std::end(spkyvcv::kInitParamDefaults), snapshot.begin());
+    snapshot[spkyvcv::ROOT_A] = 7.f;
+    snapshot[spkyvcv::ROOT_B] = 9.6f;   // a pot between detents: rounds to 10
+    snapshot[spkyvcv::REV_MOD] = 0.6f;
+    audition::apply_init_patch(inst, snapshot.data());
+    CHECK(inst.part(spky::PART_A).quant().root_semis() == 7);
+    CHECK(inst.part(spky::PART_B).quant().root_semis() == 10);
+    CHECK(std::fabs(inst.reverb_mod_for_test() - 0.6f) < 1e-6f);
 }
 
 // GRIT is one bipolar knob (spec 2026-08-09 hw-control-reduction task 4):
@@ -473,11 +512,12 @@ TEST_CASE("Seed audition's factory init pins every engine-side observable "
     // that nothing walks away from zero on its own.
     CHECK(inst.drift() == doctest::Approx(0.f));
 
-    // --- master drive, reverb smear, reverb mod: fixed-by-ear constants ---
+    // --- master drive, reverb smear: fixed-by-ear constants; reverb mod ---
     // (spec 2026-08-09 hw-control-reduction task 9). PUSH == 0.40 ->
     // Limiter's pre-gain 1 + 3*0.4*0.4 == 1.48 (a warm, not transparent,
-    // ceiling). SMEAR == 0.30 (a moderate wash), WOBL/MOD == 0.15 (gentle
-    // tail wobble).
+    // ceiling). SMEAR == 0.30 (a moderate wash). WOBL/MOD == 0.15 (gentle
+    // tail wobble) is a knob again since spec 2026-10-18 root-and-wobl-knobs,
+    // and its init value is that old constant, so this pin did not move.
     CHECK(inst.master_drive_pre_gain_for_test() == doctest::Approx(1.48f));
     CHECK(inst.reverb_smear_for_test() == doctest::Approx(0.30f));
     CHECK(inst.reverb_mod_for_test() == doctest::Approx(0.15f));

@@ -138,7 +138,11 @@ TEST_CASE("mod layer: kModLayer is exactly the spec's table") {
                          (int)TEMPO, (int)SHUFFLE, (int)PACE, (int)DRIFT,
                          (int)COUPLE, (int)CHOKE, (int)SCALE, (int)STEPS_A,
                          (int)STEPS_B, (int)SONG_A, (int)SONG_B, (int)ENGINE_A,
-                         (int)ENGINE_B, (int)REC_A, (int)REC_B, (int)MODBTN})
+                         (int)ENGINE_B, (int)REC_A, (int)REC_B, (int)MODBTN,
+                         // Not modulatable (spec 2026-10-18 root-and-wobl-knobs
+                         // §5): ROOT joins SCALE, its closest relative; WOBL
+                         // simply has no MOD_CENTER_TARGETS row.
+                         (int)ROOT_A, (int)ROOT_B, (int)REV_MOD})
         CHECK(soundIds.count(excluded) == 0);
 }
 

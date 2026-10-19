@@ -526,12 +526,15 @@ SHARED = [
     # stop. SPOT and MASTER_DRIVE (PUSH) retired here (task 9): SPOT is a
     # genuine feature loss (the owner never uses it), PUSH is fixed by ear
     # at 0.40 in Fireflow.cpp's pushParams -- "push steht immer auf 0.4".
-    # The entire freed ROW_DUO2 row stays empty; regrouping is a later
-    # session.
+    # The freed ROW_DUO2 row was not regrouped; it was filled, by appended
+    # controls (APPENDED_PANEL_PARAMS below): PULL took its centre slot and
+    # ROOT_A/ROOT_B its two outer ones (spec 2026-10-18 root-and-wobl-knobs).
     # ROOM: three semantic columns, bottom edge flush with the PLAY boxes.
-    # SMEAR (task 9, "smear ... 0.3 sowas") and MOD/WOBL ("wobbel fest auf
-    # .1 - .2") are fixed by ear too, in the same pushParams block. Their
-    # freed R-column slots stay empty; regrouping is a later session.
+    # SMEAR (task 9, "smear ... 0.3 sowas") is fixed by ear too, in the
+    # control law's fixed-value block; its freed R-column slot (R, ROW_ROOM1)
+    # stays empty. MOD/WOBL ("wobbel fest auf .1 - .2") was fixed the same
+    # way until spec 2026-10-18 root-and-wobl-knobs gave it its knob back --
+    # appended, in its own freed slot (R, ROW_ROOM2).
     Ctl("REV_SIZE",  SMKNOB, L,         ROW_ROOM1, "SIZE"),
     Ctl("REV_DECAY", SMKNOB, L,         ROW_ROOM2, "DECAY"),
     Ctl("REV_TONE",  SMKNOB, CX,        ROW_ROOM1, "TONE"),
@@ -682,6 +685,23 @@ APPENDED_PANEL_PARAMS = [
     # plate's twin slot (LEVEL_SLOTS[0]) was held open for the same control.
     Ctl("PAN_A", SMKNOB, FX_BOT[1],     ROW_V2, "PAN", "Deck balance"),
     Ctl("PAN_B", SMKNOB, W - FX_BOT[1], ROW_V2, "PAN", "Deck balance"),
+    # ROOT per deck and WOBL (spec 2026-10-18 root-and-wobl-knobs): the three
+    # pots the 9 mm plate reserved become parameters. Appended LAST like PAN
+    # -- the MOD_LAYER_PARAMS block behind them shifts by three, uniformly
+    # this time, because none of the three gets a MOD depth (spec §5: ROOT
+    # joins SCALE in the excluded faces, WOBL has no MOD_CENTER_TARGETS row).
+    # Accepted, dev alpha (memory fireflow-dev-alpha-no-patch-compat).
+    #
+    # ROOT is a 12-detent KNOBI like SCALE (C at the left stop, B at the
+    # right; _KNOBI_TOP below), and the two sit in the outer slots of the
+    # ROW_DUO2 row PULL already shares: each under the DUO control it reads
+    # with -- ROOT_A under SCALE (L), ROOT_B under DRIFT (R). The label is
+    # the same word twice, like PAN; the column says which deck.
+    Ctl("ROOT_A", KNOBI, L, ROW_DUO2, "ROOT"),
+    Ctl("ROOT_B", KNOBI, R, ROW_DUO2, "ROOT"),
+    # WOBL is the reverb's tail-delay LFO depth (P_REV_MOD), a constant 0.15
+    # in the law until now. It takes back its own freed ROOM slot.
+    Ctl("REV_MOD", SMKNOB, R, ROW_ROOM2, "WOBL"),
 ]
 
 # --- MOD latch layer (spec 2026-08-22-mod-latch-layer-design.md) ----------
@@ -923,6 +943,14 @@ INIT_DEFAULTS = {
     # surprise, not a feature.
     "PAN_A": 0.000000000,
     "PAN_B": 0.000000000,
+    # Not in NewInit.vcvm (they were reserved pots when it was saved); spec
+    # 2026-10-18 root-and-wobl-knobs §2. Both decks boot in C, where the
+    # song offset is 0, so the factory patch plays today's songs; WOBL boots
+    # at the 0.15 the control law pinned as a constant until this knob came
+    # back, so the room does not move either.
+    "ROOT_A": 0.000000000,
+    "ROOT_B": 0.000000000,
+    "REV_MOD": 0.150000000,
 }
 
 # MOD latch layer defaults (spec §3a, revised by 2026-08-22 mod-sh-split §5):
@@ -1370,7 +1398,11 @@ _KNOBI_TOP = {"SCALE": "float(spky::SCALE_LIST_COUNT - 1)",
               "SONG_B": "float(spky::kSongLadderCount - 1)",
               "FLUXRATE_A": "float(spky::kFluxRateCount - 1)",
               "FLUXRATE_B": "float(spky::kFluxRateCount - 1)",
-              "STEPS_A": "16.f", "STEPS_B": "16.f"}
+              "STEPS_A": "16.f", "STEPS_B": "16.f",
+              # 12 zones, C..B; the quantizer takes the root modulo 12, so a
+              # 13th "C an octave up" detent could not exist (spec 2026-10-18
+              # root-and-wobl-knobs §3).
+              "ROOT_A": "11.f", "ROOT_B": "11.f"}
 
 def param_range(c):
     """(lo, hi, snap) as C++ expressions, mirroring configControls()."""

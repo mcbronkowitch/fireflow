@@ -498,6 +498,15 @@ struct Fireflow : Module {
                         configParam<FluxRateQuantity>(
                             c.id, rangeOf(c.id).lo, rangeOf(c.id).hi,
                             init, lbl);
+                    // ROOT per deck (spec 2026-10-18 root-and-wobl-knobs):
+                    // 12 detents, C at the left stop, B at the right. The
+                    // tooltip names the note -- sharps, English names, the
+                    // way SCALE's tooltip uses English scale names -- not
+                    // the generic "Steps" an unknown KNOBI would get below.
+                    else if (c.id == ROOT_A || c.id == ROOT_B)
+                        configSwitch(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, "Root",
+                                     {"C", "C#", "D", "D#", "E", "F",
+                                      "F#", "G", "G#", "A", "A#", "B"});
                     else  // STEPS_A / STEPS_B
                         configParam(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, "Steps");
                     getParamQuantity(c.id)->snapEnabled = true;

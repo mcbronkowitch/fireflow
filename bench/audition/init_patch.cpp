@@ -220,11 +220,18 @@ void apply_init_patch(spky::Instrument& inst, const float* values)
     inst.set_reverb_mix(spky::PART_A, value(REV_MIX_A));
     inst.set_reverb_mix(spky::PART_B, value(REV_MIX_B));
     // Fixed by ear (spec 2026-08-09 hw-control-reduction task 9); mirrors
-    // Fireflow.cpp pushParams' PUSH/SMEAR/WOBL constants.
+    // the control law's PUSH/SMEAR constants. WOBL left that list when it
+    // got its knob back (spec 2026-10-18 root-and-wobl-knobs §2.2): it reads
+    // REV_MOD like the law does, and the snapshot boots it at the old 0.15.
     inst.set_master_drive(0.40f);
     inst.set_reverb_smear(0.30f);
-    inst.set_reverb_mod(0.15f);
+    inst.set_reverb_mod(value(REV_MOD));
     inst.set_scale(static_cast<int>(std::lround(value(SCALE))));
+    // ROOT per deck (same spec, §2.1), rounded like SCALE. The quantizer
+    // boots at root 0, so before this push a snapshot with any other root
+    // played in C here while the law played it in its key.
+    inst.set_root(spky::PART_A, static_cast<int>(std::lround(value(ROOT_A))));
+    inst.set_root(spky::PART_B, static_cast<int>(std::lround(value(ROOT_B))));
     inst.set_tempo_bpm(40.f + value(TEMPO) * 200.f);
     inst.set_pace(value(PACE));
 }

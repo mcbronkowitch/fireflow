@@ -80,7 +80,7 @@ struct Rec {
     REC_P(set_comp) REC_P(set_pan) REC_P(sampler_speed_mode) REC_P(sampler_reverse)
     REC_P(sampler_feedback) REC_P(sampler_overlap) REC_P(set_variation)
     REC_P(sampler_scan) REC_P(set_grit_mode) REC_P(set_grit_mix) REC_P(set_form)
-    REC_P(set_song) REC_P(set_reverb_mix)
+    REC_P(set_song) REC_P(set_reverb_mix) REC_P(set_root)
     REC_PS(set_fx_target_base) REC_PS(set_target_base) REC_PS(set_target_depth)
     REC_PS(set_fx_target_depth) REC_PS(set_fx_target_active)
     REC_PS(set_target_active) REC_PS(set_fx_on)

@@ -53,7 +53,9 @@ def ctl(enum):
 # (task 9): the first four became fixed-by-ear constants in pushParams, SPOT
 # is a genuine feature loss, and DRIVE_A/B was dead menu-only patch state
 # that never reached the engine. HIDDEN_PARAMS is now empty, so DRIVE_A/B's
-# old trailing pair is simply gone, not replaced.
+# old trailing pair is simply gone, not replaced. REV_MOD came back on
+# 2026-10-19 as an appended id (spec 2026-10-18 root-and-wobl-knobs), not in
+# its old slot -- see the ROOT/WOBL block after PAN below.
 # PACE (spec 2026-08-12 modulation-pace) is APPENDED_PANEL_PARAMS' first
 # member, appended after PANEL_PARAMS + HIDDEN_PARAMS, so it now trails
 # SHUFFLE as the last ParamId.
@@ -84,10 +86,16 @@ PARAM_ORDER = [
     # after PULL, so every id above keeps its number -- the mod layer ids
     # behind it all shift by two (accepted, dev alpha).
     'PAN_A', 'PAN_B',
+    # ROOT per deck and WOBL (spec 2026-10-18 root-and-wobl-knobs): the three
+    # reserved plate pots become parameters, appended last in
+    # APPENDED_PANEL_PARAMS after PAN_B, so every id above keeps its number
+    # -- the mod layer ids behind them all shift by three (accepted, dev
+    # alpha). None of the three has a MOD depth.
+    'ROOT_A', 'ROOT_B', 'REV_MOD',
     # MOD latch layer (spec 2026-08-22-mod-latch-layer-design.md): MODBTN
     # then one depth pair per deck target (MOD_DECK_TARGETS order), then one
     # depth per center target (MOD_CENTER_TARGETS order). Appended after
-    # PULL and PAN, so every id above keeps its number.
+    # PULL, PAN and ROOT/WOBL, so every id above keeps its number.
     'MODBTN',
     'MODD_SOURCE_A', 'MODD_SOURCE_B', 'MODD_DEPTH_A', 'MODD_DEPTH_B',
     'MODD_FILT_A', 'MODD_FILT_B', 'MODD_FLUX_A', 'MODD_FLUX_B',
@@ -129,6 +137,10 @@ PARAM_TIPS = [
     # rather than left to default-to-label, same reason DPTH's is -- "PAN"
     # alone would not say what the knob does.
     'Deck balance', 'Deck balance',
+    # ROOT/WOBL (spec 2026-10-18 root-and-wobl-knobs): tip-defaults-to-label.
+    # ROOT's Rack tooltip is the configSwitch name "Root" with the note names
+    # (Fireflow.cpp), not this tip.
+    'ROOT', 'ROOT', 'WOBL',
     # MOD latch layer: MODBTN carries a real tooltip; the 50 depth knobs are
     # unlabelled widgetless-in-Rack SMKNOBs (Task 5/6 draw them on the HW
     # panel only), so Ctl's tip-defaults-to-label rule leaves every one of
@@ -166,9 +178,15 @@ def test_enum_order():
     check(PARAM_ORDER[PARAM_ORDER.index('PULL') + 1:PARAM_ORDER.index('PULL') + 3]
           == ['PAN_A', 'PAN_B'],
           "PAN moved out of the appended tail -- ids above it renumbered")
-    # MOD latch layer (spec 2026-08-22): appended after PAN for the same
-    # reason -- everything above (through PAN_B) keeps its number.
-    check(PARAM_ORDER[PARAM_ORDER.index('PAN_B') + 1] == 'MODBTN',
+    # ROOT/WOBL (spec 2026-10-18 root-and-wobl-knobs): appended after PAN
+    # for the same reason -- everything above (through PAN_B) keeps its
+    # number.
+    check(PARAM_ORDER[PARAM_ORDER.index('PAN_B') + 1:PARAM_ORDER.index('PAN_B') + 4]
+          == ['ROOT_A', 'ROOT_B', 'REV_MOD'],
+          "ROOT/WOBL moved out of the appended tail -- ids above it renumbered")
+    # MOD latch layer (spec 2026-08-22): appended after ROOT/WOBL for the
+    # same reason -- everything above (through REV_MOD) keeps its number.
+    check(PARAM_ORDER[PARAM_ORDER.index('REV_MOD') + 1] == 'MODBTN',
           "MODBTN moved out of the appended tail -- ids above it renumbered")
     check(PARAM_ORDER[-1] == 'MODD_TIDE',
           "the mod-layer block is no longer the persistent tail")
@@ -251,13 +269,14 @@ def test_bbd_pitch_flux_time_collections():
     retired (task 6, spec 2026-08-09 hw-control-reduction), and TIME
     (FLUXRATE_A/B, unchanged ParamId) is the only surviving delay-time
     widget. APPENDED_PANEL_PARAMS was empty from task 6 until PACE (spec
-    2026-08-12 modulation-pace) became its first member; DEPTH_A/B, PULL
-    and now PAN_A/B followed."""
+    2026-08-12 modulation-pace) became its first member; DEPTH_A/B, PULL,
+    PAN_A/B and now ROOT_A/B + REV_MOD followed."""
     persistent = [c.enum for c in g.PARAMS]
     runtime = [c.enum for c in g.RUNTIME_PANEL_PARAMS]
     static = [c.enum for c in g.STATIC_PANEL_PARAMS]
     check([c.enum for c in g.APPENDED_PANEL_PARAMS]
-          == ['PACE', 'DEPTH_A', 'DEPTH_B', 'PULL', 'PAN_A', 'PAN_B'],
+          == ['PACE', 'DEPTH_A', 'DEPTH_B', 'PULL', 'PAN_A', 'PAN_B',
+              'ROOT_A', 'ROOT_B', 'REV_MOD'],
           "APPENDED_PANEL_PARAMS changed")
     check("FLUXTIME_A" not in persistent and "FLUXTIME_B" not in persistent,
           "FLUXTIME must not survive as a saved ParamId")
@@ -270,14 +289,20 @@ def test_bbd_pitch_flux_time_collections():
     # new length + 2 from the end -- PAN now holds the role PULL held
     # before it: the last appended pair directly ahead of the mod layer's
     # fixed-length tail.
-    check(persistent[-56:-54] == ['DEPTH_A', 'DEPTH_B'],
+    # ROOT_A/B + REV_MOD (spec 2026-10-18 root-and-wobl-knobs) took that
+    # role from PAN: three ids appended after PAN_B with NO mod-layer row of
+    # their own, so the 51-id mod layer is unchanged and everything ahead of
+    # it moves three further from the end.
+    check(persistent[-59:-57] == ['DEPTH_A', 'DEPTH_B'],
           "the appended FEED block moved out of its slot ahead of PULL")
-    check(persistent[-54] == 'PULL',
+    check(persistent[-57] == 'PULL',
           "PULL moved out of its slot ahead of PAN")
-    check(persistent[-53:-51] == ['PAN_A', 'PAN_B'],
-          "PAN moved out of its slot ahead of the mod layer")
-    # MOD latch layer (spec 2026-08-22) is appended after PULL and PAN, so
-    # it is now the persistent tail instead.
+    check(persistent[-56:-54] == ['PAN_A', 'PAN_B'],
+          "PAN moved out of its slot ahead of ROOT/WOBL")
+    check(persistent[-54:-51] == ['ROOT_A', 'ROOT_B', 'REV_MOD'],
+          "ROOT/WOBL moved out of its slot ahead of the mod layer")
+    # MOD latch layer (spec 2026-08-22) is appended after PULL, PAN and
+    # ROOT/WOBL, so it is now the persistent tail instead.
     check(persistent[-1] == 'MODD_TIDE',
           "the appended mod-layer block is not the persistent tail")
     check(all(e in runtime for e in ('STAGES_A', 'STAGES_B',
@@ -408,23 +433,29 @@ def test_param_runtime_tip_contract():
     check(PARAM_TIPS[ids["LINK_A"]:ids["STAGES_B"] + 1]
           == ['LINK', 'LINK', 'BBD Bend', 'BBD Bend'],
           "BBD Bend runtime tips drifted")
-    check(PARAM_TIPS[-56:-54] == ['MOTION lane base', 'MOTION lane base'],
+    # ROOT_A/B + REV_MOD (spec 2026-10-18 root-and-wobl-knobs) were appended
+    # after PAN with no mod-layer row, so everything ahead of the 51-id mod
+    # layer sits three slots further from the end than it did.
+    check(PARAM_TIPS[-59:-57] == ['MOTION lane base', 'MOTION lane base'],
           "the appended DPTH tip moved out of its slot ahead of PULL")
-    check(PARAM_TIPS[-57] == 'PACE',
+    check(PARAM_TIPS[-60] == 'PACE',
           "PACE must sit at the end of the legacy runtime tips (spec 2026-08-12 "
           "modulation-pace)")
     # PULL (task 6) sits directly ahead of PAN, one slot further from the end
     # than DPTH's pair.
-    check(PARAM_TIPS[-54] == 'PULL',
+    check(PARAM_TIPS[-57] == 'PULL',
           "PULL's tooltip moved out of its slot ahead of PAN")
-    # PAN (spec 2026-08-30 pan) sits directly ahead of the mod layer's
-    # fixed-length tail, so its own tip pair is one slot further from the end
-    # than PULL's, and MODBTN's distance from the end DID move this time --
-    # PAN added a MOD_DECK_TARGETS row, growing the mod layer by two.
-    check(PARAM_TIPS[-53:-51] == ['Deck balance', 'Deck balance'],
-          "PAN's tooltip moved out of its slot ahead of the mod layer")
-    # MOD latch layer (spec 2026-08-22) is appended after PAN, so its own
-    # tips (MODBTN's real tooltip, then 50 blank SMKNOB tips) are now the
+    # PAN (spec 2026-08-30 pan) sat directly ahead of the mod layer's
+    # fixed-length tail until ROOT/WOBL; MODBTN's distance from the end moved
+    # when PAN added a MOD_DECK_TARGETS row, growing the mod layer by two.
+    check(PARAM_TIPS[-56:-54] == ['Deck balance', 'Deck balance'],
+          "PAN's tooltip moved out of its slot ahead of ROOT/WOBL")
+    # ROOT/WOBL now sit directly ahead of the mod layer. MODBTN's distance
+    # from the end did NOT move this time: none of the three has a depth.
+    check(PARAM_TIPS[-54:-51] == ['ROOT', 'ROOT', 'WOBL'],
+          "ROOT/WOBL's tooltips moved out of their slot ahead of the mod layer")
+    # MOD latch layer (spec 2026-08-22) is appended after ROOT/WOBL, so its
+    # own tips (MODBTN's real tooltip, then 50 blank SMKNOB tips) are now the
     # trailing runtime tips.
     check(PARAM_TIPS[-51] == 'MOD layer latch',
           "MODBTN's tooltip is not the first mod-layer runtime tip")
@@ -1163,12 +1194,17 @@ CENTER = {   # enum -> (x offset from CX, y)
     'SCALE': (-10.5, 68.0), 'CHOKE': (0.0, 68.0), 'DRIFT': (10.5, 68.0),
     # SETTLE retired (task 8, spec 2026-08-09 hw-control-reduction): the
     # pad's job moved to DRIFT's own left stop. SPOT and MASTER_DRIVE
-    # retired (task 9): the whole ROW_DUO2 row (78.0) is now empty -- no
-    # regrouping.
+    # retired (task 9): the whole ROW_DUO2 row (78.0) was empty -- no
+    # regrouping. PULL took its centre slot; ROOT_A/ROOT_B (spec 2026-10-18
+    # root-and-wobl-knobs) take its two outer slots, each under the DUO
+    # control it belongs with: ROOT_A under SCALE, ROOT_B under DRIFT.
+    'ROOT_A': (-10.5, 78.0), 'PULL': (0.0, 78.0), 'ROOT_B': (10.5, 78.0),
     'REV_SIZE': (-10.5, 94.0), 'REV_TONE': (0.0, 94.0),
-    # REV_SMEAR and REV_MOD retired (task 9); their R-column slots at
-    # (10.5, 94.0)/(10.5, 104.5) stay empty -- no regrouping.
+    # REV_SMEAR and REV_MOD retired (task 9). REV_MOD came back as WOBL
+    # (spec 2026-10-18 root-and-wobl-knobs) in its own freed R-column slot
+    # (10.5, 104.5); SMEAR's (10.5, 94.0) stays empty -- no regrouping.
     'REV_DECAY': (-10.5, 104.5), 'REV_DIFF': (0.0, 104.5),
+    'REV_MOD': (10.5, 104.5),
 }
 
 
@@ -1182,6 +1218,31 @@ def test_center_positions():
         want_x = g.CX + dx
         check(approx(c.x, want_x) and approx(c.y, y),
               f"{enum} at ({c.x:.2f}, {c.y:.2f}), want ({want_x:.2f}, {y})")
+
+
+def test_root_tooltip_names_the_note():
+    """ROOT is a 12-detent KNOBI (spec 2026-10-18 root-and-wobl-knobs §6).
+    configControls() gives an unknown KNOBI the generic "Steps" label, so
+    ROOT needs its own branch: a configSwitch named "Root" over the twelve
+    note names, C at the left stop, B at the right, sharps, English -- and
+    the snapshot default, like every other control."""
+    cpp = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "..", "src", "Fireflow.cpp"), encoding="utf-8").read()
+    head = "c.id == ROOT_A || c.id == ROOT_B"
+    check(cpp.count(head) == 1,
+          f"Fireflow.cpp: expected exactly one ROOT branch, found {cpp.count(head)}")
+    if cpp.count(head) != 1:
+        return
+    branch = compact_cpp(cpp.split(head, 1)[1].split(";", 1)[0])
+    notes = '{"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"}'
+    check(branch.startswith(")configSwitch(c.id,"),
+          "the ROOT branch is not a configSwitch")
+    check(',init,"Root",' + notes in branch,
+          f"the ROOT branch does not name the twelve notes from the snapshot "
+          f"default: {branch!r}")
+    # The branch must sit ahead of the STEPS fallback, or it is unreachable.
+    check(cpp.index(head) < cpp.index('init, "Steps")'),
+          "the ROOT branch sits after the STEPS fallback")
 
 
 def test_center_group_boxes():
@@ -2980,6 +3041,15 @@ def test_sampler_preset_init_snapshot():
         "PAN_B": 0.0,
         "MODD_PAN_A": 0.0,
         "MODD_PAN_B": 0.0,
+        # Not in NewInit.vcvm -- these three were reserved pots when it was
+        # saved. Typed here from spec 2026-10-18 root-and-wobl-knobs §2:
+        # both decks boot in C (0), so today's songs are unchanged, and WOBL
+        # boots at the 0.15 the law pinned as a constant until then. The
+        # loop below SKIPS names the generator does not know, so leaving
+        # these out would have stayed green -- they are here on purpose.
+        "ROOT_A": 0.0,
+        "ROOT_B": 0.0,
+        "REV_MOD": 0.15,
     }
     for name, want in approved.items():
         if name not in gp.INIT_DEFAULTS:
@@ -3573,11 +3643,13 @@ def test_drift_settle_zone_and_formula_agree_across_host_and_bench():
 
 
 def test_fixed_values_and_dead_controls():
-    """PUSH, WOBL and SMEAR become constants; SPOT dies; DRIVE_A/B was never
-    wired to anything and leaves with its menu entry."""
+    """PUSH and SMEAR become constants; SPOT dies; DRIVE_A/B was never
+    wired to anything and leaves with its menu entry. WOBL (REV_MOD) was a
+    constant too until spec 2026-10-18 root-and-wobl-knobs gave it its knob
+    back, so it is no longer on the dead list."""
     import gen_panel as gp
     names = {c.enum for c in gp.PARAMS}
-    for dead in ("MASTER_DRIVE", "SPOT", "REV_MOD", "REV_SMEAR",
+    for dead in ("MASTER_DRIVE", "SPOT", "REV_SMEAR",
                  "DRIVE_A", "DRIVE_B"):
         check(dead not in names, f"{dead} still exists")
     check(gp.HIDDEN_PARAMS == [], "HIDDEN_PARAMS is not empty")
@@ -3595,8 +3667,10 @@ def test_fixed_values_agree_across_host_and_bench():
     to read a param: Fireflow.cpp (what Rack actually runs) and
     bench/audition/init_patch.cpp (the only copy a doctest can reach --
     Fireflow.cpp lives inside a Rack Module, unreachable from the engine test
-    suite). This scrapes both files' source text and requires the three
-    literals to match exactly, so a hand-edit to only one copy fails loudly
+    suite). This scrapes both files' source text and requires the literals
+    to match exactly (two since WOBL got its knob back, spec 2026-10-18
+    root-and-wobl-knobs -- its reads are pinned below the loop instead), so
+    a hand-edit to only one copy fails loudly
     here instead of shipping a Rack build that disagrees with its own test
     coverage.
 
@@ -3624,8 +3698,7 @@ def test_fixed_values_agree_across_host_and_bench():
         return matches[0] if len(matches) == 1 else None
 
     for fn, want in (("set_master_drive", 0.40),
-                      ("set_reverb_smear", 0.30),
-                      ("set_reverb_mod", 0.15)):
+                      ("set_reverb_smear", 0.30)):
         host_v = call_value(host_cpp, fn, "Fireflow.cpp")
         bench_v = call_value(bench_cpp, fn, "bench/audition/init_patch.cpp")
         if host_v is not None and bench_v is not None:
@@ -3635,6 +3708,28 @@ def test_fixed_values_agree_across_host_and_bench():
             check(float(host_v) == want,
                   f"{fn} is {host_v}, want {want} (spec 2026-08-09 "
                   f"hw-control-reduction task 9)")
+
+    # WOBL left the literal list (spec 2026-10-18 root-and-wobl-knobs §2.2):
+    # both copies now read the REV_MOD parameter, and its 0.15 boot value
+    # lives in the init snapshot (the `approved` dict pins it). Each read is
+    # required exactly once, and no literal set_reverb_mod(...) may survive
+    # in either copy -- a constant left behind beside the read would win or
+    # lose depending on which line runs last.
+    law_path = os.path.join(here, "..", "..", "..", "control",
+                            "control_law.h")
+    with open(law_path, encoding="utf-8") as f:
+        law_n = compact_cpp(f.read())
+    bench_n = compact_cpp(bench_cpp)
+    for label, src, needle in (
+            ("control/control_law.h", law_n, "set_reverb_mod(prm(REV_MOD))"),
+            ("bench/audition/init_patch.cpp", bench_n,
+             "set_reverb_mod(value(REV_MOD))")):
+        n = src.count(compact_cpp(needle))
+        check(n == 1, f"{label}: expected exactly one {needle}, found {n}")
+    for label, src in (("Fireflow.cpp + control_law.h", host_cpp),
+                       ("bench/audition/init_patch.cpp", bench_cpp)):
+        lits = re.findall(r"set_reverb_mod\(([\d.]+)f?\)", src)
+        check(lits == [], f"{label}: WOBL is still a literal: {lits!r}")
 
 
 def test_mod_layer():
@@ -3722,7 +3817,10 @@ def test_mod_layer():
     # excluded faces never grew a depth
     for base in ("GRIT", "FLUXRATE", "STAGES", "MOD", "TEMPO", "SHUFFLE",
                  "PACE", "DRIFT", "COUPLE", "CHOKE", "SCALE", "STEPS",
-                 "SONG", "ENGINE", "REC"):
+                 "SONG", "ENGINE", "REC",
+                 # spec 2026-10-18 root-and-wobl-knobs §5: ROOT joins SCALE;
+                 # WOBL has no MOD_CENTER_TARGETS row.
+                 "ROOT", "REV_MOD"):
         check(f"MODD_{base}_A" not in g.INIT_DEFAULTS
               and f"MODD_{base}" not in g.INIT_DEFAULTS,
               f"excluded face {base} has a depth param")

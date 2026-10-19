@@ -101,6 +101,9 @@ enum ParamId {
     PULL,
     PAN_A,
     PAN_B,
+    ROOT_A,
+    ROOT_B,
+    REV_MOD,
     MODBTN,
     MODD_SOURCE_A,
     MODD_SOURCE_B,
@@ -273,6 +276,9 @@ static const PanelCtl kParamCtls[] = {
     {PULL, WK_SMKNOB, {106.680f, 78.000f}, "PULL", {106.680f, 83.600f}, 0, 1.90f, 0x171713, "PULL"},
     {PAN_A, WK_SMKNOB, {54.750f, 89.400f}, "PAN", {54.750f, 95.000f}, 0, 1.90f, 0x171713, "Deck balance"},
     {PAN_B, WK_SMKNOB, {158.610f, 89.400f}, "PAN", {158.610f, 95.000f}, 0, 1.90f, 0x171713, "Deck balance"},
+    {ROOT_A, WK_KNOBI, {96.180f, 78.000f}, "ROOT", {96.180f, 83.600f}, 0, 1.90f, 0x171713, "ROOT"},
+    {ROOT_B, WK_KNOBI, {117.180f, 78.000f}, "ROOT", {117.180f, 83.600f}, 0, 1.90f, 0x171713, "ROOT"},
+    {REV_MOD, WK_SMKNOB, {117.180f, 104.500f}, "WOBL", {117.180f, 110.100f}, 0, 1.90f, 0x171713, "WOBL"},
 };
 // Knob accent, parallel to kParamCtls, same order. Green left,
 // copper right, muted in the centre strip -- side_accent().
@@ -351,6 +357,9 @@ static const FfAccent kParamAccent[] = {
     {0x656056, 0x656056},
     {0x1D6F5F, 0x1D6F5F},
     {0xB96532, 0xB96532},
+    {0x656056, 0x656056},
+    {0x656056, 0x656056},
+    {0x656056, 0x656056},
 };
 static_assert(sizeof(kParamAccent) / sizeof(kParamAccent[0]) == sizeof(kParamCtls) / sizeof(kParamCtls[0]), "kParamAccent desynced");
 static const PanelCtl kInputCtls[] = {
