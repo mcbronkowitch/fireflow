@@ -104,7 +104,7 @@ public:
     // board). An edge seen in a call is stamped at the end of its samples.
     // tempo_knob: raw TEMPO param 0..1, compared for change only.
     // beat_phase: inst.beat_phase(), for the armed-at-loss restart on the next
-    // wrap (a value below the previous call's).
+    // wrap (a value below the previous call's) when no CLOCK edge returns first.
     ClockOut step(uint32_t samples, bool clock_edge, bool reset_edge,
                   float tempo_knob, float beat_phase) {
         ClockOut o;
@@ -142,7 +142,14 @@ public:
                 _armed = true;
             }
         } else if (_armed) {
+            // Armed while running, then lost: the first CLOCK edge back is the
+            // 1, and FireFlow's own beat wrap (carries PACE) is the fallback.
+            // That edge is no pulse and does not make the clock run (two valid
+            // edges still). It needs no range check: the loss forgot every
+            // edge, so the first one back is a reference with no interval yet,
+            // and it fires and disarms, so no later edge reaches this branch.
             if (o.pulse) restart(o, 0);
+            else if (!_running && clock_edge) restart(o, 0);
             else if (!_running && beat_phase < _prevPhase) restart(o, 0);
         }
         _prevPhase = beat_phase;

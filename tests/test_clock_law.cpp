@@ -561,6 +561,37 @@ TEST_CASE("clock law: armed reset at loss fires on the next beat wrap") {
     }
 }
 
+TEST_CASE("clock law: armed reset at loss fires on the first returning edge") {
+    for (uint32_t q : {1u, kBlock}) {
+        CAPTURE(q);
+        const double P = period_of(120.0);
+        Rig rig(q);
+        rig.phase = 0.1f;
+        rig.train(400.0, 120.0, 10);
+        const double last = 400.0 + 9 * P;
+        CHECK_FALSE(rig.reset_at(last + 0.05 * kSr).restart);   // armed
+        rig.phase = 0.3f;                                   // no wrap from here on
+        rig.idle_until(last + 2.2 * P);
+        REQUIRE(rig.lost_count() == 1);
+        for (const auto& e : rig.log) CHECK_FALSE(e.out.restart);
+        rig.phase = 0.4f; CHECK_FALSE(rig.tick().restart);
+        // The source returns before FireFlow's beat wraps: its first edge is
+        // the 1, on that call, and is still only a reference.
+        const auto a = rig.clock_at(double(rig.now) + 3000.0);
+        CHECK(a.restart);
+        CHECK(a.restart_age == 0u);
+        CHECK_FALSE(a.pulse);
+        CHECK_FALSE(rig.law.running());
+        // Disarmed: neither the next wrap nor the second edge fires again.
+        rig.phase = 0.9f;  CHECK_FALSE(rig.tick().restart);
+        rig.phase = 0.05f; CHECK_FALSE(rig.tick().restart);
+        const auto b = rig.clock_at(double(rig.now) + P);
+        CHECK(b.pulse);
+        CHECK_FALSE(b.restart);
+        CHECK(rig.law.running());
+    }
+}
+
 // ---------------------------------------------------------------- lamps ----
 
 TEST_CASE("clock law: lamps show every edge") {
