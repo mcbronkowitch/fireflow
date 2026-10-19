@@ -29,8 +29,9 @@ inline constexpr float kClockBpmMax = 400.f;
 //    long+short pairs, so a swung 1-per-beat source averages to its beat
 //    exactly (55/45 at 120 BPM: 0 error once full); an odd count is off by
 //    (swing excess)/k on every pulse.
-//  - Settling. A tempo step inside kClockPauseRatio ramps through the window
-//    and has settled after k pulses at the new period (120 -> 90: the 8th).
+//  - Settling. A tempo step inside the band (kClockBand) ramps through the
+//    window and has settled after k pulses at the new period (120 -> 105:
+//    the 8th); a step out of the band settles at the 2nd (below).
 // So k = N-1 = 8: even, an eighth of the single-period step, and a ramp of two
 // bars of 4/4. k = 16 would halve the step again but take four bars to follow
 // a tempo change. tests/test_clock_law.cpp pins step, swing and settling.
@@ -40,19 +41,35 @@ inline constexpr int kClockWindowPeriods = kClockWindowEdges - 1;
 // Clock loss: no valid edge for longer than this many measured periods (§6).
 inline constexpr float kClockTimeoutPeriods = 2.f;
 
-// A period longer than this many times the full window's mean is held aside
-// instead of entering the window: a stop/start under the timeout must not
-// move the tempo (§8.1 "no tempo excursion"). If the next period is long as
-// well, the source really slowed down: the window restarts with the two, so a
-// big slowdown settles in 2 pulses (120 -> 75: the 2nd). 1.4 sits above the long half of a full
-// window of 1-per-beat swing up to 2:1 (1.33x the mean, with 55/45 at 1.1x)
-// and above a 120 -> 90 BPM step (1.33x), and below the 1.5-period pause the
-// test drives. Applies only to a full window, whose mean is the beat.
-inline constexpr float kClockPauseRatio = 1.4f;
+// The band around a full window's mean, as a ratio: a period in
+// [mean / kClockBand, mean * kClockBand] enters the window. A stop/start
+// under the timeout must not move the tempo (§8.1 "no tempo excursion"), and
+// a quick one can leave a gap of any length, shorter or longer than a beat.
+//  - Out of the band: the period still gives a pulse (the beat aligns), but it
+//    is held aside, and so is the period right after it; the tempo holds.
+//  - A tempo change is two consecutive out-of-band periods on the same side
+//    that agree with each other within the band: the window restarts with
+//    the two, and the step has settled at its 2nd pulse (120 -> 90, 75, 150).
+//  - In the band: the period enters. One odd period r (in beats) among k
+//    leaves |r-1| / (k-1+r) until it leaves the window: at the band's edges
+//    2.44 % (r = 1.2) and 2.13 % (r = 1/1.2), under the 2.5 % target
+//    (probe at 120 BPM: r = 1.19 -> 2.32 %, r = 0.84 -> 2.04 %, r = 1.1 ->
+//    1.23 %; 0.4, 0.6, 0.78, 1.21, 1.25, 1.35, 1.5, 1.9 -> 0).
+//  - 1.2 keeps 55/45 swing (1.1x and 0.91x of a full even window's mean, which
+//    is the beat) inside. Accepted cost: quarter-note swing heavy enough to
+//    leave the band (beyond about 59/41) is never measured: both halves are
+//    held, so the tempo freezes at its window value (probe: 60/40 and 66/34
+//    at 120 BPM hold 120.000) and a tempo change under such swing is not
+//    followed; the pulses still align the beat.
+// Applies only to a full window, whose mean is the beat.
+inline constexpr float kClockBand = 1.2f;
 
 // A reset up to this long after a valid pulse restarts as if it had come just
-// before that pulse, back-dated by the elapsed samples (§6).
-inline constexpr float kClockResetWindowSeconds = 0.010f;
+// before that pulse, back-dated by the elapsed samples (§6). Inclusive, and
+// rounded to whole samples in init(): with a float constant,
+// double(0.010f) * 48000 is 479.99998927 (probe), and an age of exactly 480
+// (five blocks) must back-date.
+inline constexpr double kClockResetWindowSeconds = 0.010;
 
 struct ClockOut {
     bool     pulse        = false;  // a valid pulse: the host calls inst.clock_pulse()
@@ -70,6 +87,7 @@ public:
     void init(float sample_rate) {
         *this = ClockLaw{};
         _sr = sample_rate;
+        _resetWindow = reset_window_samples(sample_rate);
     }
 
     // Drop the period history (VCV reinit and un-bypass). The held tempo stays,
@@ -118,7 +136,7 @@ public:
         if (reset_edge) {
             if (o.pulse || !_running) {
                 restart(o, 0);
-            } else if (double(_now - _lastValid) <= double(kClockResetWindowSeconds) * _sr) {
+            } else if (_now - _lastValid <= _resetWindow) {
                 restart(o, uint32_t(_now - _lastValid));
             } else {
                 _armed = true;
@@ -136,6 +154,10 @@ public:
     bool running() const { return _running; }
 
 private:
+    static uint64_t reset_window_samples(float sample_rate) {
+        return uint64_t(kClockResetWindowSeconds * double(sample_rate) + 0.5);
+    }
+
     void restart(ClockOut& o, uint32_t age) {
         o.restart = true;
         o.restart_age = age;
@@ -146,7 +168,7 @@ private:
         _haveEdge = false;
         _count = 0;
         _head = 0;
-        _pendingLong = false;
+        _pendingSide = 0;
     }
 
     void push(double interval) {
@@ -186,17 +208,29 @@ private:
             measure();
             return true;
         }
-        if (_count == kClockWindowPeriods && interval > double(kClockPauseRatio) * mean()) {
-            if (!_pendingLong) {        // held aside: the beat aligns, the tempo holds
-                _pendingLong = true;
+        if (_count == kClockWindowPeriods) {
+            const double m = mean(), band = double(kClockBand);
+            const int side = interval > m * band ? 1 : interval < m / band ? -1 : 0;
+            if (side != 0) {
+                if (side == _pendingSide && interval <= _pendingInterval * band &&
+                    interval >= _pendingInterval / band) {
+                    _count = 0;         // two agreeing out-of-band periods: a new tempo
+                    _head = 0;
+                    _pendingSide = 0;
+                    push(_pendingInterval);
+                    push(interval);
+                    measure();
+                    return true;
+                }
+                _pendingSide = side;    // held aside: the beat aligns, the tempo holds
                 _pendingInterval = interval;
                 return true;
             }
-            _count = 0;                 // two long periods in a row: a slowdown
-            _head = 0;
-            push(_pendingInterval);
+            if (_pendingSide != 0) {    // the period after a held one: held too
+                _pendingSide = 0;
+                return true;
+            }
         }
-        _pendingLong = false;
         push(interval);
         measure();
         return true;
@@ -213,8 +247,9 @@ private:
     uint64_t _lastValid = 0;        // last valid pulse (timeout, reset window)
     double   _ring[kClockWindowPeriods] = {};
     int      _count = 0, _head = 0;
-    bool     _pendingLong = false;
+    int      _pendingSide = 0;      // a held out-of-band period: +1 long, -1 short, 0 none
     double   _pendingInterval = 0.0;
+    uint64_t _resetWindow = reset_window_samples(48000.f);
 
     bool     _armed = false;
     float    _prevPhase = 0.f;

@@ -206,40 +206,40 @@ TEST_CASE("clock law: swing and tempo steps settle") {
             }
             CHECK(rig.lost_count() == 0);
         }
-        SUBCASE("120 -> 90 BPM settles within kFull pulses") {
-            // 90/120 lengthens the period by 1.33x, inside kClockPauseRatio:
-            // the window ramps, and after kFull pulses at the new period it
-            // holds only new intervals. Criterion: the single-period bound.
+        // A step from 120 BPM to `to`: 16 pulses at 120, then 16 at the new
+        // period. Returns the settle index; the criterion is the
+        // single-period bound.
+        auto settle_after_step = [q](double to) {
             Rig rig(q);
             double t = 555.0;
             for (int i = 0; i < 16; ++i, t += period_of(120.0)) rig.clock_at(t);
-            t += period_of(90.0) - period_of(120.0);
+            t += period_of(to) - period_of(120.0);
             std::vector<control::ClockOut> after;
-            for (int i = 0; i < 16; ++i, t += period_of(90.0)) after.push_back(rig.clock_at(t));
+            for (int i = 0; i < 16; ++i, t += period_of(to)) after.push_back(rig.clock_at(t));
             const auto bpms = pulse_bpms(after);
             REQUIRE(bpms.size() == 16);
-            const int s = settle_index(bpms, 90.0, tol(90.0, q, 1));
+            CHECK(rig.lost_count() == 0);
+            return settle_index(bpms, to, tol(to, q, 1));
+        };
+        SUBCASE("out-of-band steps settle at the 2nd pulse") {
+            // 120 -> 90 (1.33x), 120 -> 75 (1.6x) and 120 -> 150 (0.8x) leave
+            // the band: the first new period is held aside, the second agrees
+            // with it and restarts the window.
+            for (double to : {90.0, 75.0, 150.0}) {
+                CAPTURE(to);
+                const int s = settle_after_step(to);
+                CAPTURE(s);
+                CHECK(s >= 1);
+                CHECK(s <= 2);
+            }
+        }
+        SUBCASE("an in-band step ramps within kFull pulses") {
+            // 120 -> 105 (1.14x) stays in the band: the window ramps, and
+            // after kFull pulses at the new period it holds only new ones.
+            const int s = settle_after_step(105.0);
             CAPTURE(s);
             CHECK(s >= 1);
             CHECK(s <= kFull);
-            CHECK(rig.lost_count() == 0);
-        }
-        SUBCASE("120 -> 75 BPM settles within 2 pulses") {
-            // 1.6x is beyond kClockPauseRatio: the first long period is held
-            // aside like a pause, the second confirms the new tempo.
-            Rig rig(q);
-            double t = 555.0;
-            for (int i = 0; i < 16; ++i, t += period_of(120.0)) rig.clock_at(t);
-            t += period_of(75.0) - period_of(120.0);
-            std::vector<control::ClockOut> after;
-            for (int i = 0; i < 16; ++i, t += period_of(75.0)) after.push_back(rig.clock_at(t));
-            const auto bpms = pulse_bpms(after);
-            REQUIRE(bpms.size() == 16);
-            const int s = settle_index(bpms, 75.0, tol(75.0, q, 1));
-            CAPTURE(s);
-            CHECK(s >= 1);
-            CHECK(s <= 2);
-            CHECK(rig.lost_count() == 0);
         }
     }
 }
@@ -327,29 +327,61 @@ TEST_CASE("clock law: two valid edges before running") {
     }
 }
 
+// A running 120 BPM clock, one gap of g periods (a stop/start under the
+// timeout), then steady periods again. Returns the worst |bpm - 120| over the
+// gap pulse and the 12 pulses after it, and checks the clock was kept.
+static double worst_after_gap(uint32_t q, double g) {
+    const double bpm = 120.0, P = period_of(bpm);
+    Rig rig(q);
+    double t = 0.29 * P;
+    for (int i = 0; i < 16; ++i, t += P) rig.clock_at(t);
+    t += (g - 1.0) * P;
+    std::vector<control::ClockOut> after{rig.clock_at(t)};
+    t += P;
+    for (int i = 0; i < 12; ++i, t += P) after.push_back(rig.clock_at(t));
+    double worst = 0.0;
+    for (const auto& o : after) {
+        CHECK(o.pulse);                                // every one aligns the beat
+        worst = std::max(worst, (double)std::fabs(o.measured_bpm - bpm));
+    }
+    CHECK(rig.lost_count() == 0);
+    CHECK(rig.law.running());
+    return worst;
+}
+
 TEST_CASE("clock law: a short pause keeps the clock") {
-    // The pause period is held aside: the skipped interval splits the window
-    // into two telescoping chains, so the span error is below 2q, and
-    // |bpm' - bpm| < bpm*2q/(kFull*P - 2q).
+    // An out-of-band gap is held aside, and so is the period right after it.
+    // The holes split the window into two telescoping chains, so the span
+    // error is below 2q and |bpm' - bpm| < bpm*2q/(kFull*P - 2q): only
+    // quantization is left. 0.78 and 1.25 sit just outside the band on
+    // either side.
     for (uint32_t q : {1u, kBlock}) {
-        CAPTURE(q);
-        const double bpm = 120.0, P = period_of(bpm);
-        Rig rig(q);
-        double t = 0.29 * P;
-        for (int i = 0; i < 16; ++i, t += P) rig.clock_at(t);
-        t += 0.5 * P;                                  // 1.5 periods, under 2x
-        const auto first = rig.clock_at(t);
-        CHECK(first.pulse);                            // it still aligns the beat
-        t += P;
-        std::vector<control::ClockOut> after{first};
-        for (int i = 0; i < 12; ++i, t += P) after.push_back(rig.clock_at(t));
-        const double tol2 = bpm * 2.0 * q / (kFull * P - 2.0 * q);
-        for (const auto& o : after) {
-            CHECK(o.pulse);
-            CHECK(std::fabs(o.measured_bpm - bpm) < tol2);
+        for (double g : {0.4, 0.6, 0.78, 1.25, 1.35, 1.5}) {
+            CAPTURE(q); CAPTURE(g);
+            const double P = period_of(120.0);
+            const double tol2 = 120.0 * 2.0 * q / (kFull * P - 2.0 * q);
+            CHECK(worst_after_gap(q, g) < tol2);
         }
-        CHECK(rig.lost_count() == 0);
-        CHECK(rig.law.running());
+    }
+}
+
+TEST_CASE("clock law: an in-band gap leaves a bounded residual") {
+    // A gap of r periods inside the band enters the window: kFull - 1 periods
+    // of P plus one of rP, so the tempo is off by |r-1| / (kFull - 1 + r)
+    // until it leaves the window -- at the band's edges (1.2 and 1/1.2) 2.44 %
+    // and 2.13 %. With quantization the span is (kFull-1+r)P within q:
+    //     |bpm' - bpm| <= bpm * (|r-1|P + q) / ((kFull-1+r)P - q).
+    // And whatever the band, an in-band gap stays within 2.5 % of the tempo.
+    for (uint32_t q : {1u, kBlock}) {
+        for (double r : {0.84, 1.1, 1.19}) {
+            CAPTURE(q); CAPTURE(r);
+            const double bpm = 120.0, P = period_of(bpm);
+            const double bound = bpm * (std::fabs(r - 1.0) * P + q) / ((kFull - 1 + r) * P - q);
+            const double worst = worst_after_gap(q, r);
+            CAPTURE(worst); CAPTURE(bound);
+            CHECK(worst <= bound);
+            CHECK(worst <= 0.025 * bpm);
+        }
     }
 }
 
@@ -409,6 +441,27 @@ TEST_CASE("clock law: reset 5 ms after a pulse is back-dated") {
         const auto p = rig.clock_at(last + 2 * P);
         CHECK(p.restart);
         CHECK(p.restart_age == 0u);
+    }
+}
+
+TEST_CASE("clock law: the reset window includes exactly 10 ms") {
+    // 10 ms at 48 kHz is 480 samples, a multiple of the block, so the board
+    // can see an age of exactly 480: "up to 10 ms" back-dates it. One call
+    // later (481 per sample, 576 per block) it arms.
+    for (uint32_t q : {1u, kBlock}) {
+        CAPTURE(q);
+        const double P = period_of(120.0);
+        Rig rig(q);
+        rig.train(480.0, 120.0, 10);
+        const double stamp = double(rig.now);           // the last pulse's stamp
+        const auto r = rig.reset_at(stamp + 480.0);
+        CHECK(r.restart);
+        CHECK(r.restart_age == 480u);
+        rig.clock_at(480.0 + 10 * P);
+        const double stamp2 = double(rig.now);
+        const auto late = rig.reset_at(stamp2 + 480.0 + q);
+        CHECK_FALSE(late.restart);                      // armed
+        CHECK(rig.clock_at(480.0 + 11 * P).restart);
     }
 }
 
