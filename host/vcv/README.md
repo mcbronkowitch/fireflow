@@ -143,10 +143,21 @@ make-up gain, topping out at `kCompTop = 0.7` — the old knob's working
 compression amount — so full compressor drive is no longer reachable from
 the panel (deliberate: task 5/9's factory patches never asked for more).
 
-Three controls are fixed-by-ear constants with no panel control at all
+Two controls are fixed-by-ear constants with no panel control at all
 (task 9): the shared centre column's old **PUSH** master-drive knob is
-pinned to `0.40`, and the reverb's **REV_SMEAR** (diffuser-LFO wash) and
-**REV_MOD** (tail-delay wobble) are pinned to `0.30` and `0.15`.
+pinned to `0.40`, and the reverb's **REV_SMEAR** (diffuser-LFO wash) to
+`0.30`. The third of the original three, **REV_MOD** (tail-delay wobble,
+caption **WOBL**), has a knob again since 2026-10-19 and boots at `0.15`, its
+old constant.
+
+**ROOT_A / ROOT_B** are the per-deck key knobs: 12 zones, C at the left stop
+to B at the right, and the tooltip shows the note name (C, C#, D ... B). A turn
+moves the scale grid under the running melody; it does not re-latch the song.
+A song rebuilt afterwards (SONG rung, FORM, STEPS, entering STEP) starts from
+the new root. On `Fireflow` the three knobs sit in the centre column (ROOT_A
+and ROOT_B side by side at y = 78, WOBL under the right one at y = 104.5); on
+`FireflowHW` they are ordinary knobs at their frozen plate positions, and
+`HW_ONLY` holds only the SHIFT key.
 
 ## Engine-dependent captions
 
