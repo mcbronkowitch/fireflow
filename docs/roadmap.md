@@ -4505,7 +4505,10 @@ items 1 and 2 **failed** (the small caps stood 5.3 mm apart edge to edge), item
   about 40–55 € more. Not counted: the Daisy Seed, the ST-Link, tools and the
   measurement rig.
 
-**Next:** bring-up (P7) when the boards arrive. The hand-soldered parts of
+**Next:** bring-up (P7) when the boards arrive. Its checklist and fault list
+are [`docs/hardware/reva-bring-up.md`](hardware/reva-bring-up.md) (compiled
+2026-10-19 from every open P7 item; its §0 lists five firmware/tool gaps to
+decide before the boards arrive). The hand-soldered parts of
 `bom-hand.csv` are on hand (Bastian, 2026-10-09) except `J_SD`, the Yamaichi
 microSD socket.
 The three reserved pots (`ROOT_A`, `ROOT_B`, WOBL) sent nothing when this

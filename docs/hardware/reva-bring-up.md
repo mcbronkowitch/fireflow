@@ -1,0 +1,241 @@
+# Rev A bring-up (P7): checklist and fault list
+
+P7 of the Rev A master plan
+([`2026-09-28-rev-a-master-plan-design.md`](../superpowers/specs/2026-09-28-rev-a-master-plan-design.md),
+§"The seven sub-projects"): a checklist (power, every channel, noise,
+ergonomics) and a **fault list**. P7 decides nothing; it measures.
+
+Rules for this document:
+
+- **Nothing is fixed during bring-up** (master plan, working rule 7). Every
+  finding goes into the [fault list](#fault-list) at the end, for Rev B. A
+  DNP part named below as the prepared fallback (C_LDO_T, C_SD2, C_SENSE0-3)
+  may be fitted to keep testing, but the finding is still entered.
+- **A result is a measurement or Bastian's verdict, with a date.** Nothing
+  here is ticked from reading code or a spec (the probe rule). Pass
+  criteria are quoted from their source; where the source gives none, the
+  row says so.
+- Every row names its source. If a row and its source disagree, the source
+  wins and the row is wrong.
+- Compiled 2026-10-19 from the roadmap, the Rev A specs, `docs/hardware/`,
+  `hardware/reva/review.md` and `shell/README.md`.
+
+Sections 1-12 run roughly in bring-up order. §0 must be settled before the
+boards arrive.
+
+---
+
+## 0. Before the boards arrive
+
+### 0.1 Parts
+
+| # | Item | Status | Source |
+|---|---|---|---|
+| 0.1.1 | `J_SD`, Yamaichi PJS008U-3000-0, the only hand-soldered part not on hand | open; it was out of stock at LCSC on 2026-09-29 | roadmap M6 "Next: bring-up (P7)"; P4-1 spec §4.2 |
+| 0.1.2 | Second set of panel parts for a second board. The master plan builds two boards because one may carry an assembly fault. The one Thonk set covers 73 of 77 pots, and none of the 23 green small caps is spare | no order on record; the master plan names it as the first optional item to drop when late. Bastian decides | master plan §Timeline, "Buffer"; `grip-test.md` |
+
+### 0.2 Firmware and tools that P7 needs but that do not exist yet
+
+Each is a gap found while compiling this list, not a decision. Bastian
+decides which get built before the boards arrive.
+
+| # | Gap | What it blocks | Source |
+|---|---|---|---|
+| 0.2.1 | **No wiring-check image for Rev A.** The coupon had `SHELL_COUPON_PROBE=1`: it walks every channel and judges it against a table derived from the netlist. Every probe image (settle, xtalk, tone, wait, pot round, scan check) needs `SHELL_COUPON_PROBE=1`. Rev A runs only the play image (`SHELL_PANEL_SCAN=1`) and the default image | the per-channel verdict of §5.1. The rail-tied spare inputs (§5.6) are not printed at all | `shell/Makefile` (switch blocks); `shell/README.md` probe table |
+| 0.2.2 | **No reader for the play image.** `SHELL_PLAY`, `SHELL_PLAY_V`, `SHELL_PLAY_LAW` and `CBP_*` are parsed by nothing committed. The probe table's reader column says "—", and the coupon P6a session used an ad-hoc reader | logging and judging §5 and §10 without hand transcription | `shell/README.md` probe table; `scan-measured.md` |
+| 0.2.3 | **No firmware for the CV ins (MOD 1-4 A/B), the CV outs (PITCH A/B) or the gate outs (GATE A/B)** | "every channel" (§7.3) on those jacks | `shell/README.md`, "Known divergences" |
+| 0.2.4 | **No SD firmware** (no SDMMC code in `shell/`) | the scan-noise check while the card streams (§11.2) | `hardware/reva/review.md`, open items |
+| 0.2.5 | **The crosstalk rig builds for coupon wiring only** | the LED-to-audio check of the two admitted pairs (§7.4) | 9 mm raster spec §5.3; `shell/Makefile` |
+
+### 0.3 Documentation discrepancies found while compiling (not P7 work)
+
+- The callback deadline: `shell/README.md` says "about 945 000", while
+  `docs/gotchas.md` and `cpu-headroom-measured.md` say ~930-960 k and
+  "quote targets against ~930 k". §10 uses the spec's own numbers.
+- The roadmap lists four LED by-ear constants still owed to real hardware
+  (kFloor, kGamma, kEnvFall, kEnvOff). `control/led_law.hpp` marks kFloor,
+  kEnvFall and kEnvOff as unused since P6b-2, so only kGamma is live.
+
+---
+
+## 1. Arrival inspection (bare boards, before any soldering)
+
+| # | Check | Pass | Source | Result |
+|---|---|---|---|---|
+| 1.1 | Pin 1 / polarity of every part whose rotation was checked only in JLC's placement preview: the SOIC-16s (U_MUX*, U_SR*, U_IN1), especially U_SR2/U_SR5 (KiCad −90) and U_MUX6/U_MUX7 (KiCad 180), plus the SS14 diodes (D_SMA, +180°) | matches the assembly sheet | roadmap 2026-10-08 "Rotation re-check"; `hardware/reva/fab/reva-assembly-back.svg` | |
+| 1.2 | The two BOM rows re-ticked by hand at the order: 100 nF (95 parts, incl. C_SD1) and SS14 (10 parts) are fitted where the BOM puts them | fitted | roadmap 2026-10-13 "Boards ordered" | |
+| 1.3 | The DNP footprints are empty: C_LDO_T, C_SD2, C_SENSE0-3 | empty | `review.md` open items | |
+| 1.4 | Visual check for bridges on the fine-pitch parts and U_REG's tab | none | — | |
+
+## 2. Power, module out
+
+The module's A10 rail does not exist without the module. The 1 kΩ in the 13
+address and enable lines is there so that 3V3D rising first cannot drive
+current into an unpowered mux (P2 spec §3), so a first power-up without the
+module is safe by design. Only J_PWR is fitted for this step.
+
+| # | Check | Pass | Source | Result |
+|---|---|---|---|---|
+| 2.1 | J_PWR keyed and soldered with pin 1 = −12 V. Meter the cable on the actual bus board; never trust the red stripe. A wrong key gets a different cable, never a cut-off nose | rails as expected at the header | `review.md`; roadmap coupon bring-up record | |
+| 2.2 | J_PWR pins 7/8 are open on this board; the Doepfer A-100 bus has GND on 3-8. Confirm against the bus board actually used | no conflict | `review.md` open items | |
+| 2.3 | 3V3D at its test point (TP on 3V3D, `blocks.py`) | 3.3 V nominal; no tolerance stated | P2 spec §1 | |
+| 2.4 | U_REG stability with the 22 µF X5R MLCC alone (scope on 3V3D) | no oscillation; no amplitude criterion stated. **If it oscillates:** fit C_LDO_T (6032 low-ESR tantalum, ESR ≤ 0.5 Ω) | `review.md`; P3 spec | |
+| 2.5 | Reverse protection: SS14 in series on +12 V and −12 V. Note the drop under load | no criterion stated | P2 spec §1, §5 | |
+
+## 3. Hand assembly
+
+| # | Step | Note | Source | Result |
+|---|---|---|---|---|
+| 3.1 | U_SM's four 2×5 sockets (cut from 2×10), J_SD's pins | J_SD pin 1's side is confirmed only with a socket in hand; a mirror costs the SD card, not the board | `review.md`; `sd_footprint.py` | |
+| 3.2 | Pots, jacks, keys and LEDs with the **panel screwed on**, then soldered. LEDs pushed into their holes so they sit flush | | master plan, decision 3; P1 spec | |
+| 3.3 | The keys are normally open: the schematic symbol draws pin 1 as the rest contact, but Thonk's button closes 1-2 when pushed | | `review.md` open items | |
+| 3.4 | REC_B's cap colour (red or yellow) is chosen on the board | Bastian | P1 spec | |
+| 3.5 | Module seated; A10 (SM_3V3) at its test point with the module powered | 3.3 V nominal. Load about 23 mA against the datasheet's 500 mA (paper check, P3) | P2 spec §7; P3 spec | |
+
+## 4. Flashing and first boot
+
+DFU only; the module has no SWD. There is no front USB on Rev A, so firmware
+goes in over the module's own USB with the board out of the case.
+
+| # | Check | Pass | Source | Result |
+|---|---|---|---|---|
+| 4.1 | A USB-C plug fits the module's socket on the board (35 mm around the module is an assumption) | fits | P4-1 spec §8 | |
+| 4.2 | Build the Rev A play image: `make -C shell -j8 images SHELL_PANEL_SCAN=1` (Daisy toolchain on PATH, never `source env.sh`). `cmp` against any other switch position before flashing (stale-object trap) | builds; images differ | `shell/README.md`; `docs/gotchas.md` | |
+| 4.3 | Flash **both** images, QSPI first: `dfu-util -a 0 -s 0x90100000 -D build/shell-qspi.bin`, then `dfu-util -a 0 -s 0x90040000:leave -D build/shell-sram.bin`. DFU mode: RESET, then BOOT within two seconds | boots | `shell/README.md`, "Flashen" | |
+| 4.4 | Failure signs of a mismatched image pair: LED blinking at 5 Hz forever (ITCM link stamp), or a dark board with no serial port (QSPI-cold). Cure: flash the matching pair again | — | `shell/README.md` | |
+| 4.5 | **The 12 V supply is on before any sound is judged.** On the coupon, USB alone powers the board but the output distorts on every image. On Rev A, 3V3D (chains, keys, lamps) comes from U_REG on +12 V, so on USB alone those are expected unpowered (inference from P2 §1, not measured) | — | `p6b2-led-and-touch-measured.md`; P2 spec §1 | |
+| 4.6 | The serial port appears and the play image prints its lines. Anything printed before the forever loop never reaches the host | lines arrive | `docs/gotchas.md` | |
+| 4.7 | `SRAM_EXEC` of the flashed image | ≥ 8 192 B free (floor); 56 972 B free at the last build | P6b-1 spec §5; roadmap CLOCK/RESET entry | |
+
+## 5. Panel scan: pots, muxes, calibration
+
+Output of the play image: eight `SHELL_PLAY_V r=<first row> <up to ten
+values>` lines (73 rows, values ×1000; −1000 = never emitted, i.e. no valid
+span yet) and one `SHELL_PLAY` summary line (`shell/README.md`, "Reading it").
+
+| # | Check | Pass | Source | Result |
+|---|---|---|---|---|
+| 5.1 | Calibration span from CAL_GND / CAL_3V3 | valid once the rail reads ≥ 58 982 and the zero ≤ 1 311; until then no row leaves −1000 and no knob reaches the engine. The coupon's rail read 63 482-63 485. Do not scale out libDaisy's 3.1 % low reading | P6a spec; `scan-measured.md`; `docs/gotchas.md` | |
+| 5.2 | **All 73 pots**, including ROOT_A, ROOT_B and REV_MOD (WOBL): each reaches both stops and moves its own row | every row both stops; no row moved by another pot | P6b-2 spec; root/WOBL spec | |
+| 5.3 | At rest, each value stays within the hysteresis H = 16 | within H | P6a spec; `shell/scan_value.h` | |
+| 5.4 | **D8/D9 read as ADC_12/ADC_11** (never exercised on the coupon). Failure sign: SENSE_2 and SENSE_3 swap, so a pot moves the wrong row | rows match. **If swapped:** two `ADC_OF_PIN` entries in `shell/gen_panel_map.py`, no board change | P2 spec §7; `scan-measured.md` | |
+| 5.5 | Scan with the LEDs switching every step still meets H = 16. The coupon tested the held-key case only at the 0 stop, the weakest position for showing coupling; test at mid travel too | within H | P2 spec §7; `scan-measured.md` | |
+| 5.6 | Settle on the longest COM run (~15 cm; ~1.5 pF/cm is an assumption) stays inside the sampling window. No COM capacitor rests on arithmetic | no row trails a step change. **Lever:** C_SENSE0-3 pads | P2 spec §3, §7 | |
+| 5.7 | Pot noise against `kPotTouch` = 144: worst untouched one-second spread over all 73 pots. The coupon's worst was 67 | rule: max(2 × worst spread, 3 × H), rounded up to a multiple of 16; must stay > H | `p6b2-led-and-touch-measured.md`; `shell/pot_owner.h` | |
+| 5.8 | Re-observe RV2's drift: on the coupon, more than 60 counts over ~10 s, not attributed | recorded either way | `scan-measured.md` | |
+| 5.9 | Sweep rate from the `sweeps` counter: 24 steps × 2 ms = 48 ms expected; the coupon counted 34.6 sweeps/s (1.81 ms per step), unexplained | recorded | `scan-budget.md`; `scan-measured.md` | |
+| 5.10 | Spare-channel noise (5 spare inputs tied to GND). Not printed by the play image (§0.2.1) | blocked | P6a spec; `io-budget.md` | |
+
+## 6. Keys and knob ownership
+
+| # | Check | Pass | Source | Result |
+|---|---|---|---|---|
+| 6.1 | REC_A, REC_B, MODBTN, SHIFTBTN on the 165: five presses each | `presses` counts 5 (3-read debounce, 6 ms) | P6a spec | |
+| 6.2 | Key functions: MOD toggles the latch (lamp double pulse); REC A/B toggle the record latch; SHFT is counted and does nothing | as described | `shell/README.md` | |
+| 6.3 | Ownership, the coupon's checks 1-4 on the full panel: boot plays the init patch wherever the pots stand; a nudge below the threshold changes nothing; a real turn jumps, then follows; MOD latch/unlatch releases its pots without a jump | all four. Bastian: "ich teste das später am großen Board nochmal ausführlich" | P6b-2 spec; `p6b2-led-and-touch-measured.md` | |
+| 6.4 | `kDepthDead` = 0.04 by hand on a real 9 mm pot: noon reads reliably as off | Bastian. The alternative is 0.03 (re-run `gen_panel.py`; init pre-images 0.712 / 0.568 → 0.709 / 0.5635) | `docs/by-ear-decisions.md` | |
+| 6.5 | `kPullDead` = 0.03 on a real pot | Bastian | `docs/by-ear-decisions.md` | |
+| 6.6 | ROOT: 12 zones C..B, with the end zones half as wide | each zone reachable | root/WOBL spec | |
+| 6.7 | Ergonomics of the four keys: reach, accidental presses (grip-test item 5, moved here) | Bastian | `grip-test.md` | |
+
+## 7. Lamps, audio I/O and noise
+
+| # | Check | Pass | Source | Result |
+|---|---|---|---|---|
+| 7.1 | All 15 lamps light with their 2026-10-07 meanings | each seen | P6b-2 spec | |
+| 7.2 | `kLedSteps` = 8 on Rev A's LEDs: the darkest step (1 of 7 blocks, ~71 Hz) must not flicker. The coupon showed no flicker at 4, 6 and 8 and flicker at 16; the threshold rises with brightness | no visible flicker. **If it flickers:** lower `kLedSteps` (`control/led_law.hpp`, both hosts; `tests/test_led_law.cpp` pins it) | `p6b2-led-and-touch-measured.md` | |
+| 7.3 | LED brightness at 1 kΩ (~1.3 mA), by eye | Bastian | P2 spec §7 | |
+| 7.4 | Lamp constants never seen on a lamp: `kLvlFloor` 1e-3, `kFtimeFlash` 0.05 s, `kSwitchPulse` 0.25 s, `kJackFlash` 0.04 s, `kInputFloor` 1e-3; also `kTempoPulse` 0.12 and the MOD pulse 0.5 / 0.08 / 0.08 s; and `kGamma` 2.2 | Bastian, by eye | `docs/by-ear-decisions.md`; `control/led_law.hpp` | |
+| 7.5 | The limiter display (MODBTN_L outside MOD), never observed at a board | seen | `p6b2-led-and-touch-measured.md` | |
+| 7.6 | LED-to-audio coupling of the two admitted pairs IN_L/SHIFTBTN_L and MODBTN_L/OUT_R, with the coupon's crosstalk rig | no criterion stated; blocked by §0.2.5 | 9 mm raster spec §5.3 | |
+| 7.7 | Every audio channel: IN_L, IN_R (normalled to IN_L, as on patch.Init()), OUT_L, OUT_R | passes audio; no criterion stated | P3 spec | |
+| 7.8 | Noise margin (master plan: "noise"), including the open 500 Hz block-rate tone; tool `tools/blockrate_fft.py` | no criterion stated; recorded | `shell/README.md`; hardware roadmap Phase 2 | |
+| 7.9 | CV ins MOD 1-4 A/B, CV outs PITCH A/B (PITCH_A on C1 = datasheet CV_OUT_2, PITCH_B on C10 = CV_OUT_1; the firmware follows the pins), gate outs GATE A/B | blocked by §0.2.3 | `review.md`; `shell/README.md` | |
+
+## 8. CLOCK and RESET (spec §8 item 8)
+
+Clock spec
+[`2026-10-19-clock-and-reset-jacks-design.md`](../superpowers/specs/2026-10-19-clock-and-reset-jacks-design.md);
+not a merge gate. Gate In 1 = CLOCK (B10), Gate In 2 = RESET (B9).
+
+| # | Check | Pass | Source | Result |
+|---|---|---|---|---|
+| 8.1 | The CLK lamp flashes with a clock patched. Whether EXTI's pending bit latches with the line unmasked and the NVIC line disabled is unconfirmed on a board | flashes. **If never:** the latch is the first suspect. Never enable `EXTI15_10_IRQn` (interrupt storm) | clock spec; `docs/gotchas.md` | |
+| 8.2 | Edge polarity: falling at the pin is rising at the jack | the lamp and the beat follow the rising jack edge | clock spec | |
+| 8.3 | Input threshold (VCV uses 0.1 / 1 V; the board is whatever GateIn and the input circuit give) | measured, recorded | clock spec | |
+| 8.4 | A 1 ms trigger is caught | caught | clock spec | |
+| 8.5 | 2 ms edge jitter, by ear and on the CLK lamp | Bastian | clock spec | |
+| 8.6 | RESET: the 1 lands; a reset up to 10 ms after a pulse counts for that pulse | as specified | clock spec | |
+| 8.7 | The clock law's cycle cost (unmeasured) | read from `cb_*` with a clock patched | roadmap CLOCK/RESET entry | |
+
+## 9. Thermal
+
+| # | Check | Pass | Source | Result |
+|---|---|---|---|---|
+| 9.1 | U_REG's tab temperature, all 15 LEDs lit (thermocouple or IR), with the ambient temperature recorded | the estimate is Tj 75.8 °C worst at Ta 50 °C (θJA 73.4 °C/W, P 0.352 W), limit 125 °C. The reading replaces the θJA estimate in `power-budget.md` | `power-budget.md` | |
+| 9.2 | The inputs to that estimate, measured: Vin at the regulator, LED Vf of the bought LEDs (red L-424SURDTK), 3V3D current | recorded into `power-budget.md` | `power-budget.md` "Current per load" | |
+
+## 10. CPU
+
+The CPU-headroom spec's done criteria, re-run on Rev A with the full panel
+(the full scan's cost is unmeasured).
+
+| # | Check | Pass | Source | Result |
+|---|---|---|---|---|
+| 10.1 | Init patch, shipping image, 10 min: `SHELL_PLAY_LAW` `cb_max`, plus a 10-min recording through `tools/click_detect.py` | `cb_max` ≤ 900 000, no click; then Bastian listens. Coupon: 873 150 | cpu-headroom spec §3 | |
+| 10.2 | Stress patches W2 and F2 (`C_USER_FLAGS=-DSHELL_BOOT_PATCH=1` / `=2`, clean build), 10 min each | no block above 930 000, no click. Coupon: 894 446 / 810 105 | cpu-headroom spec §3 | |
+| 10.3 | Plan B trigger: `cyc_max` above 2.9 points (~28 000 cycles) | below. Coupon: `cyc_max` 14 976, `led_max` 1 580. **If above, or clicks:** Plan B (the law across two blocks), then cpu-headroom spec §4.5 (Bastian decides) | P6b-1 spec §6; cpu-headroom spec §4.4-4.5 | |
+
+## 11. SD card
+
+| # | Check | Pass | Source | Result |
+|---|---|---|---|---|
+| 11.1 | A card seats through the plate's 11 × 6 mm slot; the socket stands 14.18 mm above the board | seats | P4-1 spec; P1 spec | |
+| 11.2 | Pot-scan noise while the card streams (SD on A10) | within H. **If not:** fit C_SD2 (10 µF; the module's TPS6213x allows 10-200 µF). Blocked by §0.2.4 | `review.md` open items | |
+
+## 12. Mechanical and the aluminium plate
+
+| # | Check | Pass | Source | Result |
+|---|---|---|---|---|
+| 12.1 | Alpha support lugs in the RD901F slots | fit | `grip-test.md` measurements | |
+| 12.2 | Pot bushing thread and length against 2 mm aluminium; jack thread | nuts hold | `grip-test.md` | |
+| 12.3 | Jack nut diameter against the lamp holes: CLK_L 6.7 mm from its jack, SHIFTBTN_L / MODBTN_L 9.50 mm | lamp visible | `grip-test.md`; P1 spec | |
+| 12.4 | Panel-to-board height with pot and jack seated (10 mm assumed); keys stand 16.5 mm above the board (14.85 latched) | recorded | P4-1 spec; P3 spec | |
+| 12.5 | Pot pins under an LED dome do not collide (no height measured) | no collision | P4-1 spec | |
+| 12.6 | Alpha anti-rotation tab: present? where? | recorded | `grip-test.md` | |
+| 12.7 | Depth behind the panel against the Intellijel Palette 62 (45.5 mm, 37.4 mm at the outermost HP): module 15 mm + board 1.6 mm + gap + power header (unmeasured) | fits | master plan; P1 spec §6 | |
+| 12.8 | The board hangs on the pot and jack nuts, with no standoffs: does it stay put under playing? | Bastian | P4-1 spec; P1 spec | |
+| 12.9 | Aluminium plate (Schaeffer): hole diameters pot 7.2, jack 6.2, LED 3.2, key 6.2 mm fit the parts; the slots fit the rails | fit | roadmap P5 entry | |
+| 12.10 | Width of a bought 60 HP blank, if at hand (the cut assumes 304.4 mm) | recorded | `grip-test.md` | |
+| 12.11 | Ergonomics on the real aluminium: playing the full panel | Bastian | hardware roadmap Phase 2 | |
+
+---
+
+## Assumptions the board settles
+
+When a row above measures one of these, the measured value goes into the
+named document, replacing the assumption there.
+
+| Assumption | Value assumed | Where it lives | Settled by |
+|---|---|---|---|
+| Panel-to-board gap | 10 mm | P4-1 spec; `grip-test.md` | 12.4 |
+| Power header height | unmeasured | master plan | 12.7 |
+| USB-C plug clearance around the module | 35 mm enough | P4-1 spec | 4.1 |
+| COM trace capacitance | ~1.5 pF/cm | P2 spec | 5.6 |
+| No COM capacitor needed | arithmetic only | P2 spec | 5.6 |
+| U_REG θJA, Ta, LED Vf, Iq, Vin, LEDs lit | `power-budget.md` "Current per load" | `power-budget.md` | 9.1, 9.2 |
+| EXTI pending bit latches with the NVIC line off | unconfirmed | clock spec; `docs/gotchas.md` | 8.1 |
+| Dead zones on a 9 mm pot | kDepthDead 0.04, kPullDead 0.03 | `docs/by-ear-decisions.md` | 6.4, 6.5 |
+| Scan slack | ~303 µs, derived | `scan-budget.md` | 5.9, 10.1 |
+
+---
+
+## Fault list
+
+Everything found during bring-up, for Rev B. One row per finding; nothing
+here is fixed on Rev A except by a prepared DNP fallback, and that is noted
+in the row.
+
+| ID | Date | Board | Check | Finding | Evidence | Rev B action |
+|---|---|---|---|---|---|---|
+| | | | | | | |
