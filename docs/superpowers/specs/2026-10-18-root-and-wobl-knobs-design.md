@@ -1,6 +1,7 @@
 # ROOT per deck and WOBL — the reserved knobs become parameters
 
-Date: 2026-10-18. Status: draft, awaiting Bastian's approval.
+Date: 2026-10-18. Status: approved by Bastian 2026-10-19; plan
+`docs/superpowers/plans/2026-10-19-root-and-wobl-knobs.md`.
 Follows: spec 2026-10-07 (nine-mm raster) §4, roadmap entry "Reserved knobs
 become parameters".
 
