@@ -327,3 +327,69 @@ TEST_CASE("clock law drives the transport one pace step per pulse") {
     // Today's formula: the same assertion fails.
     CHECK_FALSE(std::fabs(vcv_x1 - 16.0) <= 0.5);
 }
+
+// Start from stop (spec §5 amendment): the clock starts with RESET on its first
+// edge, so the bar restarts there, and the beat up to edge 2 runs at the stale
+// tempo (the knob's here). Edge 2 must land exactly one pace step after the
+// restart, whatever that stale tempo was: a rounded pulse snapped a stale tempo
+// under ~0.5x or from ~1.5x of the source to 0 or 2, and the bar stayed a
+// quarter off until the next RESET (170 BPM: 0,0,1,2; 50 BPM: 0,2,3,4).
+namespace {
+
+// Both hosts' pulse line, verbatim.
+void host_pulse(Instrument& inst, const control::ClockOut& o) {
+    if (o.pulse) o.counted ? inst.clock_pulse_counted() : inst.clock_pulse();
+    if (o.restart) inst.restart(o.restart_age);
+}
+
+// Transport beats right after each of the first five edges, firmware block
+// order, the knob at VCV's init tempo, RESET together with edge 1.
+void start_rig(double src_bpm, float pace_norm, double beats[5]) {
+    constexpr float kInitKnob = (79.5f - 40.f) / 200.f;   // law_tempo(): 79.5 BPM
+    Instrument inst;
+    setup(inst, /*a_step=*/false, /*b_step=*/true);
+    inst.set_pace(pace_norm);
+    inst.set_tempo_bpm(law_tempo(kInitKnob, 0.f));
+    control::ClockLaw law;
+    law.init(kSr);
+    run(inst, 100 * kBlock);           // the knob's tempo, running before the clock
+    const double period = 60.0 * double(kSr) / src_bpm;
+    double next = 37.0;                // edge 1 mid-block
+    int edges = 0;
+    for (uint64_t t = kBlock; edges < 5; t += kBlock) {
+        const bool edge = double(t) >= next;
+        if (edge) next += period;
+        const control::ClockOut o = law.step(kBlock, edge, edge && edges == 0,
+                                             kInitKnob, inst.beat_phase());
+        host_pulse(inst, o);
+        inst.set_tempo_bpm(law_tempo(kInitKnob, o.measured_bpm));
+        inst.set_pace(pace_norm);
+        if (edge) beats[edges++] = inst.transport_beats_for_test();
+        run(inst, kBlock);
+    }
+}
+
+} // namespace
+
+TEST_CASE("start from stop: edge 2 lands one pace step after the RESET") {
+    struct Case { double bpm; float pace_norm; double step; };
+    const Case cases[] = {
+        { 120.0, 0.5f, 1.0 },          // the stale 79.5 is 0.66x: rounding was right
+        { 170.0, 0.5f, 1.0 },          // 0.47x: rounding gave 0,0,1,2
+        {  50.0, 0.5f, 1.0 },          // 1.59x: rounding gave 0,2,3,4
+        {  50.0, 0.1f, 1.0 / 16.0 },   // the same at PACE x1/16
+    };
+    for (const Case& c : cases) {
+        double beats[5];
+        start_rig(c.bpm, c.pace_norm, beats);
+        std::printf("[start] %5.1f BPM pace %.4f: %.3f %.3f %.3f %.3f %.3f\n",
+                    c.bpm, double(pace_mult(c.pace_norm)),
+                    beats[0], beats[1], beats[2], beats[3], beats[4]);
+        CAPTURE(c.bpm);
+        CAPTURE(c.pace_norm);
+        for (int k = 0; k < 5; ++k) {
+            CAPTURE(k);
+            CHECK(std::fabs(beats[k] - k * c.step) <= 0.25 * c.step);
+        }
+    }
+}

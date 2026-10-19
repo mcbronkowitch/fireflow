@@ -19,6 +19,8 @@ What it holds, on the source text of shell/:
     it unmasks lines 13/14 in CPUIMR1, and nothing in shell/ defines an
     EXTI15_10_IRQHandler or enables that NVIC line (libDaisy owns the handler
     and clears only its own pin, so lines 13/14 would re-fire it forever);
+  - the pulse line is the one VCV runs: clk.counted picks
+    clock_pulse_counted(), every other pulse clock_pulse() (section 10);
   - control::ClockLaw is the only clock logic in shell/: nothing else calls
     clock_pulse() / restart() / reset_transport(), nothing polls GateIn, and
     no measured_bpm is computed (only the law's value or 0 is assigned).
@@ -177,6 +179,7 @@ def function_body(text, signature):
 TICK_ORDER = [
     "gate_latch_take()",
     "g_clock.step(",
+    "inst.clock_pulse_counted()",
     "inst.clock_pulse()",
     "inst.restart(",
     "control_tick(g_knobs, inst,",
@@ -193,6 +196,16 @@ def tick_in_order(scan_text):
         all(body.count(n) == 1 for n in TICK_ORDER)
 
 
+def pulse_counts(scan_text):
+    """The pulse line VCV runs too: the start-from-stop pulse the law marks
+    counted lands one pace step after the restart (spec section 10)."""
+    body = "".join(strip_comment(l) for l in
+                   function_body(scan_text, "void panel_scan_tick(").splitlines())
+    return bool(re.search(r"if\s*\(\s*clk\.pulse\s*\)\s*clk\.counted\s*\?\s*"
+                          r"inst\.clock_pulse_counted\(\)\s*:\s*"
+                          r"inst\.clock_pulse\(\)\s*;", body))
+
+
 def step_uses_block_size(scan_text):
     body = function_body(scan_text, "void panel_scan_tick(")
     m = re.search(r"g_clock\.step\(([^,]*),", body)
@@ -201,7 +214,7 @@ def step_uses_block_size(scan_text):
 
 
 # --- clock logic only in the law ------------------------------------------
-CLOCK_CALLS = ("clock_pulse(", ".restart(", "reset_transport(",
+CLOCK_CALLS = ("clock_pulse(", "clock_pulse_counted(", ".restart(", "reset_transport(",
                "gate_in_1", "gate_in_2", ".Trig()")
 # A tempo is never computed in shell/: whatever is assigned to a measured_bpm
 # is the clock law's value, the plain pass-through, or the coupon's 0.
@@ -233,7 +246,8 @@ def clock_calls_only_in_tick(sources):
         for needle in CLOCK_CALLS:
             if not mentions(text, needle):
                 continue
-            if name == "panel_scan.cpp" and needle in ("clock_pulse(", ".restart("):
+            if name == "panel_scan.cpp" and needle in ("clock_pulse(", "clock_pulse_counted(",
+                                                ".restart("):
                 continue
             return False
     return "control::ClockLaw" in sources.get("panel_scan.cpp", "")
@@ -280,6 +294,8 @@ def run_checks(scan, main, make, tick, sources):
         tick_in_order(scan)
     results["the law steps by the board's block size, not a literal"] = \
         step_uses_block_size(scan)
+    results["the law's counted flag picks clock_pulse_counted()"] = \
+        pulse_counts(scan)
     results["the shared law is the only clock logic in shell/"] = \
         clock_calls_only_in_tick(sources)
     results["the clock law is compiled only under !SHELL_COUPON_PROBE"] = \
@@ -344,6 +360,13 @@ sabotage("a literal 96 block",
 sabotage("a second clock_pulse() caller",
          "the shared law is the only clock logic in shell/",
          sources=dict(SOURCES, **{"keys.cpp": SOURCES.get("keys.cpp", "") + "\nvoid x(){ inst.clock_pulse(); }\n"}))
+sabotage("the counted flag ignored",
+         "the law's counted flag picks clock_pulse_counted()",
+         scan=SCAN.replace("clk.counted ? inst.clock_pulse_counted() : inst.clock_pulse()",
+                           "inst.clock_pulse()", 1))
+sabotage("a second clock_pulse_counted() caller",
+         "the shared law is the only clock logic in shell/",
+         sources=dict(SOURCES, **{"keys.cpp": SOURCES.get("keys.cpp", "") + "\nvoid x(){ inst.clock_pulse_counted(); }\n"}))
 sabotage("a GateIn poll",
          "the shared law is the only clock logic in shell/",
          sources=dict(SOURCES, **{"main.cpp": MAIN + "\nstatic bool p(){ return hw.gate_in_1.Trig(); }\n"}))

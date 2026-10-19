@@ -10,7 +10,7 @@ namespace spky {
 // precision within minutes at 500 ticks/s.
 class Transport {
 public:
-    void init(float ctrl_rate) { _cr = ctrl_rate; _beats = 0.0; _anchor = 0.0; }
+    void init(float ctrl_rate) { _cr = ctrl_rate; _beats = 0.0; _anchor = 0.0; _fresh = false; }
     // Guarded at the source, not at each reader: bpm() feeds a divide in
     // every consumer (nearest_division()/division_hz() for COUPLE's grid
     // gravity, and the transport's own beat_phase()/beats() readers), so a
@@ -38,10 +38,25 @@ public:
         _beats  = _anchor + double(pace)
                           * std::round((_beats - _anchor) / double(pace));
         _anchor = _beats;
+        _fresh  = false;
+    }
+    // The pulse that starts a clock whose first edge came with a restart
+    // (control::ClockOut::counted, spec 2026-10-19-clock-and-reset-jacks §10):
+    // exactly one pace step after the anchor the reset set, not rounded. The
+    // beat up to it ran at a stale tempo, and rounding snapped one under ~0.5x
+    // or from ~1.5x of the source a whole beat off. Counted only if a reset
+    // came since the last pulse -- with no STEP deck the restart leaves the
+    // transport alone, and a stale anchor is no 1 -- otherwise rounded.
+    void clock_pulse_counted(float pace) {
+        if (!_fresh) { clock_pulse(pace); return; }
+        if (!(pace > 0.f) || !std::isfinite(pace)) return;
+        _beats  = _anchor + double(pace);
+        _anchor = _beats;
+        _fresh  = false;
     }
     // PACE moved: re-anchor so the grid follows the knob instead of lagging it.
     void set_pace_anchor() { _anchor = _beats; }
-    void reset()       { _beats = 0.0; _anchor = 0.0; }
+    void reset()       { _beats = 0.0; _anchor = 0.0; _fresh = true; }
     // A fractional number of control ticks at the current tempo: a back-dated
     // restart puts the bar where it would stand that long after its 1.
     void advance(double ticks) {
@@ -54,6 +69,7 @@ public:
 private:
     double _beats = 0.0;
     double _anchor = 0.0;
+    bool   _fresh = false;   // reset() since the last pulse
     float  _bpm = 120.f;
     float  _cr  = 500.f;
 };

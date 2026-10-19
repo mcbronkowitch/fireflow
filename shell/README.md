@@ -466,20 +466,14 @@ armed when the clock is lost restarts on the first CLOCK edge that comes back,
 and without one on FireFlow's own next beat, which carries PACE (at the factory
 PACE x1/16 up to 16 quarters away).
 
-**Known limitation: a clock that starts far from FireFlow's tempo can put the
-bar a quarter off.** Starting from "not running", RESET with edge 1 restarts at
+**Start from stop.** Starting from "not running", RESET with edge 1 restarts at
 once, edge 1 is only a reference, and the beat up to edge 2 runs at the stale
-tempo (held or knob). At edge 2 `clock_pulse()` rounds to the nearest pace
-multiple, so a stale tempo below about 0.5x or at/above about 1.5x of the
-source's lands the beat on 0 or 2 instead of 1, and the bar stays a quarter off
-until the next RESET. Probe, final review 2026-10-19 (real `Transport` +
-`ClockLaw` in this firmware's block order, 48 kHz, 96-sample blocks, PACE x1,
-knob at the VCV init 79.5 BPM, RESET with edge 1): 120 BPM puts edges 1-4 on
-quarters 0, 1, 2, 3; 170 BPM on 0, 0, 1, 2; 50 BPM on 0, 2, 3, 4 (at PACE x1/16
-the same). A normal stop/start under the held tempo is fine; first patch-up, a
-TEMPO takeover and boot (which holds no tempo) are the cases that can hit it.
-The remedy touches `clock_pulse()`'s rounding, a non-goal of spec §5, and is
-Bastian's call. Details in `host/vcv/README.md`, "CLOCK and RESET".
+tempo (held or knob). The law marks that pulse `counted`, and
+`panel_scan_tick()` runs VCV's line, `clk.counted ? inst.clock_pulse_counted()
+: inst.clock_pulse()`, so the bar lands one pace step after the restart instead
+of rounding a far-off stale tempo a quarter off (spec §10;
+`shell_clock_wiring_guard` pins the line). A clock started without a RESET
+still rounds at edge 2. Details in `host/vcv/README.md`, "CLOCK and RESET".
 
 **TEMPO pot on clock loss.** When the law reports the loss,
 `apply_clock_events()` releases the TEMPO pot's ownership (the same release the

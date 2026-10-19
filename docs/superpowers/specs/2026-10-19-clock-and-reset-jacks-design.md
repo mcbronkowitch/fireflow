@@ -216,7 +216,9 @@ probes in the session scratchpad.
 - No other jacks (CV, V/Oct, MOD1..4, audio in, the PITCH/GATE outputs).
 - No "stop when the clock stops" mode (Bastian chose to keep running).
 - No MIDI clock and no clock output.
-- No change to `clock_pulse()`'s phase rounding or to the grid servo.
+- No change to `clock_pulse()`'s phase rounding or to the grid servo, with one
+  exception added by the amendment in §10: the pulse that starts a clock whose
+  first edge came with a RESET is counted, not rounded.
 - **The reset is not a re-generation of its own.** A restart raises no
   `new_phrase`. Work that is already pending (a SONG detent, a FORM change, a
   STEPS length change) is applied at the restart, exactly as it would be at the
@@ -432,3 +434,56 @@ probes in the session scratchpad.
 - Where in the firmware's block the pending bits are read, and how the VCV
   bypass is detected.
 - The exact tolerance in acceptance 1 and 2, derived and written down.
+
+## 10. Amendment 2026-10-19: start from stop
+
+Decided by Bastian 2026-10-19 (option A of three, after the final branch
+review), built on branch `claude/mystifying-fermi-73e377`.
+
+**The defect (probe, then `tests/test_restart.cpp` "start from stop", real
+`Instrument` + `ClockLaw` in firmware block order, 48 kHz, PACE x1, knob at
+VCV's init tempo 79.5 BPM, RESET with edge 1).** The clock starts from "not
+running", so RESET restarts at once (§2.2), edge 1 is only a reference (§2.1),
+and the beat up to edge 2 runs at the stale tempo (held or knob). At edge 2
+`Transport::clock_pulse()` rounded to the nearest pace multiple, so a stale
+tempo under about 0.5x or from about 1.5x of the source snapped to 0 or 2:
+120 BPM landed edges 1..5 on beats 0,1,2,3,4; 170 BPM on 0,0,1,2,3; 50 BPM on
+0,2,3,4,5, the same at PACE x1/16 in sixteenths. The bar stayed a quarter off
+until the next RESET.
+
+**The rule.** The pulse that makes the clock run (the second valid edge after
+"not running") is **counted, not rounded** when a restart's 1 lies within the
+reset window (§6, 10 ms, inclusive) of that clock's reference edge, on either
+side. Counted means the transport lands exactly one pace step after its anchor,
+which a restart has just set to the 1. Every other pulse rounds as before.
+
+- The law reports it: `ClockOut::counted`, set together with `pulse`. It keeps
+  the sample stamp of the last restart's 1 (the call's stamp minus
+  `restart_age`) and compares it with the reference edge's stamp when the
+  running pulse arrives. RESET a few samples before edge 1 (two VCV calls)
+  therefore counts too, and so does the armed-at-loss restart on the first
+  returning edge (that edge is the 1 and the reference). The armed fallback on
+  FireFlow's own beat wrap is usually far from the next edge and keeps rounding.
+- The engine counts: `Instrument::clock_pulse_counted()` → `Center` →
+  `Transport::clock_pulse_counted(pace)`. The transport counts only if it was
+  reset since its last pulse; otherwise it rounds as `clock_pulse()` does.
+  *(My call: with no deck in STEP `restart()` leaves the transport alone (§2.2),
+  and counting from a stale anchor would throw the beat by up to a whole
+  pulse.)*
+- Both hosts run one identical line: `counted ? clock_pulse_counted() :
+  clock_pulse()`, before the restart as today.
+
+**Not changed (options B and C were not taken).** A clock that starts without
+a RESET still rounds at edge 2, so a stale tempo far from the source repeats or
+skips one beat there; without a RESET there is no bar to keep. Rounding at the
+reference edge in general (option B) was rejected: one stray edge, from a
+patch cable or a hand trigger, would then move the beat grid by up to half a
+beat, where today it does nothing.
+
+**Acceptance.** `tests/test_restart.cpp` "start from stop" lands edges 1..5 on
+0,1,2,3,4 pace steps (within a quarter step) for 120, 170 and 50 BPM at x1 and
+50 BPM at x1/16; it was red before the change with the figures above.
+`tests/test_clock_law.cpp` pins the flag: set on a RESET with edge 1, a RESET
+just before it, an armed restart on the first returning edge, and at exactly
+the window's edge; not set past the window, without a RESET, or on any later
+pulse; at both call sizes.

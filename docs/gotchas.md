@@ -416,24 +416,21 @@ by ear are a different list: [`docs/by-ear-decisions.md`](by-ear-decisions.md).
   setters and `set_drift` (see `docs/engine-map.md`, "Control-law tick rate"),
   and the events. (2026-10-09, P6b-1.)
 
-- **A clock that starts far from FireFlow's tempo lands RESET's 1 a quarter
-  off, in both hosts.** Starting from "not running", `control::ClockLaw`
-  restarts at once on a RESET that comes with edge 1, but edge 1 is only a
-  reference; the beat up to edge 2 runs at the stale tempo (the held one, or
-  the knob's). At edge 2 `Transport::clock_pulse()` rounds the beat count to
-  the nearest pace multiple, so a stale tempo below about 0.5x or at/above
-  about 1.5x of the source's snaps to 0 or 2 instead of 1, and the bar stays a
-  quarter off until the next RESET. Probe, final review 2026-10-19 (real
-  `spky::Transport` + `control::ClockLaw` in firmware block order, 48 kHz,
-  96-sample blocks, PACE x1, knob at the VCV init 79.5 BPM, RESET with edge 1):
-  a 120 BPM clock puts edges 1-4 on quarters 0, 1, 2, 3; 170 BPM on 0, 0, 1, 2;
-  50 BPM on 0, 2, 3, 4, and PACE x1/16 at 50 BPM the same. A normal stop/start
-  under the held tempo (ratio near 1) is fine; first patch-up with a far-off
-  tempo, a TEMPO takeover, and a reinit or boot (no held tempo) are the cases.
-  Known limitation, not a bug to fix in passing: the remedy (count instead of
-  round the clock's starting pulse after a restart) changes `clock_pulse()`'s
-  rounding, which spec `2026-10-19-clock-and-reset-jacks-design.md` §5 makes a
-  non-goal, so it is Bastian's call. (2026-10-19.)
+- **A clock's starting pulse is rounded unless the law marks it `counted`.**
+  Starting from "not running", the beat up to edge 2 runs at the stale tempo
+  (held or knob), and `Transport::clock_pulse()` rounds edge 2 to the nearest
+  pace multiple: a stale tempo under about 0.5x or from about 1.5x of the
+  source's snaps a whole beat off (79.5 BPM knob, 170 BPM clock: edges on 0, 0,
+  1, 2; 50 BPM: 0, 2, 3, 4). With a RESET at edge 1 that put the bar a quarter
+  off, so the law now sets `ClockOut::counted` on that pulse when a restart's 1
+  lay within 10 ms of edge 1, and both hosts call `clock_pulse_counted()`
+  (spec `2026-10-19-clock-and-reset-jacks-design.md` §10). Two traps: a host
+  that calls plain `clock_pulse()` on every pulse brings the quarter back
+  (both source guards pin the line), and `clock_pulse_counted()` counts only if
+  the transport was reset since its last pulse, because with no STEP deck
+  `restart()` leaves the transport alone and the anchor is no 1. A clock
+  started without a RESET still rounds at edge 2 and can repeat or skip one
+  beat there, by design. (2026-10-19.)
 
 ## Hardware generators (`pcbnew`, `hardware/coupon/scripts/`)
 

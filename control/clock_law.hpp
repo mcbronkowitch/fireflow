@@ -73,6 +73,12 @@ inline constexpr double kClockResetWindowSeconds = 0.010;
 
 struct ClockOut {
     bool     pulse        = false;  // a valid pulse: the host calls inst.clock_pulse()
+    // With pulse: the pulse that makes the clock run, and a restart's 1 lay
+    // within the reset window of that clock's reference edge. The host calls
+    // inst.clock_pulse_counted() instead: the transport lands one pace step
+    // after the restart, where rounding would snap a stale tempo under ~0.5x
+    // or from ~1.5x of the source a whole beat off (spec §10).
+    bool     counted      = false;
     bool     restart      = false;  // the host calls inst.restart(restart_age)
     uint32_t restart_age  = 0;      // samples since the edge the restart belongs to
     bool     lost         = false;  // running -> gone on this call (firmware releases TEMPO)
@@ -122,7 +128,7 @@ public:
             _haveKnobRef = true;
         }
 
-        if (clock_edge) o.pulse = on_edge();
+        if (clock_edge) o.pulse = on_edge(o.counted);
 
         // Knob takeover: while the clock is gone, a held tempo yields to the
         // first knob value that differs from the one at the loss.
@@ -169,10 +175,13 @@ private:
         o.restart = true;
         o.restart_age = age;
         _armed = false;
+        _haveOne = true;
+        _oneAt = _now - age;
     }
 
     void forget_edges() {
         _haveEdge = false;
+        _haveOne = false;
         _count = 0;
         _head = 0;
         _pendingSide = 0;
@@ -195,13 +204,16 @@ private:
         _bpm = float(60.0 * double(_sr) / _period);
     }
 
-    // One CLOCK edge at _now. Returns whether it is a valid pulse.
-    bool on_edge() {
+    // One CLOCK edge at _now. Returns whether it is a valid pulse; counted is
+    // set on the pulse that makes the clock run when a restart's 1 lies within
+    // the reset window of the reference edge, on either side.
+    bool on_edge(bool& counted) {
         if (!_haveEdge) {               // the first edge: a reference, no period
             _haveEdge = true;
             _lastEdge = _now;
             return false;
         }
+        const uint64_t ref = _lastEdge;
         const double interval = double(_now - _lastEdge);
         _lastEdge = _now;               // out-of-range edges are references too
         if (interval <= 0.0) return false;
@@ -211,6 +223,11 @@ private:
         _lastValid = _now;
         if (!_running) {                // the second valid edge: running
             _running = true;
+            if (_haveOne) {
+                const uint64_t d = _oneAt > ref ? _oneAt - ref : ref - _oneAt;
+                counted = d <= _resetWindow;
+                _haveOne = false;
+            }
             push(interval);
             measure();
             return true;
@@ -257,6 +274,8 @@ private:
     int      _pendingSide = 0;      // a held out-of-band period: +1 long, -1 short, 0 none
     double   _pendingInterval = 0.0;
     uint64_t _resetWindow = reset_window_samples(48000.f);
+    bool     _haveOne = false;      // a restart since the edges were last forgotten
+    uint64_t _oneAt = 0;            // its 1: the call's stamp minus restart_age
 
     bool     _armed = false;
     float    _prevPhase = 0.f;

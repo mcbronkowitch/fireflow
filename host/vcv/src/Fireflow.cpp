@@ -777,8 +777,11 @@ struct Fireflow : Module {
         lastClockOut = clockLaw.step(1, clockEdge, resetEdge,
                                      params[TEMPO].getValue(), inst.beat_phase());
         // Pulse first: a reset in the same call counts as arriving before its
-        // pulse, and the restart then lands on that pulse as the 1.
-        if (lastClockOut.pulse) inst.clock_pulse();
+        // pulse, and the restart then lands on that pulse as the 1. The pulse
+        // that starts a clock whose first edge came with a RESET is counted,
+        // not rounded (spec 2026-10-19 clock-and-reset-jacks §10).
+        if (lastClockOut.pulse)
+            lastClockOut.counted ? inst.clock_pulse_counted() : inst.clock_pulse();
         if (lastClockOut.restart) inst.restart(lastClockOut.restart_age);
         // The lamps show the jack, not the effect: latched here, cleared after
         // fill(). The menu's "Resync to bar" also resets the transport but is
