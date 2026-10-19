@@ -44,6 +44,17 @@
 // zero-fill the two new tail slots. On PAN's -1..+1 axis 0.0 is centre, so the
 // frozen points render with PAN neutral -- which is what they should do.
 //
+// APPENDED, NOT ZERO-FILLED: P_ROOT_B on 2026-10-19 (spec root-and-wobl-knobs).
+// P_ROOT used to be one global value; it is now P_ROOT_A (same slot, same
+// meaning for deck A) plus P_ROOT_B at the very end. This append is the one
+// that must NOT lean on the zero-fill: 0.0 is a real root (C), and every point
+// below was captured with a non-zero global root, so a zero-filled B slot
+// would silently re-key deck B to C and change what the point renders. Each
+// vector therefore writes its tail out explicitly -- P_PULL, P_PAN_A and
+// P_PAN_B at the 0.0f the zero-fill gave them until now, then P_ROOT_B
+// carrying the SAME value as that point's P_ROOT_A, i.e. the old global root.
+// Both decks keep playing in the key the point was frozen in.
+//
 // THE TWO DIRECTIONS ARE NOT SYMMETRIC, and 2026-08-20 is the proof: an
 // INSERTION shifts these vectors silently (short aggregate initializer,
 // zero-filled tail, no warning -- the failure mode this header spends most
@@ -59,7 +70,7 @@
 // `<last id> == P_COUNT - 1` line). The second marker is deliberately
 // re-pointed at whatever the last enum entry is on every append, so READ IT
 // THERE rather than trusting a name quoted here -- it has been P_PACE, then
-// P_PULL (2026-08-22), and is P_PAN_B as of 2026-08-30. If that case still
+// P_PULL (2026-08-22), P_PAN_B (2026-08-30), and is P_ROOT_B as of 2026-10-19. If that case still
 // passes unmodified, nothing was inserted or removed above P_MODE and this
 // file's rows are still aligned. If you changed the enum and that case
 // reddened as intended, re-derive these vectors (there is no generator left
@@ -84,7 +95,7 @@ inline constexpr FrozenPoint kFlowPoints[kPer] = {
       4.0f, // P_ENGINE_A
       4.0f, // P_ENGINE_B
       2.0f, // P_SCALE
-      6.0f, // P_ROOT
+      6.0f, // P_ROOT_A
       1.0f, // P_FORM_A
       2.0f, // P_FORM_B
       1.0f, // P_SONG_A
@@ -145,12 +156,16 @@ inline constexpr FrozenPoint kFlowPoints[kPer] = {
       91.1968918f, // P_TEMPO_BPM
       0.0f, // P_MODE
       0.5f, // P_PACE
+      0.0f, // P_PULL
+      0.0f, // P_PAN_A
+      0.0f, // P_PAN_B
+      6.0f, // P_ROOT_B
     }, false, 10, 8 },
   { "master 2, FLOW", {
       3.0f, // P_ENGINE_A
       1.0f, // P_ENGINE_B
       2.0f, // P_SCALE
-      6.0f, // P_ROOT
+      6.0f, // P_ROOT_A
       1.0f, // P_FORM_A
       2.0f, // P_FORM_B
       1.0f, // P_SONG_A
@@ -211,6 +226,10 @@ inline constexpr FrozenPoint kFlowPoints[kPer] = {
       64.3865738f, // P_TEMPO_BPM
       0.0f, // P_MODE
       0.5f, // P_PACE
+      0.0f, // P_PULL
+      0.0f, // P_PAN_A
+      0.0f, // P_PAN_B
+      6.0f, // P_ROOT_B
     }, false, 4, 4 },
 };
 
@@ -219,7 +238,7 @@ inline constexpr FrozenPoint kStepPoints[kPer] = {
       4.0f, // P_ENGINE_A
       4.0f, // P_ENGINE_B
       1.0f, // P_SCALE
-      8.0f, // P_ROOT
+      8.0f, // P_ROOT_A
       0.0f, // P_FORM_A
       2.0f, // P_FORM_B
       0.0f, // P_SONG_A
@@ -280,12 +299,16 @@ inline constexpr FrozenPoint kStepPoints[kPer] = {
       85.5476227f, // P_TEMPO_BPM
       1.0f, // P_MODE
       0.5f, // P_PACE
+      0.0f, // P_PULL
+      0.0f, // P_PAN_A
+      0.0f, // P_PAN_B
+      8.0f, // P_ROOT_B
     }, true, 8, 4 },
   { "master 8, STEP", {
       1.0f, // P_ENGINE_A
       4.0f, // P_ENGINE_B
       5.0f, // P_SCALE
-      4.0f, // P_ROOT
+      4.0f, // P_ROOT_A
       1.0f, // P_FORM_A
       3.0f, // P_FORM_B
       1.0f, // P_SONG_A
@@ -346,6 +369,10 @@ inline constexpr FrozenPoint kStepPoints[kPer] = {
       69.9121094f, // P_TEMPO_BPM
       1.0f, // P_MODE
       0.5f, // P_PACE
+      0.0f, // P_PULL
+      0.0f, // P_PAN_A
+      0.0f, // P_PAN_B
+      4.0f, // P_ROOT_B
     }, true, 4, 7 },
 };
 

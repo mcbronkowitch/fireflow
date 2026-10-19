@@ -73,6 +73,9 @@ public:
     uint8_t active_pattern() const { return _lanes[LANE_PITCH].active_pattern(); }
     void set_principle(Principle p) { set_form(p); }
     void new_phrase() { _lanes[LANE_PITCH].new_phrase(); }
+    // How often the PITCH lane has rebuilt its phrase from scratch -- see
+    // ModLane::phrase_builds. Part's song offset latches when it moves.
+    uint32_t pitch_phrase_builds() const { return _lanes[LANE_PITCH].phrase_builds(); }
 #ifdef SPKY_TESTING
     uint32_t song_position_for_test() const {
         return _lanes[LANE_PITCH].song_position();

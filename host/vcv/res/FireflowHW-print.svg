@@ -204,6 +204,12 @@
 <text x="112.000" y="82.325" fill="#b9cdd7" text-anchor="middle" font-family="monospace" font-size="2.2">PAN</text>
 <circle cx="192.800" cy="74.875" r="3.850" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
 <text x="192.800" y="82.325" fill="#b9cdd7" text-anchor="middle" font-family="monospace" font-size="2.2">PAN</text>
+<circle cx="11.000" cy="95.000" r="3.850" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
+<text x="11.000" y="102.450" fill="#b9cdd7" text-anchor="middle" font-family="monospace" font-size="2.2">ROOT</text>
+<circle cx="293.800" cy="95.000" r="3.850" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
+<text x="293.800" y="102.450" fill="#b9cdd7" text-anchor="middle" font-family="monospace" font-size="2.2">ROOT</text>
+<circle cx="175.400" cy="95.000" r="3.850" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
+<text x="175.400" y="102.450" fill="#b9cdd7" text-anchor="middle" font-family="monospace" font-size="2.2">WOBL</text>
 <circle cx="290.800" cy="112.750" r="3.000" fill="#151b1f" stroke="#7fb6c9" stroke-width="0.3"/>
 <text x="290.800" y="119.450" fill="#b9cdd7" text-anchor="middle" font-family="monospace" font-size="2.2">MOD</text>
 <circle cx="33.000" cy="112.750" r="3.100" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
@@ -310,12 +316,6 @@
 <circle cx="23.500" cy="112.750" r="0.750" fill="#4c6d79"/>
 <circle cx="14.000" cy="112.750" r="3.000" fill="#151b1f" stroke="#7fb6c9" stroke-width="0.3"/>
 <text x="14.000" y="119.450" fill="#b9cdd7" text-anchor="middle" font-family="monospace" font-size="2.2">SHFT</text>
-<circle cx="11.000" cy="95.000" r="3.850" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
-<text x="11.000" y="102.450" fill="#b9cdd7" text-anchor="middle" font-family="monospace" font-size="2.2">ROOT</text>
-<circle cx="293.800" cy="95.000" r="3.850" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
-<text x="293.800" y="102.450" fill="#b9cdd7" text-anchor="middle" font-family="monospace" font-size="2.2">ROOT</text>
-<circle cx="175.400" cy="95.000" r="3.850" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
-<text x="175.400" y="102.450" fill="#b9cdd7" text-anchor="middle" font-family="monospace" font-size="2.2">WOBL</text>
 <text x="11.000" y="9.950" fill="#7f9aa8" text-anchor="middle" font-family="monospace" font-size="1.9" letter-spacing="0.5">ENG</text>
 <text x="61.500" y="9.950" fill="#7f9aa8" text-anchor="middle" font-family="monospace" font-size="1.9" letter-spacing="0.5">SEQUENCE</text>
 <text x="112.250" y="9.950" fill="#7f9aa8" text-anchor="middle" font-family="monospace" font-size="1.9" letter-spacing="0.5">CAPTURE</text>
@@ -410,6 +410,9 @@
 <circle cx="175.400" cy="14.500" r="3.500" fill="none" stroke="#ffffff" stroke-width="0.25"/>
 <circle cx="112.000" cy="74.875" r="3.500" fill="none" stroke="#ffffff" stroke-width="0.25"/>
 <circle cx="192.800" cy="74.875" r="3.500" fill="none" stroke="#ffffff" stroke-width="0.25"/>
+<circle cx="11.000" cy="95.000" r="3.500" fill="none" stroke="#ffffff" stroke-width="0.25"/>
+<circle cx="293.800" cy="95.000" r="3.500" fill="none" stroke="#ffffff" stroke-width="0.25"/>
+<circle cx="175.400" cy="95.000" r="3.500" fill="none" stroke="#ffffff" stroke-width="0.25"/>
 <circle cx="290.800" cy="112.750" r="3.100" fill="none" stroke="#ffffff" stroke-width="0.25"/>
 <circle cx="33.000" cy="112.750" r="3.000" fill="none" stroke="#ffffff" stroke-width="0.25"/>
 <circle cx="44.500" cy="112.750" r="3.000" fill="none" stroke="#ffffff" stroke-width="0.25"/>
@@ -445,9 +448,6 @@
 <circle cx="281.300" cy="112.750" r="1.550" fill="none" stroke="#ffffff" stroke-width="0.25"/>
 <circle cx="23.500" cy="112.750" r="1.550" fill="none" stroke="#ffffff" stroke-width="0.25"/>
 <circle cx="14.000" cy="112.750" r="3.100" fill="none" stroke="#ffffff" stroke-width="0.25"/>
-<circle cx="11.000" cy="95.000" r="3.500" fill="none" stroke="#ffffff" stroke-width="0.25"/>
-<circle cx="293.800" cy="95.000" r="3.500" fill="none" stroke="#ffffff" stroke-width="0.25"/>
-<circle cx="175.400" cy="95.000" r="3.500" fill="none" stroke="#ffffff" stroke-width="0.25"/>
 <rect x="146.900" y="109.750" width="11.000" height="6.000" rx="0.000" fill="none" stroke="#ffffff" stroke-width="0.25"/>
 <rect x="5.100" y="1.400" width="5.200" height="3.200" rx="1.600" fill="none" stroke="#ffffff" stroke-width="0.25"/>
 <rect x="294.660" y="1.400" width="5.200" height="3.200" rx="1.600" fill="none" stroke="#ffffff" stroke-width="0.25"/>

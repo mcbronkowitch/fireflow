@@ -2,6 +2,7 @@
 #include "doctest/doctest.h"
 #include "param_table.h"
 #include "instrument.h"
+#include "param_impact_points.h"
 using namespace spky;
 
 TEST_CASE("param table: table is sane") {
@@ -67,7 +68,10 @@ TEST_CASE("param table: inventory marker -- P_MODE, P_PACE, P_COUNT") {
     // only that marker moves. That is what an append is supposed to cost.
     CHECK(P_MODE == 62);
     CHECK(P_PACE == P_MODE + 1);
-    CHECK(P_PAN_B == P_COUNT - 1);     // inventory marker: bump on append
+    // P_PAN_B -> P_ROOT_B on the ROOT-per-deck round (spec 2026-10-18
+    // root-and-wobl-knobs): P_ROOT split into P_ROOT_A (the old id's slot) and
+    // P_ROOT_B, appended last. P_MODE is unchanged.
+    CHECK(P_ROOT_B == P_COUNT - 1);    // inventory marker: bump on append
 }
 
 TEST_CASE("param table: the two rows other code reads by hand") {
@@ -95,6 +99,44 @@ TEST_CASE("param table: PAN is bipolar and continuous") {
     CHECK(kParams[P_PAN_B].steps == 0);
     CHECK(kParams[P_PAN_B].lo == doctest::Approx(-1.f));
     CHECK(kParams[P_PAN_B].hi == doctest::Approx(1.f));
+}
+
+TEST_CASE("param table: ROOT is per deck") {
+    // P_ROOT used to write both decks. Each deck now owns its root, so one id
+    // must reach exactly one Quantizer.
+    {
+        Instrument in;
+        in.init(48000.f);
+        apply_param(in, P_ROOT_A, 5.f);
+        CHECK(in.part(PART_A).quant().root_semis() == 5);
+        CHECK(in.part(PART_B).quant().root_semis() == 0);
+    }
+    {
+        Instrument in;
+        in.init(48000.f);
+        apply_param(in, P_ROOT_B, 9.f);
+        CHECK(in.part(PART_B).quant().root_semis() == 9);
+        CHECK(in.part(PART_A).quant().root_semis() == 0);
+    }
+    CHECK(kParams[P_ROOT_A].steps == 12);
+    CHECK(kParams[P_ROOT_B].steps == 12);
+    CHECK(kParams[P_ROOT_B].lo == doctest::Approx(0.f));
+    CHECK(kParams[P_ROOT_B].hi == doctest::Approx(11.f));
+}
+
+TEST_CASE("param impact points: P_ROOT_B mirrors P_ROOT_A") {
+    // P_ROOT_B is appended, so the frozen vectors carry it explicitly: the old
+    // global root now sits in BOTH slots, which keeps every point describing
+    // the instrument it was captured from.
+    const float expected_root[kPer * 2] = { 6.f, 6.f, 8.f, 4.f };
+    const FrozenPoint* sets[2] = { kFlowPoints, kStepPoints };
+    int n = 0;
+    for (const FrozenPoint* set : sets)
+        for (int k = 0; k < kPer; ++k, ++n) {
+            CAPTURE(set[k].origin);
+            CHECK(set[k].v[P_ROOT_B] == set[k].v[P_ROOT_A]);
+            CHECK(set[k].v[P_ROOT_A] == expected_root[n]);
+        }
 }
 
 TEST_CASE("param table: apply_mode_and_steps reaches what apply_param refuses") {

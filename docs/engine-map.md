@@ -510,6 +510,73 @@ hides everything the target does. Count `distinct` values alongside p2p — that
 what separates "a waveform" from "a two-value square", and p2p alone will not tell
 you.
 
+### Measured: ROOT reaches BBD only in STEP; the song offset never does (2026-10-19)
+
+Setup, since a number without it is a claim: the `test_param_impact.cpp` rig (two
+`Instrument`s, static echo/BBD memory, 48 kHz, first 0.5 s skipped, relative RMS
+difference), main @ `c7daab04`, offset not yet wired. The four frozen-point numbers
+below ran 4 s each. The BBD probe: deck A on BBD, deck B muted, based on STEP point 0,
+root 0 against root 5, 6 s.
+
+| Mode | ROOT 0 vs 5 on a BBD deck |
+|---|---|
+| FLOW | **0.0000** — inert; the quantizer is bypassed on the delay clock |
+| STEP | **0.2215** — alive; the delay clock steps on the scale grid, so ROOT's grid reaches BBD |
+
+On the four frozen operating points (`tests/param_impact_points.h`), deck root 0
+against 11 moves audio in both modes on both decks: master 1 FLOW A 0.751 / B 1.169,
+master 2 FLOW A 0.950 / B 1.068, master 3 STEP A 0.119 / B 0.943, master 8 STEP
+A 1.015 / B 1.003. `P_ROOT_A` and `P_ROOT_B` therefore need no entry in
+`test_param_impact`'s expected-inert sets.
+
+**The song-offset latch rule.** A note deck carries `Part::_song_offset`, the
+deck's root folded to the nearest signed distance from C
+(`song_offset_for_root`, `part.h:36`: C..F# -> 0..+6, G..B -> -5..-1; any int is
+reduced mod 12 first). It is latched in exactly two places and nowhere else:
+
+- `Part::init`, `part.cpp:109-110` — init regenerates the phrase outside the lane's
+  rebuild counter (`lane.cpp:86`), so it latches from the root the quantizer
+  holds at that moment; neither `Instrument::init` nor `Quantizer::init` resets
+  it. A host that re-inits a running instrument therefore pushes the CURRENT root
+  with `set_root` before `init`: the VCV site is `Fireflow::reinit()`
+  (`host/vcv/src/Fireflow.cpp:639-641`, guarded by `test_panel.py`'s
+  `test_reinit_pushes_the_root_before_init`). Without the push, Rack's Initialize
+  (params reset first, then `onReset` → `reinit`) latched the pre-Initialize root,
+  and the next tick's `set_root(0)` only moved the grid — measured by the final
+  review: from ROOT_A = D / ROOT_B = G, offsets stayed +2/−5 at roots 0/0. With it,
+  Initialize latches 0, and an SR change or a patch open latches the patch's own
+  root. `shell/` and `host/render/` init once, on a fresh instrument at root 0.
+- the top of `Part::_control_tick`, `part.cpp:289-292` — when
+  `ModLane::phrase_builds()` (`lane.h:83`) has moved since the last look. That
+  counter is bumped only in the `if (rebuild)` branch of `_apply_pending_song_work`
+  (`lane.cpp:328`), i.e. a full rebuild of pattern A. The `rebuild` condition
+  (`lane.cpp:314-317`) is `form_pending || new_pending || length_pending ||`
+  the B pattern's groove length is 0, and what raises those is:
+  `ModLane::new_phrase` (`lane.cpp:279`, which the panel's SONG knob issues once
+  per rung detent via `inst.new_phrase(p)`, `control_law.h:843`); a FORM change
+  (`lane.cpp:144`); a change of the effective phrase length, i.e. STEPS
+  (`lane.cpp:262`); and entering STEP, but only when the lane is melodic at init
+  and the B pattern's groove length is 0 (`lane.cpp:263-265`), so it is not
+  unconditional. A bare engine `set_song` only sets `song_pending`, which is not
+  in the `rebuild` condition: it does not rebuild and does not re-latch. Partial
+  RENEW renewals do not count.
+
+A ROOT turn alone moves the quantizer's grid and re-latches nothing. The offset
+is *applied* by `_offset_norm()` (`part.h:822`), added to the pitch before the
+quantizer and before the 0..1 clamp, on note engines only; BBD and SAMPLER read 0
+(their PITCH lane is the delay clock or a scan, not a note — owner ruling
+2026-08-07, `lane.h:293`). Measured in `tests/test_song_offset.cpp`: a song
+rebuilt at root 2 sits **exactly +2 semitones** from the root-0 song, and a ROOT
+turn alone does not re-latch. At pitch level, a deck turned to D without a
+rebuild sits at most **1 semitone** from the C song (a grid re-snap, boot scale
+Dorian) and on **0 of 2000** ticks at +2; with `_offset_norm()` sabotaged to read
+the live root it sat at +2 on 2000 of 2000 (`check_turn_is_not_transpose`).
+
+Not measured, open: what the offset does under PULL gravity (the quantizer ignores
+the root while gravity is on, `pitch/quantizer.h:138`), and how often an offset of the
+same sign pins part of a song at the span edge (0 or 36 semitones) when TUNE is far
+from centre.
+
 ---
 
 ## 7. Reachability: where the melody lives on the axes

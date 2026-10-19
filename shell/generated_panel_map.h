@@ -39,7 +39,7 @@ inline constexpr ControlEntry kRevaControls[] = {
     {2, 1, ffctl::TUNE_A, 0},  // row 13 TUNE_A -- TUNE_A
     {2, 2, ffctl::FLUX_A, 0},  // row 14 FLUX_A -- FLUX_A
     {2, 3, ffctl::FLUXRATE_A, 0},  // row 15 FLUXRATE_A -- FLUXRATE_A
-    {2, 4, -1, 0},  // row 16 ROOT_A -- reserved: per-deck scale root, follow-up to spec 2026-10-07 section 4
+    {2, 4, ffctl::ROOT_A, 0},  // row 16 ROOT_A -- ROOT_A
     {2, 5, ffctl::DETUNE_A, 0},  // row 17 DETUNE_A -- DETUNE_A
     {2, 6, ffctl::FLUXFB_A, 0},  // row 18 FLUXFB_A -- FLUXFB_A
     {2, 7, ffctl::LINK_A, 0},  // row 19 LINK_A -- LINK_A
@@ -66,7 +66,7 @@ inline constexpr ControlEntry kRevaControls[] = {
     {5, 4, ffctl::LINK_B, 1},  // row 40 LINK_B -- LINK_B
     {5, 5, ffctl::FLUXFB_B, 1},  // row 41 FLUXFB_B -- FLUXFB_B
     {5, 6, ffctl::DETUNE_B, 1},  // row 42 DETUNE_B -- DETUNE_B
-    {5, 7, -1, 1},  // row 43 ROOT_B -- reserved: per-deck scale root, follow-up to spec 2026-10-07 section 4
+    {5, 7, ffctl::ROOT_B, 1},  // row 43 ROOT_B -- ROOT_B
     {6, 0, ffctl::MELODY_A, 2},  // row 44 MELODY_A -- MELODY_A
     {6, 1, ffctl::SCALE, 2},  // row 45 SCALE -- SCALE
     {6, 2, ffctl::FILT_A, 2},  // row 46 FILT_A -- FILT_A
@@ -94,7 +94,7 @@ inline constexpr ControlEntry kRevaControls[] = {
     {9, 3, ffctl::DRIFT, 3},  // row 68 DRIFT -- DRIFT
     {9, 4, ffctl::PAN_B, 3},  // row 69 PAN_B -- PAN_B
     {9, 5, ffctl::REV_TONE, 3},  // row 70 REV_TONE -- REV_TONE
-    {9, 6, -1, 3},  // row 71 REV_MOD -- reserved: reverb tail wobble (WOBL), follow-up to spec 2026-10-07 section 4
+    {9, 6, ffctl::REV_MOD, 3},  // row 71 REV_MOD -- REV_MOD
     {9, 7, ffctl::REV_MIX_B, 3},  // row 72 REV_MIX_B -- REV_MIX_B
 };
 static_assert(entries_valid(kRevaControls,

@@ -27,6 +27,17 @@
 
 namespace spky {
 
+// The song offset a root folds to (spec 2026-10-18 root-and-wobl-knobs §2.1):
+// the root's signed distance from C, nearest way round, so a song moved into
+// the new key stays near the register TUNE puts it in. C..F# -> 0..+6,
+// G..B -> -5..-1; F# takes +6 rather than -6 (the spec author's call). Any
+// int is accepted and reduced mod 12 first, matching the quantizer, which
+// also reads its root mod 12 (spec §3: root 12 == root 0, measured).
+constexpr int song_offset_for_root(int r) {
+    const int m = ((r % 12) + 12) % 12;
+    return m <= 6 ? m : m - 12;
+}
+
 // A part = SuperModulator + selectable engine + 5 targets. Combines each lane's
 // bipolar output with a stored per-target base + depth, gated by the target's
 // active flag and the master DEPTH.
@@ -268,6 +279,10 @@ public:
     float target_value(int slot) const;
     float target_raw(int slot) const;          // base + mod*depth, unquantized
     float pitch_pre_quant() const;             // PITCH target + TUNE, pre-quantize
+    // The semitone offset latched from the root at the last full phrase
+    // rebuild or init -- see _song_offset below. Reported whatever the current
+    // engine; whether it is APPLIED is _offset_norm()'s question.
+    int song_offset() const { return _song_offset; }
     float lane_output(int slot) const { return _mod.lane_output(slot); }
     float lane_output_stepped(int slot) const {
         return _mod.lane_output_stepped(slot);
@@ -787,6 +802,26 @@ private:
     // definition.
     bool _note_deck() const {
         return _engine_id != ENGINE_SAMPLER && _engine_id != ENGINE_BBD;
+    }
+    // Song offset (spec 2026-10-18 root-and-wobl-knobs §2.1): a song generated
+    // after a ROOT turn is the song the generator would have made in C, moved
+    // by the folded root distance. Latched -- not read live from the quantizer
+    // -- because a ROOT turn alone must only move the scale grid; the running
+    // melody is not transposed. Latched at init and whenever the PITCH lane's
+    // full-rebuild count moves past _seen_builds (_control_tick).
+    int      _song_offset = 0;
+    uint32_t _seen_builds = 0;
+    // The offset as a lane-span fraction, applied in pitch_pre_quant(). Only
+    // on a note deck (_note_deck() above): on SAMPLER the PITCH lane is a read
+    // position and TUNE a transpose of a recording, on BBD a clock bend, and
+    // neither plays a generated song to move into a key. (A BBD in STEP does
+    // put its clock on the scale grid, so a ROOT turn still reaches it there;
+    // only the offset is kept off, spec §7.) At offset 0 this is 0.0f, and
+    // x + 0.0f == x exactly, so a deck at C is bit-identical to before (the
+    // ctrl_identity render hash is the guard).
+    float _offset_norm() const {
+        return _note_deck() ? static_cast<float>(_song_offset) / Quantizer::SPAN_SEMIS
+                            : 0.f;
     }
     uint16_t _chord_mask() const {
         return _quant.mode() == QuantMode::Chrom ? CHROM_MASK : _quant.scale_mask();

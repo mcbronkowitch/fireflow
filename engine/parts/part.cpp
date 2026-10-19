@@ -101,6 +101,13 @@ void Part::init(float sample_rate, uint32_t seed_base,
     _bus_dc.Init(sample_rate / static_cast<float>(SynthEngine::kCtrlInterval));
     _ctrl_ctr = 0;                              // first process() runs a tick
     _quant.init(sample_rate, SynthEngine::kCtrlInterval);   // slew in ticks
+    // Song offset (spec 2026-10-18 root-and-wobl-knobs §2.1): init generated
+    // a fresh phrase above (_mod.init), outside the lane's rebuild counter, so
+    // it latches here -- from the root the quantizer still holds, since
+    // neither Instrument::init nor Quantizer::init resets it. Taking the
+    // count as seen makes _control_tick latch only on the NEXT rebuild.
+    _seen_builds = _mod.pitch_phrase_builds();
+    _song_offset = song_offset_for_root(_quant.root_semis());
     _pitch_q = _quant.process(pitch_pre_quant());
     _chord.init();
 }
@@ -164,8 +171,16 @@ float Part::target_raw(int slot) const {
 // On a SYNTH part the sum is quantized afterwards, so the final audible pitch
 // lands on the scale grid and both parts share one grid. On a SAMPLER part it
 // is used as-is -- see the quantizer comment in _control_tick.
+//
+// Plus the song offset (_offset_norm(), part.h): the latched root distance,
+// added BEFORE the quantizer so a song rebuilt in D quantizes onto D's grid
+// exactly where the same song in C lands on C's, moved by the distance --
+// the quantizer mask is root-relative, so this is exact except where the
+// moved note would leave the 0..36 span (spec 2026-10-18 §3, measured), and
+// the clamp below is what folds it back there. Added last, inside the clamp:
+// at offset 0 it is + 0.0f on the same sum, so the result is bit-identical.
 float Part::pitch_pre_quant() const {
-    return clampf(target_raw(LANE_PITCH) + (_tune - 0.5f), 0.f, 1.f);
+    return clampf(target_raw(LANE_PITCH) + (_tune - 0.5f) + _offset_norm(), 0.f, 1.f);
 }
 
 float Part::target_value(int slot) const {
@@ -254,6 +269,29 @@ float Part::max_voice_env() const {
 // stay mutually exclusive (else if, not a second if); calling this twice on
 // the same sample double-steps the glide.
 void Part::_control_tick() {
+    // Song offset re-latch (spec 2026-10-18 root-and-wobl-knobs §2.1): only
+    // when the PITCH lane did a FULL rebuild since the last tick -- a SONG
+    // rung, a FORM change, a STEPS length change, entering STEP, NEW. That
+    // rebuild lands at a phrase wrap together with a brand-new melody, so the
+    // jump is never heard on an old one. The partial RENEW renewals
+    // (_renew_units / _renew_walk in lane.cpp) deliberately do NOT re-latch:
+    // they swap part of a running song, and moving the offset there would
+    // transpose half a song against the other half (the spec author's call).
+    // A ROOT turn on its own does not re-latch either; it moves the grid only.
+    //
+    // Here, at the top of the tick, ahead of pitch_pre_quant() below: the
+    // rebuild happens inside _mod.process(), and every PITCH fire runs this
+    // tick before process() strikes its note (_fire_trigger), so the first
+    // note of the new phrase already carries the new offset, whether it falls
+    // on the wrap sample or later. Latched on every engine (the value
+    // is a property of the song, not of the engine); _offset_norm() decides
+    // whether it is applied.
+    const uint32_t builds = _mod.pitch_phrase_builds();
+    if (builds != _seen_builds) {
+        _seen_builds = builds;
+        _song_offset = song_offset_for_root(_quant.root_semis());
+    }
+
     // LANE_PITCH is skipped on purpose: the assignment further down (after the
     // quantizer) writes _tg[LANE_PITCH] unconditionally, so target_raw's value
     // for that slot was only ever discarded. Nothing between the two points

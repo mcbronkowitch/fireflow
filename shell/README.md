@@ -264,10 +264,11 @@ like-for-like with the 2026-08-23 bench numbers.
 `shell/generated_panel_map.h` from `hardware/reva/panel-map.json`,
 `hardware/reva/blocks.py` and `control/params.hpp`. Never edit the header;
 `shell_panel_map_guard` regenerates and compares it. Since P6b-1 the 73 rows
-split 70 that send the shared control law's id of their own name (the
-`FireflowHW` control at that position) and 3 reserved (`ROOT_A`, `ROOT_B`,
-`REV_MOD`: pots on the plate that send nothing and have no parameter yet).
-P6a's "safe"/"unmapped" split is retired. A pot added to the panel with no
+split 73 that send the shared control law's id of their own name (the
+`FireflowHW` control at that position) and none reserved: `ROOT_A`, `ROOT_B`
+and `REV_MOD` (WOBL) were reserved pots until 2026-10-19 and now send their
+parameters. The generator's `RESERVED` list is empty (the SHIFT key is read
+and counted but is not a pot). P6a's "safe"/"unmapped" split is retired. A pot added to the panel with no
 `control/params.hpp` id stops the generator until it gets one or is reserved.
 
 **Keys and LEDs.** Every step reads the 165 in the same pass as the write;

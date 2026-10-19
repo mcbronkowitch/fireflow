@@ -82,13 +82,16 @@ static const PanelCtl kParamCtls[] = {
     {PULL, WK_SMKNOB, {175.400f, 14.500f}, "PULL", {175.400f, 21.950f}, 0, 2.20f, 0xB9CDD7, "PULL"},
     {PAN_A, WK_SMKNOB, {112.000f, 74.875f}, "PAN", {112.000f, 82.325f}, 0, 2.20f, 0xB9CDD7, "Deck balance"},
     {PAN_B, WK_SMKNOB, {192.800f, 74.875f}, "PAN", {192.800f, 82.325f}, 0, 2.20f, 0xB9CDD7, "Deck balance"},
+    {ROOT_A, WK_KNOBI, {11.000f, 95.000f}, "ROOT", {11.000f, 102.450f}, 0, 2.20f, 0xB9CDD7, "ROOT"},
+    {ROOT_B, WK_KNOBI, {293.800f, 95.000f}, "ROOT", {293.800f, 102.450f}, 0, 2.20f, 0xB9CDD7, "ROOT"},
+    {REV_MOD, WK_SMKNOB, {175.400f, 95.000f}, "WOBL", {175.400f, 102.450f}, 0, 2.20f, 0xB9CDD7, "Reverb wobble"},
     {MODBTN, WK_LATCH, {290.800f, 112.750f}, "MOD", {290.800f, 119.450f}, 0, 2.20f, 0xB9CDD7, "MOD layer latch"},
 };
 // 1 = big cap, 0 = small. Parallel to kParamCtls, same order.
 // The rehearsal widget reads THIS, not c.kind -- kind says
 // bipolar/detented, which is not a diameter.
 static const unsigned char kParamSize[] = {
-    0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 };
 static_assert(sizeof(kParamSize) == sizeof(kParamCtls) / sizeof(kParamCtls[0]), "kParamSize desynced");
 // Latch-gated mod ring, parallel to kParamCtls, same order.
@@ -171,6 +174,9 @@ static const HwModRing kModRing[] = {
     {0x3FBF9C, 3.850f},
     {0xE8945A, 3.850f},
     {0, 0.000f},
+    {0, 0.000f},
+    {0, 0.000f},
+    {0, 0.000f},
 };
 static_assert(sizeof(kModRing) / sizeof(kModRing[0]) == sizeof(kParamCtls) / sizeof(kParamCtls[0]), "kModRing desynced");
 // Knob and keycap accent, parallel to kParamCtls, same order.
@@ -249,6 +255,9 @@ static const FfAccent kParamAccent[] = {
     {0x7FB6C9, 0x7FB6C9},
     {0x3FBF9C, 0x3FBF9C},
     {0xE8945A, 0xE8945A},
+    {0x3FBF9C, 0x3FBF9C},
+    {0xE8945A, 0xE8945A},
+    {0x7FB6C9, 0x7FB6C9},
     {0x7FB6C9, 0x7FB6C9},
 };
 static_assert(sizeof(kParamAccent) / sizeof(kParamAccent[0]) == sizeof(kParamCtls) / sizeof(kParamCtls[0]), "kParamAccent desynced");
@@ -315,9 +324,6 @@ static_assert(sizeof(kLightAccent) / sizeof(kLightAccent[0]) == sizeof(kLightCtl
 // so these captions must come from here (spec 2026-08-10 §5).
 static const HwOnlyCtl kHwOnlyCtls[] = {
     {WK_LATCH, {14.000f, 112.750f}, "SHFT", {14.000f, 119.450f}, 0, 2.20f, 0xB9CDD7},
-    {WK_SMKNOB, {11.000f, 95.000f}, "ROOT", {11.000f, 102.450f}, 0, 2.20f, 0xB9CDD7},
-    {WK_SMKNOB, {293.800f, 95.000f}, "ROOT", {293.800f, 102.450f}, 0, 2.20f, 0xB9CDD7},
-    {WK_SMKNOB, {175.400f, 95.000f}, "WOBL", {175.400f, 102.450f}, 0, 2.20f, 0xB9CDD7},
 };
 static const PanelTxt kPanelTexts[] = {
     {{11.000f, 9.950f}, 1.90f, 0.50f, 0x7F9AA8, 0, "ENG"},

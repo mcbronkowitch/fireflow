@@ -104,6 +104,49 @@ TEST_CASE("law: COUPLE zone split and DRIFT settle edge") {
     CHECK(r.inst.count("settle") == 0);              // parked: no re-fire
 }
 
+TEST_CASE("law: ROOT per deck, rounded") {
+    // ROOT_A/ROOT_B are an appended pair (spec 2026-10-18 root-and-wobl-knobs
+    // §6), read as prm(ROOT_A)/prm(ROOT_B) -- never through mvp(), which
+    // adds PART_STRIDE to ROOT_A and lands on some other id. Each deck must
+    // get its own knob and nothing of the other's: the routing half of the
+    // isolation claim (the engine half is Instrument::set_root touching only
+    // _parts[p]).
+    Rig r;
+    for (int k = 0; k < 12; ++k) {
+        INFO("ROOT_A " << k);
+        r.k[ROOT_A] = float(k); r.k[ROOT_B] = 0.f; r.tick();
+        CHECK(r.inst.last("set_root", 0) == float(k));
+        CHECK(r.inst.last("set_root", 1) == 0.f);
+    }
+    for (int k = 0; k < 12; ++k) {
+        INFO("ROOT_B " << k);
+        r.k[ROOT_A] = 0.f; r.k[ROOT_B] = float(k); r.tick();
+        CHECK(r.inst.last("set_root", 0) == 0.f);
+        CHECK(r.inst.last("set_root", 1) == float(k));
+    }
+    // A pot hands the law a float; the law rounds, as it does SCALE.
+    r.k[ROOT_A] = 4.4f; r.tick();
+    CHECK(r.inst.last("set_root", 0) == 4.f);
+    r.k[ROOT_A] = 4.6f; r.tick();
+    CHECK(r.inst.last("set_root", 0) == 5.f);
+}
+
+TEST_CASE("law: WOBL drives set_reverb_mod") {
+    // WOBL got its knob back (spec 2026-10-18 root-and-wobl-knobs §2.2): the
+    // law reads REV_MOD instead of pinning 0.15f. The init snapshot boots it
+    // at that same 0.15, so the factory patch does not move.
+    Rig r;
+    r.tick();
+    CHECK(std::fabs(r.inst.last("set_reverb_mod") - 0.15f) < 1e-6f);
+    r.k[REV_MOD] = 0.f; r.tick();
+    CHECK(r.inst.last("set_reverb_mod") == 0.f);
+    r.k[REV_MOD] = 1.f; r.tick();
+    CHECK(r.inst.last("set_reverb_mod") == 1.f);
+    // Only WOBL left the fixed-by-ear block: PUSH and SMEAR stay constants.
+    CHECK(r.inst.last("set_reverb_smear") == 0.30f);
+    CHECK(r.inst.last("set_master_drive") == 0.40f);
+}
+
 TEST_CASE("law: TEMPO from the knob, CLOCK override only inside 20..400") {
     Rig r;
     r.k[TEMPO] = 0.5f; r.tick();

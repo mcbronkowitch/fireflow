@@ -95,9 +95,11 @@ def test_blocking_placements_against_the_reserve():
 def test_panel_channel_count_and_topology():
     # The count comes from the hardware panel generator, not from a document.
     # io-budget section 3 still says 65; the plate has had 70 pot positions
-    # since 2026-08-30 and 73 since the 9 mm raster, which adds the three
-    # reserved pots ROOT_A, ROOT_B and REV_MOD -- each is read through a mux
-    # channel like every pot (spec 2026-10-07 section 4 and 8).  If this goes
+    # since 2026-08-30 and 73 since the 9 mm raster, which adds the pots
+    # ROOT_A, ROOT_B and REV_MOD -- reserved then, each read through a mux
+    # channel like every pot (spec 2026-10-07 section 4 and 8), and
+    # parameters since spec 2026-10-18 root-and-wobl-knobs, which moved them
+    # from HW_ONLY into the knobs without moving a pot.  If this goes
     # red, the panel moved: re-read scan-budget.md section 5 and io-budget
     # section 3 in the same commit.
     n = s.pot_positions()

@@ -3219,6 +3219,43 @@ carries its own transcription of the same preset, which is the point of the
 second copy — see the open item about that guard's missing converse under
 "Planned".
 
+### Reserved knobs become parameters ✅ built and merged (2026-10-19), listening pass ok
+
+The 9 mm panel pass (M6, 2026-10-08) put three knobs on the plate and the board
+that sent nothing. They are parameters now (spec
+`docs/superpowers/specs/2026-10-18-root-and-wobl-knobs-design.md`, plan
+`docs/superpowers/plans/2026-10-19-root-and-wobl-knobs.md`, branch
+`claude/root-wobl-knobs`):
+
+- `P_ROOT` split into `P_ROOT_A` / `P_ROOT_B` (the latter appended at the end of
+  the table, like PAN). 12 zones, C at the left stop, B at the right. Turning
+  ROOT moves the scale grid under the running melody and re-latches nothing. A
+  note deck latches a **song offset** (its root folded to the nearest signed
+  distance from C, -5..+6 semitones) at every full phrase rebuild (a SONG knob
+  detent via `new_phrase`, a FORM change, a STEPS length change, or the
+  conditional STEP entry; a bare engine `set_song` does not rebuild) and at
+  `Part::init`, so a song generated after the turn is the C song moved into the
+  new key. BBD and SAMPLER decks do not apply it. Where it lives, and the
+  measured facts (a root-2 song sits exactly +2 semitones from the root-0 song;
+  ROOT is inert on BBD in FLOW and alive in STEP): `docs/engine-map.md` §6.
+- WOBL (`REV_MOD`, `P_REV_MOD`) has a knob that boots at 0.15, the old constant,
+  so the factory patch does not move. `docs/by-ear-decisions.md` is updated;
+  SMEAR's and PUSH's "no knob" rules stand.
+- Both VCV modules carry the three knobs (`Fireflow`: ROOT_A / ROOT_B at y = 78
+  either side of centre, WOBL below the right one; the ROOT tooltip shows note
+  names). `FireflowHW` draws them as ordinary knobs at their frozen plate
+  positions, `HW_ONLY` holds only SHIFTBTN, and the firmware map's `RESERVED`
+  list is empty: 73 of 73 pot rows send a parameter.
+
+**Listening pass (Bastian, 2026-10-19): "erstmal alles ok"** -- the spec §8.7
+pass is accepted. Fine-tuning of the note sequencer and the quantizer follows in
+a later round of its own, and carries the two questions this build left open:
+with TUNE far from centre an offset of the same sign can pin part of a song at
+the span edge (0 or 36 semitones), realistically init deck B (TUNE_B 0.175) with
+ROOT_B on G..B; and the offset under PULL gravity is unprobed (the quantizer
+ignores the root while gravity is on). Spec §8.8, the real Rev A pots, waits for
+the P7 bring-up and is not a gate.
+
 ## Planned
 
 The SHAPE/SMOOTH rework's SMOOTH half has shipped — see "SMOOTH becomes
@@ -3236,18 +3273,6 @@ Two engine directions sit ahead of M5k with no design at all: **FEED** and
 **AIR**, the two candidates of the 2026-08-17 ambient-engine brainstorming that
 were never built. Each needs its own brainstorming round before it can have a
 spec, which is why neither counts as a designed round above.
-
-### Reserved knobs become parameters ⬜ (needs its own spec)
-
-The 9 mm panel pass (M6, 2026-10-08) put three knobs on the plate and the board
-that send nothing yet. Split `P_ROOT` into `ROOT_A` / `ROOT_B`: today it is one
-global parameter and the VCV host never sets it, so both decks always play in C,
-while the engine's `quant().set_root()` is already per deck. Give WOBL
-(`P_REV_MOD`, the reverb's tail-delay LFO depth) a knob that boots at 0.15, the
-host constant it has today, so the sound does not move, and update the reverb
-entry of [`docs/by-ear-decisions.md`](by-ear-decisions.md), which still says not
-to give WOBL a knob (Bastian reversed that on 2026-10-07). Needs its own spec: it
-touches both panels and the factory init. Spec 2026-10-07 §4 has the reasoning.
 
 ### `test_panel.py`'s init snapshot guard does not assert its converse ⬜ (small, own task)
 
@@ -4408,9 +4433,9 @@ items 1 and 2 **failed** (the small caps stood 5.3 mm apart edge to edge), item
 **Next:** bring-up (P7) when the boards arrive. The hand-soldered parts of
 `bom-hand.csv` are on hand (Bastian, 2026-10-09) except `J_SD`, the Yamaichi
 microSD socket.
-The three reserved pots (`ROOT_A`, `ROOT_B`, WOBL) still send nothing; making
-them parameters is its own round with its own spec, see "Reserved knobs become
-parameters" under "Planned".
+The three reserved pots (`ROOT_A`, `ROOT_B`, WOBL) sent nothing when this
+was written; they became parameters on 2026-10-19, see "Reserved knobs become
+parameters" under "Done".
 - **Firmware image (2026-10-09).** The Rev A playing image
   (`SHELL_PANEL_SCAN=1`) did not compile after the pass: `panel_scan.cpp`
   asserted `kTable.count % 10 == 0` for its ten-a-line `SHELL_PLAY_V`

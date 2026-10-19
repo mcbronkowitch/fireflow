@@ -510,8 +510,10 @@ def test_size_classes_match_the_spec():
     # as a small knob, HW_SIZE["PULL"]="S". FILT×2 left again 2026-08-23,
     # REV_MIX×2 joined 2026-08-30, and PAN×2 joined the same day (spec
     # 2026-08-30 pan), filling the slot beside GRIT that had been held open
-    # for it.
-    check(len(small) == 58, f"expected 58 small params, got {len(small)}")
+    # for it. ROOT_A, ROOT_B and REV_MOD (WOBL) joined on 2026-10-19 (spec
+    # 2026-10-18 root-and-wobl-knobs): the three pots the 9 mm raster had
+    # reserved became ffctl parameters, at the positions they already held.
+    check(len(small) == 61, f"expected 61 small params, got {len(small)}")
     check(abs(hw.CLASS_R["G"] - 8.5) < 1e-9, "CLASS_R G is not 8.5")
     check(abs(hw.CLASS_R["S"] - 6.0) < 1e-9, "CLASS_R S is not 6.0")
     check(hw.HW_SIZE["SOURCE"] == "S", "TIMB/SOURCE is not small")
@@ -520,25 +522,67 @@ def test_size_classes_match_the_spec():
 
 def test_hw_only_inventory():
     """What exists on sheet metal but not in the VCV module: 1 pad (SHIFT,
-    still reserved and inert) and three reserved small pots -- ROOT_A,
-    ROOT_B and REV_MOD (spec 2026-10-07 §4): a hole, a caption and a pot,
-    no ParamId. No extra LEDs. MODBTN moved out of HW_ONLY 2026-08-22 -- it
-    is a real latch param now, drawn from hw.HW_PARAMS instead. 15 lamps
-    drawn on the plate (`FLOW_*` stay LightIds, undrawn). The eight MOD jacks
-    are real inputs (unwired), no longer HW_ONLY placeholders."""
+    still reserved and inert), no pots and no extra LEDs. The three small
+    pots the 9 mm raster reserved (ROOT_A, ROOT_B, REV_MOD, spec 2026-10-07
+    §4) left HW_ONLY on 2026-10-19: they are ffctl parameters now (spec
+    2026-10-18 root-and-wobl-knobs) and come from hw.HW_PARAMS like every
+    knob -- test_formerly_reserved_pots_stay_put pins where. MODBTN moved
+    out of HW_ONLY 2026-08-22 -- it is a real latch param now, drawn from
+    hw.HW_PARAMS instead. 15 lamps drawn on the plate (`FLOW_*` stay
+    LightIds, undrawn). The eight MOD jacks are real inputs (unwired), no
+    longer HW_ONLY placeholders."""
     kinds = {}
     for c in hw.HW_ONLY:
         kinds[hw.hw_class(c.enum)] = kinds.get(hw.hw_class(c.enum), 0) + 1
     check(kinds.get("P") == 1, f"expected 1 hw-only pad, got {kinds.get('P')}")
-    check(kinds.get("S") == 3,
-          f"expected 3 hw-only small pots (ROOT_A, ROOT_B, REV_MOD reserved, "
-          f"spec 2026-10-07 §4), got {kinds.get('S')}")
+    check(kinds.get("S", 0) == 0,
+          f"expected 0 hw-only small pots (ROOT_A, ROOT_B and REV_MOD are "
+          f"parameters since spec 2026-10-18), got {kinds.get('S')}")
     check(kinds.get("J", 0) == 0, f"expected 0 hw-only jacks, got {kinds.get('J')}")
     check(kinds.get("L", 0) == 0, f"expected 0 hw-only LEDs, got {kinds.get('L')}")
     assert [c.enum for c in hw.HW_PARAMS] == \
         [c.enum for c in gp.RUNTIME_PANEL_PARAMS] + ["MODBTN"]
     total_leds = len([c for c in hw.ALL_HW if hw.hw_class(c.enum) == "L"])
     check(total_leds == 15, f"expected 15 LEDs on the plate, got {total_leds}")
+
+
+def test_formerly_reserved_pots_stay_put():
+    """Spec 2026-10-18 root-and-wobl-knobs §5/§7: ROOT_A, ROOT_B and REV_MOD
+    stop being reserved without moving. The Rev A plate and board are frozen
+    with a pot at each of the three positions the HwOnly entries held --
+    ROOT's deck cell, its mirror, and REV_MOD's centre cell -- so the real
+    knobs must land exactly there, as small pots, with the captions the
+    plate prints (ROOT, WOBL)."""
+    by = {c.enum: c for c in hw.HW_PARAMS}
+    ax, ay = hw._deck_xy("ROOT")
+    want = {"ROOT_A": ((ax, ay), "ROOT"),
+            "ROOT_B": ((hw.W - ax, ay), "ROOT"),
+            "REV_MOD": (hw._centre_xy("REV_MOD"), "WOBL")}
+    hw_only = {c.enum for c in hw.HW_ONLY}
+    for enum, ((x, y), caption) in want.items():
+        c = by.get(enum)
+        if c is None:
+            check(False, f"{enum} is not in HW_PARAMS")
+            continue
+        check(abs(c.x - x) < 1e-9 and abs(c.y - y) < 1e-9,
+              f"{enum} at ({c.x:.3f},{c.y:.3f}), the frozen plate has its pot at "
+              f"({x:.3f},{y:.3f})")
+        check(hw.hw_class(enum) == "S", f"{enum} is class {hw.hw_class(enum)}, not a small pot")
+        check(c.label == caption, f"{enum} prints {c.label!r}, the plate says {caption!r}")
+        check(enum not in hw_only, f"{enum} is still HW_ONLY as well")
+    # The positions above are derived from DECK_CELLS/CENTRE_CELLS, so an
+    # edit to those tables would move the knob AND the expectation together
+    # and stay green. The plate is frozen, so pin its pots literally too
+    # (mm, read from the Rev A plate's generated header).
+    frozen = {"ROOT_A": (11.0, 95.0), "ROOT_B": (293.8, 95.0),
+              "REV_MOD": (175.4, 95.0)}
+    for enum, (x, y) in frozen.items():
+        c = by.get(enum)
+        if c is None:
+            continue   # already reported above
+        check(abs(c.x - x) < 1e-6 and abs(c.y - y) < 1e-6,
+              f"{enum} at ({c.x:.3f},{c.y:.3f}), the frozen Rev A plate has its "
+              f"pot at ({x:.3f},{y:.3f})")
 
 
 def test_mod_wreaths():

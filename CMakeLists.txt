@@ -59,6 +59,7 @@ add_executable(spky_tests
     tests/test_engine_map.cpp
     tests/test_melody_reachable.cpp
     tests/test_flow_melody.cpp
+    tests/test_song_offset.cpp
     tests/test_rhythm_ring.cpp
     tests/test_gate_density.cpp
     tests/test_step_accent.cpp

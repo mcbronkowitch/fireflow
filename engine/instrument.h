@@ -176,6 +176,9 @@ public:
     // compiled only for the tests target, so render and the firmware never
     // see it.
     const Part& part(int p) const { return _parts[p]; }
+    // The semitone offset deck p latched at its last full phrase rebuild (or
+    // init), whatever engine it runs now -- see Part::song_offset().
+    int song_offset_for_test(int p) const { return _parts[p].song_offset(); }
 #endif
     void set_fixed_slew(int p, bool on)      { _parts[p].mod().set_fixed_slew(on); }
     void set_depth(int p, float n)           { _parts[p].set_depth(n); }

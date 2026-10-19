@@ -31,7 +31,7 @@ ROWS = [line for line in TEXT.splitlines() if "// row " in line]
 check("committed header equals the generator's output",
       g.check_text(g.read_committed(), TEXT))
 check("73 pot rows", len(ROWS) == 73)
-check("70 rows send a parameter", sum("ffctl::" in r for r in ROWS) == 70)
+check("73 rows send a parameter", sum("ffctl::" in r for r in ROWS) == 73)
 # P6b-1 spec 7.2: every row that is not reserved sends the id of the FireflowHW
 # control at its position -- the pot's own name, which the VCV HW panel places.
 SENDING = [r for r in ROWS if "ffctl::" in r.split("//")[0]]
@@ -41,12 +41,19 @@ check("every sending row sends its own pot's id, a FireflowHW control",
           r.split("//")[1].split()[2] in BASE["hw_ids"] for r in SENDING))
 # A reserved pot is scanned like any other and sends nothing (spec 2026-10-07
 # section 4): target -1 in the code part of the row, reason "reserved:" after it.
-check("3 reserved rows send nothing",
-      sum("reserved:" in r.split("//")[1] and ", -1, " in r.split("//")[0]
-          for r in ROWS) == 3)
-check("the reserved rows are ROOT_A, ROOT_B and REV_MOD",
-      sorted(r.split("//")[1].split()[2] for r in ROWS
-             if "reserved:" in r.split("//")[1]) == ["REV_MOD", "ROOT_A", "ROOT_B"])
+# The three the 9 mm raster reserved became parameters on 2026-10-19 (spec
+# 2026-10-18 root-and-wobl-knobs), so no row is reserved today; the mechanism
+# stays for the next pot that arrives before its parameter does.
+check("0 reserved rows send nothing",
+      sum("reserved:" in r.split("//")[1] or ", -1, " in r.split("//")[0]
+          for r in ROWS) == 0)
+# The pots that were reserved now write their own id: the row's code part
+# carries ffctl::<name>, which is what the firmware compiles.
+FORMER = {r.split("//")[1].split()[2]: r.split("//")[0] for r in ROWS
+          if r.split("//")[1].split()[2] in ("ROOT_A", "ROOT_B", "REV_MOD")}
+check("ROOT_A, ROOT_B and REV_MOD send their own ffctl id",
+      sorted(FORMER) == ["REV_MOD", "ROOT_A", "ROOT_B"] and
+      all(", ffctl::%s, " % name in code for name, code in FORMER.items()))
 check("no row sends an engine ParamId any more", "spky::" not in TEXT)
 # Findings r1 item 1: the ATTACK pots carry STAGES as their BBD alternate, and
 # nothing else carries an alternate (a row's code part has five fields then).
@@ -112,8 +119,12 @@ def duplicate_channel(inp):
 
 sabotage("pot with no ffctl id",
          lambda i: i["params"].discard("RATE_A"), "RATE_A: no ffctl id")
-sabotage("reserved pot given an id",
-         lambda i: i["reserved"].pop("ROOT_A"), "ROOT_A: no ffctl id")
+# The two below replaced "reserved pot given an id" and "reserved pot dropped
+# from the list" when the reserved list emptied (spec 2026-10-18): they prove
+# the formerly reserved pots get no free pass -- each needs its ffctl id and
+# its FireflowHW control like every other pot.
+sabotage("formerly reserved pot loses its id",
+         lambda i: i["params"].discard("ROOT_A"), "ROOT_A: no ffctl id")
 sabotage("alternate with no ffctl id",
          lambda i: i["params"].discard("STAGES_A"),
          "ATTACK_A: alternate STAGES_A has no ffctl id")
@@ -130,8 +141,9 @@ sabotage("a second id on a pot the firmware has no rule for",
          second_id("RATE_A", "SHAPE_A"), "RATE_A: shares its position with SHAPE_A")
 sabotage("the other deck's STAGES as an alternate",
          second_id("ATTACK_A", "STAGES_B"), "ATTACK_A: shares its position with STAGES_B")
-sabotage("reserved pot dropped from the list",
-         lambda i: i["reserved"].pop("ROOT_B"), "ROOT_B: no ffctl id")
+sabotage("WOBL missing from the VCV HW panel",
+         lambda i: i["hw_ids"].discard("REV_MOD"),
+         "not in generated_hw_panel.hpp: REV_MOD")
 sabotage("reserved name that is no pot",
          lambda i: i["reserved"].__setitem__("NOPE", "x"), "not a pot: NOPE")
 sabotage("pot missing from the VCV HW panel",

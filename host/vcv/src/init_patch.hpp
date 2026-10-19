@@ -78,6 +78,9 @@ static constexpr float kInitParamDefaults[] = {
     0.0f, // PULL
     0.0f, // PAN_A
     0.0f, // PAN_B
+    0.0f, // ROOT_A
+    0.0f, // ROOT_B
+    0.15f, // REV_MOD
     0.0f, // MODBTN
     1.0f, // MODD_SOURCE_A
     1.0f, // MODD_SOURCE_B

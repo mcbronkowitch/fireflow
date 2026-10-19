@@ -214,7 +214,9 @@ HW_SIZE = {
     "TEMPO": "S", "COUPLE": "S", "SHUFFLE": "S",
     "SCALE": "S", "DRIFT": "S",
     "REV_DECAY": "G", "REV_SIZE": "S", "REV_TONE": "S", "REV_DIFF": "S",
-    "ROOT": "S", "REV_MOD": "S",                    # reserved pots, spec 2026-10-07 §4
+    # ROOT and REV_MOD (WOBL) were the raster's reserved pots (spec 2026-10-07
+    # §4); parameters since spec 2026-10-18 root-and-wobl-knobs, same pots.
+    "ROOT": "S", "REV_MOD": "S",
 }
 
 CLASS_R = {"G": 8.5, "S": 6.0, "P": 4.0, "J": 4.0, "L": 1.5}
@@ -247,6 +249,9 @@ HW_CAPTION = {
     "IN_L": "IN L", "IN_R": "IN R", "OUT_L": "OUT L", "OUT_R": "OUT R",
     "SHIFTBTN": "SHFT",
     "MODBTN": "MOD",
+    # Printed on the frozen Rev A plate since the raster reserved them (spec
+    # 2026-10-07 §4); pinned here so a big-panel relabel cannot move them.
+    "ROOT": "ROOT", "REV_MOD": "WOBL",
 }
 
 
@@ -327,7 +332,8 @@ COLUMN_X = tuple(sorted([deck_col_x(c) for c in range(1, 7)]
 
 
 # Deck A (deck B mirrored): stem -> (row, column). ATTACK and STAGES share a
-# knob. ROOT is reserved (§4).
+# knob. ROOT, reserved by the raster (§4), is a parameter since spec
+# 2026-10-18 root-and-wobl-knobs; its cell is the plate's, unchanged.
 DECK_CELLS = {
     "ENGINE": (1, 1), "STEPS": (1, 2), "SONG": (1, 3), "RATE": (1, 4),
     "MELODY": (1, 5), "REC": (1, 6),
@@ -365,10 +371,12 @@ CENTRE_GROUPS = {
     "TIMING": ("TIDE", "MORPH", "PACE", "TEMPO", "SHUFFLE", "COUPLE", "DRIFT"),
     "ROOM": ("REV_SIZE", "REV_DECAY", "REV_DIFF", "REV_TONE", "REV_MOD"),
 }
-# Reserved pots (spec §4): a hole, a caption and a pot on plate and board, a
-# mux channel, a firmware row that sends nothing -- no ParamId, no Rack widget.
-RESERVED = {"ROOT": ("ROOT", "reserved: per-deck scale root (spec 2026-10-07 §4)"),
-            "REV_MOD": ("WOBL", "reserved: reverb tail wobble (spec 2026-10-07 §4)")}
+# No reserved pots any more. ROOT (per deck) and REV_MOD stood here as
+# RESERVED until 2026-10-19 -- a hole, a caption and a pot on plate and board,
+# a mux channel, no ParamId, no Rack widget (spec 2026-10-07 §4). Spec
+# 2026-10-18 root-and-wobl-knobs made them parameters; they now go through
+# place() like every knob, from the same cells, so the frozen Rev A plate
+# and board keep a pot exactly where each one already was.
 
 
 def _deck_xy(stem):
@@ -381,8 +389,8 @@ def _centre_xy(name):
     return centre_col_x(k), ROW_Y[row - 1]
 
 
-DECK_POS = {s: _deck_xy(s) for s in DECK_CELLS if s not in RESERVED}
-CENTER_POS = {n: _centre_xy(n) for n in CENTRE_CELLS if n not in RESERVED}
+DECK_POS = {s: _deck_xy(s) for s in DECK_CELLS}
+CENTER_POS = {n: _centre_xy(n) for n in CENTRE_CELLS}
 # MODBTN is a real latch param (spec 2026-08-22 mod-latch-layer §5), placed
 # through place() like every sound knob, on the jack row.
 SHIFT_X = 14.00     # the SHFT key's x; MODBTN mirrors it about the centre line
@@ -519,9 +527,6 @@ class HwOnly:
 
 HW_ONLY = [
     HwOnly("SHIFTBTN", "P", SHIFT_X, JACK_Y, "SHFT", "reserved, no function"),
-    HwOnly("ROOT_A", "S", *_deck_xy("ROOT"), *RESERVED["ROOT"]),
-    HwOnly("ROOT_B", "S", W - _deck_xy("ROOT")[0], _deck_xy("ROOT")[1], *RESERVED["ROOT"]),
-    HwOnly("REV_MOD", "S", *_centre_xy("REV_MOD"), *RESERVED["REV_MOD"]),
 ]
 
 ALL_HW = HW_PARAMS + HW_INPUTS + HW_OUTPUTS + HW_LIGHTS + HW_ONLY

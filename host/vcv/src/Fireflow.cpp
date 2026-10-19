@@ -498,6 +498,15 @@ struct Fireflow : Module {
                         configParam<FluxRateQuantity>(
                             c.id, rangeOf(c.id).lo, rangeOf(c.id).hi,
                             init, lbl);
+                    // ROOT per deck (spec 2026-10-18 root-and-wobl-knobs):
+                    // 12 detents, C at the left stop, B at the right. The
+                    // tooltip names the note -- sharps, English names, the
+                    // way SCALE's tooltip uses English scale names -- not
+                    // the generic "Steps" an unknown KNOBI would get below.
+                    else if (c.id == ROOT_A || c.id == ROOT_B)
+                        configSwitch(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, "Root",
+                                     {"C", "C#", "D", "D#", "E", "F",
+                                      "F#", "G", "G#", "A", "A#", "B"});
                     else  // STEPS_A / STEPS_B
                         configParam(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, "Steps");
                     getParamQuantity(c.id)->snapEnabled = true;
@@ -617,6 +626,18 @@ struct Fireflow : Module {
         }
         fxmem.sampler_frames = frames;
 
+        // The song offset (spec 2026-10-18 root-and-wobl-knobs §2.1) latches
+        // inside init() from the root the quantizer still holds -- init()
+        // does not reset it. So the CURRENT params' root goes in first,
+        // rounded exactly as the control law rounds it. On Initialize Rack
+        // has already reset ROOT_A/B to C, so init() latches 0; without this
+        // push it latched the pre-Initialize root, and since the next tick's
+        // set_root() only moves the grid, the factory patch played
+        // transposed until its next rebuild (final review, finding 1). An SR
+        // change or a patch open latches the patch's own root the same way.
+        // Guarded by test_panel.py's test_reinit_pushes_the_root_before_init.
+        inst.set_root(spky::PART_A, (int)std::round(params[ROOT_A].getValue()));
+        inst.set_root(spky::PART_B, (int)std::round(params[ROOT_B].getValue()));
         inst.init(sr, fxmem);
         // init() put every value the law ever sent back to its default; the
         // law's sent-value cache must forget them, or the next tick would

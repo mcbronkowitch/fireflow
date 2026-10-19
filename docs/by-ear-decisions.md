@@ -58,14 +58,19 @@ a ceiling.**
   melts slap-echoes into a wet wash) and MOD (`set_mod_depth`, LFO depth on
   the tail delays — the audible pitch-wobble). Coupling all mod to DIFFUSION
   had meant taming the wobble also killed the wash. Since the 2026-08-09
-  control reduction only **DIFF has a knob**; SMEAR and MOD are host-pushed
-  constants (`set_reverb_smear(0.30f)`, `set_reverb_mod(0.15f)` in
-  `Fireflow.cpp` and `bench/audition/init_patch.cpp`). **Confirmed by ear
-  2026-08-09** ("smear ist ok") even though 0.30 nearly halves the old
-  snapshot's 0.484 — the numbers came from Bastian's stated practice, not
-  from the patch. Do not restore 0.484/0.237, do not propose giving SMEAR or
-  WOBL a knob back, and do not treat the constants as provisional. The split
-  stays fully driveable from render scenarios (`reverb_wash.json`).
+  control reduction only **DIFF has a knob**; SMEAR is a host-pushed
+  constant (`set_reverb_smear(0.30f)` in the control law and
+  `bench/audition/init_patch.cpp`), and so was MOD (`0.15f`) until
+  2026-10-19. **Confirmed by ear 2026-08-09** ("smear ist ok") even though
+  0.30 nearly halves the old snapshot's 0.484 — the numbers came from
+  Bastian's stated practice, not from the patch. Do not restore 0.484/0.237,
+  do not propose giving SMEAR a knob back, and do not treat the SMEAR
+  constant as provisional. **WOBL is the exception, reversed by Bastian on
+  2026-10-07:** MOD has a knob again (`REV_MOD`, caption WOBL, spec
+  2026-10-18 root-and-wobl-knobs) that boots at **0.15**, the old constant,
+  so the factory patch does not move. 0.15 stays the by-ear value ("wobbel
+  fest auf .1 - .2"); the knob only lets him leave it. The split stays fully
+  driveable from render scenarios (`reverb_wash.json`).
 
 ## Modulation & sequencing
 

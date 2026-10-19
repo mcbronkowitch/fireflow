@@ -730,6 +730,36 @@
    "d_mm": 7.0
   },
   {
+   "id": "ROOT_A",
+   "ids": [
+    "ROOT_A"
+   ],
+   "kind": "pot",
+   "x_mm": 11.0,
+   "y_mm": 95.0,
+   "d_mm": 7.0
+  },
+  {
+   "id": "ROOT_B",
+   "ids": [
+    "ROOT_B"
+   ],
+   "kind": "pot",
+   "x_mm": 293.8,
+   "y_mm": 95.0,
+   "d_mm": 7.0
+  },
+  {
+   "id": "REV_MOD",
+   "ids": [
+    "REV_MOD"
+   ],
+   "kind": "pot",
+   "x_mm": 175.4,
+   "y_mm": 95.0,
+   "d_mm": 7.0
+  },
+  {
    "id": "MODBTN",
    "ids": [
     "MODBTN"
@@ -1078,36 +1108,6 @@
    "x_mm": 14.0,
    "y_mm": 112.75,
    "d_mm": 6.2
-  },
-  {
-   "id": "ROOT_A",
-   "ids": [
-    "ROOT_A"
-   ],
-   "kind": "pot",
-   "x_mm": 11.0,
-   "y_mm": 95.0,
-   "d_mm": 7.0
-  },
-  {
-   "id": "ROOT_B",
-   "ids": [
-    "ROOT_B"
-   ],
-   "kind": "pot",
-   "x_mm": 293.8,
-   "y_mm": 95.0,
-   "d_mm": 7.0
-  },
-  {
-   "id": "REV_MOD",
-   "ids": [
-    "REV_MOD"
-   ],
-   "kind": "pot",
-   "x_mm": 175.4,
-   "y_mm": 95.0,
-   "d_mm": 7.0
   },
   {
    "id": "SD",

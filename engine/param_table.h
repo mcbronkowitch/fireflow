@@ -17,7 +17,7 @@ struct Span { float lo, hi; };
 // engine's own parameter table and the only enumeration of the whole surface
 // in one place. Ranges are ENGINE units (the surface is not uniformly
 // 0..1 -- FILT/VARIATION/CHOKE are bipolar,
-// ENGINE/SCALE/ROOT/FORM/SONG/STEPS are discrete). steps==0 -> continuous.
+// ENGINE/SCALE/ROOT (per deck: ROOT_A/ROOT_B)/FORM/SONG/STEPS are discrete). steps==0 -> continuous.
 // The RES ceiling 0.75 encodes the by-ear resonance cap as a hard limit.
 //
 // Verified against the real headers (not the brief's placeholder guesses).
@@ -71,7 +71,7 @@ struct Span { float lo, hi; };
 //   five of them by the same ~49 lines.
 #define SPKY_PARAMS(X) \
   X(P_ENGINE_A,   0.f, 6.f,  7)  X(P_ENGINE_B,   0.f, 6.f,  7) \
-  X(P_SCALE,      0.f, 12.f, 13) X(P_ROOT,       0.f, 11.f, 12) \
+  X(P_SCALE,      0.f, 12.f, 13) X(P_ROOT_A,     0.f, 11.f, 12) \
   X(P_FORM_A,     0.f, 4.f,  5)  X(P_FORM_B,     0.f, 4.f,  5) \
   X(P_SONG_A,     0.f, 6.f,  7)  X(P_SONG_B,     0.f, 6.f,  7) \
   X(P_STEPS_A,    2.f, 16.f, 15) X(P_STEPS_B,    2.f, 16.f, 15) \
@@ -123,7 +123,15 @@ struct Span { float lo, hi; };
      positional, so an append zero-fills the new tail slot and an insertion
      silently pairs every later row with the wrong parameter. On a -1..+1 axis
      that zero-fill lands exactly on centre, i.e. on the neutral value. */ \
-  X(P_PAN_A,     -1.f, 1.f, 0)   X(P_PAN_B,     -1.f, 1.f, 0)
+  X(P_PAN_A,     -1.f, 1.f, 0)   X(P_PAN_B,     -1.f, 1.f, 0) \
+  /* ROOT per deck (spec 2026-10-18 root-and-wobl-knobs). P_ROOT used to write
+     both decks' quantizer root; it is now P_ROOT_A (the old id, same slot, so
+     P_SCALE's neighbour does not move) and this appended P_ROOT_B. Appended
+     LAST for the same reason P_PULL and P_PAN were: the frozen vectors in
+     tests/param_impact_points.h are positional. Unlike PAN the zero-fill is
+     NOT neutral here -- those vectors carry a non-zero root -- so they spell
+     the B slot out with the value the old global root had. */ \
+  X(P_ROOT_B,     0.f, 11.f, 12)
 
 enum ParamId {
 #define SPKY_ENUM(id, lo, hi, st) id,
@@ -159,7 +167,8 @@ inline void apply_param(Instrument& in, int param, float v) {
     case P_ENGINE_A:   in.set_engine(PART_A, EngineId(i)); break;
     case P_ENGINE_B:   in.set_engine(PART_B, EngineId(i)); break;
     case P_SCALE:      in.set_scale(i); break;
-    case P_ROOT:       in.set_root(PART_A, i); in.set_root(PART_B, i); break;
+    case P_ROOT_A:     in.set_root(PART_A, i); break;
+    case P_ROOT_B:     in.set_root(PART_B, i); break;
     case P_FORM_A:     in.set_form(PART_A, i); break;
     case P_FORM_B:     in.set_form(PART_B, i); break;
     case P_SONG_A:     in.set_song(PART_A, i); break;
