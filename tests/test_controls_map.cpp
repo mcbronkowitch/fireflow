@@ -101,12 +101,24 @@ TEST_CASE("controls: no two Rev A rows share an input, and none is a calibration
                               shell::kRevaCalRail.ch) == nullptr);
 }
 
-TEST_CASE("controls: only the three reserved Rev A pots send nothing") {
-    int none = 0;
-    for (int i = 0; i < shell::kRevaTable.count; ++i)
-        none += shell::kRevaTable.entries[i].param < 0;
+TEST_CASE("controls: every Rev A pot sends a parameter, ROOT and WOBL included") {
+    // Until 2026-10-19 three rows sent nothing: ROOT_A, ROOT_B and REV_MOD,
+    // the pots the 9 mm raster reserved (spec 2026-10-07 section 4). Spec
+    // 2026-10-18 root-and-wobl-knobs gave them ffctl ids, so no row is -1 now
+    // and each of the three is the target of exactly one row.
+    int none = 0, root_a = 0, root_b = 0, wobl = 0;
+    for (int i = 0; i < shell::kRevaTable.count; ++i) {
+        const int p = shell::kRevaTable.entries[i].param;
+        none += p < 0;
+        root_a += p == ffctl::ROOT_A;
+        root_b += p == ffctl::ROOT_B;
+        wobl += p == ffctl::REV_MOD;
+    }
     CHECK(shell::kRevaTable.count == 73);
-    CHECK(none == 3);
+    CHECK(none == 0);
+    CHECK(root_a == 1);
+    CHECK(root_b == 1);
+    CHECK(wobl == 1);
 }
 
 TEST_CASE("controls: the first tick after on_restore with init knobs fires nothing") {

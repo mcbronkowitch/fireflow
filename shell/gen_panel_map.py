@@ -13,9 +13,10 @@ Inputs, all read, none written:
   control/params.hpp                   the shared control law's ParamId names
   host/vcv/src/generated_hw_panel.hpp  the FireflowHW controls
 
-RESERVED below is the only hand-written part. Every other pot sends the
-control-law parameter of its own name; a pot P3 adds or renames with no such
-parameter stops the generator until it gets one or goes into RESERVED.
+RESERVED below is the only hand-written part, and it is empty today. Every
+pot not in it sends the control-law parameter of its own name; a pot P3 adds
+or renames with no such parameter stops the generator until it gets one or
+goes into RESERVED.
 
     python shell/gen_panel_map.py           write the header
     python shell/gen_panel_map.py --check   exit 1 if the committed header is stale
@@ -45,8 +46,6 @@ CAL_IDS = ("CAL_GND", "CAL_3V3")
 # the firmware runs the same control law as VCV (spec 2026-10-09-rev-a-p6b1
 # section 4.2), so every pot with a FireflowHW counterpart sends its own id.
 #
-# Spec 2026-10-07 section 4: pots on the board with no parameter yet. They are
-# read like every pot and send nothing until the follow-up spec gives them one.
 # One pot, two FireflowHW controls at its position: Fireflow.cpp's ctlVisible()
 # shows STAGES ("BBD Bend") where the deck's ENGINE is the BBD and ATTACK on
 # every other engine. That is the only such rule the firmware knows
@@ -54,11 +53,13 @@ CAL_IDS = ("CAL_GND", "CAL_3V3")
 # from here, and only for its own deck.
 ALT_ON_BBD = {"ATTACK_A": "STAGES_A", "ATTACK_B": "STAGES_B"}
 
-RESERVED = {
-    "ROOT_A": "per-deck scale root, follow-up to spec 2026-10-07 section 4",
-    "ROOT_B": "per-deck scale root, follow-up to spec 2026-10-07 section 4",
-    "REV_MOD": "reverb tail wobble (WOBL), follow-up to spec 2026-10-07 section 4",
-}
+# Pots on the board with no parameter yet (spec 2026-10-07 section 4), name ->
+# reason. They are read like every pot and send nothing (target -1) until a
+# spec gives them one; the name must be a pot. The raster's three -- ROOT_A,
+# ROOT_B and REV_MOD (WOBL) -- became ffctl parameters with spec 2026-10-18
+# root-and-wobl-knobs, so the list is empty; the mechanism stays for the next
+# pot that arrives before its parameter does.
+RESERVED = {}
 
 
 # hardware/reva/blocks.py KEYS -> shell::KeyFn (shell/keys.h)

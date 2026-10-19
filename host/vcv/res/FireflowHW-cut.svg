@@ -71,6 +71,9 @@
 <circle cx="175.400" cy="14.500" r="3.500" fill="none" stroke="#0000ff" stroke-width="0.01"/>
 <circle cx="112.000" cy="74.875" r="3.500" fill="none" stroke="#0000ff" stroke-width="0.01"/>
 <circle cx="192.800" cy="74.875" r="3.500" fill="none" stroke="#0000ff" stroke-width="0.01"/>
+<circle cx="11.000" cy="95.000" r="3.500" fill="none" stroke="#0000ff" stroke-width="0.01"/>
+<circle cx="293.800" cy="95.000" r="3.500" fill="none" stroke="#0000ff" stroke-width="0.01"/>
+<circle cx="175.400" cy="95.000" r="3.500" fill="none" stroke="#0000ff" stroke-width="0.01"/>
 <circle cx="290.800" cy="112.750" r="3.100" fill="none" stroke="#0000ff" stroke-width="0.01"/>
 <circle cx="33.000" cy="112.750" r="3.000" fill="none" stroke="#0000ff" stroke-width="0.01"/>
 <circle cx="44.500" cy="112.750" r="3.000" fill="none" stroke="#0000ff" stroke-width="0.01"/>
@@ -106,9 +109,6 @@
 <circle cx="281.300" cy="112.750" r="1.550" fill="none" stroke="#0000ff" stroke-width="0.01"/>
 <circle cx="23.500" cy="112.750" r="1.550" fill="none" stroke="#0000ff" stroke-width="0.01"/>
 <circle cx="14.000" cy="112.750" r="3.100" fill="none" stroke="#0000ff" stroke-width="0.01"/>
-<circle cx="11.000" cy="95.000" r="3.500" fill="none" stroke="#0000ff" stroke-width="0.01"/>
-<circle cx="293.800" cy="95.000" r="3.500" fill="none" stroke="#0000ff" stroke-width="0.01"/>
-<circle cx="175.400" cy="95.000" r="3.500" fill="none" stroke="#0000ff" stroke-width="0.01"/>
 <rect x="146.900" y="109.750" width="11.000" height="6.000" rx="0.000" fill="none" stroke="#0000ff" stroke-width="0.01"/>
 <rect x="5.100" y="1.400" width="5.200" height="3.200" rx="1.600" fill="none" stroke="#0000ff" stroke-width="0.01"/>
 <rect x="294.660" y="1.400" width="5.200" height="3.200" rx="1.600" fill="none" stroke="#0000ff" stroke-width="0.01"/>

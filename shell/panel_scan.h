@@ -9,9 +9,11 @@
 // law lights the lamps through the LightId -> chain-bit table (spec
 // 2026-10-18-rev-a-p6b2-mod-keys-leds-design.md).
 // On the coupon, RV2/RV4/RV6 drive RATE_A/DENSITY_A/FILT_A over Rev A's step
-// model (kCouponPlayChain); on Rev A, every pot of the generated table but
-// the three reserved ones drives its FireflowHW twin's parameter (spec
-// 2026-10-09-rev-a-p6b1-shared-control-law-design.md section 4.2).
+// model (kCouponPlayChain); on Rev A, every pot of the generated table
+// drives its FireflowHW twin's parameter (spec
+// 2026-10-09-rev-a-p6b1-shared-control-law-design.md section 4.2) -- the
+// three that were reserved, ROOT_A, ROOT_B and REV_MOD, too since spec
+// 2026-10-18-root-and-wobl-knobs-design.md.
 //
 // Spec: ../docs/superpowers/specs/2026-09-28-coupon-panel-scan-design.md
 // section 5.
