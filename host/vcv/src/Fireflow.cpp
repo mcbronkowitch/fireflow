@@ -651,6 +651,11 @@ struct Fireflow : Module {
         // 2026-10-19 clock-and-reset-jacks §6).
         clockLaw.init(sr);
         lastClockOut = control::ClockOut{};
+        // A jack already high here is a level, not an edge: Rack's reset()
+        // leaves the trigger UNINITIALIZED, and a high input then only sets
+        // it HIGH, so a RESET held high does not restart on the first sample.
+        clockTrig.reset();
+        resetTrig.reset();
         // init() put every value the law ever sent back to its default; the
         // law's sent-value cache must forget them, or the next tick would
         // skip them as unchanged (control_law.h). Re-arms no edge detector.
@@ -687,9 +692,13 @@ struct Fireflow : Module {
     // A bypassed module is not called, so the clock law saw no samples while
     // CLOCK kept running: the first interval after the gap is not a period.
     // Drop the history; the clock counts as running again after two new valid
-    // edges (spec 2026-10-19 clock-and-reset-jacks §6).
+    // edges (spec 2026-10-19 clock-and-reset-jacks §6). The triggers forget
+    // their level too: a jack that went high during the bypass is a level,
+    // not an edge, on the first sample back.
     void onUnBypass(const UnBypassEvent& e) override {
         clockLaw.discontinuity();
+        clockTrig.reset();
+        resetTrig.reset();
     }
 
     // The host side of control/control_law.h: what needs Rack or a file.

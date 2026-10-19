@@ -1350,6 +1350,14 @@ def clock_law_wiring_issues(cpp):
         issues.append("reinit() does not call clockLaw.init(sr)")
     if "clockLaw.discontinuity();" not in unbypass:
         issues.append("onUnBypass() does not call clockLaw.discontinuity()")
+    # The Schmitt triggers forget their level at both discontinuities too, or
+    # a jack that went high while the module was bypassed (or before reinit)
+    # reads as an edge on the first sample: a RESET there restarts at once.
+    for trig in ("clockTrig", "resetTrig"):
+        if f"{trig}.reset();" not in reinit:
+            issues.append(f"reinit() does not call {trig}.reset()")
+        if f"{trig}.reset();" not in unbypass:
+            issues.append(f"onUnBypass() does not call {trig}.reset()")
     return issues
 
 
@@ -1377,7 +1385,12 @@ def test_clock_law_guard_rejects_representative_regressions():
             ("no un-bypass discontinuity",
              "clockLaw.discontinuity();", ""),
             ("no law reset in reinit",
-             "clockLaw.init(sr);", "")):
+             "clockLaw.init(sr);", ""),
+            ("a RESET trigger that keeps its level across reinit",
+             "resetTrig.reset();\n        // init() put", "// init() put"),
+            ("a CLOCK trigger that keeps its level across un-bypass",
+             "clockLaw.discontinuity();\n        clockTrig.reset();",
+             "clockLaw.discontinuity();")):
         check(old in cpp, f"guard self-test: {label}: anchor not found in "
                           f"Fireflow.cpp: {old!r}")
         if old not in cpp:
