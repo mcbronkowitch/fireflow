@@ -31,7 +31,7 @@ boards arrive.
 
 | # | Item | Status | Source |
 |---|---|---|---|
-| 0.1.1 | `J_SD`, Yamaichi PJS008U-3000-0, the only hand-soldered part not on hand | open; it was out of stock at LCSC on 2026-09-29 | roadmap M6 "Next: bring-up (P7)"; P4-1 spec §4.2 |
+| 0.1.1 | `J_SD`, Yamaichi PJS008U-3000-0, the only hand-soldered part not on hand | **deferred (Bastian, 2026-10-22): Rev A is brought up without the SD socket; it comes much later.** It was out of stock at LCSC on 2026-09-29. §11 waits with it | roadmap M6 "Next: bring-up (P7)"; P4-1 spec §4.2 |
 | 0.1.2 | Second set of panel parts for a second board. The master plan builds two boards because one may carry an assembly fault. The one Thonk set covers 73 of 77 pots, and none of the 23 green small caps is spare | no order on record; the master plan names it as the first optional item to drop when late. Bastian decides | master plan §Timeline, "Buffer"; `grip-test.md` |
 
 ### 0.2 Firmware and tools that P7 needs but that do not exist yet
@@ -42,9 +42,9 @@ decides which get built before the boards arrive.
 | # | Gap | What it blocks | Source |
 |---|---|---|---|
 | 0.2.1 | **No wiring-check image for Rev A.** The coupon had `SHELL_COUPON_PROBE=1`: it walks every channel and judges it against a table derived from the netlist. Every probe image (settle, xtalk, tone, wait, pot round, scan check) needs `SHELL_COUPON_PROBE=1`. Rev A runs only the play image (`SHELL_PANEL_SCAN=1`) and the default image | the per-channel verdict of §5.1. The rail-tied spare inputs (§5.6) are not printed at all | `shell/Makefile` (switch blocks); `shell/README.md` probe table |
-| 0.2.2 | **No reader for the play image.** `SHELL_PLAY`, `SHELL_PLAY_V`, `SHELL_PLAY_LAW` and `CBP_*` are parsed by nothing committed. The probe table's reader column says "—", and the coupon P6a session used an ad-hoc reader | logging and judging §5 and §10 without hand transcription | `shell/README.md` probe table; `scan-measured.md` |
+| 0.2.2 | ~~**No reader for the play image.**~~ **Closed 2026-10-22:** `shell/read_play.py` records the lines, prints live which row moved, and judges §5.1-5.3, §5.9, §6.1 and §10.1 from a capture (`--rest`, `--stops`, `--seconds`); guard `test_read_play.py`, ctest `read_play_guard`. `CBP_*` lines are still read by hand (they need the probe-marks build) | — | `shell/README.md`, "Reading it" |
 | 0.2.3 | **No firmware for the CV ins (MOD 1-4 A/B), the CV outs (PITCH A/B) or the gate outs (GATE A/B)** | "every channel" (§7.3) on those jacks | `shell/README.md`, "Known divergences" |
-| 0.2.4 | **No SD firmware** (no SDMMC code in `shell/`) | the scan-noise check while the card streams (§11.2) | `hardware/reva/review.md`, open items |
+| 0.2.4 | **No SD firmware** (no SDMMC code in `shell/`) | the scan-noise check while the card streams (§11.2). **Not a P7 gap since 2026-10-22:** the socket itself is deferred (§0.1.1), so no SD firmware is owed for bring-up | `hardware/reva/review.md`, open items |
 | 0.2.5 | **The crosstalk rig builds for coupon wiring only** | the LED-to-audio check of the two admitted pairs (§7.4) | 9 mm raster spec §5.3; `shell/Makefile` |
 
 ### 0.3 Documentation discrepancies found while compiling (not P7 work)
@@ -112,6 +112,11 @@ goes in over the module's own USB with the board out of the case.
 Output of the play image: eight `SHELL_PLAY_V r=<first row> <up to ten
 values>` lines (73 rows, values ×1000; −1000 = never emitted, i.e. no valid
 span yet) and one `SHELL_PLAY` summary line (`shell/README.md`, "Reading it").
+Record and judge with `shell/read_play.py`: `python read_play.py COMx
+capture.txt 60` while turning pots prints each moved row by name (5.2's "its
+own row"); `--file capture.txt --stops` judges 5.2, `--file capture.txt
+--rest` judges 5.3 and 5.5 (hands off, LEDs switching), `--seconds` gives
+5.9's sweep rate. Commit the capture under `captures/`.
 
 | # | Check | Pass | Source | Result |
 |---|---|---|---|---|
@@ -187,6 +192,10 @@ The CPU-headroom spec's done criteria, re-run on Rev A with the full panel
 | 10.3 | Plan B trigger: `cyc_max` above 2.9 points (~28 000 cycles) | below. Coupon: `cyc_max` 14 976, `led_max` 1 580. **If above, or clicks:** Plan B (the law across two blocks), then cpu-headroom spec §4.5 (Bastian decides) | P6b-1 spec §6; cpu-headroom spec §4.4-4.5 | |
 
 ## 11. SD card
+
+**Deferred as a whole (Bastian, 2026-10-22):** Rev A is brought up without
+`J_SD` fitted (§0.1.1), so neither row can run. The rows stay for the day the
+socket goes in; nothing in §1-§10 or §12 depends on them.
 
 | # | Check | Pass | Source | Result |
 |---|---|---|---|---|

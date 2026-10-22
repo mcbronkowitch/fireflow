@@ -570,6 +570,15 @@ add_test(NAME read_scan_check_guard
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_read_scan_check.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
 
+# The Rev A play image's reader (docs/hardware/reva-bring-up.md 0.2.2): frame
+# parsing against panel_scan.cpp's line format, row names from the generated
+# header, the stops / rest / span verdicts and their exit codes. Generated
+# fixtures; a committed capture joins after the first Rev A board session.
+add_test(NAME read_play_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_read_play.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
+
 # The Rev A panel as the firmware sees it: shell/generated_panel_map.h is
 # regenerated and compared, and every check the spec names proves its RED
 # (spec 2026-10-02-rev-a-p6a-panel-scan-design.md section 4; a few purely

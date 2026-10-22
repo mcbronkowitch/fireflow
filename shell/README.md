@@ -286,7 +286,18 @@ measured a valid one, no knob reaches the engine.
 last line carries three (row order and names are in
 the generated header's comments; values ×1000, −1000 = never emitted: no valid span yet, i.e. calibration
 never succeeded) and one
-`SHELL_PLAY` summary line with key mask and press counts. Both images then
+`SHELL_PLAY` summary line with key mask and press counts. **Rev A's lines
+are read by `shell/read_play.py`** (guard `test_read_play.py`, ctest
+`read_play_guard`): `python read_play.py PORT capture.txt [seconds]` records
+the raw lines for `docs/hardware/captures/` and prints, live, every row that
+changed since the last frame by name — turn one pot, read which row moved;
+`--file capture.txt` reports per row last/min/max and whether 0 and 1000
+were reached, the span, the key presses, the sweep rate (`--seconds S`) and
+the three cycle maxima against the 900 000 criterion. `--rest` fails on any
+row that changed (hands off: that is row 5.3's hysteresis criterion, since a
+value is printed only after a move of more than `kPotHysteresis` counts),
+`--stops` fails on any row that did not reach both stops (row 5.2). Raw counts
+are not printed, so H itself is not measurable from this image. Both images then
 print `SHELL_PLAY_LAW cyc_last=<n> cyc_max=<n> led_last=<n> led_max=<n>
 cb_last=<n> cb_max=<n>`, three DWT cycle counters, each as the last block's
 value and the worst since the first second (the first 500 blocks are left
@@ -518,7 +529,7 @@ written up under `docs/hardware/`:
 | `+ SHELL_WAIT_PROBE=1` | the wait between conversions | `read_wait.py` | `wait-measured.md` |
 | `+ SHELL_POT_ROUND=1` (on settle or wait) | the pots at mid travel, both questions | `read_pots.py` | `pots-measured.md` |
 | `+ SHELL_SCAN_CHECK=1` | the panel scan's pattern: clean at one step per block, with the engine running | `read_scan_check.py` | `scan-measured.md` |
-| `SHELL_PANEL_SCAN=1` (± `SHELL_COUPON_PROBE=1`) | the playing image: the scan drives the engine through the board's control table | `SHELL_PLAY` line | — |
+| `SHELL_PANEL_SCAN=1` (± `SHELL_COUPON_PROBE=1`) | the playing image: the scan drives the engine through the board's control table | Rev A: `read_play.py` (coupon: the `SHELL_PLAY` line by eye) | `reva-bring-up.md` §5, §6, §10 |
 | `+ C_USER_FLAGS=-DSPKY_PROBE_MARKS=1` (clean build) | the callback profile: per-deck and mix cycles per block, the worst blocks with their lane events, a histogram of the whole callback (`cb_profile.cpp`, `engine/util/probe_mark.h`) | `CBP_*` lines | `cpu-headroom-measured.md` |
 | `+ C_USER_FLAGS=-DSHELL_BOOT_PATCH=N` (clean build) | boots a stress patch instead of the init patch: 1 = W2 (both decks WAVE), 2 = F2 (both decks FEED); combinable with the probe flag | `CBP_BOOT` line | `cpu-headroom-measured.md` |
 | `SHELL_ITCM=0` | the hot set stays in SRAM: only the comparison image of the ITCM measurement | — | `cpu-headroom-measured.md` |
