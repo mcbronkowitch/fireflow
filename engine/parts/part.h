@@ -15,6 +15,7 @@
 #include "fx/part_fx.h"
 #include "util/math.h"
 #include "util/fast_tanh.h"
+#include "util/probe_mark.h"
 #include "Utility/dcblock.h"
 
 // Movement 1's cross-deck bus, behind a switch so the bench can build the
@@ -349,7 +350,7 @@ public:
     // disassembly, not the attribute.
     __attribute__((always_inline)) inline
     void process(float inL, float inR, float& outL, float& outR,
-                 float& sendL, float& sendR) {
+                 float& sendL, float& sendR SPKY_PROBE_PART_PARAMS) {
         _mod.process();
 
         // click-free engine switch: fade out (4 ms) -> swap -> fade in (4 ms).
@@ -429,6 +430,10 @@ public:
         // read cadence, not from this guard.
         if (_ctrl_ctr == 0) _audio_in_tap = 0.5f * (inL + inR);
 
+        // Callback profile only (util/probe_mark.h): the modulation and
+        // control half of this deck ends here, the engine starts.
+        SPKY_PROBE_PART_MARK(0);
+
         // Skipped unless the engine actually implements process_in. The base
         // declares it with an empty body (engine_iface.h), so on every engine
         // but the sampler and the BBD (the two that consume input) this call
@@ -459,15 +464,17 @@ public:
         _engine->process(outL, outR);
         outL *= fade;
         outR *= fade;
+        // Callback profile only: the engine ends here, the FX chain starts.
+        SPKY_PROBE_PART_MARK(1);
 
         _fx.process(outL, outR, sendL, sendR, _fxv);
     }
     void process(float& outL, float& outR, float& sendL, float& sendR) {
-        process(0.f, 0.f, outL, outR, sendL, sendR);
+        process(0.f, 0.f, outL, outR, sendL, sendR SPKY_PROBE_PART_SCRATCH);
     }
     void process(float& outL, float& outR) {
         float sl, sr;
-        process(0.f, 0.f, outL, outR, sl, sr);
+        process(0.f, 0.f, outL, outR, sl, sr SPKY_PROBE_PART_SCRATCH);
     }
 
 private:

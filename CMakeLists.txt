@@ -206,6 +206,8 @@ add_executable(spky_tests
     tests/test_param_impact.cpp
     tests/test_smooth_law.cpp
     tests/test_skip_unchanged.cpp
+    shell/boot_patch.cpp
+    tests/test_boot_patch.cpp
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)
 target_include_directories(spky_tests PRIVATE host ${CMAKE_SOURCE_DIR})
@@ -292,6 +294,43 @@ add_executable(render
 )
 target_include_directories(render PRIVATE host engine third_party)
 target_link_libraries(render PRIVATE nlohmann_json daisysp_min)
+
+# --- the callback profile's stamps, on the desktop ---
+# The one desktop target built with SPKY_PROBE_MARKS=1 (engine/util/
+# probe_mark.h): the engine compiled as the firmware's probe image compiles
+# it, so the stamp sites cannot rot between board sessions, and the stamp
+# ORDER per sample is checked against a running clock. Not the cost: that is
+# the board's (shell/cb_profile.cpp). Its own executable because the define
+# changes Part::process's signature.
+add_executable(spky_probe_tests
+    tests/test_probe_marks.cpp
+    engine/mod/lane.cpp
+    engine/mod/super_modulator.cpp
+    engine/parts/part.cpp
+    engine/parts/bbd_engine.cpp
+    engine/feed/feed_engine.cpp
+    engine/instrument.cpp
+    engine/center/center.cpp
+    engine/fx/grit.cpp
+    engine/fx/flux.cpp
+    engine/fx/bbd.cpp
+    engine/fx/reverb.cpp
+    engine/fx/part_fx.cpp
+    engine/fx/comp.cpp
+    engine/synth/wt_bank.cpp
+    engine/synth/voice.cpp
+    engine/synth/synth_engine.cpp
+    engine/sampler/sample_buffer.cpp
+    engine/sampler/sampler_engine.cpp
+    engine/sampler/slice_map.cpp
+    engine/body/mode_bank.cpp
+    engine/body/ks_string.cpp
+    engine/body/body_voice.cpp
+)
+target_include_directories(spky_probe_tests PRIVATE engine third_party)
+target_compile_definitions(spky_probe_tests PRIVATE SPKY_PROBE_MARKS=1)
+target_link_libraries(spky_probe_tests PRIVATE doctest daisysp_min)
+add_test(NAME spky_probe_tests COMMAND spky_probe_tests)
 
 add_test(
     NAME ctrl_identity
@@ -586,6 +625,22 @@ add_test(NAME read_play_guard
 add_test(NAME shell_panel_map_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_gen_panel_map.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
+
+# The all-noon boot patch of fault R4 (docs/hardware/reva-bring-up.md 10.1):
+# shell/generated_boot_patch_noon.h is regenerated from the committed capture
+# and compared, and every refusal of the generator proves its RED.
+add_test(NAME shell_boot_patch_noon_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_gen_boot_patch_noon.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
+
+# The callback profile's window reader (CBP_WIN / CBP_WIN2 lines of a play
+# capture, shell/cb_profile.cpp): a hand-written fixture plus the committed
+# R4 capture.
+add_test(NAME read_cbp_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_read_cbp.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
 
 # The firmware's CLOCK and RESET wiring (spec 2026-10-19-clock-and-reset-jacks
