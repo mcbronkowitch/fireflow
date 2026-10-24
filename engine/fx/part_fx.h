@@ -52,7 +52,17 @@ public:
     void set_link(float n)   { _flux.set_link(n); }
     void set_rhythm(const RhythmView& rv) { _flux.set_rhythm(rv); }
 
-    // fxv[FXT_COUNT]: already-modulated values from Part::fx_target_value().
+    // fxv[FXT_COUNT]: already-modulated values from Part::fx_target_value(),
+    // pushed once per raster tick (Part::_control_tick). process() smooths
+    // towards them; between two pushes, once every smoother has snapped onto
+    // its target, it skips the five smoothers (fault R4) -- bit-identical,
+    // since OnePole::process would have returned the same values.
+    void set_targets(const float* fxv) {
+        for (int i = 0; i < FXT_COUNT; ++i) _target[i] = fxv[i];
+        _targets_moved = true;
+    }
+    float smoothed_for_test(int i) const { return _v[i]; }
+
     // The trailing parameters exist only in the callback profile's build
     // (util/probe_mark.h): Part::process forwards its stamp clock and slots.
     // They would change the mangled name, and shell/itcm_hot.ld places this
@@ -60,10 +70,10 @@ public:
     // listed name that is not in the image), so the probe build keeps the
     // plain build's name through an asm label. GNU toolchains only: the
     // desktop probe test target links no ITCM and keeps its own mangling.
-    void process(float& l, float& r, float& send_l, float& send_r,
-                 const float* fxv SPKY_PROBE_PART_PARAMS)
+    void process(float& l, float& r, float& send_l, float& send_r
+                 SPKY_PROBE_PART_PARAMS)
 #if defined(SPKY_PROBE_MARKS) && defined(__GNUC__) && !defined(_MSC_VER)
-        __asm__("_ZN4spky6PartFx7processERfS1_S1_S1_PKf")
+        __asm__("_ZN4spky6PartFx7processERfS1_S1_S1_")
 #endif
         ;
 
@@ -91,6 +101,19 @@ private:
     Flux _flux;
     Comp _comp;
     OnePole _smooth[FXT_COUNT];
+    // The targets set_targets() last pushed (Part's control tick), and the
+    // smoothers' outputs. The 2 ms smoothing is what keeps the raster's
+    // 96-sample steps from ever reaching an FX parameter raw. Boot values
+    // mirror Part's _fx_base so the first block cannot push zeros: the first
+    // process() snaps to whatever _target holds then, and init() leaves both
+    // alone (the targets belong to Part, not to the FX chain's state).
+    // Slot 1 (FXT_FLUX_TIME) is 0.5 because tape delay reads it as a geometric
+    // time multiplier with 0.5 == x1; a 0.4 there would put every deck 1.3x
+    // off its own synced grid.
+    float _target[FXT_COUNT] = { 0.3f, 0.5f, 1.f, 0.25f, 0.45f };
+    float _v[FXT_COUNT]      = { 0.3f, 0.5f, 1.f, 0.25f, 0.45f };
+    bool _targets_moved = true;   // set_targets() since the last smoother run
+    bool _gliding = false;        // a smoother had not reached its target yet
     float _grit_applied = -1.f;   // change guard: Overdrive::SetDrive costs
     bool _primed = false;         // first process() snaps the smoothers
 

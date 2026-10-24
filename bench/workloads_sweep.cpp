@@ -91,9 +91,10 @@ void setup_flux_rate(int rate_index)
     // empty machine, consistently across both runs, so the checksum gate
     // cannot catch it. See kSweepFluxSettleSamples above for the derivation.
     const float* in = test_input();
+    group.fx.set_targets(group.values);
     for (int i = 0; i < kSweepFluxSettleSamples; ++i) {
         float l = in[i % kBlock], r = l * 0.9f, sl = 0.f, sr = 0.f;
-        group.fx.process(l, r, sl, sr, group.values);
+        group.fx.process(l, r, sl, sr);
     }
     group.delay_target_s = group.fx.flux().delay_target_for_test();
     assert(group.delay_target_s > 0.f);
@@ -110,9 +111,10 @@ float proc_sweep_fx()
     auto& group = g_sweep_arena.get<SweepFxGroup>();
     const float* in = test_input();
     float acc = 0.f;
+    group.fx.set_targets(group.values);   // once per block, as Part's raster tick
     for (size_t i = 0; i < kBlock; ++i) {
         float l = in[i], r = in[i] * 0.9f, sl = 0.f, sr = 0.f;
-        group.fx.process(l, r, sl, sr, group.values);
+        group.fx.process(l, r, sl, sr);
         acc += l + r + sl + sr;
     }
     // Fold the achieved tape target once per block so a row stuck on the

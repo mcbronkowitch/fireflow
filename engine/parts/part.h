@@ -467,7 +467,7 @@ public:
         // Callback profile only: the engine ends here, the FX chain starts.
         SPKY_PROBE_PART_MARK(1);
 
-        _fx.process(outL, outR, sendL, sendR, _fxv SPKY_PROBE_PART_FWD);
+        _fx.process(outL, outR, sendL, sendR SPKY_PROBE_PART_FWD);
     }
     void process(float& outL, float& outR, float& sendL, float& sendR) {
         process(0.f, 0.f, outL, outR, sendL, sendR SPKY_PROBE_PART_SCRATCH);
@@ -488,7 +488,7 @@ private:
     // The converse does not hold: this is NOT every member process() touches
     // per sample. Four are still declared further down -- _mod (_mod.process(),
     // lane_fired(), pitch_sustain() via gate()), _engine (the process_in/
-    // process pair), and _fx together with _fxv (_fx.process). What moving any
+    // process pair), and _fx (_fx.process). What moving any
     // of those would be worth is not claimed here; the bench settles that.
     //
     // The object is ~24 KB, so a member
@@ -695,15 +695,6 @@ private:
     // values mirror SynthEngine::_targets so a push before the first tick
     // cannot hand the engine garbage.
     float _tg[LANE_COUNT] = { 0.f, 0.5f, 0.5f, 0.f, 0.8f };
-
-    // FX target cache, filled at the control tick. PartFx smooths each value
-    // over 2 ms, so the raster's steps never reach an FX parameter raw.
-    // Boot values mirror _fx_base so the first block cannot push zeros.
-    // Slot 1 (FXT_FLUX_TIME) is 0.5 because tape delay reads it as a geometric
-    // time multiplier with 0.5 == x1. The 0.4 it carried while the
-    // target was retired and unread would put every deck 1.3x off its own
-    // synced grid.
-    float _fxv[FXT_COUNT] = { 0.3f, 0.5f, 1.f, 0.25f, 0.45f };
 
     PartFx         _fx;
 

@@ -481,9 +481,12 @@ void Part::_control_tick() {
     // process runs _targets[LANE_LEVEL] through a ~10 ms smoother, and
     // PartFx::process runs each of the five FX values through a 2 ms
     // smoother. Do not "optimize away" that smoothing -- it is what makes
-    // this raster hold inaudible.
+    // this raster hold inaudible. (PartFx does skip its smoothers between
+    // two pushes once all five have settled; that skip changes no value.)
     _engine->set_targets(_tg, _tune);
-    for (int i = 0; i < FXT_COUNT; ++i) _fxv[i] = fx_target_value(i);
+    float fxv[FXT_COUNT];
+    for (int i = 0; i < FXT_COUNT; ++i) fxv[i] = fx_target_value(i);
+    _fx.set_targets(fxv);
 
     // Excitation bus (spec §6, Tasks 9 + 10). Three enabled-by-flag sources,
     // each one control block late for its own reason:

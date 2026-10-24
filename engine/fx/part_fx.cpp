@@ -21,14 +21,27 @@ void PartFx::set_fx_on(FxBlock b, bool on, bool immediate) {
     else                    _grit.set_on(on, immediate);
 }
 
-void PartFx::process(float& l, float& r, float& send_l, float& send_r,
-                     const float* fxv SPKY_PROBE_PART_PARAMS) {
+void PartFx::process(float& l, float& r, float& send_l, float& send_r
+                     SPKY_PROBE_PART_PARAMS) {
     if (!_primed) {   // snap to the first real values: no phantom boot slew
-        for (int i = 0; i < FXT_COUNT; ++i) _smooth[i].reset(fxv[i]);
+        for (int i = 0; i < FXT_COUNT; ++i) _smooth[i].reset(_target[i]);
         _primed = true;
+        _targets_moved = true;
     }
-    float v[FXT_COUNT];
-    for (int i = 0; i < FXT_COUNT; ++i) v[i] = _smooth[i].process(fxv[i]);
+    // Idle skip (fault R4). A smoother that has snapped onto its target and
+    // sees the same target again returns its value unchanged -- OnePole's own
+    // fast path -- so the five calls are only made when that can differ:
+    // a fresh push, or a glide still under way.
+    if (_targets_moved || _gliding) {
+        bool gliding = false;
+        for (int i = 0; i < FXT_COUNT; ++i) {
+            _v[i] = _smooth[i].process(_target[i]);
+            gliding |= _smooth[i].smoothing();
+        }
+        _gliding = gliding;
+        _targets_moved = false;
+    }
+    const float* v = _v;
     // Callback profile only (util/probe_mark.h): the smoothers end here.
     SPKY_PROBE_PART_MARK(2);
 

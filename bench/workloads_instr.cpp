@@ -1031,10 +1031,11 @@ void setup_fx_flux_hot()
     g.values[FXT_FLUX_FB] = 0.9f;
 
     const float* in = test_input();
+    g.fx.set_targets(g.values);
     for (int b = 0; b < kInstrSettleBlocks; ++b)
         for (size_t i = 0; i < kBlock; ++i) {
             float l = in[i], r = in[i] * 0.9f, sl = 0.f, sr = 0.f;
-            g.fx.process(l, r, sl, sr, g.values);
+            g.fx.process(l, r, sl, sr);
         }
 
     g.delay_target_s = g.fx.flux().delay_target_for_test();
@@ -1045,9 +1046,10 @@ float proc_fx_flux_hot()
     auto& g = g_instr_arena.get<FxFluxHotGroup>();
     const float* in = test_input();
     float acc = 0.f;
+    g.fx.set_targets(g.values);   // once per block, as Part's raster tick
     for (size_t i = 0; i < kBlock; ++i) {
         float l = in[i], r = in[i] * 0.9f, sl = 0.f, sr = 0.f;
-        g.fx.process(l, r, sl, sr, g.values);
+        g.fx.process(l, r, sl, sr);
         acc += l + r + sl + sr;
     }
     acc += g.delay_target_s;
