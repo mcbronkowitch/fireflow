@@ -100,12 +100,12 @@ goes in over the module's own USB with the board out of the case.
 | # | Check | Pass | Source | Result |
 |---|---|---|---|---|
 | 4.1 | A USB-C plug fits the module's socket on the board (35 mm around the module is an assumption) | fits | P4-1 spec §8 | |
-| 4.2 | Build the Rev A play image: `make -C shell -j8 images SHELL_PANEL_SCAN=1` (Daisy toolchain on PATH, never `source env.sh`). `cmp` against any other switch position before flashing (stale-object trap) | builds; images differ | `shell/README.md`; `docs/gotchas.md` | |
-| 4.3 | Flash **both** images, QSPI first: `dfu-util -a 0 -s 0x90100000 -D build/shell-qspi.bin`, then `dfu-util -a 0 -s 0x90040000:leave -D build/shell-sram.bin`. DFU mode: RESET, then BOOT within two seconds | boots | `shell/README.md`, "Flashen" | |
+| 4.2 | Build the Rev A play image: `make -C shell -j8 images SHELL_PANEL_SCAN=1` (Daisy toolchain on PATH, never `source env.sh`). `cmp` against any other switch position before flashing (stale-object trap) | builds; images differ | `shell/README.md`; `docs/gotchas.md` | 2026-10-24, built from 5693d0eb: builds; SRAM_EXEC 205 908 B. No second switch position was built; the switch's arrival was shown instead by `gate_latch.o` in the link line and three `gate_latch` symbols in `build/shell.nm` (linked only under `SHELL_PANEL_SCAN=1` without the coupon). md5 sram `dcf37af3…`, qspi `3faf8fed…` |
+| 4.3 | Flash **both** images, QSPI first: `dfu-util -a 0 -s 0x90100000 -D build/shell-qspi.bin`, then `dfu-util -a 0 -s 0x90040000:leave -D build/shell-sram.bin`. DFU mode: RESET, then BOOT within two seconds | boots | `shell/README.md`, "Flashen" | 2026-10-24: both images flashed in that order into submodule `3859386B3330` (dfu-util 0.10, "File downloaded successfully" twice); the board left DFU and booted |
 | 4.4 | Failure signs of a mismatched image pair: LED blinking at 5 Hz forever (ITCM link stamp), or a dark board with no serial port (QSPI-cold). Cure: flash the matching pair again | — | `shell/README.md` | |
 | 4.5 | **The 12 V supply is on before any sound is judged.** On the coupon, USB alone powers the board but the output distorts on every image. On Rev A, 3V3D (chains, keys, lamps) comes from U_REG on +12 V, so on USB alone those are expected unpowered (inference from P2 §1, not measured) | — | `p6b2-led-and-touch-measured.md`; P2 spec §1 | |
-| 4.6 | The serial port appears and the play image prints its lines. Anything printed before the forever loop never reaches the host | lines arrive | `docs/gotchas.md` | |
-| 4.7 | `SRAM_EXEC` of the flashed image | ≥ 8 192 B free (floor); 56 972 B free at the last build | P6b-1 spec §5; roadmap CLOCK/RESET entry | |
+| 4.6 | The serial port appears and the play image prints its lines. Anything printed before the forever loop never reaches the host | lines arrive | `docs/gotchas.md` | 2026-10-24: COM4 appeared within 4 s of `:leave`; 26 complete frames in a 20 s capture (`captures/reva-play-2026-10-24-rest-left-stop.txt`) |
+| 4.7 | `SRAM_EXEC` of the flashed image | ≥ 8 192 B free (floor); 56 972 B free at the last build | P6b-1 spec §5; roadmap CLOCK/RESET entry | 2026-10-24: 205 908 of 262 880 B used, 56 972 B free (linker memory table of the flashed build) |
 
 ## 5. Panel scan: pots, muxes, calibration
 
@@ -120,22 +120,22 @@ own row"); `--file capture.txt --stops` judges 5.2, `--file capture.txt
 
 | # | Check | Pass | Source | Result |
 |---|---|---|---|---|
-| 5.1 | Calibration span from CAL_GND / CAL_3V3 | valid once the rail reads ≥ 58 982 and the zero ≤ 1 311; until then no row leaves −1000 and no knob reaches the engine. The coupon's rail read 63 482-63 485. Do not scale out libDaisy's 3.1 % low reading | P6a spec; `scan-measured.md`; `docs/gotchas.md` | |
-| 5.2 | **All 73 pots**, including ROOT_A, ROOT_B and REV_MOD (WOBL): each reaches both stops and moves its own row | every row both stops; no row moved by another pot | P6b-2 spec; root/WOBL spec | |
-| 5.3 | At rest, each value stays within the hysteresis H = 16 | within H | P6a spec; `shell/scan_value.h` | |
+| 5.1 | Calibration span from CAL_GND / CAL_3V3 | valid once the rail reads ≥ 58 982 and the zero ≤ 1 311; until then no row leaves −1000 and no knob reaches the engine. The coupon's rail read 63 482-63 485. Do not scale out libDaisy's 3.1 % low reading | P6a spec; `scan-measured.md`; `docs/gotchas.md` | **Pass 2026-10-24:** zero 0-1, rail 63 476-63 485, `valid=1` in 26 of 26 frames (the coupon's range). CAL_GND and CAL_3V3 are channels 4 and 5 of the same mux, so a valid span also proves the 595 address chain is driven, i.e. 3V3D is up |
+| 5.2 | **All 73 pots**, including ROOT_A, ROOT_B and REV_MOD (WOBL): each reaches both stops and moves its own row | every row both stops; no row moved by another pot | P6b-2 spec; root/WOBL spec | 2026-10-24, partial: with every pot at its left stop all 73 rows read 0 (no −1000). The right stop and "its own row" are still owed (turn-through capture with `--stops`) |
+| 5.3 | At rest, each value stays within the hysteresis H = 16 | within H | P6a spec; `shell/scan_value.h` | **Pass at the 0 stop, 2026-10-24:** 20 s hands off, 0 of 73 rows changed (`read_play.py --rest`, exit 0). Mid travel still owed (see 5.5) |
 | 5.4 | **D8/D9 read as ADC_12/ADC_11** (never exercised on the coupon). Failure sign: SENSE_2 and SENSE_3 swap, so a pot moves the wrong row | rows match. **If swapped:** two `ADC_OF_PIN` entries in `shell/gen_panel_map.py`, no board change | P2 spec §7; `scan-measured.md` | |
 | 5.5 | Scan with the LEDs switching every step still meets H = 16. The coupon tested the held-key case only at the 0 stop, the weakest position for showing coupling; test at mid travel too | within H | P2 spec §7; `scan-measured.md` | |
 | 5.6 | Settle on the longest COM run (~15 cm; ~1.5 pF/cm is an assumption) stays inside the sampling window. No COM capacitor rests on arithmetic | no row trails a step change. **Lever:** C_SENSE0-3 pads | P2 spec §3, §7 | |
 | 5.7 | Pot noise against `kPotTouch` = 144: worst untouched one-second spread over all 73 pots. The coupon's worst was 67 | rule: max(2 × worst spread, 3 × H), rounded up to a multiple of 16; must stay > H | `p6b2-led-and-touch-measured.md`; `shell/pot_owner.h` | |
 | 5.8 | Re-observe RV2's drift: on the coupon, more than 60 counts over ~10 s, not attributed | recorded either way | `scan-measured.md` | |
-| 5.9 | Sweep rate from the `sweeps` counter: 24 steps × 2 ms = 48 ms expected; the coupon counted 34.6 sweeps/s (1.81 ms per step), unexplained | recorded | `scan-budget.md`; `scan-measured.md` | |
+| 5.9 | Sweep rate from the `sweeps` counter: 24 steps × 2 ms = 48 ms expected; the coupon counted 34.6 sweeps/s (1.81 ms per step), unexplained | recorded | `scan-budget.md`; `scan-measured.md` | 2026-10-24: 20.00 sweeps/s, 50.0 ms per sweep (`sweeps` 426 → 826 over the 20 s capture), 2 ms slower than the 48 ms budget |
 | 5.10 | Spare-channel noise (5 spare inputs tied to GND). Not printed by the play image (§0.2.1) | blocked | P6a spec; `io-budget.md` | |
 
 ## 6. Keys and knob ownership
 
 | # | Check | Pass | Source | Result |
 |---|---|---|---|---|
-| 6.1 | REC_A, REC_B, MODBTN, SHIFTBTN on the 165: five presses each | `presses` counts 5 (3-read debounce, 6 ms) | P6a spec | |
+| 6.1 | REC_A, REC_B, MODBTN, SHIFTBTN on the 165: five presses each | `presses` counts 5 (3-read debounce, 6 ms) | P6a spec | **Open finding 2026-10-24:** with nothing pressed, every frame reads `keys=15 presses=1,1,1,1`: all four key inputs read low since boot, so the firmware saw one press of each key at power-up (REC A/B and MOD latches toggled once). The bit path is the coupon's (D0..D3 → bits 7..4, `kRevaKeys`), so the nets themselves read low. Candidates: keys closed at rest (held by the plate, or the pad/pin swap of 3.3), or the 165 read path (Q7 → D10, ~PL). Press test pending |
 | 6.2 | Key functions: MOD toggles the latch (lamp double pulse); REC A/B toggle the record latch; SHFT is counted and does nothing | as described | `shell/README.md` | |
 | 6.3 | Ownership, the coupon's checks 1-4 on the full panel: boot plays the init patch wherever the pots stand; a nudge below the threshold changes nothing; a real turn jumps, then follows; MOD latch/unlatch releases its pots without a jump | all four. Bastian: "ich teste das später am großen Board nochmal ausführlich" | P6b-2 spec; `p6b2-led-and-touch-measured.md` | |
 | 6.4 | `kDepthDead` = 0.04 by hand on a real 9 mm pot: noon reads reliably as off | Bastian. The alternative is 0.03 (re-run `gen_panel.py`; init pre-images 0.712 / 0.568 → 0.709 / 0.5635) | `docs/by-ear-decisions.md` | |
@@ -187,9 +187,9 @@ The CPU-headroom spec's done criteria, re-run on Rev A with the full panel
 
 | # | Check | Pass | Source | Result |
 |---|---|---|---|---|
-| 10.1 | Init patch, shipping image, 10 min: `SHELL_PLAY_LAW` `cb_max`, plus a 10-min recording through `tools/click_detect.py` | `cb_max` ≤ 900 000, no click; then Bastian listens. Coupon: 873 150 | cpu-headroom spec §3 | |
+| 10.1 | Init patch, shipping image, 10 min: `SHELL_PLAY_LAW` `cb_max`, plus a 10-min recording through `tools/click_detect.py` | `cb_max` ≤ 900 000, no click; then Bastian listens. Coupon: 873 150 | cpu-headroom spec §3 | 2026-10-24, first 20 s only, all pots at the left stop, keys latched (see 6.1): `cb_max` 834 852. The 10-min run and the recording are still owed |
 | 10.2 | Stress patches W2 and F2 (`C_USER_FLAGS=-DSHELL_BOOT_PATCH=1` / `=2`, clean build), 10 min each | no block above 930 000, no click. Coupon: 894 446 / 810 105 | cpu-headroom spec §3 | |
-| 10.3 | Plan B trigger: `cyc_max` above 2.9 points (~28 000 cycles) | below. Coupon: `cyc_max` 14 976, `led_max` 1 580. **If above, or clicks:** Plan B (the law across two blocks), then cpu-headroom spec §4.5 (Bastian decides) | P6b-1 spec §6; cpu-headroom spec §4.4-4.5 | |
+| 10.3 | Plan B trigger: `cyc_max` above 2.9 points (~28 000 cycles) | below. Coupon: `cyc_max` 14 976, `led_max` 1 580. **If above, or clicks:** Plan B (the law across two blocks), then cpu-headroom spec §4.5 (Bastian decides) | P6b-1 spec §6; cpu-headroom spec §4.4-4.5 | 2026-10-24, first 20 s: `cyc_max` 11 967, `led_max` 1 552, below the trigger |
 
 ## 11. SD card
 
