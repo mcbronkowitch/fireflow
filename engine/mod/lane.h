@@ -125,6 +125,12 @@ public:
     // false = every setter takes its full path again, as before the
     // early-outs existed: the reference side of the bit-identity gate.
     void set_skip_unchanged_for_test(bool on) { _skip_unchanged = on; }
+    // false = process()'s STEP branch searches the grid on every sample, as
+    // before the step cache existed: the reference side of its equivalence
+    // test. Both are CLASS-wide (see _grid_cache_on): every lane's searches
+    // count into one total, and the switch flips every lane at once.
+    static void set_step_cache_for_test(bool on) { _grid_cache_on = on; }
+    static uint32_t step_searches_for_test() { return _grid_searches; }
     float last_out_for_test() const { return _last_out; }
     // kFlowSlewFrac itself stays private (it's an implementation constant of
     // _update_slew's top selection, not part of the public control surface);
@@ -327,6 +333,21 @@ private:
     void  _mutate_groove(bool renew_side);  // VARIATION outer zone: rhythm dice (wrap only)
     void  _start_note(int slot);    // groove: set _note_hold (tie-capped) on fire
     int   _effective_length() const;
+    // process()'s STEP step: shuffle_step_index(phase, _steps,
+    // _shuffle_latched), searched only when the phase has left the last
+    // result's interval or the grid changed (fault R4: the search cost ~270
+    // cycles per sample on the board, for a step that changes a few times a
+    // second). The result is a pure function of (phase, steps, shuffle) --
+    // the search returns the one interval [b(i), b(i+1)) holding the phase,
+    // with the outer edges open -- so nothing has to invalidate the cache
+    // but its own key.
+    int _grid_step(float phase) {
+        if (_grid_cache_on && _steps == _grid_steps && _shuffle_latched == _grid_shuffle &&
+            phase >= _grid_lo && phase < _grid_hi)
+            return _grid_cur;
+        return _grid_search(phase);
+    }
+    int  _grid_search(float phase);
     void  _generate_pattern_a();
     void  _derive_pattern_b();
     void  _apply_pending_song_work();
@@ -382,6 +403,22 @@ private:
     bool  _fixed_slew = false;
 
     int   _cur_step = -1;
+    // _grid_step()'s cache: the grid it was built on (_grid_steps 0 = empty,
+    // _steps is never below 1), the step found and its interval. 16 bits
+    // for the two counts keep the cache inside test_song_form.cpp's lane
+    // budget; a STEPS beyond int16 never matches its key, so it only
+    // searches every sample. The test switches are class-wide for the same
+    // reason: a per-lane flag would cost the budget a padded word.
+    int16_t _grid_steps = 0;
+    int16_t _grid_cur = 0;
+    float   _grid_shuffle = 0.f;
+    float   _grid_lo = 0.f, _grid_hi = 0.f;
+#ifdef SPKY_TESTING
+    static inline bool     _grid_cache_on = true;
+    static inline uint32_t _grid_searches = 0;
+#else
+    static constexpr bool _grid_cache_on = true;
+#endif
     static constexpr int kSeqSlots = 32;
     // The free mode owns its phrase length. It cannot come from STEPS: Fireflow
     // spends STEPS == 0 on the mode switch (Fireflow.cpp:892-893) and set_step

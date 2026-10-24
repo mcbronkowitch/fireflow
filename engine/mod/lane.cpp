@@ -3,6 +3,7 @@
 #include "mod/range.h"
 #include "util/math.h"
 #include <cmath>
+#include <limits>
 
 using namespace spky;
 
@@ -872,6 +873,23 @@ void ModLane::_latch_stepped(float out) {
     }
 }
 
+int ModLane::_grid_search(float phase) {
+#ifdef SPKY_TESTING
+    ++_grid_searches;
+#endif
+    const int step = shuffle_step_index(phase, _steps, _shuffle_latched);
+    const int n = _steps < 1 ? 1 : _steps;
+    // The outer edges are open: the search clamps the phase into [0, 1]
+    // and never compares against b(0) or b(steps).
+    constexpr float kInf = std::numeric_limits<float>::infinity();
+    _grid_steps   = static_cast<int16_t>(_steps);
+    _grid_shuffle = _shuffle_latched;
+    _grid_cur     = static_cast<int16_t>(step);
+    _grid_lo = step <= 0 ? -kInf : shuffle_boundary_phase(step, n, _shuffle_latched);
+    _grid_hi = step + 1 >= n ? kInf : shuffle_boundary_phase(step + 1, n, _shuffle_latched);
+    return step;
+}
+
 float ModLane::process(SPKY_PROBE_MOD_PARAMS) {
     SPKY_PROBE_PART_MARK(12);   // callback profile only: the lane starts here
     _fired = false;
@@ -902,8 +920,7 @@ float ModLane::process(SPKY_PROBE_MOD_PARAMS) {
     SPKY_PROBE_PART_MARK(13);   // the counters, the phase advance and a wrap end here
 
     if (_step_mode) {
-        const int step = shuffle_step_index(
-            static_cast<float>(_phase), _steps, _shuffle_latched);
+        const int step = _grid_step(static_cast<float>(_phase));
         if (step != _cur_step) _enter_step(step);
     } else if (_flow_melody_on()) {
         // One cycle is one phrase pass -- the same relation STEP already has.
