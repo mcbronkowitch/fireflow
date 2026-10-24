@@ -30,6 +30,7 @@ CBP_WIN4 w=5 xo=10000 xd=20000 xr=98000 xt=2000 xl=19998
 CBP_WIN5 w=5 ap=5000 al=40000 ai=5000 at=45000 ar=5000 bp=4000 bl=40000 bi=5000 bt=36000 br=4998
 CBP_WIN6 w=5 aq=30000 ao=2000 au=8000 bq=30000 bo=2000 bu=7998
 CBP_WIN7 w=5 aqc=500 aqh=4000 aqs=20000 aqt=5497 bqc=500 bqh=4000 bqs=20000 bqt=5500
+CBP_WIN8 w=5 agp=100 agw=200 ag1=300 ag2=200 agx=199 bgp=100 bgw=200 bg1=500 bg2=0 bgx=198
 CBP_WORST w=5 last=990 am=900 al=500 at=300 ae=20000 af=1500 bm=800 bl=500 bt=250 be=9000 bf=1400 x=1600
 CBP_BOOT patch=3 eng_a=4 eng_b=3
 CBP_RVCLR n=1 last=393216 max=393216
@@ -40,6 +41,7 @@ CBP_WIN4 w=6 xo=10000 xd=20000 xr=100000 xt=2000 xl=20000
 CBP_WIN5 w=6 ap=5000 al=40000 ai=5000 at=46000 ar=5000 bp=4000 bl=40000 bi=5000 bt=37000 br=5000
 CBP_WIN6 w=6 aq=30000 ao=2000 au=8000 bq=30000 bo=2000 bu=8000
 CBP_WIN7 w=6 aqc=500 aqh=4000 aqs=20000 aqt=5500 bqc=500 bqh=4000 bqs=20000 bqt=5500
+CBP_WIN8 w=6 agp=100 agw=200 ag1=300 ag2=200 agx=200 bgp=100 bgw=200 bg1=500 bg2=0 bgx=200
 CBP_WORST w=6 last=1000 am=1000 al=500 at=400 ae=21000 af=1500 bm=800 bl=500 bt=250 be=9000 bf=1400 x=1600
 CBP_WIN w=7 cb=920000 cb_max=970000 proc=890000 a=364000 b=384000 mix=154000 law=12400
 """.splitlines()
@@ -56,6 +58,8 @@ check("a window joins its modulation split", wins[5]["at"] == 45000 and wins[6][
       and "ap" not in wins[7])
 check("a window joins its lanes split", wins[5]["aq"] == 30000 and wins[6]["bu"] == 8000
       and "aq" not in wins[7])
+check("a window joins its GRIT split", wins[5].get("ag1") == 300 and wins[6].get("bgx") == 200
+      and "agp" not in wins[7])
 check("a window joins its pitch-lane split", wins[5].get("aqt") == 5497 and wins[6].get("bqs") == 20000
       and "aqc" not in wins[7])
 worst = {}
@@ -82,7 +86,7 @@ check("the report prints the boot line, every window and the mean",
 check("a missing split prints dashes", "       -" in text.splitlines()[5])
 # A pre-split capture still gets a mean over the fields its image printed.
 old = r.parse([l for l in FIXTURE
-               if not l.startswith(("CBP_WIN2", "CBP_WIN3", "CBP_WIN4", "CBP_WIN5", "CBP_WIN6", "CBP_WIN7"))])[0]
+               if not l.startswith(("CBP_WIN2", "CBP_WIN3", "CBP_WIN4", "CBP_WIN5", "CBP_WIN6", "CBP_WIN7", "CBP_WIN8"))])[0]
 mo = r.means(old, 5, 7)
 check("a pre-split capture's mean covers its own fields",
       mo is not None and mo[1] == 3 and mo[0]["cb"] == 910000 and "am" not in mo[0])
@@ -106,6 +110,8 @@ check("sabotage: a lanes split short of its whole goes red",
 bad = r.parse([l.replace("bqs=20000 bqt=5500", "bqs=21000 bqt=5500") for l in FIXTURE])[0]
 check("sabotage: a pitch-lane split above its whole goes red",
       r.split_gaps(bad) == [(5, "bq", -1000), (6, "bq", -1000)])
+bad = r.parse([l.replace("ag1=300 ag2=200 agx=200", "ag1=300 ag2=100 agx=200") for l in FIXTURE])[0]
+check("sabotage: a GRIT split short of its whole goes red", r.split_gaps(bad) == [(6, "ag", 100)])
 check("sabotage: a capture with no window is a failure",
       r.parse(["SHELL_PLAY_LAW cyc_last=1 cyc_max=2 led_last=3 led_max=4 cb_last=5 cb_max=6"])[0] == {})
 check("sabotage: a malformed window line is not a window",

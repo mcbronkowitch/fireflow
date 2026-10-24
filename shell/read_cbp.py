@@ -10,7 +10,10 @@ before-the-deck (ap / bp), lanes (al / bl), fade + swap + fire bookkeeping
 and the lanes into pitch lane (aq / bq), step clock + onset ring (ao / bo)
 and texture tick (au / bu), and the pitch lane into the call in (aqc /
 bqc), counters + phase advance + wrap (aqh / bqh), step search (aqs / bqs)
-and slew + RANGE + latch + stores (aqt / bqt). CBP_WORST (each block's worst sample, broken
+and slew + RANGE + latch + stores (aqt / bqt), and GRIT into the FX setters
++ call in (agp / bgp), switch (agw / bgw), stage 1 (ag1 / bg1: Overdrive or
+Decimator), stage 2 (ag2 / bg2: nothing or SampleRateReducer) and XFade +
+crossfade (agx / bgx). CBP_WORST (each block's worst sample, broken
 down) is parsed into the worst table the report prints below the windows.
 
 Call:
@@ -25,6 +28,7 @@ Lines read (transcribed from cb_profile.cpp's PrintLine calls):
     CBP_WIN5 w=N ap= al= ai= at= ar= bp= bl= bi= bt= br=
     CBP_WIN6 w=N aq= ao= au= bq= bo= bu=
     CBP_WIN7 w=N aqc= aqh= aqs= aqt= bqc= bqh= bqs= bqt=
+    CBP_WIN8 w=N agp= agw= ag1= ag2= agx= bgp= bgw= bg1= bg2= bgx=
     CBP_WORST w=N last= am= al= at= ae= af= bm= bl= bt= be= bf= x=
     CBP_BOOT patch= eng_a= eng_b=          (the last one seen)
     CBP_RVCLR n= last= max=                (every one; the report lists them)
@@ -33,7 +37,8 @@ but no CBP_WIN2 / CBP_WIN3 / CBP_WIN4 (an image from before that split)
 prints dashes. am+ae+af is a's three parts, as+ag+ax+ac+an is af's five
 (smoothers, GRIT, FLUX, tap + FX mix + COMP, send law), xo+xd+xr+xt+xl
 is mix's five, ap+al+ai+at+ar is am's five, aq+ao+au is al's three and
-aqc+aqh+aqs+aqt is aq's four, each a floor of its own
+aqc+aqh+aqs+aqt is aq's four and agp+agw+ag1+ag2+agx is ag's five, each a
+floor of its own
 1000-block mean, so a sum may fall a few cycles short of its whole; a gap
 above kSplitSlack is reported as a reader failure, since it means the lines
 do not describe the same window.
@@ -54,6 +59,8 @@ _WIN5 = re.compile(r"^CBP_WIN5 w=(\d+) ap=(\d+) al=(\d+) ai=(\d+) at=(\d+) ar=(\
 _WIN6 = re.compile(r"^CBP_WIN6 w=(\d+) aq=(\d+) ao=(\d+) au=(\d+) bq=(\d+) bo=(\d+) bu=(\d+)\s*$")
 _WIN7 = re.compile(r"^CBP_WIN7 w=(\d+) aqc=(\d+) aqh=(\d+) aqs=(\d+) aqt=(\d+)"
                    r" bqc=(\d+) bqh=(\d+) bqs=(\d+) bqt=(\d+)\s*$")
+_WIN8 = re.compile(r"^CBP_WIN8 w=(\d+) agp=(\d+) agw=(\d+) ag1=(\d+) ag2=(\d+) agx=(\d+)"
+                   r" bgp=(\d+) bgw=(\d+) bg1=(\d+) bg2=(\d+) bgx=(\d+)\s*$")
 _WORST = re.compile(r"^CBP_WORST w=(\d+) last=(\d+) am=(\d+) al=(\d+) at=(\d+) ae=(\d+) af=(\d+)"
                     r" bm=(\d+) bl=(\d+) bt=(\d+) be=(\d+) bf=(\d+) x=(\d+)\s*$")
 WORST_FIELDS = ("last", "am", "al", "at", "ae", "af", "bm", "bl", "bt", "be", "bf", "x")
@@ -61,9 +68,9 @@ _BOOT = re.compile(r"^CBP_BOOT patch=(\d+) eng_a=(-?\d+) eng_b=(-?\d+)\s*$")
 _RVCLR = re.compile(r"^CBP_RVCLR n=(\d+) last=(\d+) max=(\d+)\s*$")
 
 FIELDS = ("cb", "cb_max", "a", "am", "ap", "al", "aq", "aqc", "aqh", "aqs", "aqt", "ao", "au", "ai", "at", "ar", "ae", "af",
-          "as", "ag", "ax", "ac", "an",
+          "as", "ag", "agp", "agw", "ag1", "ag2", "agx", "ax", "ac", "an",
           "b", "bm", "bp", "bl", "bq", "bqc", "bqh", "bqs", "bqt", "bo", "bu", "bi", "bt", "br", "be", "bf",
-          "bs", "bg", "bx", "bc", "bn",
+          "bs", "bg", "bgp", "bgw", "bg1", "bg2", "bgx", "bx", "bc", "bn",
           "mix", "xo", "xd", "xr", "xt", "xl", "law")
 # A whole and the parts that must add up to it, within kSplitSlack.
 SPLITS = (("a", ("am", "ae", "af")), ("b", ("bm", "be", "bf")),
@@ -71,7 +78,8 @@ SPLITS = (("a", ("am", "ae", "af")), ("b", ("bm", "be", "bf")),
           ("mix", ("xo", "xd", "xr", "xt", "xl")),
           ("am", ("ap", "al", "ai", "at", "ar")), ("bm", ("bp", "bl", "bi", "bt", "br")),
           ("al", ("aq", "ao", "au")), ("bl", ("bq", "bo", "bu")),
-          ("aq", ("aqc", "aqh", "aqs", "aqt")), ("bq", ("bqc", "bqh", "bqs", "bqt")))
+          ("aq", ("aqc", "aqh", "aqs", "aqt")), ("bq", ("bqc", "bqh", "bqs", "bqt")),
+          ("ag", ("agp", "agw", "ag1", "ag2", "agx")), ("bg", ("bgp", "bgw", "bg1", "bg2", "bgx")))
 kSplitSlack = 6   # cycles: up to five floors against one
 
 
@@ -128,6 +136,13 @@ def parse(lines, clears=None, worst=None):
             w = int(m.group(1))
             d = wins.setdefault(w, {})
             for k, name in enumerate(("aqc", "aqh", "aqs", "aqt", "bqc", "bqh", "bqs", "bqt")):
+                d[name] = int(m.group(2 + k))
+            continue
+        m = _WIN8.match(line)
+        if m:
+            w = int(m.group(1))
+            d = wins.setdefault(w, {})
+            for k, name in enumerate(("agp", "agw", "ag1", "ag2", "agx", "bgp", "bgw", "bg1", "bg2", "bgx")):
                 d[name] = int(m.group(2 + k))
             continue
         m = _WORST.match(line)

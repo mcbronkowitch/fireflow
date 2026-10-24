@@ -37,7 +37,16 @@ TEST_CASE("law: GRIT dead zone, sign picks the mode; FLUX on above 1e-4") {
     r.k[GRIT_B] = 0.02f; r.tick();
     CHECK(r.inst.last("set_grit_mix", 1) == 0.f);
     CHECK(r.inst.last("set_fx_on/" + std::to_string(int(spky::FxBlock::Grit)), 1) == 0.f);
-    r.k[GRIT_B] = -0.515f; r.tick();
+    // Rev A #1's noon (fault R4, 2026-10-24): GRIT_B read +0.044 with the pot
+    // set to noon by eye, past the old 0.03 zone. It is off now; the
+    // 0.06 zone's edge still engages with a mix rescaled from 0.
+    r.k[GRIT_B] = 0.044f; r.tick();
+    CHECK(r.inst.last("set_grit_mix", 1) == 0.f);
+    CHECK(r.inst.last("set_fx_on/" + std::to_string(int(spky::FxBlock::Grit)), 1) == 0.f);
+    r.k[GRIT_B] = 0.0614f; r.tick();
+    CHECK(r.inst.last("set_fx_on/" + std::to_string(int(spky::FxBlock::Grit)), 1) == 1.f);
+    CHECK(r.inst.last("set_grit_mix", 1) == doctest::Approx(0.0014f / 0.94f).epsilon(1e-3));
+    r.k[GRIT_B] = -0.53f; r.tick();
     CHECK(r.inst.last("set_grit_mix", 1) == doctest::Approx(0.5f));
     CHECK(r.inst.last("set_grit_mode", 1) == float(int(spky::GritMode::Reduce)));
     r.k[FLUX_A] = 5e-5f; r.tick();

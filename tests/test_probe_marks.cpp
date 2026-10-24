@@ -92,8 +92,10 @@ void probe_block(const uint32_t* ts, const uint32_t* d1, const uint32_t* d2,
 
 // A deck call's slots in the order they are taken (probe_mark.h): the
 // modulation split 6..9 comes first, with the lanes' own 10 and 11 inside
-// 6..7 and the pitch lane's 12..14 inside 6..10, then 0..5.
-constexpr int kDeckOrder[kSlots] = {6, 12, 13, 14, 10, 11, 7, 8, 9, 0, 1, 2, 3, 4, 5};
+// 6..7 and the pitch lane's 12..14 inside 6..10, then 0..5 with GRIT's
+// 15..20 inside 2..3.
+constexpr int kDeckOrder[kSlots] = {6, 12, 13, 14, 10, 11, 7, 8, 9, 0, 1, 2,
+                                    15, 16, 17, 18, 19, 20, 3, 4, 5};
 
 // Samples of a block whose stamps are not in process order: top ->
 // [priority deck: pre, lanes, fire bookkeeping, control tick, trigger, engine,
@@ -255,4 +257,29 @@ TEST_CASE("probe marks: the lanes segment is non-empty and the lanes' stamps com
     CHECK(bad == 0);
     CHECK(lanes[0] > 0);
     CHECK(lanes[1] > 0);
+}
+
+TEST_CASE("probe marks: GRIT's stamps come in order with GRIT running, both modes") {
+    // The GRIT split (fault R4): deck A on CRSH, deck B on DRIVE, both at a
+    // real mix, so Grit::process takes its DSP path and every one of slots
+    // 15..20 is written there (not only on the idle path that writes them
+    // all at once). Order only, for the reason the lanes case gives.
+    Spinner spin;
+    g_blocks.clear();
+    spky::Instrument inst;
+    inst.init(48000.f);
+    inst.set_grit_mode(spky::PART_A, spky::GritMode::Reduce);
+    inst.set_grit_mode(spky::PART_B, spky::GritMode::Drive);
+    inst.set_grit_mix(spky::PART_A, 0.5f);
+    inst.set_grit_mix(spky::PART_B, 0.5f);
+    inst.set_fx_on(spky::PART_A, spky::FxBlock::Grit, true);
+    inst.set_fx_on(spky::PART_B, spky::FxBlock::Grit, true);
+    std::vector<float> l(96), r(96);
+    for (int blk = 0; blk < 6; ++blk) inst.process(nullptr, nullptr, l.data(), r.data(), 96);
+    REQUIRE(g_blocks.size() == 6);
+    REQUIRE(inst.grit_engaged_for_test(spky::PART_A));
+    REQUIRE(inst.grit_engaged_for_test(spky::PART_B));
+    int bad = 0;
+    for (size_t k = 1; k < g_blocks.size(); ++k) bad += out_of_order(g_blocks[k]);
+    CHECK(bad == 0);
 }

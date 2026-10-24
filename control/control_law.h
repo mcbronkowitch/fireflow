@@ -36,8 +36,12 @@ inline constexpr float kCoupleZoneSplit = 0.5f;
 // because a 9 mm pot on an ADC cannot hit an exact zero -- without it
 // "off" would be unreachable on hardware. Shared between the fx_on gate
 // below and the mode/mix push further down so both agree on what
-// "engaged" means.
-inline constexpr float kGritDead = 0.03f;
+// "engaged" means. 0.06, not 0.03, since fault R4 (2026-10-24): on Rev A #1
+// a GRIT pot set to noon by eye read +0.044, past the old zone, and paid the
+// whole GRIT block (~29 k cycles a block on the board) for a DRIVE whose
+// change to the signal measured -31 dB. The mix is rescaled off the zone's
+// edge, so GRIT still enters from silence and both stops still reach 1.
+inline constexpr float kGritDead = 0.06f;
 
 // What the host's menus feed the law, per deck. Defaults = a fresh
 // spkyvcv::SamplerPartState (host/vcv/src/sampler_ui.hpp), so a host that
