@@ -287,8 +287,12 @@ public:
         Reset();
     }
 
+    // Leaves the ring as it is: a cell not written since the last Reset reads
+    // as zero (_read_tap), which is what clearing it would give. Clearing it
+    // here put the whole ring through memset inside the audio callback, on
+    // every swap into the BBD engine (fault R2, docs/hardware/reva-bring-up.md).
     void Reset() {
-        if (mem_ && max_cells_) std::memset(mem_, 0, max_cells_ * sizeof(float));
+        filled_ = 0;
         write_index_ = 0;
         read_cells_ = cells_;
         stage_from_cells_ = cells_;
@@ -394,6 +398,7 @@ public:
                     write_index_ = (write_index_ + 1 < static_cast<int>(max_cells_))
                                          ? write_index_ + 1
                                          : 0;
+                    if (filled_ < static_cast<int>(max_cells_)) ++filled_;
                 } else {
                     // READ phase: the output filter is driven by the STEP
                     // between consecutive readings, which is what makes the
@@ -458,6 +463,8 @@ private:
     }
 
     float _read_tap(int delay_cells) const {
+        // Written fewer than delay_cells ago since Reset: the cell is stale.
+        if (delay_cells > filled_) return 0.f;
         int index = write_index_ - delay_cells;
         if (index < 0) index += static_cast<int>(max_cells_);
         return mem_[index];
@@ -472,6 +479,7 @@ private:
 
     int      cells_ = 1;              // latest requested/clamped read distance
     int      write_index_ = 0;         // physical ring always wraps at max_cells_
+    int      filled_ = 0;              // cells written since Reset, up to max_cells_
     int      read_cells_ = 1;          // settled read distance
     int      stage_from_cells_ = 1;
     int      stage_to_cells_ = 1;

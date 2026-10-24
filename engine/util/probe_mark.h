@@ -35,6 +35,19 @@ void probe_block(const uint32_t* ts, const uint32_t* d1, const uint32_t* d2,
 #define SPKY_PROBE_DECK2(i)      (_probe_d2[SPKY_PROBE_IDX(i)] = *_probe_clk)
 #define SPKY_PROBE_END(n)        ::spky::probe_block(_probe_ts, _probe_d1, _probe_d2, \
                                      static_cast<int>((n) < 128 ? (n) : 128), _probe_pri)
+namespace spky {
+// The engine swap's own cost (fault R2, 2026-10-24): Part::_engine_swap stamps
+// the clock around the whole swap and around BbdEngine::reset() inside it, and
+// the host prints the figures. A swap runs once per pot turn, so the global
+// stores the sample loop cannot afford are fine here.
+struct ProbeSwap {
+    uint32_t n;            // swaps so far
+    int      eng;          // the engine swapped in last
+    uint32_t total, bbd;   // the last swap: whole swap / BbdEngine::reset() in it
+    uint32_t total_max, bbd_max;
+};
+extern ProbeSwap probe_swap;                    // defined in part.cpp
+} // namespace spky
 #else
 #define SPKY_PROBE_DECL          static_assert(true, "")
 #define SPKY_PROBE_STAMP(i)      ((void)0)
