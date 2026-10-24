@@ -467,7 +467,7 @@ public:
         // Callback profile only: the engine ends here, the FX chain starts.
         SPKY_PROBE_PART_MARK(1);
 
-        _fx.process(outL, outR, sendL, sendR, _fxv);
+        _fx.process(outL, outR, sendL, sendR, _fxv SPKY_PROBE_PART_FWD);
     }
     void process(float& outL, float& outR, float& sendL, float& sendR) {
         process(0.f, 0.f, outL, outR, sendL, sendR SPKY_PROBE_PART_SCRATCH);

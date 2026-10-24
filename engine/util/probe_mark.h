@@ -19,10 +19,13 @@
 #include <cstdint>
 namespace spky {
 extern volatile uint32_t* probe_clock;          // defined by the host
-// Two stamps per deck call, written by Part::process into the two-slot stack
-// array its caller passes in: [0] after the modulation and control half (just
-// before the engine runs), [1] after the engine (just before the FX chain).
-using ProbePartSlots = uint32_t[2];
+// Six stamps per deck call, written into the stack array the caller passes
+// in. Part::process: [0] after the modulation and control half (just before
+// the engine runs), [1] after the engine (just before the FX chain).
+// PartFx::process, handed the same array: [2] after the target smoothers,
+// [3] after GRIT, [4] after FLUX, [5] after the tap, the FX mix and COMP
+// (just before the send law). Deck end = the caller's d1 / d2 stamp.
+using ProbePartSlots = uint32_t[6];
 // Where the Part::process overloads that take no slots write their stamps
 // (tests, the bench's single-part workloads): nobody reads it. Defined by
 // the host.
@@ -55,6 +58,7 @@ void probe_block(const uint32_t* ts, const uint32_t* d1, const uint32_t* d2,
 #define SPKY_PROBE_PART_ARGS1(i) SPKY_PROBE_PART_ARGS(_probe_p1[SPKY_PROBE_IDX(i)])
 #define SPKY_PROBE_PART_ARGS2(i) SPKY_PROBE_PART_ARGS(_probe_p2[SPKY_PROBE_IDX(i)])
 #define SPKY_PROBE_PART_SCRATCH  , ::spky::probe_clock, ::spky::probe_part_scratch
+#define SPKY_PROBE_PART_FWD      , _probe_clk, _probe_slot
 #define SPKY_PROBE_PART_MARK(k)  (_probe_slot[k] = *_probe_clk)
 namespace spky {
 // The engine swap's own cost (fault R2, 2026-10-24): Part::_engine_swap stamps
@@ -79,5 +83,6 @@ extern ProbeSwap probe_swap;                    // defined in part.cpp
 #define SPKY_PROBE_PART_ARGS1(i)
 #define SPKY_PROBE_PART_ARGS2(i)
 #define SPKY_PROBE_PART_SCRATCH
+#define SPKY_PROBE_PART_FWD
 #define SPKY_PROBE_PART_MARK(k)  ((void)0)
 #endif

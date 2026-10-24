@@ -41,10 +41,11 @@ struct Spinner {
     }
 };
 
+constexpr int kSlots = sizeof(spky::ProbePartSlots) / sizeof(uint32_t);
 struct Block {
-    std::vector<uint32_t>                ts, d1, d2;
-    std::vector<std::array<uint32_t, 2>> p1, p2;
-    int                                  n, pri;
+    std::vector<uint32_t>                     ts, d1, d2;
+    std::vector<std::array<uint32_t, kSlots>> p1, p2;
+    int                                       n, pri;
 };
 std::vector<Block> g_blocks;
 
@@ -69,8 +70,13 @@ void probe_block(const uint32_t* ts, const uint32_t* d1, const uint32_t* d2,
     b.d1.assign(d1, d1 + n);
     b.d2.assign(d2, d2 + n);
     for (int i = 0; i < n; ++i) {
-        b.p1.push_back({p1[i][0], p1[i][1]});
-        b.p2.push_back({p2[i][0], p2[i][1]});
+        std::array<uint32_t, kSlots> s1, s2;
+        for (int k = 0; k < kSlots; ++k) {
+            s1[k] = p1[i][k];
+            s2[k] = p2[i][k];
+        }
+        b.p1.push_back(s1);
+        b.p2.push_back(s2);
     }
     g_blocks.push_back(std::move(b));
 }
@@ -89,14 +95,15 @@ TEST_CASE("probe marks: every sample's stamps come in process order") {
         REQUIRE(b.n == 96);
         CHECK((b.pri == 0 || b.pri == 1));
         for (int i = 0; i < b.n; ++i) {
-            // top -> [priority deck: mod, engine, fx] -> [yielding deck: mod,
-            // engine, fx] -> mix -> next top.
+            // top -> [priority deck: mod, engine, smoothers, grit, flux,
+            // comp, send] -> [yielding deck: the same seven] -> mix -> next
+            // top. A deck's slot k is taken after its slot k-1.
             CHECK(after(b.ts[i], b.p1[i][0]));
-            CHECK(after(b.p1[i][0], b.p1[i][1]));
-            CHECK(after(b.p1[i][1], b.d1[i]));
+            for (int k = 1; k < kSlots; ++k) CHECK(after(b.p1[i][k - 1], b.p1[i][k]));
+            CHECK(after(b.p1[i][kSlots - 1], b.d1[i]));
             CHECK(after(b.d1[i], b.p2[i][0]));
-            CHECK(after(b.p2[i][0], b.p2[i][1]));
-            CHECK(after(b.p2[i][1], b.d2[i]));
+            for (int k = 1; k < kSlots; ++k) CHECK(after(b.p2[i][k - 1], b.p2[i][k]));
+            CHECK(after(b.p2[i][kSlots - 1], b.d2[i]));
             CHECK(after(b.d2[i], b.ts[i + 1]));
         }
         if (b.ts[b.n] != b.ts[0]) ++moved;

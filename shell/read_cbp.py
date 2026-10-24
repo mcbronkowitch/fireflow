@@ -11,12 +11,15 @@ Call:
 Lines read (transcribed from cb_profile.cpp's PrintLine calls):
     CBP_WIN  w=N cb= cb_max= proc= a= b= mix= law=
     CBP_WIN2 w=N am= ae= af= bm= be= bf=
+    CBP_WIN3 w=N as= ag= ax= ac= an= bs= bg= bx= bc= bn=
     CBP_BOOT patch= eng_a= eng_b=          (the last one seen)
 Everything else, SHELL_PLAY_* included, is ignored. A window with a CBP_WIN
-but no CBP_WIN2 (an image from before the split) prints dashes. am+ae+af is
-a's three parts, each a floor of its own 1000-block mean, so it may fall a
-cycle or two short of a; a gap above kSplitSlack is reported as a reader
-failure, since it means the lines do not describe the same window.
+but no CBP_WIN2 / CBP_WIN3 (an image from before that split) prints dashes.
+am+ae+af is a's three parts and as+ag+ax+ac+an is af's five (smoothers,
+GRIT, FLUX, tap + FX mix + COMP, send law), each a floor of its own
+1000-block mean, so a sum may fall a few cycles short of its whole; a gap
+above kSplitSlack is reported as a reader failure, since it means the lines
+do not describe the same window.
 
 Exit code: 0 with at least one window and no gap; 1 otherwise.
 """
@@ -26,10 +29,16 @@ import sys
 
 _WIN = re.compile(r"^CBP_WIN w=(\d+) cb=(\d+) cb_max=(\d+) proc=(\d+) a=(\d+) b=(\d+) mix=(\d+) law=(\d+)\s*$")
 _WIN2 = re.compile(r"^CBP_WIN2 w=(\d+) am=(\d+) ae=(\d+) af=(\d+) bm=(\d+) be=(\d+) bf=(\d+)\s*$")
+_WIN3 = re.compile(r"^CBP_WIN3 w=(\d+) as=(\d+) ag=(\d+) ax=(\d+) ac=(\d+) an=(\d+)"
+                   r" bs=(\d+) bg=(\d+) bx=(\d+) bc=(\d+) bn=(\d+)\s*$")
 _BOOT = re.compile(r"^CBP_BOOT patch=(\d+) eng_a=(-?\d+) eng_b=(-?\d+)\s*$")
 
-FIELDS = ("cb", "cb_max", "a", "am", "ae", "af", "b", "bm", "be", "bf", "mix", "law")
-kSplitSlack = 4   # cycles: three floors against one
+FIELDS = ("cb", "cb_max", "a", "am", "ae", "af", "as", "ag", "ax", "ac", "an",
+          "b", "bm", "be", "bf", "bs", "bg", "bx", "bc", "bn", "mix", "law")
+# A whole and the parts that must add up to it, within kSplitSlack.
+SPLITS = (("a", ("am", "ae", "af")), ("b", ("bm", "be", "bf")),
+          ("af", ("as", "ag", "ax", "ac", "an")), ("bf", ("bs", "bg", "bx", "bc", "bn")))
+kSplitSlack = 6   # cycles: up to five floors against one
 
 
 def parse(lines):
@@ -50,6 +59,13 @@ def parse(lines):
             d.update(am=int(m.group(2)), ae=int(m.group(3)), af=int(m.group(4)),
                      bm=int(m.group(5)), be=int(m.group(6)), bf=int(m.group(7)))
             continue
+        m = _WIN3.match(line)
+        if m:
+            w = int(m.group(1))
+            d = wins.setdefault(w, {})
+            for k, name in enumerate(("as", "ag", "ax", "ac", "an", "bs", "bg", "bx", "bc", "bn")):
+                d[name] = int(m.group(2 + k))
+            continue
         m = _BOOT.match(line)
         if m:
             boot = (int(m.group(1)), int(m.group(2)), int(m.group(3)))
@@ -57,24 +73,26 @@ def parse(lines):
 
 
 def split_gaps(wins):
-    """Windows whose deck split does not add up to the deck: [(w, deck, gap)]."""
+    """Windows whose split does not add up to its whole: [(w, whole, gap)]."""
     out = []
     for w, d in sorted(wins.items()):
-        for deck, parts in (("a", ("am", "ae", "af")), ("b", ("bm", "be", "bf"))):
-            if deck not in d or any(p not in d for p in parts):
+        for whole, parts in SPLITS:
+            if whole not in d or any(p not in d for p in parts):
                 continue
-            gap = d[deck] - sum(d[p] for p in parts)
+            gap = d[whole] - sum(d[p] for p in parts)
             if gap < 0 or gap > kSplitSlack:
-                out.append((w, deck, gap))
+                out.append((w, whole, gap))
     return out
 
 
 def means(wins, lo, hi):
-    """Per-field means over the complete windows lo..hi (both ends), or None."""
-    rows = [d for w, d in wins.items() if lo <= w <= hi and all(f in d for f in FIELDS)]
+    """Per-field means over the windows lo..hi (both ends) that carry every
+    field the capture's image prints (a pre-split image has fewer), or None."""
+    present = [f for f in FIELDS if any(f in d for d in wins.values())]
+    rows = [d for w, d in wins.items() if lo <= w <= hi and all(f in d for f in present)]
     if not rows:
         return None
-    return {f: sum(d[f] for d in rows) / len(rows) for f in FIELDS}, len(rows)
+    return {f: sum(d[f] for d in rows) / len(rows) for f in present}, len(rows)
 
 
 def fmt_row(label, d):
@@ -96,8 +114,8 @@ def report(wins, boot, lo, hi, out=sys.stdout):
     if m:
         print(fmt_row("  mean", m[0]) + "   (%d complete windows)" % m[1], file=out)
     gaps = split_gaps(wins)
-    for w, deck, gap in gaps:
-        print("FAIL window %d: deck %s is %d cycles off its split" % (w, deck, gap), file=out)
+    for w, whole, gap in gaps:
+        print("FAIL window %d: %s is %d cycles off its split" % (w, whole, gap), file=out)
     return bool(wins) and not gaps
 
 
