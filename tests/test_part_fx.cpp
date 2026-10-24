@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 #include <cmath>
+#include <cstring>
 #include <vector>
 #include "fx/part_fx.h"
 using namespace spky;
@@ -369,3 +370,66 @@ TEST_CASE("part_fx: idle smoothers are skipped without changing a single value")
     // 8 019 (and both FXT_FLUX_TIME cases above failed too).
 }
 
+
+namespace {
+// One 4 s run of a PartFx with FLUX and GRIT on: targets pushed once per
+// 96 samples as Part does, every setter input moving (GRIT intensity, FLUX
+// feedback and time, with jumps the 2 ms smoothers glide over), and both
+// blocks off from 1.5 s to 50 samples past 2.5 s. The targets jump at 1.6 s
+// and then hold, so they have settled when the blocks come back -- off the
+// 96-sample push grid, where nothing but the setters left due while the
+// blocks were off can hand them the new values.
+std::vector<float> setter_run(bool skip) {
+    PartFx::set_setter_skip_for_test(skip);
+    std::fill(s_pf_l.begin(), s_pf_l.end(), 0.f);
+    std::fill(s_pf_r.begin(), s_pf_r.end(), 0.f);
+    static PartFx fx;
+    fx.init(48000.f, s_pf_l.data(), s_pf_r.data());
+    fx.set_fx_on(FxBlock::Grit, true, true);
+    fx.set_fx_on(FxBlock::Flux, true, true);
+    fx.set_grit_mode(GritMode::Drive);
+    fx.set_grit_mix(0.6f);
+    std::vector<float> out;
+    uint32_t rng = 12345u;
+    float v[FXT_COUNT];
+    for (int i = 0; i < 48000 * 4; ++i) {
+        if (i % 96 == 0) {
+            const int t = i / 96;
+            if (i >= 48000 * 16 / 10 && i < 48000 * 26 / 10)
+                fill(v, 0.95f, 0.8f, 0.8f, 0.3f, 0.9f);           // the jump, then held
+            else
+                fill(v, 0.2f + 0.6f * float((t / 7) % 5) / 4.f,   // GRIT intensity steps
+                     0.5f + 0.3f * float((t / 11) % 3 - 1),      // FLUX time
+                     0.8f, 0.3f,
+                     0.3f + 0.5f * float((t / 5) % 4) / 3.f);    // FLUX feedback
+            fx.set_targets(v);
+        }
+        if (i == 48000 * 3 / 2)      { fx.set_fx_on(FxBlock::Grit, false); fx.set_fx_on(FxBlock::Flux, false); }
+        if (i == 48000 * 5 / 2 + 50) { fx.set_fx_on(FxBlock::Grit, true);  fx.set_fx_on(FxBlock::Flux, true); }
+        rng = rng * 1664525u + 1013904223u;
+        float l = (float(rng >> 8) / 16777216.f - 0.5f) * 0.5f, r = -l, sl, sr;
+        fx.process(l, r, sl, sr);
+        out.push_back(l); out.push_back(r); out.push_back(sl); out.push_back(fx.tape_tap());
+    }
+    PartFx::set_setter_skip_for_test(true);
+    return out;
+}
+} // namespace
+
+TEST_CASE("part_fx: the FX setters run only when their inputs moved, without changing a bit") {
+    // Fault R4: GRIT's intensity check and FLUX's set_feedback / set_time_mod
+    // ran on every engaged sample although they only ever see the smoothed
+    // targets. Run with them on every sample (the reference) and with them
+    // only when due: every output bit equal.
+    const std::vector<float> ref = setter_run(false);
+    const std::vector<float> dut = setter_run(true);
+    REQUIRE(ref.size() == dut.size());
+    long diffs = 0;
+    for (size_t i = 0; i < ref.size(); ++i)
+        diffs += std::memcmp(&ref[i], &dut[i], sizeof(float)) != 0;
+    CHECK(diffs == 0);
+    // The run is not trivially equal: the targets did move the sound.
+    long moved = 0;
+    for (size_t i = 4; i < ref.size(); i += 4) moved += ref[i] != ref[i - 4];
+    CHECK(moved > 100000);
+}

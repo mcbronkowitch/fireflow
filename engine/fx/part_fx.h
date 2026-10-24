@@ -116,6 +116,25 @@ private:
     bool _gliding = false;        // a smoother had not reached its target yet
     float _grit_applied = -1.f;   // change guard: Overdrive::SetDrive costs
     bool _primed = false;         // first process() snaps the smoothers
+    // _v moved (the smoothers ran) since GRIT's intensity and FLUX's
+    // feedback / time were last handed it (fault R4). Those three setters
+    // only ever see _v, and FLUX's two cached norms are written by nothing
+    // but them and init, so a call with an unmoved _v is a no-op -- on the
+    // board ~140 cycles a sample per deck of no-op. Left set while neither
+    // block is engaged, so a block that comes back gets the values it
+    // missed.
+    bool _setters_due = true;
+#ifdef SPKY_TESTING
+    // false = the setters run on every engaged sample, as before: the
+    // reference side of their equivalence test. Class-wide, so it costs
+    // the struct nothing.
+    static inline bool _setters_skip = true;
+public:
+    static void set_setter_skip_for_test(bool on) { _setters_skip = on; }
+private:
+#else
+    static constexpr bool _setters_skip = true;
+#endif
 
     // Tape tap (spec §6). Only reached inside the existing
     // `_grit.engaged() || _flux.engaged()` branch, so a fully FX-off deck
