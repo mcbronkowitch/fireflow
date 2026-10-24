@@ -1,6 +1,7 @@
 #include "fx/reverb.h"
 #include "Utility/dsp.h"
 #include "util/math.h"
+#include <algorithm>
 #include <cmath>
 
 using namespace spky;
@@ -80,17 +81,32 @@ void AmbientReverb::init(float sample_rate) {
     _wet_peak = 0.f;
     _lim_gain = 1.f;   // boot wide open; nothing has overshot yet
     _lim_target = 1.f;
+    _clear_pos = clouds::Oliverb::kBufferSize;   // Init() emptied the room
     _verb.Prepare();
 }
 
 void AmbientReverb::clear() {
-    _verb.Clear();
+    begin_clear();
+    while (clearing()) clear_step();
+}
+
+void AmbientReverb::begin_clear() {
+    _verb.ClearState();   // write pointer and loop filters; the buffer follows
     _ctrl = 0;   // refresh the LFO slopes on the next process()
     // An emptied room holds no level: forget the ride rather than let the last
     // bloom duck the first note of the next one.
     _wet_peak = 0.f;
     _lim_gain = 1.f;
     _lim_target = 1.f;
+    _clear_pos = 0;
+}
+
+void AmbientReverb::clear_step() {
+    if (!clearing()) return;
+    int end = _clear_pos + kClearChunk;
+    if (end > clouds::Oliverb::kBufferSize) end = clouds::Oliverb::kBufferSize;
+    std::fill(_buffer + _clear_pos, _buffer + end, 0.f);
+    _clear_pos = end;
 }
 
 void AmbientReverb::set_size(float norm) {

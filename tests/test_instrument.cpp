@@ -1789,3 +1789,46 @@ TEST_CASE("instrument: set_step routes each count to its own deck") {
     CHECK(in.deck_steps(PART_A) == 16);
     CHECK(in.deck_steps(PART_B) == 11);   // untouched by A's change
 }
+
+// Fault R4: the room clears over 32 control ticks after it falls asleep, not
+// in one sample. A send reopened during that clear must not wake it into a
+// half-cleared room; it wakes on the tick the clear completes. A send
+// reopened later wakes it at once, as before.
+TEST_CASE("instrument M4.8: a wake during the spread clear waits for an empty room") {
+    static AmbientReverb rv;
+    TapeMem echo;
+    FxMem m;
+    echo.bind(m);
+    m.reverb = &rv;
+    static Instrument fx;
+    fx.init(48000.f, m);
+    fx.set_reverb_mix(0.6f);
+    float l, r;
+    for (int i = 0; i < 48000; ++i) fx.process(nullptr, nullptr, &l, &r, 1);
+    fx.set_reverb_mix(0.f);
+    int i = 0;
+    while (!fx.reverb_asleep() && i < 48000) { fx.process(nullptr, nullptr, &l, &r, 1); ++i; }
+    REQUIRE(fx.reverb_asleep());
+    REQUIRE(rv.clearing());              // the clear has only begun
+    fx.set_reverb_mix(0.4f);
+    CHECK(fx.reverb_asleep());           // not into a half-cleared room
+    int waited = 0;
+    while (fx.reverb_asleep() && waited < 48000) {
+        fx.process(nullptr, nullptr, &l, &r, 1);
+        ++waited;
+        if (fx.reverb_asleep()) CHECK(rv.clearing());
+    }
+    CHECK_FALSE(fx.reverb_asleep());
+    CHECK_FALSE(rv.clearing());
+    // 32 ticks of 96 samples at most, from wherever in a tick the sleep fell.
+    CHECK(waited <= 32 * 96);
+    CHECK(waited > 30 * 96);
+
+    // A later close and reopen, with the clear long done: the wake is instant.
+    fx.set_reverb_mix(0.f);
+    for (int k = 0; k < 24000; ++k) fx.process(nullptr, nullptr, &l, &r, 1);
+    REQUIRE(fx.reverb_asleep());
+    REQUIRE_FALSE(rv.clearing());
+    fx.set_reverb_mix(0.4f);
+    CHECK_FALSE(fx.reverb_asleep());
+}

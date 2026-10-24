@@ -205,7 +205,9 @@ void Instrument::set_reverb_mix(int part, float n) {
         _rev_dry_target[part] = std::cos(n * kHalfPi);   // equal-power crossfade
         _rev_wet_target[part] = std::sin(n * kHalfPi);   // rides the SEND, not the return
     }
-    if (_rev_wet_target[part] > 0.f) _rev_asleep = false;   // wake into the cleared room
+    // Wake into the cleared room -- or, while its spread clear is still
+    // running, on the control tick that finishes it (Instrument::process).
+    if (_rev_wet_target[part] > 0.f && !(_reverb && _reverb->clearing())) _rev_asleep = false;
 }
 
 void Instrument::set_reverb_mix(float n) {   // convenience: both decks together
@@ -331,6 +333,18 @@ void Instrument::process(const float* inL, const float* inR,
             if (new_duck_target != _duck_target) {
                 _duck_residual += _duck_target - new_duck_target;
                 _duck_target = new_duck_target;
+            }
+            // The sleeping room's spread clear (fault R4): one chunk per tick
+            // instead of 128 KB inside one sample. The room stays asleep --
+            // process() untouched -- until the last chunk is zeroed; a send
+            // reopened meanwhile wakes it on that tick, into an empty room.
+            if (_reverb && _reverb->clearing()) {
+                SPKY_PROBE_CLEAR_BEGIN;
+                _reverb->clear_step();
+                SPKY_PROBE_CLEAR_END;
+                if (!_reverb->clearing() &&
+                    (_rev_wet_target[PART_A] > 0.f || _rev_wet_target[PART_B] > 0.f))
+                    _rev_asleep = false;
             }
             _ctrl_ctr = Center::kCtrlInterval;
         }
@@ -544,9 +558,7 @@ void Instrument::process(const float* inL, const float* inR,
                     _rev_wet[p].reset(_rev_wet_target[p]);
                 }
                 if (_rev_wet_target[PART_A] == 0.f && _rev_wet_target[PART_B] == 0.f) {
-                    SPKY_PROBE_CLEAR_BEGIN;
-                    _reverb->clear();
-                    SPKY_PROBE_CLEAR_END;
+                    _reverb->begin_clear();   // the control ticks zero the buffer
                     _rev_asleep = true;
                 }
                 _duck_gain = 1.f;
@@ -615,9 +627,8 @@ void Instrument::process(const float* inL, const float* inR,
                 l += wl * _rev_return_gain;  // wl already carries kWetGain; the return joins at unity
                 r += wr * _rev_return_gain;
                 if (closing && _rev_return_gain == 0.f) {
-                    SPKY_PROBE_CLEAR_BEGIN;
-                    _reverb->clear();        // clear-on-sleep: waking starts empty
-                    SPKY_PROBE_CLEAR_END;
+                    _reverb->begin_clear();  // clear-on-sleep, spread over the next
+                                             // control ticks: waking starts empty
                     _rev_asleep = true;      // Oliverb CPU is off until a MIX reopens
                     _rev_return_gain = 1.f;  // room is empty; the next wake starts at unity
                 }

@@ -170,10 +170,11 @@ TEST_CASE("probe marks: the engine segment is non-empty on a playing deck") {
     CHECK(eng2 > 0);
 }
 
-TEST_CASE("probe marks: the reverb segment runs while a send is open, and its clear is counted") {
+TEST_CASE("probe marks: the reverb segment runs while a send is open, and its clear steps are counted") {
     // The mix split (fault R4): with a send open the reverb runs between
     // slots 1 and 2; with both sends closed the return fades, the room is
-    // cleared once (counted in probe_rev_clear) and the segment empties.
+    // cleared in 32 steps on the control ticks (counted in probe_rev_clear)
+    // and the segment empties.
     Spinner spin;
     g_blocks.clear();
     static spky::Instrument inst;   // ~100 KB: not on the test's stack
@@ -200,7 +201,8 @@ TEST_CASE("probe marks: the reverb segment runs while a send is open, and its cl
         ++blocks;
     }
     REQUIRE(inst.reverb_asleep());
-    CHECK(spky::probe_rev_clear.n == clears + 1);
+    for (int blk = 0; blk < 40; ++blk) inst.process(in.data(), in.data(), l.data(), r.data(), 96);
+    CHECK(spky::probe_rev_clear.n == clears + 32);
     g_blocks.clear();
     for (int blk = 0; blk < 4; ++blk) inst.process(in.data(), in.data(), l.data(), r.data(), 96);
     bad = 0;

@@ -47,12 +47,13 @@ extern ProbePartSlots probe_part_scratch;
 void probe_block(const uint32_t* ts, const uint32_t* d1, const uint32_t* d2,
                  const ProbePartSlots* p1, const ProbePartSlots* p2,
                  const ProbeMixSlots* mx, int n, int pri);   // defined by the host
-// The reverb's clear-on-sleep (and the boot prime's clear), stamped around
-// AmbientReverb::clear() inside the sample loop. Rare, so the global stores
-// are fine here, as for ProbeSwap below.
+// The sleeping reverb's spread clear, stamped around each
+// AmbientReverb::clear_step() on the control tick (fault R4; until 2026-10-24
+// it stamped the whole clear(), which cost 393 k cycles in one sample). 32
+// steps per sleep, so the global stores are fine here, as for ProbeSwap below.
 struct ProbeRevClear {
-    uint32_t n;            // clears so far
-    uint32_t last, max;    // cycles of the last one / the worst one
+    uint32_t n;            // clear steps so far
+    uint32_t last, max;    // cycles of the last step / the worst one
 };
 extern ProbeRevClear probe_rev_clear;            // defined in instrument.cpp
 } // namespace spky

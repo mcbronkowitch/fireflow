@@ -108,6 +108,14 @@ class Oliverb {
     hp_decay_1_ = hp_decay_2_ = 0.0f;
   }
 
+  // Clear() minus the delay buffer (fault R4): the caller zeroes the buffer
+  // it handed Init() in chunks, and must not call Process() until it has.
+  void ClearState() {
+    engine_.ResetWritePtr();
+    lp_decay_1_ = lp_decay_2_ = 0.0f;
+    hp_decay_1_ = hp_decay_2_ = 0.0f;
+  }
+
   void Process(float* left, float* right) {
     // Griesinger topology per the Dattorro paper: 4 AP input diffusers,
     // then a loop of 2x (2 AP + 1 long delay). All lengths are the

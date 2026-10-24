@@ -84,6 +84,10 @@ class FxEngine {
     write_ptr_ = 0;
   }
 
+  // Spotykach port addition (fault R4): Clear() without the buffer fill, for
+  // a host that zeroes the buffer itself in chunks while nothing processes.
+  void ResetWritePtr() { write_ptr_ = 0; }
+
   struct Empty { };
 
   template<int32_t l, typename T = Empty>
