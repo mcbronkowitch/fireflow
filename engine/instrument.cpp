@@ -363,7 +363,8 @@ void Instrument::process(const float* inL, const float* inR,
         float pl[PART_COUNT], prr[PART_COUNT];
         float psl[PART_COUNT], psr[PART_COUNT];
         _parts[pri].set_inhibit(false);   // knob flips must never strand a part
-        _parts[pri].process(in_l, in_r, pl[pri], prr[pri], psl[pri], psr[pri]);
+        _parts[pri].process(in_l, in_r, pl[pri], prr[pri], psl[pri], psr[pri]
+                            SPKY_PROBE_PART_ARGS1(i));
         SPKY_PROBE_DECK1(i, pri);
 
         // The duck stage, read straight after the priority deck ran so it
@@ -459,7 +460,8 @@ void Instrument::process(const float* inL, const float* inR,
         } else {
             _parts[yld].set_inhibit(false);
         }
-        _parts[yld].process(in_l, in_r, pl[yld], prr[yld], psl[yld], psr[yld]);
+        _parts[yld].process(in_l, in_r, pl[yld], prr[yld], psl[yld], psr[yld]
+                            SPKY_PROBE_PART_ARGS2(i));
         SPKY_PROBE_DECK2(i);
 
         // Lamp observers: peak followers, instant attack, one-pole release.

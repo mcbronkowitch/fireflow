@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+"""Guard for shell/read_cbp.py. Plain script -- pytest is not installed here --
+and its exit code is the verdict. The fixture is hand-written in the line
+format cb_profile.cpp prints; the committed R4 capture (an image from before
+the split) proves the no-CBP_WIN2 path on real lines.
+"""
+import io
+import os
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
+import read_cbp as r  # noqa: E402
+
+FAILS = []
+
+
+def check(name, cond):
+    print(("ok   " if cond else "FAIL ") + name)
+    if not cond:
+        FAILS.append(name)
+
+
+FIXTURE = """SHELL_PLAY_V r=0 531 523 562 460 531 450 445 527 605 517
+CBP_WIN w=5 cb=900000 cb_max=950000 proc=870000 a=360000 b=380000 mix=150000 law=12000
+CBP_WIN2 w=5 am=100000 ae=200000 af=59998 bm=90000 be=210000 bf=80000
+CBP_BOOT patch=3 eng_a=4 eng_b=3
+CBP_WIN w=6 cb=910000 cb_max=960000 proc=880000 a=362000 b=382000 mix=152000 law=12200
+CBP_WIN2 w=6 am=101000 ae=201000 af=60000 bm=91000 be=211000 bf=80000
+CBP_WIN w=7 cb=920000 cb_max=970000 proc=890000 a=364000 b=384000 mix=154000 law=12400
+""".splitlines()
+
+wins, boot = r.parse(FIXTURE)
+check("three windows parsed", sorted(wins) == [5, 6, 7])
+check("the boot line is kept", boot == (3, 4, 3))
+check("a window joins its two lines", wins[5]["a"] == 360000 and wins[5]["ae"] == 200000)
+check("a window without CBP_WIN2 has no split", "am" not in wins[7])
+m = r.means(wins, 5, 6)
+check("means run over the complete windows only", m is not None and m[1] == 2
+      and m[0]["cb"] == 905000 and m[0]["ae"] == 200500)
+check("a range with no complete window has no mean", r.means(wins, 7, 7) is None)
+check("a split two cycles short is within slack", r.split_gaps(wins) == [])
+out = io.StringIO()
+check("the report succeeds on the fixture", r.report(wins, boot, 0, 1 << 30, out) is True)
+text = out.getvalue()
+check("the report prints the boot line, every window and the mean",
+      "boot patch=3 eng_a=4 eng_b=3" in text and "\n     5 " in text and "\n     7 " in text
+      and "mean" in text and "(2 complete windows)" in text)
+check("a missing split prints dashes", "       -" in text.splitlines()[4])
+
+# --- sabotages ------------------------------------------------------------
+bad = r.parse([l.replace("af=60000", "af=50000") for l in FIXTURE])[0]
+check("sabotage: a split that does not add up goes red",
+      r.split_gaps(bad) == [(6, "a", 10000)] and r.report(bad, None, 0, 99, io.StringIO()) is False)
+bad = r.parse([l.replace("af=60000", "af=70000") for l in FIXTURE])[0]
+check("sabotage: a split above the deck goes red", r.split_gaps(bad) == [(6, "a", -10000)])
+check("sabotage: a capture with no window is a failure",
+      r.parse(["SHELL_PLAY_LAW cyc_last=1 cyc_max=2 led_last=3 led_max=4 cb_last=5 cb_max=6"])[0] == {})
+check("sabotage: a malformed window line is not a window",
+      r.parse(["CBP_WIN w=5 cb=900000 cb_max=950000 proc=870000 a=360000 b=380000 mix=150000"])[0] == {})
+
+# --- the committed R4 capture: real lines, no split -------------------------
+R4 = os.path.join(HERE, "..", "docs", "hardware", "captures", "reva-play-2026-10-24-r4-profile.txt")
+with open(R4, encoding="utf-8", errors="replace") as f:
+    w4, b4 = r.parse(f.read().splitlines())
+check("the R4 capture's 178 windows parse", len(w4) == 178)
+check("the R4 capture carries no split", all("am" not in d for d in w4.values()))
+m4 = r.means(w4, 43, 49)
+check("the R4 capture has no complete window, so no mean", m4 is None)
+check("window 43 of the R4 capture reads as the record says",
+      w4[43]["cb"] == 939268 and w4[43]["a"] == 369133 and w4[43]["b"] == 388728)
+
+print("%d failed" % len(FAILS) if FAILS else "all passed")
+sys.exit(1 if FAILS else 0)

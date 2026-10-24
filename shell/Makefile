@@ -422,6 +422,7 @@ CPP_SOURCES = \
 	scan_check.cpp \
 	scan_value.cpp \
 	controls.cpp \
+	boot_patch.cpp \
 	control_tick.cpp \
 	keys.cpp \
 	pot_owner.cpp \

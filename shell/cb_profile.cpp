@@ -10,6 +10,7 @@
 // (engine/util/probe_mark.h).
 namespace spky {
 volatile uint32_t* probe_clock = &DWT->CYCCNT;
+ProbePartSlots     probe_part_scratch;
 } // namespace spky
 
 namespace {
@@ -22,6 +23,12 @@ int      g_maxi  = 0;    // its index in the block
 uint32_t g_med   = 0;    // the mean of the other samples of this block
 uint32_t g_deck[2] = {0, 0};  // deck A / deck B process(), summed over the block
 uint32_t g_mix   = 0;    // the rest of process(): CHOKE, mix, reverb, limiter
+// Each deck's process() split three ways (fault R4), summed over the block:
+// [0] modulation + control (the lanes, the raster tick, the fire; on the
+// priority deck also the top-of-sample centre update, on the yielding deck
+// the duck stage), [1] the engine, [2] the FX chain. The three sum to g_deck.
+enum { SEG_MOD = 0, SEG_ENG = 1, SEG_FX = 2, SEG_COUNT = 3 };
+uint32_t g_seg[2][SEG_COUNT] = {{0, 0, 0}, {0, 0, 0}};
 
 uint32_t g_block = 0;    // blocks since StartAudio
 int      g_eng[2] = {-1, -1};  // each deck's engine id at the last block end
@@ -63,9 +70,11 @@ uint32_t           g_hist[kHist];
 constexpr uint32_t kWinBlocks = 1000u;
 struct Win {
     uint32_t cb, proc, deck[2], mix, law, cb_max;
+    uint32_t seg[2][SEG_COUNT];
 };
 uint64_t          g_wsum_cb = 0, g_wsum_proc = 0, g_wsum_deck[2] = {0, 0}, g_wsum_mix = 0,
-                  g_wsum_law = 0;
+                  g_wsum_law = 0, g_wsum_seg[2][SEG_COUNT] = {{0, 0, 0}, {0, 0, 0}};
+uint64_t          g_sum_seg[2][SEG_COUNT] = {{0, 0, 0}, {0, 0, 0}};
 uint32_t          g_wmax_cb = 0, g_wn = 0;
 volatile Win      g_win_pub;
 volatile uint32_t g_win_n = 0;
@@ -94,19 +103,32 @@ uint32_t lane_events(const spky::Instrument& inst)
 
 namespace spky {
 void probe_block(const uint32_t* ts, const uint32_t* d1, const uint32_t* d2,
+                 const ProbePartSlots* p1, const ProbePartSlots* p2,
                  int n, int pri)
 {
     g_proc = ts[n] - ts[0];
     uint32_t a = 0, b = 0, m = 0;
+    uint32_t sa[SEG_COUNT] = {0, 0, 0}, sb[SEG_COUNT] = {0, 0, 0};
     for(int i = 0; i < n; ++i)
     {
         a += d1[i] - ts[i];        // top of the sample + the priority deck
         b += d2[i] - d1[i];        // the yielding deck
         m += ts[i + 1] - d2[i];    // mix, reverb, limiter
+        sa[SEG_MOD] += p1[i][0] - ts[i];
+        sa[SEG_ENG] += p1[i][1] - p1[i][0];
+        sa[SEG_FX]  += d1[i] - p1[i][1];
+        sb[SEG_MOD] += p2[i][0] - d1[i];
+        sb[SEG_ENG] += p2[i][1] - p2[i][0];
+        sb[SEG_FX]  += d2[i] - p2[i][1];
     }
     g_deck[pri]     = a;
     g_deck[1 - pri] = b;
     g_mix           = m;
+    for(int s = 0; s < SEG_COUNT; ++s)
+    {
+        g_seg[pri][s]     = sa[s];
+        g_seg[1 - pri][s] = sb[s];
+    }
     uint32_t mx = 0;
     int      mi = 0;
     for(int i = 0; i < n; ++i)
@@ -153,9 +175,21 @@ void cb_profile_block_end(uint32_t cb, uint32_t law, uint32_t led, bool warm,
     g_wsum_deck[1] += g_deck[1];
     g_wsum_mix += g_mix;
     g_wsum_law += law;
+    for(int p = 0; p < 2; ++p)
+        for(int s = 0; s < SEG_COUNT; ++s)
+        {
+            g_wsum_seg[p][s] += g_seg[p][s];
+            g_sum_seg[p][s] += g_seg[p][s];
+        }
     if(cb > g_wmax_cb) g_wmax_cb = cb;
     if(++g_wn == kWinBlocks)
     {
+        for(int p = 0; p < 2; ++p)
+            for(int s = 0; s < SEG_COUNT; ++s)
+            {
+                g_win_pub.seg[p][s] = static_cast<uint32_t>(g_wsum_seg[p][s] / kWinBlocks);
+                g_wsum_seg[p][s]    = 0;
+            }
         g_win_pub.cb      = static_cast<uint32_t>(g_wsum_cb / kWinBlocks);
         g_win_pub.proc    = static_cast<uint32_t>(g_wsum_proc / kWinBlocks);
         g_win_pub.deck[0] = static_cast<uint32_t>(g_wsum_deck[0] / kWinBlocks);
@@ -232,6 +266,8 @@ void cb_profile_report(bench::Board& hw)
         wv.mix       = g_win_pub.mix;
         wv.law       = g_win_pub.law;
         wv.cb_max    = g_win_pub.cb_max;
+        for(int p = 0; p < 2; ++p)
+            for(int s = 0; s < SEG_COUNT; ++s) wv.seg[p][s] = g_win_pub.seg[p][s];
     } while(wn != g_win_n);
     if(wn != 0 && wn != win_seen)
     {
@@ -243,6 +279,14 @@ void cb_profile_report(bench::Board& hw)
                      static_cast<int>(wv.cb_max), static_cast<int>(wv.proc),
                      static_cast<int>(wv.deck[0]), static_cast<int>(wv.deck[1]),
                      static_cast<int>(wv.mix), static_cast<int>(wv.law));
+        // The same window, each deck split into modulation + control (m),
+        // engine (e) and FX (f): am + ae + af = a, bm + be + bf = b, up to the
+        // per-block rounding. At most ~80 bytes.
+        hw.PrintLine("CBP_WIN2 w=%d am=%d ae=%d af=%d bm=%d be=%d bf=%d",
+                     static_cast<int>(wn), static_cast<int>(wv.seg[0][SEG_MOD]),
+                     static_cast<int>(wv.seg[0][SEG_ENG]), static_cast<int>(wv.seg[0][SEG_FX]),
+                     static_cast<int>(wv.seg[1][SEG_MOD]), static_cast<int>(wv.seg[1][SEG_ENG]),
+                     static_cast<int>(wv.seg[1][SEG_FX]));
     }
     if(++g_calls % 20u != 0u) return;
     const uint32_t n = g_n;
@@ -262,6 +306,12 @@ void cb_profile_report(bench::Board& hw)
     hw.PrintLine("CBP_BOOT patch=%d eng_a=%d eng_b=%d", patch, g_eng[0], g_eng[1]);
     hw.PrintLine("CBP_SUM2 a_mean=%d b_mean=%d mix_mean=%d", static_cast<int>(g_sum_deck[0] / n),
                  static_cast<int>(g_sum_deck[1] / n), static_cast<int>(g_sum_mix / n));
+    // Since boot, the deck split's means (CBP_WIN2's fields, as CBP_SUM2 is
+    // CBP_WIN's).
+    hw.PrintLine("CBP_SUM3 am=%d ae=%d af=%d bm=%d be=%d bf=%d",
+                 static_cast<int>(g_sum_seg[0][SEG_MOD] / n), static_cast<int>(g_sum_seg[0][SEG_ENG] / n),
+                 static_cast<int>(g_sum_seg[0][SEG_FX] / n), static_cast<int>(g_sum_seg[1][SEG_MOD] / n),
+                 static_cast<int>(g_sum_seg[1][SEG_ENG] / n), static_cast<int>(g_sum_seg[1][SEG_FX] / n));
     for(int h = 0; h < 3; ++h)
     {
         const uint32_t* p = g_hist + h * 8;
