@@ -4484,7 +4484,7 @@ items 1 and 2 **failed** (the small caps stood 5.3 mm apart edge to edge), item
   months ahead of the master plan's 18 Dec, so the plate is in hand before
   the Rev A bring-up.
 
-- **Hardware spend so far (2026-10-13): about 620–630 €.** Paid amounts from
+- **Hardware spend so far (2026-10-24): about 700–710 €.** Paid amounts from
   the entries above; dollars at the rate PayPal charged for Rev A
   (136.58 $ = 128.22 €), pounds at 1.15–1.20 € (the order-day rate is not
   recorded).
@@ -4496,13 +4496,15 @@ items 1 and 2 **failed** (the small caps stood 5.3 mm apart edge to edge), item
   | Coupon: Reichelt parts incl. shipping | 20.14 € |
   | Coupon: Amazon RV09 pots, 2 × 10 | 13.98 € |
   | Thonk panel parts (£179.01, DDU) | ~205–215 € |
+  | Thonk: FedEx customs duty and import VAT | 81.75 € |
   | Formulor acrylic plate, 3 mm | 28.14 € |
   | Formulor correction cut, 2 mm | 24.77 € |
   | JLCPCB Rev A, five boards assembled | 128.22 € |
   | Schaeffer aluminium plate | ~140 € |
 
-  The Thonk import VAT and FedEx fee have not been charged yet; if they come,
-  about 40–55 € more. Not counted: the Daisy Seed, the ST-Link, tools and the
+  The FedEx bill for the Thonk parcel came on 2026-10-24: 81.75 € customs
+  duty and import VAT, against the 40–55 € estimated here, which puts the
+  Thonk set at roughly 290 € delivered. Not counted: the Daisy Seed, the ST-Link, tools and the
   measurement rig.
 
 **Next:** bring-up (P7) when the boards arrive. Its checklist and fault list

@@ -16,7 +16,7 @@ deadline. Delivery dates go in the table when the parcels arrive.
 
 | Supplier | What | Price | Arrived |
 |---|---|---|---|
-| Thonk | One set of panel parts (below) | **£179.01 paid**: £164.51 parts excl. VAT + £14.50 FedEx International Connect Plus (4–7 days). DDU: import VAT and carrier fee still due on delivery | |
+| Thonk | One set of panel parts (below) | **£179.01 paid**: £164.51 parts excl. VAT + £14.50 FedEx International Connect Plus (4–7 days). DDU: FedEx invoiced **81.75 €** customs duty and import VAT afterwards (bill received 2026-10-24), well above the 40–55 € estimated | |
 | Formulor | The plate: `FireflowHW-cut.svg` as of commit `60fbc37e`, clear acrylic GS 3 mm, P2. Formulor read it as one part, 304.4 × 128.5 mm | **28.14 € paid** | |
 | Formulor | The correction cut (2026-10-09): `FireflowHW-cut.svg` as of commit `815dbe3a`, clear acrylic GS **2 mm**, P2. Formulor read it as one part, 304.4 × 128.5 mm, 116 paths (outline + 115 holes) | **24.77 € paid** incl. shipping | 2026-10-13 |
 
