@@ -197,6 +197,146 @@ def test_report_prints_names_and_cb_max():
     check(str(r.CB_MAX_INIT) in text, "the report does not quote the cb_max criterion")
 
 
+def raw_lines(w, lo=None, hi=None, drop_r=None):
+    """One raw window as run_panel_scan_report() prints it with
+    SHELL_RAW_SPREAD=1: SHELL_PLAY_R lines of up to six lo:hi pairs.
+    Defaults: every row at 32760..32770 (spread 10)."""
+    lo = [32760] * ROWS if lo is None else list(lo)
+    hi = [32770] * ROWS if hi is None else list(hi)
+    lines = []
+    for r0 in range(0, ROWS, 6):
+        if drop_r == r0:
+            continue
+        pairs = " ".join("%d:%d" % (a, b) for a, b in zip(lo[r0:r0 + 6], hi[r0:r0 + 6]))
+        lines.append("SHELL_PLAY_R w=%d r=%d %s" % (w, r0, pairs))
+    return lines
+
+
+def test_constants_match_the_firmware():
+    sv = (HERE / "scan_value.h").read_text(encoding="utf-8")
+    po = (HERE / "pot_owner.h").read_text(encoding="utf-8")
+    check("kPotHysteresis = %d;" % r.POT_HYSTERESIS in sv,
+          "POT_HYSTERESIS %d is not scan_value.h's kPotHysteresis" % r.POT_HYSTERESIS)
+    check("kPotTouch = %d;" % r.POT_TOUCH in po,
+          "POT_TOUCH %d is not pot_owner.h's kPotTouch" % r.POT_TOUCH)
+    check(r.RAW_WINDOW_SWEEPS == 20, "the raw window is not 20 sweeps")
+    pc = (HERE / "panel_scan.cpp").read_text(encoding="utf-8")
+    check("kRawWindowSweeps = %d;" % r.RAW_WINDOW_SWEEPS in pc,
+          "RAW_WINDOW_SWEEPS is not panel_scan.cpp's kRawWindowSweeps")
+    # raw_lines() transcribes these three; a change on either side shows here.
+    for piece in ('"SHELL_PLAY_R w=%u r=%d"', '" %u:%u"', "r0 += 6"):
+        check(piece in pc, "panel_scan.cpp no longer prints %s" % piece)
+
+
+def test_row_senses_come_from_the_generated_header():
+    s = r.row_senses()
+    check(len(s) == ROWS, "expected %d senses, got %d" % (ROWS, len(s)))
+    check(s[0] == 0 and s[72] == 3, "row 0 / row 72 sense is %r / %r" % (s[:1], s[72:]))
+    check(sum(1 for x in s if x == 0) == 20,
+          "SENSE_0 carries %d rows, not 20" % sum(1 for x in s if x == 0))
+
+
+def test_raw_window_parses_whole():
+    lo = list(range(100, 100 + ROWS))
+    hi = [x + 7 for x in lo]
+    ws = r.parse_raw_windows(raw_lines(5, lo, hi))
+    check(len(ws) == 1 and ws[0]["w"] == 5, "expected window 5, got %r"
+          % ([w["w"] for w in ws],))
+    if ws:
+        check(ws[0]["lo"] == lo and ws[0]["hi"] == hi, "lo/hi did not parse")
+
+
+def test_a_raw_window_missing_a_line_is_not_a_window():
+    check(r.parse_raw_windows(raw_lines(5, drop_r=36)) == [],
+          "a window with a missing SHELL_PLAY_R line was accepted")
+
+
+def test_a_torn_raw_window_does_not_mix_with_the_next():
+    lines = raw_lines(5)[:4] + raw_lines(6, hi=[32800] * ROWS)
+    ws = r.parse_raw_windows(lines)
+    check([w["w"] for w in ws] == [6], "a torn window leaked: %r" % ([w["w"] for w in ws],))
+    # Host lost window 5's tail and window 6's head: the halves must not merge.
+    lines = raw_lines(5)[:6] + raw_lines(6)[6:]
+    check(r.parse_raw_windows(lines) == [], "halves of windows 5 and 6 merged")
+
+
+def test_raw_windows_interleaved_with_frames_still_parse():
+    lines = raw_lines(3) + frame_lines() + raw_lines(4) + frame_lines()
+    check([w["w"] for w in r.parse_raw_windows(lines)] == [3, 4],
+          "raw windows between frames did not parse")
+    check(len(r.parse_frames(lines)) == 2, "raw lines broke the frame parser")
+
+
+def test_a_repeated_window_counts_once():
+    ws = r.parse_raw_windows(raw_lines(3) + raw_lines(3))
+    check([w["w"] for w in ws] == [3], "window 3 counted twice")
+
+
+def test_worst_spread_per_row_skips_the_boot_window():
+    hi_boot = with_row(9, 40000, [32770] * ROWS)
+    hi_late = with_row(9, 32800, [32770] * ROWS)
+    ws = r.parse_raw_windows(raw_lines(1, hi=hi_boot) + raw_lines(2, hi=hi_late)
+                             + raw_lines(3))
+    sp = r.raw_spreads(ws)
+    check(sp[9]["worst"] == 40, "row 9 worst spread %r, not 40 (boot window 1 "
+          "must be skipped)" % (sp[9]["worst"],))
+    check(sp[9]["w"] == 2, "row 9's worst is from window %r, not 2" % (sp[9]["w"],))
+    check(sp[0]["worst"] == 10, "row 0 worst spread %r, not 10" % (sp[0]["worst"],))
+    check(sp[0]["windows"] == 2, "row 0 judged over %r windows, not 2"
+          % (sp[0]["windows"],))
+
+
+def test_touch_rule():
+    check(r.touch_rule(67) == 144, "the coupon's 67 does not give 144")
+    check(r.touch_rule(10) == 48, "a quiet 10 does not give 3 x H = 48")
+    check(r.touch_rule(72) == 144, "72 does not give 144")
+    check(r.touch_rule(73) == 160, "73 does not round up to 160")
+
+
+def test_sense_summary_splits_by_pin():
+    s = r.row_senses()
+    hi = [32770] * ROWS
+    for row, sense in enumerate(s):
+        if sense == 0:
+            hi[row] = 32800          # spread 40 on every SENSE_0 row
+    sp = r.raw_spreads(r.parse_raw_windows(raw_lines(2, hi=hi)))
+    summ = r.sense_summary(sp, s)
+    check(summ[0]["worst"] == 40 and summ[0]["over_h"] == 20,
+          "SENSE_0 summary %r" % (summ[0],))
+    check(all(summ[p]["worst"] == 10 and summ[p]["over_h"] == 0 for p in (1, 2, 3)),
+          "SENSE_1-3 summary %r" % ([summ[p] for p in (1, 2, 3)],))
+    check(summ[0]["median"] == 40 and summ[1]["median"] == 10,
+          "median wrong: %r / %r" % (summ[0]["median"], summ[1]["median"]))
+
+
+def quiet_raw(windows):
+    return r.report_raw(windows, out=io.StringIO())
+
+
+def test_raw_report_exit_codes():
+    check(quiet_raw([]) == 1, "no raw window: exit code not 1")
+    check(quiet_raw(r.parse_raw_windows(raw_lines(1))) == 1,
+          "only the boot window: exit code not 1")
+    quiet = r.parse_raw_windows(raw_lines(2) + raw_lines(3))
+    check(quiet_raw(quiet) == 0, "spread 10 everywhere: exit code not 0")
+    # 73 counts gives a rule of 160 > kPotTouch 144.
+    loud = r.parse_raw_windows(raw_lines(2, hi=with_row(9, 32760 + 73, [32770] * ROWS)))
+    check(quiet_raw(loud) == 1, "a rule above kPotTouch: exit code not 1")
+    edge = r.parse_raw_windows(raw_lines(2, hi=with_row(9, 32760 + 72, [32770] * ROWS)))
+    check(quiet_raw(edge) == 0, "72 counts (rule 144): exit code not 0")
+
+
+def test_raw_report_names_rows_and_senses():
+    hi = with_row(1, 32830, [32770] * ROWS)
+    out = io.StringIO()
+    r.report_raw(r.parse_raw_windows(raw_lines(2, hi=hi)), out=out)
+    text = out.getvalue()
+    check("STEPS_A" in text and "70" in text, "the raw report does not name "
+          "row 1 STEPS_A with its spread 70")
+    check("SENSE_0" in text and "SENSE_3" in text, "the raw report has no "
+          "per-sense summary")
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

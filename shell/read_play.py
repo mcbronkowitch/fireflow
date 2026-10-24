@@ -3,7 +3,7 @@ judges it against docs/hardware/reva-bring-up.md sections 5, 6 and 10.
 
 Call:
     python read_play.py PORT capture.txt [seconds]   # record, watch, analyse
-    python read_play.py --file capture.txt [--rest] [--stops] [--seconds S]
+    python read_play.py --file capture.txt [--rest] [--stops] [--raw] [--seconds S]
 
 Recording writes every line the board sends, unedited, to capture.txt --
 that file is what gets committed under docs/hardware/captures/ -- and while
@@ -21,13 +21,20 @@ only when the raw word has moved more than kPotHysteresis (16 counts) from
 the last emitted one, and it snaps to exactly 0 / 1000 at the stops
 (scan_value.h). So "the printed value does not change at rest" IS the
 hysteresis criterion of checklist row 5.3, and "reaches 0 and 1000" IS row
-5.2's "both stops". Raw counts are not printed; H itself is not measurable
-from this image.
+5.2's "both stops". Raw counts are not printed by the default image.
+
+Raw counts (SHELL_RAW_SPREAD=1, fault R3): once per 20-sweep window (one
+second) the image prints SHELL_PLAY_R lines, `w=<window> r=<first row>` and
+up to six `lo:hi` pairs, the min and max of each row's raw 16-bit word in
+that window. --raw judges them: per row the worst one-second spread, per
+sense pin the worst and median of those, and row 5.7's touch rule over the
+worst spread against kPotTouch. Window 1 opens at boot and is skipped.
 
 Verdicts (exit code): no complete frame, or a span that is never valid, is
 1. --rest makes any row that changed during the capture a failure (hands
 off the panel). --stops makes any row that did not reach both stops a
-failure (every pot turned end to end). Without either flag the rows are
+failure (every pot turned end to end). --raw makes a missing raw window, or
+a touch rule above kPotTouch, a failure. Without a flag the rows are
 reported, not judged.
 
 The line format was transcribed from panel_scan.cpp's PrintLine calls; the
@@ -51,8 +58,16 @@ CB_MAX_INIT = 900000
 CB_DEADLINE = 945000
 # scan-budget.md: 24 steps x 2 ms per sweep.
 SWEEP_MS_EXPECTED = 48.0
+# scan_value.h kPotHysteresis, pot_owner.h kPotTouch, panel_scan.cpp
+# kRawWindowSweeps (the guard checks all three against the source).
+POT_HYSTERESIS = 16
+POT_TOUCH = 144
+RAW_WINDOW_SWEEPS = 20
+SENSES = 4
 
 _V_LINE = re.compile(r"^SHELL_PLAY_V r=(\d+)((?: -?\d+)+)\s*$")
+_R_LINE = re.compile(r"^SHELL_PLAY_R w=(\d+) r=(\d+)((?: \d+:\d+)+)\s*$")
+_ROW_ENTRY = re.compile(r"\{\s*\d+,\s*\d+,\s*[\w:]+,\s*(\d+)[^}]*\},\s*//\s*row\s+(\d+)\s")
 _PLAY_LINE = re.compile(r"^SHELL_PLAY (\S.*)$")
 _LAW_LINE = re.compile(r"^SHELL_PLAY_LAW (\S.*)$")
 _ROW_COMMENT = re.compile(r"//\s*row\s+(\d+)\s+(\w+)\s+--")
@@ -64,6 +79,14 @@ def row_names(path=PANEL_MAP):
     for m in _ROW_COMMENT.finditer(path.read_text(encoding="utf-8")):
         names[int(m.group(1))] = m.group(2)
     return [names[i] for i in range(len(names))]
+
+
+def row_senses(path=PANEL_MAP):
+    """Row index -> sense pin, the table entry's fourth field."""
+    senses = {}
+    for m in _ROW_ENTRY.finditer(path.read_text(encoding="utf-8")):
+        senses[int(m.group(2))] = int(m.group(1))
+    return [senses[i] for i in range(len(senses))]
 
 
 def _fields(text):
@@ -191,6 +214,104 @@ def sweeps_per_second(frames, seconds):
     return (frames[-1]["play"]["sweeps"] - frames[0]["play"]["sweeps"]) / seconds
 
 
+def parse_raw_windows(lines, rows=None):
+    """Every complete raw window (SHELL_RAW_SPREAD=1), in order, each once:
+    {"w", "lo", "hi"}. A window opens at SHELL_PLAY_R r=0 and is complete
+    once every row is filled from lines of the same w; a line of another w
+    tears the open window off."""
+    rows = rows if rows is not None else len(row_names())
+    windows, seen, cur = [], set(), None
+    for raw in lines:
+        m = _R_LINE.match(raw.strip())
+        if not m:
+            continue
+        w, r0 = int(m.group(1)), int(m.group(2))
+        pairs = [tuple(int(x) for x in p.split(":")) for p in m.group(3).split()]
+        if r0 == 0:
+            cur = {"w": w, "lo": [None] * rows, "hi": [None] * rows}
+        if cur is None or cur["w"] != w or r0 + len(pairs) > rows:
+            cur = None
+            continue
+        for i, (lo, hi) in enumerate(pairs):
+            cur["lo"][r0 + i], cur["hi"][r0 + i] = lo, hi
+        if all(x is not None for x in cur["lo"]):
+            if w not in seen:
+                windows.append(cur)
+                seen.add(w)
+            cur = None
+    return windows
+
+
+def raw_spreads(windows):
+    """Row -> {"worst", "w", "lo", "hi", "windows"}: the worst max-min of the
+    raw word in one window, which window, its lo/hi, and how many windows
+    were judged. Window 1 opens at boot, before the span is valid and with a
+    part-sweep in it, and is skipped."""
+    judged = [w for w in windows if w["w"] > 1]
+    rows = len(judged[0]["lo"]) if judged else 0
+    out = {}
+    for r in range(rows):
+        best = None
+        for w in judged:
+            s = w["hi"][r] - w["lo"][r]
+            if best is None or s > best["worst"]:
+                best = {"worst": s, "w": w["w"], "lo": w["lo"][r], "hi": w["hi"][r]}
+        best["windows"] = len(judged)
+        out[r] = best
+    return out
+
+
+def touch_rule(worst):
+    """Row 5.7's rule (pot_owner.h): max(2 x worst spread, 3 x H), rounded
+    up to a multiple of 16."""
+    v = max(2 * worst, 3 * POT_HYSTERESIS)
+    return -(-v // 16) * 16
+
+
+def sense_summary(spreads, senses):
+    """Sense pin -> {"rows", "worst", "median", "over_h"} of the rows' worst
+    spreads; over_h counts rows whose worst spread exceeds H."""
+    from statistics import median
+    out = {}
+    for p in range(SENSES):
+        vals = [spreads[r]["worst"] for r in spreads if senses[r] == p]
+        out[p] = {"rows": len(vals),
+                  "worst": max(vals) if vals else None,
+                  "median": median(vals) if vals else None,
+                  "over_h": sum(1 for v in vals if v > POT_HYSTERESIS)}
+    return out
+
+
+def report_raw(windows, out=None):
+    """Judges row 5.7 from the raw windows: exit 1 without a judged window or
+    when the touch rule over the worst spread lands above kPotTouch."""
+    out = out or sys.stdout
+    sp = raw_spreads(windows)
+    if not sp:
+        print("no judged raw window (SHELL_PLAY_R; window 1 is boot and "
+              "skipped): was the image built with SHELL_RAW_SPREAD=1?", file=out)
+        return 1
+    names, senses = row_names(), row_senses()
+    n = sp[0]["windows"]
+    print("raw: %d windows of %d sweeps judged" % (n, RAW_WINDOW_SWEEPS), file=out)
+    print("  row name          sense  worst     lo     hi  window", file=out)
+    for r in sorted(sp, key=lambda r: -sp[r]["worst"]):
+        s = sp[r]
+        print("  %3d %-13s SENSE_%d %5d  %5d  %5d  w=%d%s"
+              % (r, names[r], senses[r], s["worst"], s["lo"], s["hi"], s["w"],
+                 "  > H" if s["worst"] > POT_HYSTERESIS else ""), file=out)
+    for p, s in sense_summary(sp, senses).items():
+        print("  SENSE_%d: %2d rows  worst %s  median %s  %d over H = %d"
+              % (p, s["rows"], s["worst"], s["median"], s["over_h"], POT_HYSTERESIS),
+              file=out)
+    worst = max(s["worst"] for s in sp.values())
+    rule = touch_rule(worst)
+    print("  worst spread %d -> touch rule %d (kPotTouch %d)%s"
+          % (worst, rule, POT_TOUCH, "  <- above kPotTouch" if rule > POT_TOUCH else ""),
+          file=out)
+    return 1 if rule > POT_TOUCH else 0
+
+
 _stops = stops   # report()'s `stops` flag shadows the function
 
 
@@ -296,12 +417,13 @@ def main(argv):
     args = list(argv[1:])
     rest = "--rest" in args
     stops_flag = "--stops" in args
+    raw = "--raw" in args
     seconds = None
     if "--seconds" in args:
         i = args.index("--seconds")
         seconds = float(args[i + 1])
         del args[i:i + 2]
-    args = [a for a in args if a not in ("--rest", "--stops")]
+    args = [a for a in args if a not in ("--rest", "--stops", "--raw")]
     if len(args) == 2 and args[0] == "--file":
         path = args[1]
     elif len(args) in (2, 3) and args[0] != "--file":
@@ -310,15 +432,18 @@ def main(argv):
         record(args[0], path, seconds)
     else:
         raise SystemExit("usage: read_play.py PORT capture.txt [seconds] "
-                         "| --file capture.txt [--rest] [--stops] [--seconds S]")
+                         "| --file capture.txt [--rest] [--stops] [--raw] [--seconds S]")
     with open(path, encoding="utf-8", errors="replace") as f:
         lines = f.readlines()
     if is_coupon_capture(lines):
         print("this is a coupon play capture (SHELL_PLAY rv2=...); "
               "read_play.py reads the Rev A image only")
         return 1
-    return report(parse_frames(lines), rest=rest, stops=stops_flag,
+    code = report(parse_frames(lines), rest=rest, stops=stops_flag,
                   seconds=seconds)
+    if raw:
+        code = max(code, report_raw(parse_raw_windows(lines)))
+    return code
 
 
 if __name__ == "__main__":
