@@ -23,12 +23,17 @@ int      g_maxi  = 0;    // its index in the block
 uint32_t g_med   = 0;    // the mean of the other samples of this block
 uint32_t g_deck[2] = {0, 0};  // deck A / deck B process(), summed over the block
 uint32_t g_mix   = 0;    // the rest of process(): CHOKE, mix, reverb, limiter
-// Each deck's process() split three ways (fault R4), summed over the block:
-// [0] modulation + control (the lanes, the raster tick, the fire; on the
-// priority deck also the top-of-sample centre update, on the yielding deck
-// the duck stage), [1] the engine, [2] the FX chain. The three sum to g_deck.
-enum { SEG_MOD = 0, SEG_ENG = 1, SEG_FX = 2, SEG_COUNT = 3 };
-uint32_t g_seg[2][SEG_COUNT] = {{0, 0, 0}, {0, 0, 0}};
+// Each deck's process() split (fault R4), summed over the block: [0]
+// modulation + control (the lanes, the raster tick, the fire; on the priority
+// deck also the top-of-sample centre update, on the yielding deck the duck
+// stage), [1] the engine, and the FX chain in five: [2] the target
+// smoothers, [3] GRIT, [4] FLUX, [5] the tap, the FX mix and COMP, [6] the
+// send law. All seven sum to g_deck; [2..6] sum to the FX chain.
+enum {
+    SEG_MOD = 0, SEG_ENG, SEG_SMOOTH, SEG_GRIT, SEG_FLUX, SEG_COMP, SEG_SEND, SEG_COUNT
+};
+constexpr int SEG_FX_FIRST = SEG_SMOOTH;
+uint32_t g_seg[2][SEG_COUNT] = {};
 
 uint32_t g_block = 0;    // blocks since StartAudio
 int      g_eng[2] = {-1, -1};  // each deck's engine id at the last block end
@@ -73,8 +78,8 @@ struct Win {
     uint32_t seg[2][SEG_COUNT];
 };
 uint64_t          g_wsum_cb = 0, g_wsum_proc = 0, g_wsum_deck[2] = {0, 0}, g_wsum_mix = 0,
-                  g_wsum_law = 0, g_wsum_seg[2][SEG_COUNT] = {{0, 0, 0}, {0, 0, 0}};
-uint64_t          g_sum_seg[2][SEG_COUNT] = {{0, 0, 0}, {0, 0, 0}};
+                  g_wsum_law = 0, g_wsum_seg[2][SEG_COUNT] = {};
+uint64_t          g_sum_seg[2][SEG_COUNT] = {};
 uint32_t          g_wmax_cb = 0, g_wn = 0;
 volatile Win      g_win_pub;
 volatile uint32_t g_win_n = 0;
@@ -108,18 +113,23 @@ void probe_block(const uint32_t* ts, const uint32_t* d1, const uint32_t* d2,
 {
     g_proc = ts[n] - ts[0];
     uint32_t a = 0, b = 0, m = 0;
-    uint32_t sa[SEG_COUNT] = {0, 0, 0}, sb[SEG_COUNT] = {0, 0, 0};
+    uint32_t sa[SEG_COUNT] = {}, sb[SEG_COUNT] = {};
     for(int i = 0; i < n; ++i)
     {
         a += d1[i] - ts[i];        // top of the sample + the priority deck
         b += d2[i] - d1[i];        // the yielding deck
         m += ts[i + 1] - d2[i];    // mix, reverb, limiter
+        // Slot k of a deck ends segment k; segment 0 starts at the deck's
+        // start, the last one ends at the deck's end stamp.
         sa[SEG_MOD] += p1[i][0] - ts[i];
-        sa[SEG_ENG] += p1[i][1] - p1[i][0];
-        sa[SEG_FX]  += d1[i] - p1[i][1];
         sb[SEG_MOD] += p2[i][0] - d1[i];
-        sb[SEG_ENG] += p2[i][1] - p2[i][0];
-        sb[SEG_FX]  += d2[i] - p2[i][1];
+        for(int s = 1; s < SEG_COUNT - 1; ++s)
+        {
+            sa[s] += p1[i][s] - p1[i][s - 1];
+            sb[s] += p2[i][s] - p2[i][s - 1];
+        }
+        sa[SEG_SEND] += d1[i] - p1[i][SEG_COUNT - 2];
+        sb[SEG_SEND] += d2[i] - p2[i][SEG_COUNT - 2];
     }
     g_deck[pri]     = a;
     g_deck[1 - pri] = b;
@@ -282,11 +292,24 @@ void cb_profile_report(bench::Board& hw)
         // The same window, each deck split into modulation + control (m),
         // engine (e) and FX (f): am + ae + af = a, bm + be + bf = b, up to the
         // per-block rounding. At most ~80 bytes.
+        uint32_t fx[2] = {0, 0};
+        for(int p = 0; p < 2; ++p)
+            for(int s = SEG_FX_FIRST; s < SEG_COUNT; ++s) fx[p] += wv.seg[p][s];
         hw.PrintLine("CBP_WIN2 w=%d am=%d ae=%d af=%d bm=%d be=%d bf=%d",
                      static_cast<int>(wn), static_cast<int>(wv.seg[0][SEG_MOD]),
-                     static_cast<int>(wv.seg[0][SEG_ENG]), static_cast<int>(wv.seg[0][SEG_FX]),
+                     static_cast<int>(wv.seg[0][SEG_ENG]), static_cast<int>(fx[0]),
                      static_cast<int>(wv.seg[1][SEG_MOD]), static_cast<int>(wv.seg[1][SEG_ENG]),
-                     static_cast<int>(wv.seg[1][SEG_FX]));
+                     static_cast<int>(fx[1]));
+        // The FX chain of each deck in five: smoothers (s), GRIT (g), FLUX
+        // (x), tap + FX mix + COMP (c), send law (n); the five sum to af / bf.
+        // At most ~100 bytes.
+        hw.PrintLine("CBP_WIN3 w=%d as=%d ag=%d ax=%d ac=%d an=%d bs=%d bg=%d bx=%d bc=%d bn=%d",
+                     static_cast<int>(wn), static_cast<int>(wv.seg[0][SEG_SMOOTH]),
+                     static_cast<int>(wv.seg[0][SEG_GRIT]), static_cast<int>(wv.seg[0][SEG_FLUX]),
+                     static_cast<int>(wv.seg[0][SEG_COMP]), static_cast<int>(wv.seg[0][SEG_SEND]),
+                     static_cast<int>(wv.seg[1][SEG_SMOOTH]), static_cast<int>(wv.seg[1][SEG_GRIT]),
+                     static_cast<int>(wv.seg[1][SEG_FLUX]), static_cast<int>(wv.seg[1][SEG_COMP]),
+                     static_cast<int>(wv.seg[1][SEG_SEND]));
     }
     if(++g_calls % 20u != 0u) return;
     const uint32_t n = g_n;
@@ -306,12 +329,21 @@ void cb_profile_report(bench::Board& hw)
     hw.PrintLine("CBP_BOOT patch=%d eng_a=%d eng_b=%d", patch, g_eng[0], g_eng[1]);
     hw.PrintLine("CBP_SUM2 a_mean=%d b_mean=%d mix_mean=%d", static_cast<int>(g_sum_deck[0] / n),
                  static_cast<int>(g_sum_deck[1] / n), static_cast<int>(g_sum_mix / n));
-    // Since boot, the deck split's means (CBP_WIN2's fields, as CBP_SUM2 is
-    // CBP_WIN's).
+    // Since boot, the deck split's means (CBP_WIN2's and CBP_WIN3's fields,
+    // as CBP_SUM2 is CBP_WIN's).
+    uint64_t fxs[2] = {0, 0};
+    for(int p = 0; p < 2; ++p)
+        for(int s = SEG_FX_FIRST; s < SEG_COUNT; ++s) fxs[p] += g_sum_seg[p][s];
     hw.PrintLine("CBP_SUM3 am=%d ae=%d af=%d bm=%d be=%d bf=%d",
                  static_cast<int>(g_sum_seg[0][SEG_MOD] / n), static_cast<int>(g_sum_seg[0][SEG_ENG] / n),
-                 static_cast<int>(g_sum_seg[0][SEG_FX] / n), static_cast<int>(g_sum_seg[1][SEG_MOD] / n),
-                 static_cast<int>(g_sum_seg[1][SEG_ENG] / n), static_cast<int>(g_sum_seg[1][SEG_FX] / n));
+                 static_cast<int>(fxs[0] / n), static_cast<int>(g_sum_seg[1][SEG_MOD] / n),
+                 static_cast<int>(g_sum_seg[1][SEG_ENG] / n), static_cast<int>(fxs[1] / n));
+    hw.PrintLine("CBP_SUM4 as=%d ag=%d ax=%d ac=%d an=%d bs=%d bg=%d bx=%d bc=%d bn=%d",
+                 static_cast<int>(g_sum_seg[0][SEG_SMOOTH] / n), static_cast<int>(g_sum_seg[0][SEG_GRIT] / n),
+                 static_cast<int>(g_sum_seg[0][SEG_FLUX] / n), static_cast<int>(g_sum_seg[0][SEG_COMP] / n),
+                 static_cast<int>(g_sum_seg[0][SEG_SEND] / n), static_cast<int>(g_sum_seg[1][SEG_SMOOTH] / n),
+                 static_cast<int>(g_sum_seg[1][SEG_GRIT] / n), static_cast<int>(g_sum_seg[1][SEG_FLUX] / n),
+                 static_cast<int>(g_sum_seg[1][SEG_COMP] / n), static_cast<int>(g_sum_seg[1][SEG_SEND] / n));
     for(int h = 0; h < 3; ++h)
     {
         const uint32_t* p = g_hist + h * 8;

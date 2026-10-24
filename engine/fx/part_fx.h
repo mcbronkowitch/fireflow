@@ -3,6 +3,7 @@
 #include "fx/flux.h"
 #include "fx/grit.h"
 #include "util/onepole.h"
+#include "util/probe_mark.h"
 #include "Utility/dcblock.h"
 
 namespace spky {
@@ -52,8 +53,19 @@ public:
     void set_rhythm(const RhythmView& rv) { _flux.set_rhythm(rv); }
 
     // fxv[FXT_COUNT]: already-modulated values from Part::fx_target_value().
+    // The trailing parameters exist only in the callback profile's build
+    // (util/probe_mark.h): Part::process forwards its stamp clock and slots.
+    // They would change the mangled name, and shell/itcm_hot.ld places this
+    // function in ITCM by that exact name (the placement guard refuses a
+    // listed name that is not in the image), so the probe build keeps the
+    // plain build's name through an asm label. GNU toolchains only: the
+    // desktop probe test target links no ITCM and keeps its own mangling.
     void process(float& l, float& r, float& send_l, float& send_r,
-                 const float* fxv);
+                 const float* fxv SPKY_PROBE_PART_PARAMS)
+#if defined(SPKY_PROBE_MARKS) && defined(__GNUC__) && !defined(_MSC_VER)
+        __asm__("_ZN4spky6PartFx7processERfS1_S1_S1_PKf")
+#endif
+        ;
 
     // The excitation bus's own-FLUX source (spec §6): the part's echo
     // playback signal, one sample behind (per-sample cache, not a block

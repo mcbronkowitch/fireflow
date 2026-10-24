@@ -22,13 +22,15 @@ void PartFx::set_fx_on(FxBlock b, bool on, bool immediate) {
 }
 
 void PartFx::process(float& l, float& r, float& send_l, float& send_r,
-                     const float* fxv) {
+                     const float* fxv SPKY_PROBE_PART_PARAMS) {
     if (!_primed) {   // snap to the first real values: no phantom boot slew
         for (int i = 0; i < FXT_COUNT; ++i) _smooth[i].reset(fxv[i]);
         _primed = true;
     }
     float v[FXT_COUNT];
     for (int i = 0; i < FXT_COUNT; ++i) v[i] = _smooth[i].process(fxv[i]);
+    // Callback profile only (util/probe_mark.h): the smoothers end here.
+    SPKY_PROBE_PART_MARK(2);
 
     if (_grit.engaged() || _flux.engaged()) {
         if (v[FXT_GRIT_INT] != _grit_applied) {
@@ -43,6 +45,7 @@ void PartFx::process(float& l, float& r, float& send_l, float& send_r,
         _flux.set_time_mod(v[FXT_FLUX_TIME]);
         const float dry_l = l, dry_r = r;
         _grit.process(l, r);
+        SPKY_PROBE_PART_MARK(3);   // GRIT ends here
 
         // Tape tap capture point (spec §6: "the part's echo playback signal,
         // not the mixed output"). Flux::process only ever ADDS its echo (and
@@ -55,6 +58,7 @@ void PartFx::process(float& l, float& r, float& send_l, float& send_r,
         // mix.
         const float pre_flux_l = l, pre_flux_r = r;
         _flux.process(l, r);
+        SPKY_PROBE_PART_MARK(4);   // FLUX ends here
         // Gate on Flux specifically, not just "this outer branch ran": a
         // deck can have GRIT engaged with FLUX fully idle, and in that case
         // l/r are untouched by _flux.process() (pre_flux == post exactly),
@@ -80,9 +84,13 @@ void PartFx::process(float& l, float& r, float& send_l, float& send_r,
         // whatever it was the last time FLUX was on (addendum D: "must not
         // freeze at a stale value").
         _tape_tap = 0.f;
+        // Nothing engaged: the GRIT and FLUX segments are empty by stamp.
+        SPKY_PROBE_PART_MARK(3);
+        SPKY_PROBE_PART_MARK(4);
     }
 
     _comp.process(l, r);   // one-knob comp — BEFORE the send tap (spec: full-wet must profit)
+    SPKY_PROBE_PART_MARK(5);   // the tap, the FX mix and COMP end here
 
     // Equal-power send law. fast_sin(p) IS sin(2*pi*p), so 0.25 * v is
     // exactly the quarter-turn this used to spell as v * pi/2 -- same curve,
