@@ -262,7 +262,7 @@ TEST_CASE("Seed audition pushes ROOT per deck and WOBL from the snapshot")
 }
 
 // GRIT is one bipolar knob (spec 2026-08-09 hw-control-reduction task 4):
-// sign picks Reduce/Drive, magnitude (past a 0.03 dead zone) is the mix.
+// sign picks Reduce/Drive, magnitude (past a 0.06 dead zone) is the mix.
 // Task 4's review flagged that nothing exercised this mapping end to end --
 // the panel guard only substring-checks Fireflow.cpp's source text, so a
 // regression that declares kGritDead but stops wiring it into the fx_on
@@ -277,7 +277,7 @@ namespace {
 // kGritDead. res/test_panel.py's test_grit_dead_zone_constant_agrees
 // keeps those two -- and only those two -- in sync; this local copy is a
 // third, independent expectation, not a fourth source of truth to sync.
-constexpr float kGritDeadForTest = 0.03f;
+constexpr float kGritDeadForTest = 0.06f;
 }  // namespace
 
 TEST_CASE("Seed audition: negative GRIT engages Reduce and leaves the effect on")

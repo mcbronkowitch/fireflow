@@ -53,8 +53,10 @@ inline float center_term(float masterA, float laneA,
 // exact zero, so without a zone "off" would be unreachable on hardware. The
 // remainder is rescaled so both stops still reach a full +-1.
 //
-// 0.04 where kGritDead and kPullDead are both 0.03 -- the spec's figure
-// (2026-08-22 mod-sh-split-design §5), untried against 0.03 by ear. See
+// 0.04 where kPullDead is 0.03 and kGritDead 0.06 (raised from 0.03 on
+// 2026-10-24, fault R4: a GRIT pot at noon by eye read +0.044 on Rev A #1)
+// -- the spec's figure (2026-08-22 mod-sh-split-design §5), untried against
+// 0.03 by ear. See
 // docs/by-ear-decisions.md; changing it moves the init pre-images.
 constexpr float kDepthDead = 0.04f;
 

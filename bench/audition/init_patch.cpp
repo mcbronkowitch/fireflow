@@ -23,7 +23,7 @@ void apply_engine_stages(spky::Instrument& inst, int deck,
 // sign picks the mode, magnitude is the mix. The dead zone exists because a
 // 9 mm pot on an ADC cannot hit an exact zero -- without it "off" would be
 // unreachable on hardware. Mirrors Fireflow.cpp's kGritDead/pushParams.
-constexpr float kGritDead = 0.03f;
+constexpr float kGritDead = 0.06f;
 
 }  // namespace
 

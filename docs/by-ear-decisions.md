@@ -470,8 +470,11 @@ question Rack cannot answer.
   zone around noon, there for the same reason `kGritDead` is: a 9 mm pot on an
   ADC cannot hit an exact zero, so without a zone "off" would be unreachable
   on hardware. `|depth|` is rescaled off it so both stops still reach a full
-  ±1. **The alternative is 0.03**, which is what both `kGritDead`
-  (`Fireflow.cpp`) and `kPullDead` (`engine/instrument.h`) use — this layer
+  ±1. **The alternative is 0.03**, which is what `kPullDead`
+  (`engine/instrument.h`) uses and `kGritDead` (`control/control_law.h`)
+  used until 2026-10-24 — fault R4 raised it to 0.06, because a GRIT pot set
+  to noon by eye on Rev A #1 read +0.044, past 0.03. That is the first
+  measured noon on a real pot, and it says ±0.04 is not safe either. This layer
   took 0.04 only because the spec asked for it (§5, "~±0.04"), and nobody has
   turned the two against each other. **The Rack pass could not settle this and
   never could have:** a mouse lands on an exact noon, so the zone is invisible
