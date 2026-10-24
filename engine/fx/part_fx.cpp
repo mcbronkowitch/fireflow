@@ -12,6 +12,7 @@ void PartFx::init(float sample_rate, float* echo_l, float* echo_r) {
     for (auto& s : _smooth) s.init(sample_rate, 0.002f);
     _grit_applied = -1.f;
     _primed = false;
+    _setters_due = true;
     _tap_dc.Init(sample_rate);
     _tape_tap = 0.f;
 }
@@ -40,22 +41,27 @@ void PartFx::process(float& l, float& r, float& send_l, float& send_r
         }
         _gliding = gliding;
         _targets_moved = false;
+        _setters_due = true;
     }
     const float* v = _v;
     // Callback profile only (util/probe_mark.h): the smoothers end here.
     SPKY_PROBE_PART_MARK(2);
 
     if (_grit.engaged() || _flux.engaged()) {
-        if (v[FXT_GRIT_INT] != _grit_applied) {
-            _grit.set_intensity(v[FXT_GRIT_INT]);
-            _grit_applied = v[FXT_GRIT_INT];
+        // Only once _v has moved (see _setters_due).
+        if (_setters_due || !_setters_skip) {
+            if (v[FXT_GRIT_INT] != _grit_applied) {
+                _grit.set_intensity(v[FXT_GRIT_INT]);
+                _grit_applied = v[FXT_GRIT_INT];
+            }
+            _flux.set_feedback(v[FXT_FLUX_FB]);
+            // The lane's ordinary 2 ms target smoothing feeds FLUX's one
+            // shared 30 ms tape-delay slew. RATE changes and modulation
+            // therefore meet at the same click-free delay target instead of
+            // moving independent clock/stage state.
+            _flux.set_time_mod(v[FXT_FLUX_TIME]);
+            _setters_due = false;
         }
-        _flux.set_feedback(v[FXT_FLUX_FB]);
-        // The lane's ordinary 2 ms target smoothing feeds FLUX's one shared
-        // 30 ms tape-delay slew. RATE changes and modulation therefore meet
-        // at the same click-free delay target instead of moving independent
-        // clock/stage state.
-        _flux.set_time_mod(v[FXT_FLUX_TIME]);
         const float dry_l = l, dry_r = r;
         _grit.process(l, r SPKY_PROBE_PART_FWD);
         SPKY_PROBE_PART_MARK(3);   // GRIT ends here
