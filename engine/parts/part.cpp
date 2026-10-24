@@ -1,8 +1,13 @@
 #include "parts/part.h"
 #include "util/fast_tanh.h"
+#include "util/probe_mark.h"
 #include <cmath>
 
 using namespace spky;
+
+#if defined(SPKY_PROBE_MARKS)
+ProbeSwap spky::probe_swap = {0, -1, 0, 0, 0, 0};
+#endif
 
 // The mod tick must ride the same raster the engine control tick uses --
 // Part::_control_tick() reads texture lane outputs the sample they are
@@ -531,6 +536,10 @@ void Part::_control_tick() {
 // which call of the ramp the swap lands on, and therefore how far apart
 // engine_id()'s flip and the fade's end are. Do not reorder the two.
 void Part::_engine_swap() {
+#if defined(SPKY_PROBE_MARKS)
+    const uint32_t t0 = *probe_clock;
+    uint32_t tb0 = t0, tb1 = t0;
+#endif
     _engine_id = _pending_engine;
     ++_engine_epoch;
     _engine = _engine_for(_engine_id);
@@ -549,7 +558,13 @@ void Part::_engine_swap() {
     // The BBD holds charge, and IPartEngine has no swap-away notification --
     // Part only ever pushes state INTO the engine being swapped in. Without
     // this a deck switched away from and back to returns the previous take.
+#if defined(SPKY_PROBE_MARKS)
+    tb0 = *probe_clock;
+#endif
     if (_engine_id == ENGINE_BBD) _bbd.reset();
+#if defined(SPKY_PROBE_MARKS)
+    tb1 = *probe_clock;
+#endif
     _engine->set_flow(!_step_on);                          // re-sync state
     _engine->set_hold(_inhibit);
     _engine->set_gate(_last_gate);   // the freshly swapped-in engine
@@ -563,6 +578,15 @@ void Part::_engine_swap() {
     // SynthEngine::kCtrlInterval - 1 samples from now on its power-on
     // defaults (e.g. TestToneEngine's 220 Hz _freq, test_tone_engine.h).
     _ctrl_ctr = 0;
+#if defined(SPKY_PROBE_MARKS)
+    ProbeSwap& s = probe_swap;
+    s.total = *probe_clock - t0;
+    s.bbd   = tb1 - tb0;
+    s.eng   = static_cast<int>(_engine_id);
+    if (s.total > s.total_max) s.total_max = s.total;
+    if (s.bbd > s.bbd_max) s.bbd_max = s.bbd;
+    ++s.n;
+#endif
 }
 
 // Guard in part.h: `if (hz != _last_master_hz && hz > 0.f)`, i.e. this runs

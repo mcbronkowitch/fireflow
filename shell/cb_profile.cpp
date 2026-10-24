@@ -170,6 +170,19 @@ void cb_profile_report(bench::Board& hw)
                      static_cast<int>(r.deck[0]), static_cast<int>(r.deck[1]),
                      static_cast<int>(r.mix), r.voices[0], r.voices[1]);
     }
+    // Every engine swap (fault R2): its whole cost and BbdEngine::reset()'s
+    // share, printed once per new swap. Copied before printing; a swap landing
+    // mid-copy is at worst one stale line, and the next one repeats it.
+    static uint32_t swaps_seen = 0;
+    if(spky::probe_swap.n != swaps_seen)
+    {
+        const spky::ProbeSwap s = spky::probe_swap;
+        swaps_seen              = s.n;
+        hw.PrintLine("CBP_SWAP n=%d eng=%d total=%d bbd=%d total_max=%d bbd_max=%d",
+                     static_cast<int>(s.n), s.eng, static_cast<int>(s.total),
+                     static_cast<int>(s.bbd), static_cast<int>(s.total_max),
+                     static_cast<int>(s.bbd_max));
+    }
     if(++g_calls % 20u != 0u) return;
     const uint32_t n = g_n;
     if(n == 0) return;

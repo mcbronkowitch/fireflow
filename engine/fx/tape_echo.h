@@ -27,8 +27,13 @@ public:
         Reset();
     }
 
+    // Leaves the arena as it is: a cell not written since the last Reset reads
+    // as zero (Read), which is what clearing it would give. Clearing it here
+    // put 2 x 1 MB through memset inside the audio callback whenever FLUX
+    // switched off -- ~6.3 M cycles on Rev A (fault R2,
+    // docs/hardware/reva-bring-up.md).
     void Reset() {
-        std::memset(_line, 0, MaxSize * sizeof(T));
+        _filled = 0;
         _write = 0;
         _delay = 1;
         _frac = 0.f;
@@ -44,14 +49,16 @@ public:
     }
 
     T Read() const {
-        const T a = _line[(_write + _delay) & kMask];
-        const T b = _line[(_write + _delay + 1) & kMask];
+        // A cell k writes back exists only if k <= _filled.
+        const T a = _delay <= _filled ? _line[(_write + _delay) & kMask] : T{};
+        const T b = _delay < _filled ? _line[(_write + _delay + 1) & kMask] : T{};
         return a + (b - a) * _frac;
     }
 
     void Write(T x) {
         _line[_write] = x;
         _write = (_write - 1) & kMask;
+        if (_filled < kMask) ++_filled;
     }
 
 private:
@@ -59,6 +66,7 @@ private:
     float _frac = 0.f;
     int32_t _write = 0;
     int32_t _delay = 1;
+    int32_t _filled = 0;   // cells written since Reset, saturating below MaxSize
 };
 
 // The historical tape echo's single 800 Hz band-pass section, with the

@@ -471,6 +471,14 @@ invisible from reading the scripts, and each cost real time.
 
 ## Daisy Patch Submodule (the board itself, not the generators)
 
+- **`memset` on the board is a byte loop, ~3 cycles per byte into SDRAM.**
+  The shell links newlib-nano's size-optimised `memset` (one `strb` per byte).
+  Measured 2026-10-24 on Rev A (fault R2): 64 KB of BBD line cost 198 k
+  cycles, 2 x 1 MB of FLUX tape 6.31 M — a whole callback is 945 k. Never
+  clear a delay line inside the audio callback; `BbdLine` and
+  `InjectedDelayLine` keep a written-cell count instead and read stale cells
+  as zero. A desktop run will not show the cost.
+
 - **`hw.adc.Get()` reads about 3.1 % low — and it is libDaisy's ADC
   configuration, not the converter.** Measured 2026-09-17 during the test
   coupon's bring-up, on ADC_9 and ADC_10 (module pins A2/A3) with libDaisy's

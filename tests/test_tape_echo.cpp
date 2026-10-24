@@ -21,14 +21,36 @@ TEST_CASE("injected delay: fractional reads interpolate host memory") {
     CHECK(y[3] == doctest::Approx(0.5f));
 }
 
-TEST_CASE("injected delay: reset clears exactly the injected arena") {
-    // Mutation caught: omitting Reset from Init leaves the caller's arena
-    // dirty. Zero is independent of the implementation's clearing method.
+TEST_CASE("injected delay: reset leaves the arena alone and reads as cleared") {
+    // Fault R2 (docs/hardware/reva-bring-up.md): FLUX's switch-off flush ran
+    // Reset() inside the audio callback, and clearing 2 x 1 MB there cost
+    // ~6.3 M cycles on Rev A. Reset() must not touch the arena; every cell not
+    // written since must still read as zero, at every delay.
     float mem[16];
     std::fill(std::begin(mem), std::end(mem), 1.f);
     InjectedDelayLine<float, 16> d;
     d.Init(mem);
-    for (float x : mem) CHECK(x == 0.f);
+    bool untouched = true;
+    for (float x : mem) untouched = untouched && (x == 1.f);
+    CHECK(untouched);
+
+    // Write a few samples, reset, and walk every delay as the line refills:
+    // only what was written since the reset may come back.
+    for (int i = 0; i < 40; ++i) d.Write(0.5f);
+    d.Reset();
+    for (int n = 0; n < 20; ++n) {
+        // Up to 13.5: SetDelay clamps at MaxSize - 2 = 14 whole samples.
+        for (int delay = 1; delay <= 13; ++delay) {
+            d.SetDelay(static_cast<float>(delay) + 0.5f);
+            // Cells delay and delay+1 back; written iff not further back than n.
+            const float a = (delay <= n) ? 0.25f : 0.f;
+            const float b = (delay + 1 <= n) ? 0.25f : 0.f;
+            CAPTURE(n);
+            CAPTURE(delay);
+            CHECK(d.Read() == doctest::Approx(0.5f * (a + b)));
+        }
+        d.Write(0.25f);
+    }
 }
 
 TEST_CASE("tape time target spans four octaves without per-call libm") {

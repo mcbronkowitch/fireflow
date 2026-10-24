@@ -398,6 +398,51 @@ TEST_CASE("bbd line: Reset cancels a stage transition at the latest request") {
     for (int i = 0; i < 256; ++i) CHECK(line.Process(0.f) == 0.f);
 }
 
+// Fault R2 (docs/hardware/reva-bring-up.md): Reset() runs inside the audio
+// callback on every swap into the BBD engine, and clearing the ring there cost
+// a whole block on the Seed. So Reset() must not touch the ring at all -- the
+// cells it leaves behind must read as silence until they are written again --
+// and the line must still sound exactly like one over cleared memory.
+TEST_CASE("bbd line: Reset leaves the ring untouched and still reads as cleared") {
+    static float dirty[8192];
+    static float clean[8192];
+    constexpr float kGarbage = 0.75f;
+    for (float& c : dirty) c = kGarbage;
+    for (float& c : clean) c = 0.f;
+
+    BbdLine a, b;
+    a.Init(dirty, 8192, 48000.f);
+    b.Init(clean, 8192, 48000.f);
+    bool untouched = true;
+    for (float c : dirty) untouched = untouched && (c == kGarbage);
+    CHECK(untouched);
+
+    // Charge the dirty line with real signal, then reset it mid-run: what it
+    // held before and the garbage under it must both be gone.
+    a.SetStages(16384);
+    a.SetClock(9000.f);
+    for (int i = 0; i < 20000; ++i) a.Process(0.4f * std::sin(0.01f * i));
+    a.Reset();
+    b.Reset();
+
+    const auto drive = [](BbdLine& l, int i) {
+        // Short reach first, then the longest, then back: the long read taps
+        // land on cells the short phase never wrote.
+        if (i == 0) l.SetStages(1024);
+        if (i == 6000) l.SetStages(16384);
+        if (i == 30000) l.SetStages(4096);
+        l.SetClock(i < 30000 ? 8000.f : 14000.f);
+        const float x = (i % 3000 < 8) ? 0.8f : 0.1f * std::sin(0.003f * i);
+        return l.Process(x);
+    };
+    a.SetDither(4e-5f);
+    b.SetDither(4e-5f);
+    int first_diff = -1;
+    for (int i = 0; i < 60000 && first_diff < 0; ++i)
+        if (drive(a, i) != drive(b, i)) first_diff = i;
+    CHECK(first_diff == -1);
+}
+
 TEST_CASE("bbd line: null memory can hold a pending stage request safely") {
     BbdLine line;
     line.Init(nullptr, 8192, 48000.f);

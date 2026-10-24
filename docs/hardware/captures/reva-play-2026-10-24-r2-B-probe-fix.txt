@@ -1,0 +1,74 @@
+SHELL_PLAY_V r=60 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=70 0 0 0
+SHELL_PLAY zero=0 rail=63484 valid=1 sweeps=99420 keys=0 presses=0,0,0,0
+SHELL_PLAY_LAW cyc_last=11824 cyc_max=20326 led_last=1041 led_max=1275 cb_last=737784 cb_max=7112150
+SHELL_PLAY_V r=0 812 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=10 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=20 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=30 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=40 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=50 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=60 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=70 0 0 0
+SHELL_PLAY zero=0 rail=63483 valid=1 sweeps=99430 keys=0 presses=0,0,0,0
+SHELL_PLAY_LAW cyc_last=11794 cyc_max=20326 led_last=1045 led_max=1275 cb_last=737898 cb_max=7112150
+SHELL_PLAY_V r=0 812 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=10 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=20 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=30 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=40 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=50 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=60 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=70 0 0 0
+SHELL_PLAY zero=0 rail=63484 valid=1 sweeps=99448 keys=0 presses=0,0,0,0
+SHELL_PLAY_LAW cyc_last=11742 cyc_max=20326 led_last=1025 led_max=1275 cb_last=737312 cb_max=7112150
+SHELL_PLAY_V r=0 812 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=10 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=20 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=30 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=40 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=50 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=60 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=70 0 0 0
+SHELL_PLAY zero=1 rail=63483 valid=1 sweeps=99469 keys=0 presses=0,0,0,0
+SHELL_PLAY_LAW cyc_last=11962 cyc_max=20326 led_last=1000 led_max=1275 cb_last=738402 cb_max=7112150
+SHELL_PLAY_V r=0 812 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=10 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=20 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=30 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=40 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=50 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=60 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=70 0 0 0
+SHELL_PLAY zero=0 rail=63483 valid=1 sweeps=99481 keys=0 presses=0,0,0,0
+SHELL_PLAY_LAW cyc_last=11732 cyc_max=20326 led_last=1009 led_max=1275 cb_last=740406 cb_max=7112150
+SHELL_PLAY_V r=0 812 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=10 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=20 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=30 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=40 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=50 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=60 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=70 0 0 0
+SHELL_PLAY zero=3 rail=63483 valid=1 sweeps=99492 keys=0 presses=0,0,0,0
+SHELL_PLAY_LAW cyc_last=11742 cyc_max=20326 led_last=1036 led_max=1275 cb_last=737478 cb_max=7112150
+SHELL_PLAY_V r=0 812 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=10 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=20 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=30 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=40 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=50 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=60 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=70 0 0 0
+SHELL_PLAY zero=0 rail=63483 valid=1 sweeps=99502 keys=0 presses=0,0,0,0
+SHELL_PLAY_LAW cyc_last=11670 cyc_max=20326 led_last=1011 led_max=1275 cb_last=736138 cb_max=7112150
+SHELL_PLAY_V r=0 812 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=10 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=20 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=30 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=40 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=50 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=60 0 0 0 0 0 0 0 0 0 0
+SHELL_PLAY_V r=70 0 0 0
+SHELL_PLAY zero=0 rail=63485 valid=1 sweeps=99522 keys=0 presses=0,0,0,0
+SHELL_PLAY_LAW cyc_last=11534 cyc_max=20326 led_last=1059 led_max=1275 cb_last=734023 cb_max=7112150
