@@ -33,8 +33,14 @@ extern volatile uint32_t* probe_clock;          // defined by the host
 // call: 6, 7, 8, 9, 0, 1, 2, 3, 4, 5. SuperModulator::process, handed the
 // same array, splits [6]..[7]: [10] after the pitch lane (the per-sample
 // one), [11] after the step clock and the onset ring, just before the
-// texture lanes' raster tick. Full order: 6, 10, 11, 7, 8, 9, 0, 1, 2, 3, 4, 5.
-using ProbePartSlots = uint32_t[12];
+// texture lanes' raster tick. ModLane::process (the pitch lane), handed the
+// same array, splits [6]..[10]: [12] at its top (what lies before it is the
+// call into SuperModulator::process), [13] after the counters, the phase
+// advance and a wrap's events, [14] after the step search and a step entry
+// (in FLOW: the target). [14]..[10] is the slew, RANGE, the S&H latch and
+// the two output stores. Full order: 6, 12, 13, 14, 10, 11, 7, 8, 9, 0, 1,
+// 2, 3, 4, 5.
+using ProbePartSlots = uint32_t[15];
 // Four stamps per sample in the mix, after both decks (fault R4, the reverb
 // split): [0] after the lamp observers and the dry / deck taps (just before
 // the MORPH blend), [1] after the blend, the reverb's dry / wet smoothers and

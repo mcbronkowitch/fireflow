@@ -872,7 +872,8 @@ void ModLane::_latch_stepped(float out) {
     }
 }
 
-float ModLane::process() {
+float ModLane::process(SPKY_PROBE_MOD_PARAMS) {
+    SPKY_PROBE_PART_MARK(12);   // callback profile only: the lane starts here
     _fired = false;
     _wrapped = false;
     _apply_preroll_work();
@@ -898,6 +899,7 @@ float ModLane::process() {
     _wrapped = wrapped;
 
     if (wrapped) _wrap_events();
+    SPKY_PROBE_PART_MARK(13);   // the counters, the phase advance and a wrap end here
 
     if (_step_mode) {
         const int step = shuffle_step_index(
@@ -916,6 +918,7 @@ float ModLane::process() {
         if (wrapped) _on_boundary();
         if (!_frozen) _target = _compute_raw();     // continuous in FLOW
     }
+    SPKY_PROBE_PART_MARK(14);   // the step search (or the FLOW target) ends here
 
     const float out = apply_range(_slew.process(_target), _range);
     _latch_stepped(out);
