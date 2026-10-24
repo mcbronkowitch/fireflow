@@ -4,6 +4,7 @@
 #include "mod/rng.h"
 #include "mod/song_form.h"
 #include "mod/shuffle_grid.h"
+#include "util/probe_mark.h"
 
 namespace spky {
 
@@ -132,7 +133,15 @@ public:
     static constexpr float kFlowSlewFrac_for_test() { return kFlowSlewFrac; }
 #endif
 
-    float process();                  // advance one sample, return post-range value
+    // Advance one sample, return the post-range value. The parameters exist
+    // only in the callback profile's build (util/probe_mark.h, fault R4):
+    // SuperModulator::process forwards its stamp clock and slots, and the
+    // asm label keeps the name shell/itcm_hot.ld lists (GNU toolchains only).
+    float process(SPKY_PROBE_MOD_PARAMS)
+#if defined(SPKY_PROBE_MARKS) && defined(__GNUC__) && !defined(_MSC_VER)
+        __asm__("_ZN4spky7ModLane7processEv")
+#endif
+        ;
     float tick();                     // advance kTickInterval samples in one call
 
     bool  fired()   const { return _fired; }    // true on the sample a gated boundary fired

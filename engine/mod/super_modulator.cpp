@@ -124,7 +124,7 @@ void SuperModulator::process(SPKY_PROBE_MOD_PARAMS) {
     // up to 95 samples (~2 ms) of texture staleness at the read until the
     // grids happen to coincide again. Documented as the spec's "Accepted
     // asymmetry"; see also part.h.
-    _out[LANE_PITCH] = _lanes[LANE_PITCH].process();
+    _out[LANE_PITCH] = _lanes[LANE_PITCH].process(SPKY_PROBE_MOD_FWD);
     _out_stepped[LANE_PITCH] = _lanes[LANE_PITCH].stepped_output();
     SPKY_PROBE_PART_MARK(10);   // callback profile only: the pitch lane ends here
 

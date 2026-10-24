@@ -8,7 +8,9 @@ sleep (xt) and limiter (xl), and each deck's modulation + control half into
 before-the-deck (ap / bp), lanes (al / bl), fade + swap + fire bookkeeping
 (ai / bi), control tick (at / bt) and trigger + gate edge + tap (ar / br),
 and the lanes into pitch lane (aq / bq), step clock + onset ring (ao / bo)
-and texture tick (au / bu). CBP_WORST (each block's worst sample, broken
+and texture tick (au / bu), and the pitch lane into the call in (aqc /
+bqc), counters + phase advance + wrap (aqh / bqh), step search (aqs / bqs)
+and slew + RANGE + latch + stores (aqt / bqt). CBP_WORST (each block's worst sample, broken
 down) is parsed into the worst table the report prints below the windows.
 
 Call:
@@ -22,6 +24,7 @@ Lines read (transcribed from cb_profile.cpp's PrintLine calls):
     CBP_WIN4 w=N xo= xd= xr= xt= xl=
     CBP_WIN5 w=N ap= al= ai= at= ar= bp= bl= bi= bt= br=
     CBP_WIN6 w=N aq= ao= au= bq= bo= bu=
+    CBP_WIN7 w=N aqc= aqh= aqs= aqt= bqc= bqh= bqs= bqt=
     CBP_WORST w=N last= am= al= at= ae= af= bm= bl= bt= be= bf= x=
     CBP_BOOT patch= eng_a= eng_b=          (the last one seen)
     CBP_RVCLR n= last= max=                (every one; the report lists them)
@@ -29,8 +32,8 @@ Everything else, SHELL_PLAY_* included, is ignored. A window with a CBP_WIN
 but no CBP_WIN2 / CBP_WIN3 / CBP_WIN4 (an image from before that split)
 prints dashes. am+ae+af is a's three parts, as+ag+ax+ac+an is af's five
 (smoothers, GRIT, FLUX, tap + FX mix + COMP, send law), xo+xd+xr+xt+xl
-is mix's five, ap+al+ai+at+ar is am's five and aq+ao+au is al's three,
-each a floor of its own
+is mix's five, ap+al+ai+at+ar is am's five, aq+ao+au is al's three and
+aqc+aqh+aqs+aqt is aq's four, each a floor of its own
 1000-block mean, so a sum may fall a few cycles short of its whole; a gap
 above kSplitSlack is reported as a reader failure, since it means the lines
 do not describe the same window.
@@ -49,15 +52,17 @@ _WIN4 = re.compile(r"^CBP_WIN4 w=(\d+) xo=(\d+) xd=(\d+) xr=(\d+) xt=(\d+) xl=(\
 _WIN5 = re.compile(r"^CBP_WIN5 w=(\d+) ap=(\d+) al=(\d+) ai=(\d+) at=(\d+) ar=(\d+)"
                    r" bp=(\d+) bl=(\d+) bi=(\d+) bt=(\d+) br=(\d+)\s*$")
 _WIN6 = re.compile(r"^CBP_WIN6 w=(\d+) aq=(\d+) ao=(\d+) au=(\d+) bq=(\d+) bo=(\d+) bu=(\d+)\s*$")
+_WIN7 = re.compile(r"^CBP_WIN7 w=(\d+) aqc=(\d+) aqh=(\d+) aqs=(\d+) aqt=(\d+)"
+                   r" bqc=(\d+) bqh=(\d+) bqs=(\d+) bqt=(\d+)\s*$")
 _WORST = re.compile(r"^CBP_WORST w=(\d+) last=(\d+) am=(\d+) al=(\d+) at=(\d+) ae=(\d+) af=(\d+)"
                     r" bm=(\d+) bl=(\d+) bt=(\d+) be=(\d+) bf=(\d+) x=(\d+)\s*$")
 WORST_FIELDS = ("last", "am", "al", "at", "ae", "af", "bm", "bl", "bt", "be", "bf", "x")
 _BOOT = re.compile(r"^CBP_BOOT patch=(\d+) eng_a=(-?\d+) eng_b=(-?\d+)\s*$")
 _RVCLR = re.compile(r"^CBP_RVCLR n=(\d+) last=(\d+) max=(\d+)\s*$")
 
-FIELDS = ("cb", "cb_max", "a", "am", "ap", "al", "aq", "ao", "au", "ai", "at", "ar", "ae", "af",
+FIELDS = ("cb", "cb_max", "a", "am", "ap", "al", "aq", "aqc", "aqh", "aqs", "aqt", "ao", "au", "ai", "at", "ar", "ae", "af",
           "as", "ag", "ax", "ac", "an",
-          "b", "bm", "bp", "bl", "bq", "bo", "bu", "bi", "bt", "br", "be", "bf",
+          "b", "bm", "bp", "bl", "bq", "bqc", "bqh", "bqs", "bqt", "bo", "bu", "bi", "bt", "br", "be", "bf",
           "bs", "bg", "bx", "bc", "bn",
           "mix", "xo", "xd", "xr", "xt", "xl", "law")
 # A whole and the parts that must add up to it, within kSplitSlack.
@@ -65,7 +70,8 @@ SPLITS = (("a", ("am", "ae", "af")), ("b", ("bm", "be", "bf")),
           ("af", ("as", "ag", "ax", "ac", "an")), ("bf", ("bs", "bg", "bx", "bc", "bn")),
           ("mix", ("xo", "xd", "xr", "xt", "xl")),
           ("am", ("ap", "al", "ai", "at", "ar")), ("bm", ("bp", "bl", "bi", "bt", "br")),
-          ("al", ("aq", "ao", "au")), ("bl", ("bq", "bo", "bu")))
+          ("al", ("aq", "ao", "au")), ("bl", ("bq", "bo", "bu")),
+          ("aq", ("aqc", "aqh", "aqs", "aqt")), ("bq", ("bqc", "bqh", "bqs", "bqt")))
 kSplitSlack = 6   # cycles: up to five floors against one
 
 
@@ -115,6 +121,13 @@ def parse(lines, clears=None, worst=None):
             w = int(m.group(1))
             d = wins.setdefault(w, {})
             for k, name in enumerate(("aq", "ao", "au", "bq", "bo", "bu")):
+                d[name] = int(m.group(2 + k))
+            continue
+        m = _WIN7.match(line)
+        if m:
+            w = int(m.group(1))
+            d = wins.setdefault(w, {})
+            for k, name in enumerate(("aqc", "aqh", "aqs", "aqt", "bqc", "bqh", "bqs", "bqt")):
                 d[name] = int(m.group(2 + k))
             continue
         m = _WORST.match(line)

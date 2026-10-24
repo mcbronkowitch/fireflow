@@ -92,8 +92,8 @@ void probe_block(const uint32_t* ts, const uint32_t* d1, const uint32_t* d2,
 
 // A deck call's slots in the order they are taken (probe_mark.h): the
 // modulation split 6..9 comes first, with the lanes' own 10 and 11 inside
-// 6..7, then 0..5.
-constexpr int kDeckOrder[kSlots] = {6, 10, 11, 7, 8, 9, 0, 1, 2, 3, 4, 5};
+// 6..7 and the pitch lane's 12..14 inside 6..10, then 0..5.
+constexpr int kDeckOrder[kSlots] = {6, 12, 13, 14, 10, 11, 7, 8, 9, 0, 1, 2, 3, 4, 5};
 
 // Samples of a block whose stamps are not in process order: top ->
 // [priority deck: pre, lanes, fire bookkeeping, control tick, trigger, engine,
