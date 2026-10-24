@@ -482,13 +482,7 @@ void Part::_control_tick() {
     // PartFx::process runs each of the five FX values through a 2 ms
     // smoother. Do not "optimize away" that smoothing -- it is what makes
     // this raster hold inaudible.
-#if defined(SPKY_PROBE_MARKS)
-    const uint32_t pt0 = *probe_clock;
-#endif
     _engine->set_targets(_tg, _tune);
-#if defined(SPKY_PROBE_MARKS)
-    _probe_seg(6, *probe_clock - pt0);
-#endif
     for (int i = 0; i < FXT_COUNT; ++i) _fxv[i] = fx_target_value(i);
 
     // Excitation bus (spec §6, Tasks 9 + 10). Three enabled-by-flag sources,

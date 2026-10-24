@@ -9,7 +9,6 @@
 #include "parts/test_tone_engine.h"
 #include "parts/bbd_engine.h"
 #include "feed/feed_engine.h"
-#include "util/probe_mark.h"
 #include "synth/synth_engine.h"
 #include "sampler/sampler_engine.h"
 #include "fx/fx_util.h"
@@ -253,13 +252,6 @@ public:
     FeedEngine& feed() { return _feed; }
     const FeedEngine& feed() const { return _feed; }
 
-#if defined(SPKY_PROBE_MARKS)
-    // Fault R2 probe: the worst single pass, in cycles, of each segment of
-    // process() -- 0 mod, 1 swap/master/fire, 2 control tick, 3 trigger/gate/
-    // input, 4 engine, 5 FX -- and 6, set_targets() inside the control tick.
-    uint32_t probe_seg_max(int k) const { return _probe_seg_max[k]; }
-    int      probe_seg_eng(int k) const { return _probe_seg_eng[k]; }
-#endif
     int active_voices() const {
         if (_engine_id == ENGINE_SYNTH) return _synth.active_voices();
         if (_engine_id == ENGINE_WAVE) return _wave.active_voices();
@@ -358,9 +350,7 @@ public:
     __attribute__((always_inline)) inline
     void process(float inL, float inR, float& outL, float& outR,
                  float& sendL, float& sendR) {
-        SPKY_PART_SEG_BEGIN;
         _mod.process();
-        SPKY_PART_SEG(0);
 
         // click-free engine switch: fade out (4 ms) -> swap -> fade in (4 ms).
         // At hold the multiplier is exactly 1.0, so unswitched runs stay
@@ -388,7 +378,6 @@ public:
                         && _pull_rng.next_unipolar() < _grav_prob;
         }
         if (_gate_ctr > 0) --_gate_ctr;
-        SPKY_PART_SEG(1);
 
         // Raster, plus an event refresh: a PITCH fire samples the lane at that
         // exact sample, so a tick-stale pitch is not "late", it is the wrong
@@ -420,7 +409,6 @@ public:
             _control_tick();
         }
         --_ctrl_ctr;
-        SPKY_PART_SEG(2);
 
         if (fired && !_note_suppressed) _fire_trigger();
 
@@ -468,14 +456,11 @@ public:
 #endif
             _engine->process_in(el, er);
         }
-        SPKY_PART_SEG(3);
         _engine->process(outL, outR);
         outL *= fade;
         outR *= fade;
-        SPKY_PART_SEG(4);
 
         _fx.process(outL, outR, sendL, sendR, _fxv);
-        SPKY_PART_SEG(5);
     }
     void process(float& outL, float& outR, float& sendL, float& sendR) {
         process(0.f, 0.f, outL, outR, sendL, sendR);
@@ -533,17 +518,6 @@ private:
     bool           _last_gate = false;
     bool           _switching = false;
     uint32_t       _engine_epoch = 0;          // ++ in _engine_swap; observer only
-#if defined(SPKY_PROBE_MARKS)
-    uint32_t       _probe_t = 0;
-    uint32_t       _probe_seg_max[7] = {0, 0, 0, 0, 0, 0, 0};
-    int            _probe_seg_eng[7] = {-1, -1, -1, -1, -1, -1, -1};
-    void _probe_seg(int k, uint32_t d) {
-        if (d > _probe_seg_max[k]) {
-            _probe_seg_max[k] = d;
-            _probe_seg_eng[k] = static_cast<int>(_engine_id);
-        }
-    }
-#endif
     bool           _note_suppressed = false;   // last fire was swallowed
     // Cached IPartEngine::consumes_input() for the engine _engine points at.
     // Written only where _engine is written -- Part::init and
