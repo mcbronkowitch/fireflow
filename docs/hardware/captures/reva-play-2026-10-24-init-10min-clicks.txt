@@ -1,0 +1,15 @@
+# tools/click_detect.py (k=12) on the 600 s recording made alongside reva-play-2026-10-24-init-10min.txt
+# (Line in of the UA Twin, 48 kHz; the WAV itself is not kept in the repo, 115 MB)
+init-10min.wav: 599.4 s, channel 0
+  t=  280.193 s  score=   12.3  phase  38.668 of 48.305
+  t=  298.312 s  score=   23.5  phase   8.482 of 48.305
+  t=  322.464 s  score=   16.0  phase  32.634 of 48.305
+  t=  328.494 s  score=   12.5  phase  38.664 of 48.305
+clicks=4
+init-10min.wav: 599.4 s, channel 1
+  t=  177.570 s  score=   12.4  phase  32.655 of 48.305
+  t=  201.710 s  score=   12.3  phase   8.490 of 48.305
+  t=  298.312 s  score=   12.5  phase   8.482 of 48.305
+  t=  322.464 s  score=   15.0  phase  32.634 of 48.305
+  t=  328.496 s  score=   22.6  phase  38.666 of 48.305
+clicks=5
