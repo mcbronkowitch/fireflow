@@ -455,6 +455,10 @@ private:
     bool  _fired = false;
     bool  _wrapped = false;
     bool  _frozen = false;
+    // _phase_inc is derived from the CURRENT _rate_hz, _steps, _step_mode and
+    // _sr. Cleared by init() (which may bring a new _sr), set by _update_inc():
+    // until then set_rate_hz and set_step must take the full path.
+    bool  _inc_applied = false;
 #ifdef SPKY_TESTING
     uint32_t _wraps = 0;   // real wrap count; see wrap_count_for_test() above
     uint32_t _slew_updates = 0;     // see slew_update_count_for_test()
