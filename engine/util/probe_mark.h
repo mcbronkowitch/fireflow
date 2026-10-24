@@ -30,8 +30,11 @@ extern volatile uint32_t* probe_clock;          // defined by the host
 // lies before it is the Instrument's own work ahead of this deck), [7] after
 // SuperModulator::process (the lanes), [8] after the engine fade, the swap
 // and the fire bookkeeping, [9] after the control tick. Time order per deck
-// call: 6, 7, 8, 9, 0, 1, 2, 3, 4, 5.
-using ProbePartSlots = uint32_t[10];
+// call: 6, 7, 8, 9, 0, 1, 2, 3, 4, 5. SuperModulator::process, handed the
+// same array, splits [6]..[7]: [10] after the pitch lane (the per-sample
+// one), [11] after the step clock and the onset ring, just before the
+// texture lanes' raster tick. Full order: 6, 10, 11, 7, 8, 9, 0, 1, 2, 3, 4, 5.
+using ProbePartSlots = uint32_t[12];
 // Four stamps per sample in the mix, after both decks (fault R4, the reverb
 // split): [0] after the lamp observers and the dry / deck taps (just before
 // the MORPH blend), [1] after the blend, the reverb's dry / wet smoothers and
@@ -91,6 +94,10 @@ extern ProbeRevClear probe_rev_clear;            // defined in instrument.cpp
 #define SPKY_PROBE_PART_SCRATCH  , ::spky::probe_clock, ::spky::probe_part_scratch
 #define SPKY_PROBE_PART_FWD      , _probe_clk, _probe_slot
 #define SPKY_PROBE_PART_MARK(k)  (_probe_slot[k] = *_probe_clk)
+// SuperModulator::process takes no other parameter, so its pair has no
+// leading comma.
+#define SPKY_PROBE_MOD_PARAMS    volatile uint32_t* const _probe_clk, uint32_t* const _probe_slot
+#define SPKY_PROBE_MOD_FWD       _probe_clk, _probe_slot
 namespace spky {
 // The engine swap's own cost (fault R2, 2026-10-24): Part::_engine_swap stamps
 // the clock around the whole swap and around BbdEngine::reset() inside it, and
@@ -119,4 +126,6 @@ extern ProbeSwap probe_swap;                    // defined in part.cpp
 #define SPKY_PROBE_PART_SCRATCH
 #define SPKY_PROBE_PART_FWD
 #define SPKY_PROBE_PART_MARK(k)  ((void)0)
+#define SPKY_PROBE_MOD_PARAMS
+#define SPKY_PROBE_MOD_FWD
 #endif

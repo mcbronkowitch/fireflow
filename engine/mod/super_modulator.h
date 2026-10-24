@@ -8,6 +8,7 @@
 #include "mod/lane_len.h"
 #include "mod/rhythm_view.h"
 #include "util/math.h"
+#include "util/probe_mark.h"
 
 namespace spky {
 
@@ -141,7 +142,16 @@ public:
     }
     float pitch_step_samples() const { return _lanes[LANE_PITCH].step_samples(); }
 
-    void process();                // advance all lanes one sample
+    // Advance all lanes one sample. The parameters exist only in the callback
+    // profile's build (util/probe_mark.h, fault R4): Part::process forwards
+    // its stamp clock and slots. Same mangled-name reason as
+    // PartFx::process: shell/itcm_hot.ld lists the plain name, so the probe
+    // build keeps it through an asm label (GNU toolchains only).
+    void process(SPKY_PROBE_MOD_PARAMS)
+#if defined(SPKY_PROBE_MARKS) && defined(__GNUC__) && !defined(_MSC_VER)
+        __asm__("_ZN4spky14SuperModulator7processEv")
+#endif
+        ;
 
     float lane_output(int i) const { return _out[i]; }
     // The S&H twin of lane_output, on the same frozen frame. Reading
