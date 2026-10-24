@@ -48,10 +48,16 @@ struct ProbeSwap {
 };
 extern ProbeSwap probe_swap;                    // defined in part.cpp
 } // namespace spky
+// Part::process's segment stamps (fault R2): see Part::probe_seg_max.
+#define SPKY_PART_SEG_BEGIN      (_probe_t = *::spky::probe_clock)
+#define SPKY_PART_SEG(k)         do { const uint32_t _pn = *::spky::probe_clock; \
+                                      _probe_seg((k), _pn - _probe_t); _probe_t = _pn; } while (0)
 #else
 #define SPKY_PROBE_DECL          static_assert(true, "")
 #define SPKY_PROBE_STAMP(i)      ((void)0)
 #define SPKY_PROBE_DECK1(i, p)   ((void)0)
 #define SPKY_PROBE_DECK2(i)      ((void)0)
 #define SPKY_PROBE_END(n)        ((void)0)
+#define SPKY_PART_SEG_BEGIN      ((void)0)
+#define SPKY_PART_SEG(k)         ((void)0)
 #endif

@@ -24,6 +24,7 @@ uint32_t g_deck[2] = {0, 0};  // deck A / deck B process(), summed over the bloc
 uint32_t g_mix   = 0;    // the rest of process(): CHOKE, mix, reverb, limiter
 
 uint32_t g_block = 0;    // blocks since StartAudio
+const spky::Instrument* g_inst = nullptr;   // for the CBP_SEG report
 int      g_eng[2] = {-1, -1};  // each deck's engine id at the last block end
 
 // Lane state at the previous block end, per deck and lane: a changed phrase
@@ -115,6 +116,7 @@ void cb_profile_init()
 void cb_profile_block_end(uint32_t cb, uint32_t law, uint32_t led, bool warm,
                           const spky::Instrument& inst)
 {
+    g_inst = &inst;
     const uint32_t blk = g_block++;
     const uint32_t ev  = lane_events(inst);
     g_eng[0] = static_cast<int>(inst.engine_id(0));
@@ -184,6 +186,24 @@ void cb_profile_report(bench::Board& hw)
                      static_cast<int>(s.bbd_max));
     }
     if(++g_calls % 20u != 0u) return;
+    // Part::process's worst pass per segment (fault R2), and the engine id
+    // that was active when each was set.
+    if(g_inst != nullptr)
+        for(int p = 0; p < 2; ++p)
+        {
+            const spky::Part& pt = g_inst->probe_part(p);
+            hw.PrintLine("CBP_SEG p=%d mod=%d swp=%d tick=%d trg=%d eng=%d fx=%d tgt=%d",
+                         p, static_cast<int>(pt.probe_seg_max(0)),
+                         static_cast<int>(pt.probe_seg_max(1)),
+                         static_cast<int>(pt.probe_seg_max(2)),
+                         static_cast<int>(pt.probe_seg_max(3)),
+                         static_cast<int>(pt.probe_seg_max(4)),
+                         static_cast<int>(pt.probe_seg_max(5)),
+                         static_cast<int>(pt.probe_seg_max(6)));
+            hw.PrintLine("CBP_SEGE p=%d %d %d %d %d %d %d %d", p, pt.probe_seg_eng(0),
+                         pt.probe_seg_eng(1), pt.probe_seg_eng(2), pt.probe_seg_eng(3),
+                         pt.probe_seg_eng(4), pt.probe_seg_eng(5), pt.probe_seg_eng(6));
+        }
     const uint32_t n = g_n;
     if(n == 0) return;
     hw.PrintLine("CBP_SUM blocks=%d warm=%d cb_mean=%d cb_max=%d proc_mean=%d proc_max=%d maxs_max=%d",
