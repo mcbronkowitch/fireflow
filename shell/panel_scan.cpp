@@ -3,6 +3,7 @@
 #include "shell_panel_scan.h"
 #include "shell_coupon_probe.h"
 #include "shell_keys_nc.h"
+#include "shell_raw_spread.h"
 
 #if SHELL_PANEL_SCAN
 
@@ -92,6 +93,23 @@ uint16_t g_cal_rail = 0;
 #endif
 volatile uint32_t g_sweeps = 0;
 
+#if SHELL_RAW_SPREAD
+// The raw-count readout (fault R3, reva-bring-up.md 5.3/5.5/5.7): per mux
+// channel the min and max of the raw word over a window of whole sweeps, so
+// every channel is read the same number of times in it. 20 sweeps is one
+// second at the measured 50 ms per sweep (5.9). The callback keeps the open
+// window in g_raw_lo/hi and copies it to the published pair at the window's
+// end, then counts g_raw_win up; the foreground reads the pair between two
+// equal g_raw_win readings (a torn copy is retried, never printed).
+constexpr uint32_t kRawWindowSweeps = 20;
+uint16_t           g_raw_lo[kChannels];
+uint16_t           g_raw_hi[kChannels];
+volatile uint16_t  g_raw_pub_lo[kChannels];
+volatile uint16_t  g_raw_pub_hi[kChannels];
+volatile uint32_t  g_raw_win        = 0;
+uint32_t           g_raw_win_sweeps = 0;
+#endif
+
 // The knob vector the shared control law reads (spec 2026-10-09-rev-a-p6b1
 // section 4.2): every parameter in VCV's units, booted from the init patch,
 // depths included. A pot writes it only while it owns its target (pot_owner.h);
@@ -134,6 +152,13 @@ void panel_scan_init(bench::Board& hw)
     g_scan.set_walk_leds(false);
     g_scan.set_read_keys(true, keys_released(kKeys));
     for(int c = 0; c < kChannels; ++c) g_value[c] = -1.0f;
+#if SHELL_RAW_SPREAD
+    for(int c = 0; c < kChannels; ++c)
+    {
+        g_raw_lo[c] = 0xFFFF;
+        g_raw_hi[c] = 0;
+    }
+#endif
     // The FLUX rows' channels, found the way panel_scan_tick() walks a step
     // (group_at / channel_at per sense pin), so the index is the one its
     // g_owner[] entry has (flux_channels(), host tested against kRevaTable).
@@ -181,6 +206,10 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
         const int      ch  = channel_at(kActiveChain, step, s);
         const int      idx = mux_channel(kActiveChain, step, s);
         const uint16_t raw = g_mux_raw[idx];
+#if SHELL_RAW_SPREAD
+        if(raw < g_raw_lo[idx]) g_raw_lo[idx] = raw;
+        if(raw > g_raw_hi[idx]) g_raw_hi[idx] = raw;
+#endif
 #if SHELL_COUPON_PROBE
         g_step_raw[step_of(kCouponChain, g, ch)] = raw;
 #else
@@ -273,6 +302,20 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
 #endif
         if(sp.valid) g_span = sp;
         g_sweeps = g_sweeps + 1u;
+#if SHELL_RAW_SPREAD
+        if(++g_raw_win_sweeps >= kRawWindowSweeps)
+        {
+            for(int c = 0; c < kChannels; ++c)
+            {
+                g_raw_pub_lo[c] = g_raw_lo[c];
+                g_raw_pub_hi[c] = g_raw_hi[c];
+                g_raw_lo[c]     = 0xFFFF;
+                g_raw_hi[c]     = 0;
+            }
+            g_raw_win_sweeps = 0;
+            g_raw_win        = g_raw_win + 1u;
+        }
+#endif
     }
 }
 
@@ -321,6 +364,46 @@ void run_panel_scan_report(bench::Board& hw)
                      static_cast<int>(hw.adc.Get(daisy::patch_sm::ADC_11)),
                      static_cast<int>(hw.adc.Get(daisy::patch_sm::ADC_12)));
 #else
+#if SHELL_RAW_SPREAD
+        // Once per window, before the frame: `SHELL_PLAY_R w=<window> r=<first
+        // row>` and up to six `lo:hi` raw words per line, in the V lines' row
+        // order. Worst case "SHELL_PLAY_R w=4294967295 r=72" plus six
+        // " 65535:65535" is 102 bytes, inside the 128-byte log buffer.
+        static uint32_t raw_printed = 0;
+        static uint16_t raw_lo[kChannels];
+        static uint16_t raw_hi[kChannels];
+        uint32_t        w;
+        do
+        {
+            w = g_raw_win;
+            for(int c = 0; c < kChannels; ++c)
+            {
+                raw_lo[c] = g_raw_pub_lo[c];
+                raw_hi[c] = g_raw_pub_hi[c];
+            }
+        } while(w != g_raw_win);
+        if(w != 0 && w != raw_printed)
+        {
+            for(int r0 = 0; r0 < kTable.count; r0 += 6)
+            {
+                const int n = kTable.count - r0 < 6 ? kTable.count - r0 : 6;
+                char      line[112];
+                int       len = snprintf(line, sizeof line, "SHELL_PLAY_R w=%u r=%d",
+                                         static_cast<unsigned>(w), r0);
+                for(int i = 0; i < n; ++i)
+                {
+                    const ControlEntry& e    = kTable.entries[r0 + i];
+                    const int           step = step_of(kActiveChain, e.group, e.ch);
+                    const int           idx  = mux_channel(kActiveChain, step, e.sense);
+                    len += snprintf(line + len, sizeof line - len, " %u:%u",
+                                    static_cast<unsigned>(raw_lo[idx]),
+                                    static_cast<unsigned>(raw_hi[idx]));
+                }
+                hw.PrintLine("%s", line);
+            }
+            raw_printed = w;
+        }
+#endif
         // Up to ten values per line, in generated_panel_map.h's row order:
         // seventy in one line would overrun libDaisy's 128-byte log buffer.
         // The last line carries the remainder (73 rows: seven of ten, one of
