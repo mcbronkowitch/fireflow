@@ -19,13 +19,19 @@
 #include <cstdint>
 namespace spky {
 extern volatile uint32_t* probe_clock;          // defined by the host
-// Six stamps per deck call, written into the stack array the caller passes
+// Ten stamps per deck call, written into the stack array the caller passes
 // in. Part::process: [0] after the modulation and control half (just before
 // the engine runs), [1] after the engine (just before the FX chain).
 // PartFx::process, handed the same array: [2] after the target smoothers,
 // [3] after GRIT, [4] after FLUX, [5] after the tap, the FX mix and COMP
 // (just before the send law). Deck end = the caller's d1 / d2 stamp.
-using ProbePartSlots = uint32_t[6];
+// The modulation + control half split (fault R4, appended so [0..5] keep
+// their meaning; taken BEFORE [0]): [6] at the top of Part::process (what
+// lies before it is the Instrument's own work ahead of this deck), [7] after
+// SuperModulator::process (the lanes), [8] after the engine fade, the swap
+// and the fire bookkeeping, [9] after the control tick. Time order per deck
+// call: 6, 7, 8, 9, 0, 1, 2, 3, 4, 5.
+using ProbePartSlots = uint32_t[10];
 // Four stamps per sample in the mix, after both decks (fault R4, the reverb
 // split): [0] after the lamp observers and the dry / deck taps (just before
 // the MORPH blend), [1] after the blend, the reverb's dry / wet smoothers and

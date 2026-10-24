@@ -27,12 +27,14 @@ CBP_WIN w=5 cb=900000 cb_max=950000 proc=870000 a=360000 b=380000 mix=150000 law
 CBP_WIN2 w=5 am=100000 ae=200000 af=59998 bm=90000 be=210000 bf=80000
 CBP_WIN3 w=5 as=5000 ag=1000 ax=40000 ac=10000 an=3995 bs=5000 bg=1000 bx=60000 bc=10000 bn=4000
 CBP_WIN4 w=5 xo=10000 xd=20000 xr=98000 xt=2000 xl=19998
+CBP_WIN5 w=5 ap=5000 al=40000 ai=5000 at=45000 ar=5000 bp=4000 bl=40000 bi=5000 bt=36000 br=4998
 CBP_BOOT patch=3 eng_a=4 eng_b=3
 CBP_RVCLR n=1 last=393216 max=393216
 CBP_WIN w=6 cb=910000 cb_max=960000 proc=880000 a=362000 b=382000 mix=152000 law=12200
 CBP_WIN2 w=6 am=101000 ae=201000 af=60000 bm=91000 be=211000 bf=80000
 CBP_WIN3 w=6 as=5000 ag=1000 ax=40000 ac=10000 an=4000 bs=5000 bg=1000 bx=60000 bc=10000 bn=4000
 CBP_WIN4 w=6 xo=10000 xd=20000 xr=100000 xt=2000 xl=20000
+CBP_WIN5 w=6 ap=5000 al=40000 ai=5000 at=46000 ar=5000 bp=4000 bl=40000 bi=5000 bt=37000 br=5000
 CBP_WIN w=7 cb=920000 cb_max=970000 proc=890000 a=364000 b=384000 mix=154000 law=12400
 """.splitlines()
 
@@ -44,6 +46,8 @@ check("a window joins its three lines",
 check("a window without CBP_WIN2 / CBP_WIN3 has no split", "am" not in wins[7] and "ax" not in wins[7])
 check("a window joins its mix split", wins[5]["xr"] == 98000 and wins[6]["xl"] == 20000
       and "xo" not in wins[7])
+check("a window joins its modulation split", wins[5]["at"] == 45000 and wins[6]["bt"] == 37000
+      and "ap" not in wins[7])
 clears = []
 r.parse(FIXTURE, clears)
 check("a reverb clear is collected", clears == [(1, 393216, 393216)])
@@ -61,7 +65,7 @@ check("the report prints the boot line, every window and the mean",
       and "mean" in text and "(2 complete windows)" in text)
 check("a missing split prints dashes", "       -" in text.splitlines()[5])
 # A pre-split capture still gets a mean over the fields its image printed.
-old = r.parse([l for l in FIXTURE if not l.startswith(("CBP_WIN2", "CBP_WIN3", "CBP_WIN4"))])[0]
+old = r.parse([l for l in FIXTURE if not l.startswith(("CBP_WIN2", "CBP_WIN3", "CBP_WIN4", "CBP_WIN5"))])[0]
 mo = r.means(old, 5, 7)
 check("a pre-split capture's mean covers its own fields",
       mo is not None and mo[1] == 3 and mo[0]["cb"] == 910000 and "am" not in mo[0])
@@ -77,6 +81,8 @@ bad = r.parse([l.replace("bx=60000", "bx=59000") for l in FIXTURE])[0]
 check("sabotage: an FX split that does not add up goes red", r.split_gaps(bad) == [(5, "bf", 1000), (6, "bf", 1000)])
 bad = r.parse([l.replace("xr=100000", "xr=90000") for l in FIXTURE])[0]
 check("sabotage: a mix split that does not add up goes red", r.split_gaps(bad) == [(6, "mix", 10000)])
+bad = r.parse([l.replace("at=46000", "at=56000") for l in FIXTURE])[0]
+check("sabotage: a modulation split above its whole goes red", r.split_gaps(bad) == [(6, "am", -10000)])
 check("sabotage: a capture with no window is a failure",
       r.parse(["SHELL_PLAY_LAW cyc_last=1 cyc_max=2 led_last=3 led_max=4 cb_last=5 cb_max=6"])[0] == {})
 check("sabotage: a malformed window line is not a window",
