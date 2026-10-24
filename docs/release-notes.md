@@ -8,43 +8,38 @@
   Everything below the comment is public.
 -->
 
-## FireFlow 2.23.0
+## FireFlow 2.23.1
 
-**The hardware plate (`FireflowHW`) is the one going to the board.** Its
-layout is frozen: the Rev A boards are ordered, and the acrylic plate is cut
-from the same file this panel is drawn from. Every knob now sits on one 9 mm
-raster: at least 9 mm of air between any two caps, a three-column centre on its
-own wider pitch, and the jack row at the bottom of the plate.
+**ROOT and WOBL work.** The three reserved pots from 2.23.0 are now parameters.
+`ROOT` on each deck sets that deck's key: 12 zones from C at the left stop to B
+at the right, and the tooltip shows the note name. Turning it moves the scale
+under the running melody without re-latching the song; a song rebuilt
+afterwards starts from the new root. `WOBL` in `ROOM` is the reverb tail
+wobble. It boots at 0.15, the old fixed value, so the factory patch sounds the
+same until you turn it. On `Fireflow` the three knobs sit in the centre column.
 
-**Three new pots that do nothing yet.** `ROOT` on each deck (a per-deck scale
-root) and `WOBL` in `ROOM` (reverb tail wobble) are reserved: they have a hole,
-a caption and a pot on the board, but no function and no Rack widget. They show
-as dark discs on the plate.
+**CLOCK and RESET follow one law, shared with the firmware.** CLOCK takes one
+pulse per quarter note. The tempo is averaged over the last eight periods and
+changes only on a pulse. Pulses outside 20..400 BPM are ignored. When the
+pulses stop, FireFlow keeps the last tempo until you move the TEMPO knob.
+RESET now restarts the music on STEP decks. While a clock is running, it waits
+for the next CLOCK pulse.
 
-**Fifteen lamps, and they show timing, not modulation.** The TIMB, FILT and
-COLR excursion lamps and the limiter lamp are gone. New on the plate: a `TIME`
-lamp for the FLUX time period, `CLK` and `RST` beside their jacks, and the SHFT
-and MOD lamps between their key and jack. Every knob lamp sits beside its
-caption, toward its own group. **In Rack, `TIME`, `CLK`, `RST` and `SHFT` stay
-dark for now**: what they will show is designed but not wired yet. The MOD lamp
-now also takes over the old limiter lamp's job.
+**The lamps from 2.23.0 light up.** `TIME` flashes once per FLUX period, `CLK`
+and `RST` flash on their jack's pulses, and `SHFT` shows the input level plus
+one long flash when an engine or scale change takes effect. The lamp law is now
+the same code the firmware runs. Its timings are first guesses that no one has
+watched yet.
 
-**The plate is drawn evenly.** Every gap between two group fields is now
-3.0 mm. It ranged from 3.0 to 5.9 mm before, widest above DIFF and WOBL.
-Every field fills its row's full height, so CAPTURE is as tall as its
-neighbours, and every group name sits centred on its field's top edge. Deck B
-now reads as an exact mirror image of deck A.
+**GRIT's off zone around noon is wider: 0.06 instead of 0.03.** On the first
+real pot, a GRIT knob set to noon by eye read +0.044, so it never switched off.
+In Rack this only means GRIT starts a touch further from noon.
 
-**Fixed: loading a patch onto a BBD deck no longer silences FLUX.** Restoring a
-patch over a running deck whose ENG is BBD made the plugin see a fresh switch
-to BBD. It then set FLUX to 0 and turned excite-other-deck on, over the patch
-you had just loaded. A restore now fires no switch; turning ENG yourself still
-does.
-
-**Under the hood:** the control law that turns knob positions into engine
-settings moved out of the Rack module into a shared, Rack-free layer. The
-firmware runs the same code. It now sends a setting only when its value
-changed. Nothing should sound different.
+**Under the hood:** CPU work for the hardware's audio callback. The STEP grid
+search now runs only when the phase leaves its step. The FX setters run only
+when their inputs move. A sleeping reverb clears its room in 32 small steps
+instead of all at once. Tests confirm the first two are bit-identical, so
+nothing should sound different.
 
 This is a development alpha. Saved patches may break between releases.
 
