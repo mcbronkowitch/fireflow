@@ -4,7 +4,9 @@
 2 s window, the whole callback, each deck, the mix, the law, and since fault
 R4 each deck split into modulation + control (m), engine (e) and FX (f), and
 the mix into observers + taps (xo), blend + duck (xd), reverb (xr), return +
-sleep (xt) and limiter (xl).
+sleep (xt) and limiter (xl), and each deck's modulation + control half into
+before-the-deck (ap / bp), lanes (al / bl), fade + swap + fire bookkeeping
+(ai / bi), control tick (at / bt) and trigger + gate edge + tap (ar / br).
 
 Call:
     python read_cbp.py capture.txt                 # every window
@@ -15,13 +17,14 @@ Lines read (transcribed from cb_profile.cpp's PrintLine calls):
     CBP_WIN2 w=N am= ae= af= bm= be= bf=
     CBP_WIN3 w=N as= ag= ax= ac= an= bs= bg= bx= bc= bn=
     CBP_WIN4 w=N xo= xd= xr= xt= xl=
+    CBP_WIN5 w=N ap= al= ai= at= ar= bp= bl= bi= bt= br=
     CBP_BOOT patch= eng_a= eng_b=          (the last one seen)
     CBP_RVCLR n= last= max=                (every one; the report lists them)
 Everything else, SHELL_PLAY_* included, is ignored. A window with a CBP_WIN
 but no CBP_WIN2 / CBP_WIN3 / CBP_WIN4 (an image from before that split)
 prints dashes. am+ae+af is a's three parts, as+ag+ax+ac+an is af's five
-(smoothers, GRIT, FLUX, tap + FX mix + COMP, send law) and xo+xd+xr+xt+xl
-is mix's five, each a floor of its own
+(smoothers, GRIT, FLUX, tap + FX mix + COMP, send law), xo+xd+xr+xt+xl
+is mix's five and ap+al+ai+at+ar is am's five, each a floor of its own
 1000-block mean, so a sum may fall a few cycles short of its whole; a gap
 above kSplitSlack is reported as a reader failure, since it means the lines
 do not describe the same window.
@@ -37,16 +40,20 @@ _WIN2 = re.compile(r"^CBP_WIN2 w=(\d+) am=(\d+) ae=(\d+) af=(\d+) bm=(\d+) be=(\
 _WIN3 = re.compile(r"^CBP_WIN3 w=(\d+) as=(\d+) ag=(\d+) ax=(\d+) ac=(\d+) an=(\d+)"
                    r" bs=(\d+) bg=(\d+) bx=(\d+) bc=(\d+) bn=(\d+)\s*$")
 _WIN4 = re.compile(r"^CBP_WIN4 w=(\d+) xo=(\d+) xd=(\d+) xr=(\d+) xt=(\d+) xl=(\d+)\s*$")
+_WIN5 = re.compile(r"^CBP_WIN5 w=(\d+) ap=(\d+) al=(\d+) ai=(\d+) at=(\d+) ar=(\d+)"
+                   r" bp=(\d+) bl=(\d+) bi=(\d+) bt=(\d+) br=(\d+)\s*$")
 _BOOT = re.compile(r"^CBP_BOOT patch=(\d+) eng_a=(-?\d+) eng_b=(-?\d+)\s*$")
 _RVCLR = re.compile(r"^CBP_RVCLR n=(\d+) last=(\d+) max=(\d+)\s*$")
 
-FIELDS = ("cb", "cb_max", "a", "am", "ae", "af", "as", "ag", "ax", "ac", "an",
-          "b", "bm", "be", "bf", "bs", "bg", "bx", "bc", "bn",
+FIELDS = ("cb", "cb_max", "a", "am", "ap", "al", "ai", "at", "ar", "ae", "af",
+          "as", "ag", "ax", "ac", "an",
+          "b", "bm", "bp", "bl", "bi", "bt", "br", "be", "bf", "bs", "bg", "bx", "bc", "bn",
           "mix", "xo", "xd", "xr", "xt", "xl", "law")
 # A whole and the parts that must add up to it, within kSplitSlack.
 SPLITS = (("a", ("am", "ae", "af")), ("b", ("bm", "be", "bf")),
           ("af", ("as", "ag", "ax", "ac", "an")), ("bf", ("bs", "bg", "bx", "bc", "bn")),
-          ("mix", ("xo", "xd", "xr", "xt", "xl")))
+          ("mix", ("xo", "xd", "xr", "xt", "xl")),
+          ("am", ("ap", "al", "ai", "at", "ar")), ("bm", ("bp", "bl", "bi", "bt", "br")))
 kSplitSlack = 6   # cycles: up to five floors against one
 
 
@@ -81,6 +88,13 @@ def parse(lines, clears=None):
             w = int(m.group(1))
             d = wins.setdefault(w, {})
             for k, name in enumerate(("xo", "xd", "xr", "xt", "xl")):
+                d[name] = int(m.group(2 + k))
+            continue
+        m = _WIN5.match(line)
+        if m:
+            w = int(m.group(1))
+            d = wins.setdefault(w, {})
+            for k, name in enumerate(("ap", "al", "ai", "at", "ar", "bp", "bl", "bi", "bt", "br")):
                 d[name] = int(m.group(2 + k))
             continue
         m = _BOOT.match(line)

@@ -351,7 +351,11 @@ public:
     __attribute__((always_inline)) inline
     void process(float inL, float inR, float& outL, float& outR,
                  float& sendL, float& sendR SPKY_PROBE_PART_PARAMS) {
+        // Callback profile only (util/probe_mark.h, slots 6..9: fault R4's
+        // split of the modulation + control half): the deck starts here...
+        SPKY_PROBE_PART_MARK(6);
         _mod.process();
+        SPKY_PROBE_PART_MARK(7);   // ...the lanes end here
 
         // click-free engine switch: fade out (4 ms) -> swap -> fade in (4 ms).
         // At hold the multiplier is exactly 1.0, so unswitched runs stay
@@ -403,12 +407,14 @@ public:
         //   mid-interval triggers against a surface up to 95 samples (~2 ms)
         //   stale. Musically negligible for rare knob transitions -- this is an
         //   accepted asymmetry, not something to fix here.
+        SPKY_PROBE_PART_MARK(8);   // the fade, the swap and the fire bookkeeping end here
         if (_ctrl_ctr == 0) {
             _ctrl_ctr = SynthEngine::kCtrlInterval;
             _control_tick();
         } else if (fired) {
             _control_tick();
         }
+        SPKY_PROBE_PART_MARK(9);   // the control tick ends here
         --_ctrl_ctr;
 
         if (fired && !_note_suppressed) _fire_trigger();

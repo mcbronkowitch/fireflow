@@ -7,6 +7,7 @@
 // (shell/cb_profile.cpp, docs/hardware/reva-bring-up.md 10.1).
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cmath>
@@ -89,20 +90,26 @@ void probe_block(const uint32_t* ts, const uint32_t* d1, const uint32_t* d2,
 }
 } // namespace spky
 
+// A deck call's slots in the order they are taken (probe_mark.h): the
+// modulation split 6..9 comes first, then 0..5.
+constexpr int kDeckOrder[kSlots] = {6, 7, 8, 9, 0, 1, 2, 3, 4, 5};
+
 // Samples of a block whose stamps are not in process order: top ->
-// [priority deck: mod, engine, smoothers, grit, flux, comp, send] ->
-// [yielding deck: the same seven] -> [mix: observers + taps, blend + duck,
-// reverb, return + sleep] -> limiter -> next top. Slot k is taken after slot
-// k-1 in each group.
+// [priority deck: pre, lanes, fire bookkeeping, control tick, trigger, engine,
+// smoothers, grit, flux, comp, send] -> [yielding deck: the same eleven] ->
+// [mix: observers + taps, blend + duck, reverb, return + sleep] -> limiter ->
+// next top.
 int out_of_order(const Block& b) {
     int bad = 0;
     for (int i = 0; i < b.n; ++i) {
-        bool ok = after(b.ts[i], b.p1[i][0]);
-        for (int k = 1; k < kSlots; ++k) ok = ok && after(b.p1[i][k - 1], b.p1[i][k]);
-        ok = ok && after(b.p1[i][kSlots - 1], b.d1[i]);
-        ok = ok && after(b.d1[i], b.p2[i][0]);
-        for (int k = 1; k < kSlots; ++k) ok = ok && after(b.p2[i][k - 1], b.p2[i][k]);
-        ok = ok && after(b.p2[i][kSlots - 1], b.d2[i]);
+        bool ok = after(b.ts[i], b.p1[i][kDeckOrder[0]]);
+        for (int k = 1; k < kSlots; ++k)
+            ok = ok && after(b.p1[i][kDeckOrder[k - 1]], b.p1[i][kDeckOrder[k]]);
+        ok = ok && after(b.p1[i][kDeckOrder[kSlots - 1]], b.d1[i]);
+        ok = ok && after(b.d1[i], b.p2[i][kDeckOrder[0]]);
+        for (int k = 1; k < kSlots; ++k)
+            ok = ok && after(b.p2[i][kDeckOrder[k - 1]], b.p2[i][kDeckOrder[k]]);
+        ok = ok && after(b.p2[i][kDeckOrder[kSlots - 1]], b.d2[i]);
         ok = ok && after(b.d2[i], b.mx[i][0]);
         for (int k = 1; k < kMix; ++k) ok = ok && after(b.mx[i][k - 1], b.mx[i][k]);
         ok = ok && after(b.mx[i][kMix - 1], b.ts[i + 1]);
@@ -214,4 +221,51 @@ TEST_CASE("probe marks: the reverb segment runs while a send is open, and its cl
     CHECK(bad == 0);
     // Asleep, slots 1 and 2 are taken back to back: a stamp's own cost only.
     CHECK(asleep_rev < rev / 10);
+}
+
+TEST_CASE("probe marks: the lanes run every sample, the control tick once per block") {
+    // The modulation split (fault R4): SuperModulator::process runs on every
+    // sample, the control tick on one fixed sample of every 96 per deck. On
+    // the spinner clock a segment's size is noisy (a tick measured 54-296
+    // steps, and a descheduled thread can put a bigger jump anywhere), so a
+    // size floor flakes both ways. What a misplaced slot 9 cannot fake is
+    // WHERE the largest tick segment of a block sits: on the tick's own
+    // sample in nearly every block. With slot 9 taken right after slot 8 the
+    // largest one is jitter and wanders. RED, 2026-10-24, 20 runs with slot 9
+    // moved: red in 19, the priority deck's mode at 2-5 of 49 (36-49 in
+    // place). The yielding deck's jitter peak often sits on one fixed sample
+    // as well, so for that deck this check is not a reliable RED; the board's
+    // DWT split (CBP_WIN5) is the cost evidence, as for every segment here.
+    Spinner spin;
+    g_blocks.clear();
+    spky::Instrument inst;
+    inst.init(48000.f);
+    std::vector<float> l(96), r(96);
+    constexpr int kBlocks = 50;
+    for (int blk = 0; blk < kBlocks; ++blk) inst.process(nullptr, nullptr, l.data(), r.data(), 96);
+    REQUIRE(g_blocks.size() == static_cast<size_t>(kBlocks));
+    uint64_t lanes[2] = {0, 0};
+    int at[2][96] = {};
+    for (size_t k = 1; k < g_blocks.size(); ++k) {
+        const Block& b = g_blocks[k];
+        REQUIRE(b.n == 96);
+        uint32_t tmax[2] = {0, 0};
+        int      imax[2] = {0, 0};
+        for (int i = 0; i < b.n; ++i) {
+            lanes[0] += b.p1[i][7] - b.p1[i][6];
+            lanes[1] += b.p2[i][7] - b.p2[i][6];
+            const uint32_t t[2] = {b.p1[i][9] - b.p1[i][8], b.p2[i][9] - b.p2[i][8]};
+            for (int p = 0; p < 2; ++p)
+                if (t[p] > tmax[p]) { tmax[p] = t[p]; imax[p] = i; }
+        }
+        ++at[0][imax[0]];
+        ++at[1][imax[1]];
+    }
+    CHECK(lanes[0] > 0);
+    CHECK(lanes[1] > 0);
+    for (int p = 0; p < 2; ++p) {
+        const int mode = *std::max_element(at[p], at[p] + 96);
+        INFO("deck slot " << p << ": the most common sample holds " << mode << " of " << kBlocks - 1);
+        CHECK(mode >= (kBlocks - 1) / 2);   // measured: 36-49 of 49 in place, a handful when not
+    }
 }
