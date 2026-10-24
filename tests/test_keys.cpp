@@ -3,6 +3,7 @@
 // Spec: docs/superpowers/specs/2026-10-02-rev-a-p6a-panel-scan-design.md
 // section 3.4.
 #include <doctest/doctest.h>
+#include <initializer_list>
 #include "../shell/keys.h"
 #include "../shell/mux_plan.h"
 
@@ -84,6 +85,43 @@ TEST_CASE("keys: two keys debounce independently") {
     CHECK(s.pressed == 0x3);
     CHECK(s.presses[0] == 1);
     CHECK(s.presses[1] == 1);
+}
+
+TEST_CASE("keys: a closed-at-rest pad reads a high input as a press") {
+    // Rev A as assembled (reva-bring-up.md 6.1): the keys sit on their
+    // normally closed contacts, so a released key reads low and a press high.
+    constexpr shell::KeyPad nc = shell::closed_at_rest(shell::kCouponKeys);
+    CHECK(nc.bit[0] == shell::kCouponKeys.bit[0]);
+    shell::KeyState s;
+    feed(s, nc, 0u, 20);   // every input low: every key released
+    CHECK(s.pressed == 0);
+    CHECK(s.presses[0] == 0);
+    for(int i = 0; i < 5; ++i)
+    {
+        feed(s, nc, 1u << 7, 5);
+        feed(s, nc, 0u, 5);
+    }
+    CHECK(s.presses[0] == 5);
+    CHECK(s.pressed == 0);
+}
+
+TEST_CASE("keys: the released word reads as released in either polarity") {
+    // MuxScan's last_return() before the first read: a wrong word here counts
+    // one phantom press per key at boot.
+    CHECK(shell::keys_released(shell::kCouponKeys) == kUp);
+    CHECK(shell::keys_released(shell::closed_at_rest(shell::kCouponKeys)) == 0u);
+    for(const shell::KeyPad& p : {shell::kCouponKeys, shell::closed_at_rest(shell::kCouponKeys)})
+    {
+        shell::KeyState s;
+        feed(s, p, shell::keys_released(p), 50);
+        CHECK(s.pressed == 0);
+        CHECK(s.presses[0] == 0);
+    }
+}
+
+TEST_CASE("keys: the pads are active low unless told otherwise") {
+    CHECK_FALSE(shell::kCouponKeys.closed_at_rest);
+    CHECK_FALSE(kTwo.closed_at_rest);
 }
 
 TEST_CASE("keys: the coupon key is the bit kCouponChain names") {

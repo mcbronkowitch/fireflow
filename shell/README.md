@@ -530,6 +530,7 @@ written up under `docs/hardware/`:
 | `+ SHELL_POT_ROUND=1` (on settle or wait) | the pots at mid travel, both questions | `read_pots.py` | `pots-measured.md` |
 | `+ SHELL_SCAN_CHECK=1` | the panel scan's pattern: clean at one step per block, with the engine running | `read_scan_check.py` | `scan-measured.md` |
 | `SHELL_PANEL_SCAN=1` (± `SHELL_COUPON_PROBE=1`) | the playing image: the scan drives the engine through the board's control table | Rev A: `read_play.py` (coupon: the `SHELL_PLAY` line by eye) | `reva-bring-up.md` §5, §6, §10 |
+| `+ SHELL_KEYS_NC=1` (Rev A only) | the panel keys read closed at rest: Rev A #1 as assembled, a workaround until Rev B | `read_play.py` (`keys=`, `presses=`) | `reva-bring-up.md` 6.1, fault R1 |
 | `+ C_USER_FLAGS=-DSPKY_PROBE_MARKS=1` (clean build) | the callback profile: per-deck and mix cycles per block, the worst blocks with their lane events, a histogram of the whole callback (`cb_profile.cpp`, `engine/util/probe_mark.h`) | `CBP_*` lines | `cpu-headroom-measured.md` |
 | `+ C_USER_FLAGS=-DSHELL_BOOT_PATCH=N` (clean build) | boots a stress patch instead of the init patch: 1 = W2 (both decks WAVE), 2 = F2 (both decks FEED); combinable with the probe flag | `CBP_BOOT` line | `cpu-headroom-measured.md` |
 | `SHELL_ITCM=0` | the hot set stays in SRAM: only the comparison image of the ITCM measurement | — | `cpu-headroom-measured.md` |

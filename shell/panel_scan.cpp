@@ -2,6 +2,7 @@
 
 #include "shell_panel_scan.h"
 #include "shell_coupon_probe.h"
+#include "shell_keys_nc.h"
 
 #if SHELL_PANEL_SCAN
 
@@ -37,7 +38,13 @@ constexpr KeyMap        kKeyMap = kCouponKeyMap;
 constexpr const int8_t* kLedBit = kCouponLedBit;
 #else
 constexpr ControlTable  kTable  = kRevaTable;
+// SHELL_KEYS_NC=1: Rev A as assembled reads its keys closed at rest
+// (reva-bring-up.md 6.1). A workaround; the finding stays in the fault list.
+#if SHELL_KEYS_NC
+constexpr KeyPad        kKeys   = closed_at_rest(kRevaKeys);
+#else
 constexpr KeyPad        kKeys   = kRevaKeys;
+#endif
 constexpr KeyMap        kKeyMap = kRevaKeyMap;
 constexpr const int8_t* kLedBit = kRevaLedBit;
 #endif
@@ -125,7 +132,7 @@ void panel_scan_init(bench::Board& hw)
 {
     g_scan.init();
     g_scan.set_walk_leds(false);
-    g_scan.set_read_keys(true);
+    g_scan.set_read_keys(true, keys_released(kKeys));
     for(int c = 0; c < kChannels; ++c) g_value[c] = -1.0f;
     // The FLUX rows' channels, found the way panel_scan_tick() walks a step
     // (group_at / channel_at per sense pin), so the index is the one its

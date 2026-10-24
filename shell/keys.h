@@ -16,11 +16,31 @@ inline constexpr int kKeyDebounce = 3;
 // Where each key sits in the 165's return stream, counted from the first bit
 // shifted out (MuxScan::read_chain). The first bit is D7, so a key on Dn is
 // bit 7 - n.
+//
+// closed_at_rest flips the polarity: a released key reads low, a pressed key
+// high. That is Rev A as assembled (docs/hardware/reva-bring-up.md 6.1 and
+// the fault list: the keys sit on their normally closed contacts), reached
+// through SHELL_KEYS_NC=1. The design is active low, and so is every table.
 struct KeyPad
 {
-    int count;
-    int bit[kMaxKeys];
+    int  count;
+    int  bit[kMaxKeys];
+    bool closed_at_rest = false;
 };
+
+inline constexpr KeyPad closed_at_rest(KeyPad pad)
+{
+    pad.closed_at_rest = true;
+    return pad;
+}
+
+// The return word that reads every key of `pad` released -- what
+// MuxScan::last_return() must hold before the first read, or the boot counts
+// one phantom press per key.
+inline constexpr uint32_t keys_released(const KeyPad& pad)
+{
+    return pad.closed_at_rest ? 0u : 0xFFFFFFFFu;
+}
 
 // The coupon: SW1 on D0 (hardware/coupon/scripts/netlist.py), so bit 7 --
 // what kCouponChain.button_bit has always said.
@@ -49,7 +69,7 @@ struct KeyState
 };
 
 // One read of the 165's return stream. Keys are active low: a pressed key
-// pulls its input to GND against the pull-up.
+// pulls its input to GND against the pull-up -- unless pad.closed_at_rest.
 void key_update(KeyState& s, const KeyPad& pad, uint32_t ret);
 
 } // namespace shell

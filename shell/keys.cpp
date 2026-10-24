@@ -7,7 +7,8 @@ void key_update(KeyState& s, const KeyPad& pad, uint32_t ret)
     for(int i = 0; i < pad.count && i < kMaxKeys; ++i)
     {
         const uint8_t me   = static_cast<uint8_t>(1u << i);
-        const bool    raw  = ((ret >> pad.bit[i]) & 1u) == 0u;
+        const bool    high = ((ret >> pad.bit[i]) & 1u) != 0u;
+        const bool    raw  = pad.closed_at_rest ? high : !high;
         const bool    cand = (s.candidate & me) != 0u;
         if(raw == cand)
         {

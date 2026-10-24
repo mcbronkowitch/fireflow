@@ -129,7 +129,13 @@ class MuxScan
     // The play images read the keys in the same pass as every select()
     // (spec section 3.4); the probes keep the write-only pass they were
     // measured with.
-    void     set_read_keys(bool on) { read_keys_ = on; }
+    // `released` is what last_return() holds until the first read:
+    // keys_released() of the pad, so the boot sees every key up.
+    void set_read_keys(bool on, uint32_t released = 0xFFFFFFFFu)
+    {
+        read_keys_   = on;
+        last_return_ = released;
+    }
     uint32_t last_return() const { return last_return_; }
 
   private:

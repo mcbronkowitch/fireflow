@@ -353,6 +353,23 @@ $(error SHELL_PANEL_SCAN=1 excludes SHELL_MUX_PROBE)
 endif
 endif
 
+# Rev A's keys read closed at rest (docs/hardware/reva-bring-up.md 6.1 and
+# its fault list entry): 1 flips the key polarity so the board plays without
+# resoldering. A workaround for one board's assembly, so it only exists on the
+# Rev A play image; the coupon image keeps its active-low key.
+SHELL_KEYS_NC ?= 0
+
+ifneq ($(filter $(SHELL_KEYS_NC),0 1),$(SHELL_KEYS_NC))
+$(error SHELL_KEYS_NC must be 0 or 1)
+endif
+
+ifeq ($(SHELL_KEYS_NC),1)
+ifneq ($(SHELL_PANEL_SCAN)$(SHELL_COUPON_PROBE),10)
+$(error SHELL_KEYS_NC=1 needs SHELL_PANEL_SCAN=1 without SHELL_COUPON_PROBE: \
+only the Rev A play image reads the panel keys)
+endif
+endif
+
 # The per-sample audio path in ITCM (spec 2026-10-18-cpu-headroom-design.md
 # section 4.2): itcm_hot.ld places it, itcm_load.cpp copies it out of QSPI at
 # the top of main(), itcm_placement.py refuses a link that could run it first.
@@ -518,6 +535,7 @@ SWITCH_HEADERS := \
   $(shell python write_shell_pot_round.py $(BUILD_DIR)/shell_pot_round.h $(SHELL_POT_ROUND) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_scan_check.py $(BUILD_DIR)/shell_scan_check.h $(SHELL_SCAN_CHECK) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_panel_scan.py $(BUILD_DIR)/shell_panel_scan.h $(SHELL_PANEL_SCAN) $(SWITCH_OBJECTS)) \
+  $(shell python write_shell_keys_nc.py $(BUILD_DIR)/shell_keys_nc.h $(SHELL_KEYS_NC) $(BUILD_DIR)/panel_scan.o) \
   $(shell python write_shell_itcm.py $(BUILD_DIR)/shell_itcm.h $(SHELL_ITCM) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_link_stamp.py $(BUILD_DIR)/shell_link_stamp.h $(BUILD_DIR)/itcm_load.o) \
   $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/pot_report.o $(BUILD_DIR)/scan_check.o)
@@ -536,7 +554,7 @@ $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o: $(BUILD_DIR)/shell_coupon_pr
 $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/wait_probe.o: $(BUILD_DIR)/shell_pot_round.h
 $(BUILD_DIR)/pot_report.o: $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/scan_check.o: $(BUILD_DIR)/shell_scan_check.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_git_hash.h
-$(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h
+$(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_keys_nc.h
 $(BUILD_DIR)/control_tick.o: $(BUILD_DIR)/shell_panel_scan.h
 
 .PHONY: FORCE
