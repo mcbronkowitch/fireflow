@@ -35,6 +35,9 @@ public:
 
     void reset(float value = 0.f) { _value = value; _smoothing = false; }
     float value() const { return _value; }
+    // False once a glide has snapped onto its target (or never started): the
+    // next process() with the same target then returns value() unchanged.
+    bool smoothing() const { return _smoothing; }
 
 #ifdef SPKY_TESTING
     // Test-only window onto the current coefficient, added so

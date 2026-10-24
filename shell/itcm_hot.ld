@@ -51,7 +51,7 @@ SECTIONS
     *(.text._ZN4spky7BbdLine7ProcessEf)                                /* 1498 */
     *(.text._ZN4spky9BodyVoice7processERfS1_)                          /* 1222 */
     *(.text._ZN4spky12SampleBuffer5writeEff)                           /* 1188 */
-    *(.text._ZN4spky6PartFx7processERfS1_S1_S1_PKf)                    /* 1142 */
+    *(.text._ZN4spky6PartFx7processERfS1_S1_S1_)                       /* 1142 */
     *(.text._ZN4spky13SamplerEngine7processERfS1_)                     /* 1100 */
     *(.text._ZN4spky7ModLane7processEv)                                /* 1056 */
     *(.text._ZN4spky13AmbientReverb7processEffRfS1_)                   /*  920 */

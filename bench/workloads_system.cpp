@@ -239,9 +239,10 @@ float proc_fx()
     auto& group = g_system_arena.get<FxGroup>();
     const float* in = test_input();
     float acc = 0.f;
+    group.fx.set_targets(group.values);   // once per block, as Part's raster tick
     for (size_t i = 0; i < kBlock; ++i) {
         float l = in[i], r = in[i] * 0.9f, sl = 0.f, sr = 0.f;
-        group.fx.process(l, r, sl, sr, group.values);
+        group.fx.process(l, r, sl, sr);
         acc += l + r + sl + sr;
     }
     return acc;
