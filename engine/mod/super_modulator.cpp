@@ -112,7 +112,7 @@ void SuperModulator::set_step(bool on, int n) {
 }
 void SuperModulator::set_fixed_slew(bool on)  { for (auto& l : _lanes) l.set_fixed_slew(on); }
 
-void SuperModulator::process() {
+void SuperModulator::process(SPKY_PROBE_MOD_PARAMS) {
     // The PITCH lane is the anchor: per-sample, fires bit-identical to the
     // pre-rework engine. The four texture lanes advance on the 96-sample
     // raster (spec 2026-07-19 mod-plane-control-rate); the counter boots at
@@ -126,6 +126,7 @@ void SuperModulator::process() {
     // asymmetry"; see also part.h.
     _out[LANE_PITCH] = _lanes[LANE_PITCH].process();
     _out_stepped[LANE_PITCH] = _lanes[LANE_PITCH].stepped_output();
+    SPKY_PROBE_PART_MARK(10);   // callback profile only: the pitch lane ends here
 
     // The deck's step clock. Counted from the master lane's own step index
     // rather than from lane_fired(), because a gated melodic step still
@@ -169,6 +170,7 @@ void SuperModulator::process() {
         if (_onsets < 3) ++_onsets;
     }
 
+    SPKY_PROBE_PART_MARK(11);   // the step clock and the onset ring end here
     if (_tick_ctr == 0) {
         _tick_ctr = ModLane::kTickInterval;
         const int   deck = _deck_steps < 1 ? 1 : _deck_steps;

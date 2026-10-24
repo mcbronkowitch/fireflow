@@ -354,7 +354,7 @@ public:
         // Callback profile only (util/probe_mark.h, slots 6..9: fault R4's
         // split of the modulation + control half): the deck starts here...
         SPKY_PROBE_PART_MARK(6);
-        _mod.process();
+        _mod.process(SPKY_PROBE_MOD_FWD);
         SPKY_PROBE_PART_MARK(7);   // ...the lanes end here
 
         // click-free engine switch: fade out (4 ms) -> swap -> fade in (4 ms).

@@ -50,6 +50,19 @@ uint32_t g_mseg[MSEG_COUNT] = {};
 // the audio-in tap. The five sum to g_seg[p][SEG_MOD].
 enum { DSEG_PRE = 0, DSEG_LANES, DSEG_FIRE, DSEG_TICK, DSEG_TRIG, DSEG_COUNT };
 uint32_t g_dseg[2][DSEG_COUNT] = {};
+// Each deck's lanes split (fault R4), summed over the block: [0] the pitch
+// lane (per sample), [1] the step clock and the onset ring, [2] the texture
+// lanes' raster tick and the rest of SuperModulator::process. The three sum
+// to g_dseg[p][DSEG_LANES].
+enum { LSEG_PITCH = 0, LSEG_RING, LSEG_TEX, LSEG_COUNT };
+uint32_t g_lseg[2][LSEG_COUNT] = {};
+// The block's most expensive sample, broken down (fault R4: it is sample 95
+// of every block, ~33 k against a median of ~9 k): each deck's modulation
+// half, lanes, control tick, engine and FX, the mix. WSEG_* index both.
+enum { WSEG_MOD = 0, WSEG_LANES, WSEG_TICK, WSEG_ENG, WSEG_FX, WSEG_COUNT };
+uint32_t g_wseg[2][WSEG_COUNT] = {};
+uint32_t g_wmix  = 0;
+bool     g_wlast = false;   // the worst sample was the block's last one
 
 uint32_t g_block = 0;    // blocks since StartAudio
 int      g_eng[2] = {-1, -1};  // each deck's engine id at the last block end
@@ -94,12 +107,17 @@ struct Win {
     uint32_t seg[2][SEG_COUNT];
     uint32_t mseg[MSEG_COUNT];
     uint32_t dseg[2][DSEG_COUNT];
+    uint32_t lseg[2][LSEG_COUNT];
+    uint32_t wseg[2][WSEG_COUNT];
+    uint32_t wmix, wlast;
 };
 uint64_t          g_wsum_cb = 0, g_wsum_proc = 0, g_wsum_deck[2] = {0, 0}, g_wsum_mix = 0,
                   g_wsum_law = 0, g_wsum_seg[2][SEG_COUNT] = {}, g_wsum_mseg[MSEG_COUNT] = {},
-                  g_wsum_dseg[2][DSEG_COUNT] = {};
+                  g_wsum_dseg[2][DSEG_COUNT] = {}, g_wsum_lseg[2][LSEG_COUNT] = {},
+                  g_wsum_wseg[2][WSEG_COUNT] = {}, g_wsum_wmix = 0;
+uint32_t          g_wsum_wlast = 0;
 uint64_t          g_sum_seg[2][SEG_COUNT] = {}, g_sum_mseg[MSEG_COUNT] = {},
-                  g_sum_dseg[2][DSEG_COUNT] = {};
+                  g_sum_dseg[2][DSEG_COUNT] = {}, g_sum_lseg[2][LSEG_COUNT] = {};
 uint32_t          g_wmax_cb = 0, g_wn = 0;
 volatile Win      g_win_pub;
 volatile uint32_t g_win_n = 0;
@@ -135,6 +153,7 @@ void probe_block(const uint32_t* ts, const uint32_t* d1, const uint32_t* d2,
     uint32_t a = 0, b = 0, m = 0;
     uint32_t sa[SEG_COUNT] = {}, sb[SEG_COUNT] = {}, sm[MSEG_COUNT] = {};
     uint32_t da[DSEG_COUNT] = {}, db[DSEG_COUNT] = {};
+    uint32_t la[LSEG_COUNT] = {}, lb[LSEG_COUNT] = {};
     for(int i = 0; i < n; ++i)
     {
         a += d1[i] - ts[i];        // top of the sample + the priority deck
@@ -167,11 +186,23 @@ void probe_block(const uint32_t* ts, const uint32_t* d1, const uint32_t* d2,
         db[DSEG_TICK]  += p2[i][9] - p2[i][8];
         da[DSEG_TRIG]  += p1[i][0] - p1[i][9];
         db[DSEG_TRIG]  += p2[i][0] - p2[i][9];
+        // The lanes: 6 -> 10 -> 11 -> 7 (probe_mark.h).
+        la[LSEG_PITCH] += p1[i][10] - p1[i][6];
+        lb[LSEG_PITCH] += p2[i][10] - p2[i][6];
+        la[LSEG_RING]  += p1[i][11] - p1[i][10];
+        lb[LSEG_RING]  += p2[i][11] - p2[i][10];
+        la[LSEG_TEX]   += p1[i][7] - p1[i][11];
+        lb[LSEG_TEX]   += p2[i][7] - p2[i][11];
     }
     for(int s = 0; s < DSEG_COUNT; ++s)
     {
         g_dseg[pri][s]     = da[s];
         g_dseg[1 - pri][s] = db[s];
+    }
+    for(int s = 0; s < LSEG_COUNT; ++s)
+    {
+        g_lseg[pri][s]     = la[s];
+        g_lseg[1 - pri][s] = lb[s];
     }
     for(int s = 0; s < MSEG_COUNT; ++s) g_mseg[s] = sm[s];
     g_deck[pri]     = a;
@@ -191,6 +222,23 @@ void probe_block(const uint32_t* ts, const uint32_t* d1, const uint32_t* d2,
     }
     g_maxs = mx;
     g_maxi = mi;
+    // The worst sample's breakdown. The priority deck starts at the sample's
+    // top stamp, the yielding one at the priority deck's end stamp.
+    {
+        const uint32_t st[2] = {ts[mi], d1[mi]}, en[2] = {d1[mi], d2[mi]};
+        const uint32_t* ps[2] = {p1[mi], p2[mi]};
+        for(int k = 0; k < 2; ++k)
+        {
+            const int p = k == 0 ? pri : 1 - pri;
+            g_wseg[p][WSEG_MOD]   = ps[k][0] - st[k];
+            g_wseg[p][WSEG_LANES] = ps[k][7] - ps[k][6];
+            g_wseg[p][WSEG_TICK]  = ps[k][9] - ps[k][8];
+            g_wseg[p][WSEG_ENG]   = ps[k][1] - ps[k][0];
+            g_wseg[p][WSEG_FX]    = en[k] - ps[k][1];
+        }
+        g_wmix  = ts[mi + 1] - d2[mi];
+        g_wlast = mi == n - 1;
+    }
     g_med  = n > 1 ? (g_proc - mx) / static_cast<uint32_t>(n - 1) : g_proc;
 }
 } // namespace spky
@@ -245,6 +293,17 @@ void cb_profile_block_end(uint32_t cb, uint32_t law, uint32_t led, bool warm,
             g_wsum_dseg[p][s] += g_dseg[p][s];
             g_sum_dseg[p][s] += g_dseg[p][s];
         }
+    for(int p = 0; p < 2; ++p)
+    {
+        for(int s = 0; s < LSEG_COUNT; ++s)
+        {
+            g_wsum_lseg[p][s] += g_lseg[p][s];
+            g_sum_lseg[p][s] += g_lseg[p][s];
+        }
+        for(int s = 0; s < WSEG_COUNT; ++s) g_wsum_wseg[p][s] += g_wseg[p][s];
+    }
+    g_wsum_wmix += g_wmix;
+    if(g_wlast) ++g_wsum_wlast;
     if(cb > g_wmax_cb) g_wmax_cb = cb;
     if(++g_wn == kWinBlocks)
     {
@@ -265,6 +324,23 @@ void cb_profile_block_end(uint32_t cb, uint32_t law, uint32_t led, bool warm,
                 g_win_pub.dseg[p][s] = static_cast<uint32_t>(g_wsum_dseg[p][s] / kWinBlocks);
                 g_wsum_dseg[p][s]    = 0;
             }
+        for(int p = 0; p < 2; ++p)
+        {
+            for(int s = 0; s < LSEG_COUNT; ++s)
+            {
+                g_win_pub.lseg[p][s] = static_cast<uint32_t>(g_wsum_lseg[p][s] / kWinBlocks);
+                g_wsum_lseg[p][s]    = 0;
+            }
+            for(int s = 0; s < WSEG_COUNT; ++s)
+            {
+                g_win_pub.wseg[p][s] = static_cast<uint32_t>(g_wsum_wseg[p][s] / kWinBlocks);
+                g_wsum_wseg[p][s]    = 0;
+            }
+        }
+        g_win_pub.wmix  = static_cast<uint32_t>(g_wsum_wmix / kWinBlocks);
+        g_win_pub.wlast = g_wsum_wlast;
+        g_wsum_wmix     = 0;
+        g_wsum_wlast    = 0;
         g_win_pub.cb      = static_cast<uint32_t>(g_wsum_cb / kWinBlocks);
         g_win_pub.proc    = static_cast<uint32_t>(g_wsum_proc / kWinBlocks);
         g_win_pub.deck[0] = static_cast<uint32_t>(g_wsum_deck[0] / kWinBlocks);
@@ -357,6 +433,13 @@ void cb_profile_report(bench::Board& hw)
         for(int s = 0; s < MSEG_COUNT; ++s) wv.mseg[s] = g_win_pub.mseg[s];
         for(int p = 0; p < 2; ++p)
             for(int s = 0; s < DSEG_COUNT; ++s) wv.dseg[p][s] = g_win_pub.dseg[p][s];
+        for(int p = 0; p < 2; ++p)
+        {
+            for(int s = 0; s < LSEG_COUNT; ++s) wv.lseg[p][s] = g_win_pub.lseg[p][s];
+            for(int s = 0; s < WSEG_COUNT; ++s) wv.wseg[p][s] = g_win_pub.wseg[p][s];
+        }
+        wv.wmix  = g_win_pub.wmix;
+        wv.wlast = g_win_pub.wlast;
     } while(wn != g_win_n);
     if(wn != 0 && wn != win_seen)
     {
@@ -407,6 +490,25 @@ void cb_profile_report(bench::Board& hw)
                      static_cast<int>(wv.dseg[1][DSEG_PRE]), static_cast<int>(wv.dseg[1][DSEG_LANES]),
                      static_cast<int>(wv.dseg[1][DSEG_FIRE]), static_cast<int>(wv.dseg[1][DSEG_TICK]),
                      static_cast<int>(wv.dseg[1][DSEG_TRIG]));
+        // Each deck's lanes in three: pitch lane (q), step clock + onset ring
+        // (o), texture tick (u); the three sum to al / bl. At most ~70 bytes.
+        hw.PrintLine("CBP_WIN6 w=%d aq=%d ao=%d au=%d bq=%d bo=%d bu=%d",
+                     static_cast<int>(wn), static_cast<int>(wv.lseg[0][LSEG_PITCH]),
+                     static_cast<int>(wv.lseg[0][LSEG_RING]), static_cast<int>(wv.lseg[0][LSEG_TEX]),
+                     static_cast<int>(wv.lseg[1][LSEG_PITCH]), static_cast<int>(wv.lseg[1][LSEG_RING]),
+                     static_cast<int>(wv.lseg[1][LSEG_TEX]));
+        // Each block's worst sample, broken down and averaged over the window:
+        // per deck modulation half (m), its lanes (l) and control tick (t),
+        // engine (e), FX (f); the mix (x); and in how many of the window's
+        // blocks the worst sample was the last one (last). At most ~110 bytes.
+        hw.PrintLine("CBP_WORST w=%d last=%d am=%d al=%d at=%d ae=%d af=%d bm=%d bl=%d bt=%d be=%d bf=%d x=%d",
+                     static_cast<int>(wn), static_cast<int>(wv.wlast),
+                     static_cast<int>(wv.wseg[0][WSEG_MOD]), static_cast<int>(wv.wseg[0][WSEG_LANES]),
+                     static_cast<int>(wv.wseg[0][WSEG_TICK]), static_cast<int>(wv.wseg[0][WSEG_ENG]),
+                     static_cast<int>(wv.wseg[0][WSEG_FX]), static_cast<int>(wv.wseg[1][WSEG_MOD]),
+                     static_cast<int>(wv.wseg[1][WSEG_LANES]), static_cast<int>(wv.wseg[1][WSEG_TICK]),
+                     static_cast<int>(wv.wseg[1][WSEG_ENG]), static_cast<int>(wv.wseg[1][WSEG_FX]),
+                     static_cast<int>(wv.wmix));
     }
     if(++g_calls % 20u != 0u) return;
     const uint32_t n = g_n;
@@ -451,6 +553,10 @@ void cb_profile_report(bench::Board& hw)
                  static_cast<int>(g_sum_dseg[0][DSEG_TRIG] / n), static_cast<int>(g_sum_dseg[1][DSEG_PRE] / n),
                  static_cast<int>(g_sum_dseg[1][DSEG_LANES] / n), static_cast<int>(g_sum_dseg[1][DSEG_FIRE] / n),
                  static_cast<int>(g_sum_dseg[1][DSEG_TICK] / n), static_cast<int>(g_sum_dseg[1][DSEG_TRIG] / n));
+    hw.PrintLine("CBP_SUM7 aq=%d ao=%d au=%d bq=%d bo=%d bu=%d",
+                 static_cast<int>(g_sum_lseg[0][LSEG_PITCH] / n), static_cast<int>(g_sum_lseg[0][LSEG_RING] / n),
+                 static_cast<int>(g_sum_lseg[0][LSEG_TEX] / n), static_cast<int>(g_sum_lseg[1][LSEG_PITCH] / n),
+                 static_cast<int>(g_sum_lseg[1][LSEG_RING] / n), static_cast<int>(g_sum_lseg[1][LSEG_TEX] / n));
     for(int h = 0; h < 3; ++h)
     {
         const uint32_t* p = g_hist + h * 8;
