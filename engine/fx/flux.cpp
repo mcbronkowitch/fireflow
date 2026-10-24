@@ -160,8 +160,9 @@ void Flux::set_rhythm(const RhythmView& rv) {
 }
 
 void Flux::flush_lines() {
-    // One memset per switch-off (2 x 1 MB). Desktop-cheap; the Daisy shell
-    // will need an amortized clear before this engine runs on hardware.
+    // O(1): InjectedDelayLine::Reset() drops a written-cell count instead of
+    // clearing the 2 x 1 MB arena, which cost ~6.3 M cycles in the audio
+    // callback on Rev A (fault R2, docs/hardware/reva-bring-up.md).
     _echo_l.Reset();
     _echo_r.Reset();
     _line_dirty = false;
