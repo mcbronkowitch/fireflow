@@ -55,6 +55,21 @@ constexpr uint32_t kHistLo = 850000u, kHistStep = 10000u;
 constexpr int      kHist   = 23;
 uint32_t           g_hist[kHist];
 
+// A window of kWinBlocks warm blocks (2 s), so a change made mid-run shows
+// in the next window instead of vanishing into the since-boot means above
+// (fault R4: ablating one effect at a time). The interrupt sums the open
+// window and publishes it whole at its end; the foreground prints a window
+// once, read between two equal g_win_n readings.
+constexpr uint32_t kWinBlocks = 1000u;
+struct Win {
+    uint32_t cb, proc, deck[2], mix, law, cb_max;
+};
+uint64_t          g_wsum_cb = 0, g_wsum_proc = 0, g_wsum_deck[2] = {0, 0}, g_wsum_mix = 0,
+                  g_wsum_law = 0;
+uint32_t          g_wmax_cb = 0, g_wn = 0;
+volatile Win      g_win_pub;
+volatile uint32_t g_win_n = 0;
+
 uint32_t lane_events(const spky::Instrument& inst)
 {
     uint32_t ev = 0;
@@ -132,6 +147,27 @@ void cb_profile_block_end(uint32_t cb, uint32_t law, uint32_t led, bool warm,
     int b = cb < kHistLo ? 0 : 1 + static_cast<int>((cb - kHistLo) / kHistStep);
     if(b > kHist - 1) b = kHist - 1;
     ++g_hist[b];
+    g_wsum_cb += cb;
+    g_wsum_proc += g_proc;
+    g_wsum_deck[0] += g_deck[0];
+    g_wsum_deck[1] += g_deck[1];
+    g_wsum_mix += g_mix;
+    g_wsum_law += law;
+    if(cb > g_wmax_cb) g_wmax_cb = cb;
+    if(++g_wn == kWinBlocks)
+    {
+        g_win_pub.cb      = static_cast<uint32_t>(g_wsum_cb / kWinBlocks);
+        g_win_pub.proc    = static_cast<uint32_t>(g_wsum_proc / kWinBlocks);
+        g_win_pub.deck[0] = static_cast<uint32_t>(g_wsum_deck[0] / kWinBlocks);
+        g_win_pub.deck[1] = static_cast<uint32_t>(g_wsum_deck[1] / kWinBlocks);
+        g_win_pub.mix     = static_cast<uint32_t>(g_wsum_mix / kWinBlocks);
+        g_win_pub.law     = static_cast<uint32_t>(g_wsum_law / kWinBlocks);
+        g_win_pub.cb_max  = g_wmax_cb;
+        g_wsum_cb = g_wsum_proc = g_wsum_deck[0] = g_wsum_deck[1] = g_wsum_mix = g_wsum_law = 0;
+        g_wmax_cb = 0;
+        g_wn      = 0;
+        g_win_n   = g_win_n + 1u;
+    }
     const uint32_t wrap_mask = 0x1Fu | (0x1Fu << 10);
     if(cb > kHot || (ev & wrap_mask) != 0u)
     {
@@ -182,6 +218,31 @@ void cb_profile_report(bench::Board& hw)
                      static_cast<int>(s.n), s.eng, static_cast<int>(s.total),
                      static_cast<int>(s.bbd), static_cast<int>(s.total_max),
                      static_cast<int>(s.bbd_max));
+    }
+    static uint32_t win_seen = 0;
+    uint32_t        wn;
+    Win             wv;
+    do
+    {
+        wn           = g_win_n;
+        wv.cb        = g_win_pub.cb;
+        wv.proc      = g_win_pub.proc;
+        wv.deck[0]   = g_win_pub.deck[0];
+        wv.deck[1]   = g_win_pub.deck[1];
+        wv.mix       = g_win_pub.mix;
+        wv.law       = g_win_pub.law;
+        wv.cb_max    = g_win_pub.cb_max;
+    } while(wn != g_win_n);
+    if(wn != 0 && wn != win_seen)
+    {
+        win_seen = wn;
+        // Means over the window's 1000 blocks, plus its worst callback.
+        // At most ~100 bytes.
+        hw.PrintLine("CBP_WIN w=%d cb=%d cb_max=%d proc=%d a=%d b=%d mix=%d law=%d",
+                     static_cast<int>(wn), static_cast<int>(wv.cb),
+                     static_cast<int>(wv.cb_max), static_cast<int>(wv.proc),
+                     static_cast<int>(wv.deck[0]), static_cast<int>(wv.deck[1]),
+                     static_cast<int>(wv.mix), static_cast<int>(wv.law));
     }
     if(++g_calls % 20u != 0u) return;
     const uint32_t n = g_n;
