@@ -9,6 +9,7 @@
 #include <doctest/doctest.h>
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <thread>
 #include <vector>
 #include "instrument.h"
@@ -42,9 +43,11 @@ struct Spinner {
 };
 
 constexpr int kSlots = sizeof(spky::ProbePartSlots) / sizeof(uint32_t);
+constexpr int kMix   = sizeof(spky::ProbeMixSlots) / sizeof(uint32_t);
 struct Block {
     std::vector<uint32_t>                     ts, d1, d2;
     std::vector<std::array<uint32_t, kSlots>> p1, p2;
+    std::vector<std::array<uint32_t, kMix>>   mx;
     int                                       n, pri;
 };
 std::vector<Block> g_blocks;
@@ -61,7 +64,8 @@ volatile uint32_t* probe_clock = &g_clock;
 ProbePartSlots     probe_part_scratch;
 
 void probe_block(const uint32_t* ts, const uint32_t* d1, const uint32_t* d2,
-                 const ProbePartSlots* p1, const ProbePartSlots* p2, int n, int pri)
+                 const ProbePartSlots* p1, const ProbePartSlots* p2,
+                 const ProbeMixSlots* mx, int n, int pri)
 {
     Block b;
     b.n   = n;
@@ -77,10 +81,52 @@ void probe_block(const uint32_t* ts, const uint32_t* d1, const uint32_t* d2,
         }
         b.p1.push_back(s1);
         b.p2.push_back(s2);
+        std::array<uint32_t, kMix> m;
+        for (int k = 0; k < kMix; ++k) m[k] = mx[i][k];
+        b.mx.push_back(m);
     }
     g_blocks.push_back(std::move(b));
 }
 } // namespace spky
+
+// Samples of a block whose stamps are not in process order: top ->
+// [priority deck: mod, engine, smoothers, grit, flux, comp, send] ->
+// [yielding deck: the same seven] -> [mix: observers + taps, blend + duck,
+// reverb, return + sleep] -> limiter -> next top. Slot k is taken after slot
+// k-1 in each group.
+int out_of_order(const Block& b) {
+    int bad = 0;
+    for (int i = 0; i < b.n; ++i) {
+        bool ok = after(b.ts[i], b.p1[i][0]);
+        for (int k = 1; k < kSlots; ++k) ok = ok && after(b.p1[i][k - 1], b.p1[i][k]);
+        ok = ok && after(b.p1[i][kSlots - 1], b.d1[i]);
+        ok = ok && after(b.d1[i], b.p2[i][0]);
+        for (int k = 1; k < kSlots; ++k) ok = ok && after(b.p2[i][k - 1], b.p2[i][k]);
+        ok = ok && after(b.p2[i][kSlots - 1], b.d2[i]);
+        ok = ok && after(b.d2[i], b.mx[i][0]);
+        for (int k = 1; k < kMix; ++k) ok = ok && after(b.mx[i][k - 1], b.mx[i][k]);
+        ok = ok && after(b.mx[i][kMix - 1], b.ts[i + 1]);
+        if (!ok) ++bad;
+    }
+    return bad;
+}
+
+// The full FX chain and the reverb, as the firmware has them.
+std::vector<float> s_echo[spky::PART_COUNT][2];
+std::vector<float> s_bbd[spky::PART_COUNT][2];
+spky::AmbientReverb s_reverb;
+spky::FxMem fx_mem() {
+    spky::FxMem m;
+    for (int p = 0; p < spky::PART_COUNT; ++p)
+        for (int c = 0; c < 2; ++c) {
+            s_echo[p][c].assign(spky::Flux::kMaxSamples, 0.f);
+            s_bbd[p][c].assign(spky::BbdEngine::kCells, 0.f);
+            m.echo[p][c] = s_echo[p][c].data();
+            m.bbd[p][c]  = s_bbd[p][c].data();
+        }
+    m.reverb = &s_reverb;
+    return m;
+}
 
 TEST_CASE("probe marks: every sample's stamps come in process order") {
     Spinner spin;
@@ -94,18 +140,7 @@ TEST_CASE("probe marks: every sample's stamps come in process order") {
     for (const Block& b : g_blocks) {
         REQUIRE(b.n == 96);
         CHECK((b.pri == 0 || b.pri == 1));
-        for (int i = 0; i < b.n; ++i) {
-            // top -> [priority deck: mod, engine, smoothers, grit, flux,
-            // comp, send] -> [yielding deck: the same seven] -> mix -> next
-            // top. A deck's slot k is taken after its slot k-1.
-            CHECK(after(b.ts[i], b.p1[i][0]));
-            for (int k = 1; k < kSlots; ++k) CHECK(after(b.p1[i][k - 1], b.p1[i][k]));
-            CHECK(after(b.p1[i][kSlots - 1], b.d1[i]));
-            CHECK(after(b.d1[i], b.p2[i][0]));
-            for (int k = 1; k < kSlots; ++k) CHECK(after(b.p2[i][k - 1], b.p2[i][k]));
-            CHECK(after(b.p2[i][kSlots - 1], b.d2[i]));
-            CHECK(after(b.d2[i], b.ts[i + 1]));
-        }
+        CHECK(out_of_order(b) == 0);
         if (b.ts[b.n] != b.ts[0]) ++moved;
     }
     // The clock ran: a block's stamps are not all one value. (A frozen clock
@@ -133,4 +168,48 @@ TEST_CASE("probe marks: the engine segment is non-empty on a playing deck") {
     }
     CHECK(eng1 > 0);
     CHECK(eng2 > 0);
+}
+
+TEST_CASE("probe marks: the reverb segment runs while a send is open, and its clear is counted") {
+    // The mix split (fault R4): with a send open the reverb runs between
+    // slots 1 and 2; with both sends closed the return fades, the room is
+    // cleared once (counted in probe_rev_clear) and the segment empties.
+    Spinner spin;
+    g_blocks.clear();
+    static spky::Instrument inst;   // ~100 KB: not on the test's stack
+    inst.init(48000.f, fx_mem());
+    inst.set_reverb_mix(1.f);
+    std::vector<float> in(96), l(96), r(96);
+    for (int i = 0; i < 96; ++i) in[i] = 0.3f * std::sin(0.05f * i);
+    for (int blk = 0; blk < 20; ++blk) inst.process(in.data(), in.data(), l.data(), r.data(), 96);
+    REQUIRE_FALSE(inst.reverb_asleep());
+    uint64_t rev = 0;
+    int bad = 0;
+    for (size_t k = 1; k < g_blocks.size(); ++k) {
+        bad += out_of_order(g_blocks[k]);
+        for (int i = 0; i < g_blocks[k].n; ++i) rev += g_blocks[k].mx[i][2] - g_blocks[k].mx[i][1];
+    }
+    CHECK(bad == 0);
+    CHECK(rev > 0);
+
+    const uint32_t clears = spky::probe_rev_clear.n;
+    inst.set_reverb_mix(0.f);
+    int blocks = 0;
+    while (!inst.reverb_asleep() && blocks < 2000) {
+        inst.process(in.data(), in.data(), l.data(), r.data(), 96);
+        ++blocks;
+    }
+    REQUIRE(inst.reverb_asleep());
+    CHECK(spky::probe_rev_clear.n == clears + 1);
+    g_blocks.clear();
+    for (int blk = 0; blk < 4; ++blk) inst.process(in.data(), in.data(), l.data(), r.data(), 96);
+    bad = 0;
+    uint32_t asleep_rev = 0;
+    for (const Block& b : g_blocks) {
+        bad += out_of_order(b);
+        for (int i = 0; i < b.n; ++i) asleep_rev += b.mx[i][2] - b.mx[i][1];
+    }
+    CHECK(bad == 0);
+    // Asleep, slots 1 and 2 are taken back to back: a stamp's own cost only.
+    CHECK(asleep_rev < rev / 10);
 }

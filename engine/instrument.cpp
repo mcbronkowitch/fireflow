@@ -30,6 +30,10 @@
 
 using namespace spky;
 
+#if defined(SPKY_PROBE_MARKS)
+ProbeRevClear spky::probe_rev_clear = {0, 0, 0};
+#endif
+
 namespace {
 constexpr float kHalfPi = 1.57079632679489661923f;
 // Keeps the dry level (cos = 0.92, -0.7 dB) with a leaner room than the
@@ -510,6 +514,8 @@ void Instrument::process(const float* inL, const float* inR,
         _deck_tap[PART_A][0] = al;  _deck_tap[PART_A][1] = ar;
         _deck_tap[PART_B][0] = bl;  _deck_tap[PART_B][1] = br;
 #endif
+        // Callback profile only: the observers and the taps end here.
+        SPKY_PROBE_MIX(i, 0);
 
         // MORPH blend (null-reverb path keeps this). The CHOKE duck joins HERE
         // and nowhere earlier: al/ar/bl/br, _dry_tap and _deck_tap above are
@@ -538,7 +544,10 @@ void Instrument::process(const float* inL, const float* inR,
                     _rev_wet[p].reset(_rev_wet_target[p]);
                 }
                 if (_rev_wet_target[PART_A] == 0.f && _rev_wet_target[PART_B] == 0.f) {
-                    _reverb->clear(); _rev_asleep = true;
+                    SPKY_PROBE_CLEAR_BEGIN;
+                    _reverb->clear();
+                    SPKY_PROBE_CLEAR_END;
+                    _rev_asleep = true;
                 }
                 _duck_gain = 1.f;
                 _duck_target = 1.f;
@@ -581,6 +590,7 @@ void Instrument::process(const float* inL, const float* inR,
             _duck_gain = _duck_target + _duck_residual;
             l = (al * ga * dga * pla * duck[PART_A] + bl * gb * dgb * plb * duck[PART_B]) * _duck_gain;
             r = (ar * ga * dga * pra * duck[PART_A] + br * gb * dgb * prb * duck[PART_B]) * _duck_gain;
+            SPKY_PROBE_MIX(i, 1);   // the blend, the dry / wet smoothers and the duck end here
             if (!_rev_asleep) {
                 // Per-deck send: the equal-power wet curve (sin) rides the SEND
                 // -- one shared room has only one return. MORPH fades the send
@@ -592,6 +602,7 @@ void Instrument::process(const float* inL, const float* inR,
                 _reverb->process(asl * ga * wga * duck[PART_A] + bsl * gb * wgb * duck[PART_B],
                                  asr * ga * wga * duck[PART_A] + bsr * gb * wgb * duck[PART_B],
                                  wl, wr);
+                SPKY_PROBE_MIX(i, 2);   // the reverb ends here
                 const bool closing = wga == 0.f && wgb == 0.f &&
                     _rev_wet_target[PART_A] == 0.f && _rev_wet_target[PART_B] == 0.f;
                 if (closing) {
@@ -604,13 +615,21 @@ void Instrument::process(const float* inL, const float* inR,
                 l += wl * _rev_return_gain;  // wl already carries kWetGain; the return joins at unity
                 r += wr * _rev_return_gain;
                 if (closing && _rev_return_gain == 0.f) {
+                    SPKY_PROBE_CLEAR_BEGIN;
                     _reverb->clear();        // clear-on-sleep: waking starts empty
+                    SPKY_PROBE_CLEAR_END;
                     _rev_asleep = true;      // Oliverb CPU is off until a MIX reopens
                     _rev_return_gain = 1.f;  // room is empty; the next wake starts at unity
                 }
+            } else {
+                SPKY_PROBE_MIX(i, 2);   // asleep: the reverb segment is empty
             }
             // asleep: dga/dgb have snapped to 1 (both decks mix 0), so l/r stay full dry
+        } else {
+            SPKY_PROBE_MIX(i, 1);       // no reverb: nothing between the blend
+            SPKY_PROBE_MIX(i, 2);       // and the limiter but the stamps
         }
+        SPKY_PROBE_MIX(i, 3);   // the return and the sleep check end here
         _limiter.process(l, r);   // master ceiling (M6 engine delta 3, delivered early)
         outL[i] = l;
         outR[i] = r;

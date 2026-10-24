@@ -34,6 +34,13 @@ enum {
 };
 constexpr int SEG_FX_FIRST = SEG_SMOOTH;
 uint32_t g_seg[2][SEG_COUNT] = {};
+// The mix split (fault R4, the reverb), summed over the block: [0] the lamp
+// observers and the dry / deck taps, [1] the MORPH blend, the reverb's dry /
+// wet smoothers and the duck, [2] AmbientReverb::process (empty while the
+// room sleeps), [3] the return gain and the sleep check (and a clear when it
+// lands), [4] the master limiter and the output store. The five sum to g_mix.
+enum { MSEG_OBS = 0, MSEG_BLEND, MSEG_REV, MSEG_RET, MSEG_LIM, MSEG_COUNT };
+uint32_t g_mseg[MSEG_COUNT] = {};
 
 uint32_t g_block = 0;    // blocks since StartAudio
 int      g_eng[2] = {-1, -1};  // each deck's engine id at the last block end
@@ -76,10 +83,11 @@ constexpr uint32_t kWinBlocks = 1000u;
 struct Win {
     uint32_t cb, proc, deck[2], mix, law, cb_max;
     uint32_t seg[2][SEG_COUNT];
+    uint32_t mseg[MSEG_COUNT];
 };
 uint64_t          g_wsum_cb = 0, g_wsum_proc = 0, g_wsum_deck[2] = {0, 0}, g_wsum_mix = 0,
-                  g_wsum_law = 0, g_wsum_seg[2][SEG_COUNT] = {};
-uint64_t          g_sum_seg[2][SEG_COUNT] = {};
+                  g_wsum_law = 0, g_wsum_seg[2][SEG_COUNT] = {}, g_wsum_mseg[MSEG_COUNT] = {};
+uint64_t          g_sum_seg[2][SEG_COUNT] = {}, g_sum_mseg[MSEG_COUNT] = {};
 uint32_t          g_wmax_cb = 0, g_wn = 0;
 volatile Win      g_win_pub;
 volatile uint32_t g_win_n = 0;
@@ -109,11 +117,11 @@ uint32_t lane_events(const spky::Instrument& inst)
 namespace spky {
 void probe_block(const uint32_t* ts, const uint32_t* d1, const uint32_t* d2,
                  const ProbePartSlots* p1, const ProbePartSlots* p2,
-                 int n, int pri)
+                 const ProbeMixSlots* ms, int n, int pri)
 {
     g_proc = ts[n] - ts[0];
     uint32_t a = 0, b = 0, m = 0;
-    uint32_t sa[SEG_COUNT] = {}, sb[SEG_COUNT] = {};
+    uint32_t sa[SEG_COUNT] = {}, sb[SEG_COUNT] = {}, sm[MSEG_COUNT] = {};
     for(int i = 0; i < n; ++i)
     {
         a += d1[i] - ts[i];        // top of the sample + the priority deck
@@ -130,7 +138,13 @@ void probe_block(const uint32_t* ts, const uint32_t* d1, const uint32_t* d2,
         }
         sa[SEG_SEND] += d1[i] - p1[i][SEG_COUNT - 2];
         sb[SEG_SEND] += d2[i] - p2[i][SEG_COUNT - 2];
+        // The mix the same way: slot k ends segment k, the limiter ends at
+        // the next sample's top stamp.
+        sm[MSEG_OBS] += ms[i][0] - d2[i];
+        for(int s = 1; s < MSEG_COUNT - 1; ++s) sm[s] += ms[i][s] - ms[i][s - 1];
+        sm[MSEG_LIM] += ts[i + 1] - ms[i][MSEG_COUNT - 2];
     }
+    for(int s = 0; s < MSEG_COUNT; ++s) g_mseg[s] = sm[s];
     g_deck[pri]     = a;
     g_deck[1 - pri] = b;
     g_mix           = m;
@@ -191,6 +205,11 @@ void cb_profile_block_end(uint32_t cb, uint32_t law, uint32_t led, bool warm,
             g_wsum_seg[p][s] += g_seg[p][s];
             g_sum_seg[p][s] += g_seg[p][s];
         }
+    for(int s = 0; s < MSEG_COUNT; ++s)
+    {
+        g_wsum_mseg[s] += g_mseg[s];
+        g_sum_mseg[s] += g_mseg[s];
+    }
     if(cb > g_wmax_cb) g_wmax_cb = cb;
     if(++g_wn == kWinBlocks)
     {
@@ -200,6 +219,11 @@ void cb_profile_block_end(uint32_t cb, uint32_t law, uint32_t led, bool warm,
                 g_win_pub.seg[p][s] = static_cast<uint32_t>(g_wsum_seg[p][s] / kWinBlocks);
                 g_wsum_seg[p][s]    = 0;
             }
+        for(int s = 0; s < MSEG_COUNT; ++s)
+        {
+            g_win_pub.mseg[s] = static_cast<uint32_t>(g_wsum_mseg[s] / kWinBlocks);
+            g_wsum_mseg[s]    = 0;
+        }
         g_win_pub.cb      = static_cast<uint32_t>(g_wsum_cb / kWinBlocks);
         g_win_pub.proc    = static_cast<uint32_t>(g_wsum_proc / kWinBlocks);
         g_win_pub.deck[0] = static_cast<uint32_t>(g_wsum_deck[0] / kWinBlocks);
@@ -263,6 +287,16 @@ void cb_profile_report(bench::Board& hw)
                      static_cast<int>(s.bbd), static_cast<int>(s.total_max),
                      static_cast<int>(s.bbd_max));
     }
+    // Every reverb clear (fault R4): the clear-on-sleep, or the boot prime's.
+    // Printed once per new clear, copied first, as CBP_SWAP above.
+    static uint32_t clears_seen = 0;
+    if(spky::probe_rev_clear.n != clears_seen)
+    {
+        const spky::ProbeRevClear c = spky::probe_rev_clear;
+        clears_seen                 = c.n;
+        hw.PrintLine("CBP_RVCLR n=%d last=%d max=%d", static_cast<int>(c.n),
+                     static_cast<int>(c.last), static_cast<int>(c.max));
+    }
     static uint32_t win_seen = 0;
     uint32_t        wn;
     Win             wv;
@@ -278,6 +312,7 @@ void cb_profile_report(bench::Board& hw)
         wv.cb_max    = g_win_pub.cb_max;
         for(int p = 0; p < 2; ++p)
             for(int s = 0; s < SEG_COUNT; ++s) wv.seg[p][s] = g_win_pub.seg[p][s];
+        for(int s = 0; s < MSEG_COUNT; ++s) wv.mseg[s] = g_win_pub.mseg[s];
     } while(wn != g_win_n);
     if(wn != 0 && wn != win_seen)
     {
@@ -310,6 +345,13 @@ void cb_profile_report(bench::Board& hw)
                      static_cast<int>(wv.seg[1][SEG_SMOOTH]), static_cast<int>(wv.seg[1][SEG_GRIT]),
                      static_cast<int>(wv.seg[1][SEG_FLUX]), static_cast<int>(wv.seg[1][SEG_COMP]),
                      static_cast<int>(wv.seg[1][SEG_SEND]));
+        // The mix in five: observers + taps (o), blend + dry / wet smoothers
+        // + duck (d), reverb (r), return + sleep (t), limiter (l); the five
+        // sum to mix. At most ~70 bytes.
+        hw.PrintLine("CBP_WIN4 w=%d xo=%d xd=%d xr=%d xt=%d xl=%d",
+                     static_cast<int>(wn), static_cast<int>(wv.mseg[MSEG_OBS]),
+                     static_cast<int>(wv.mseg[MSEG_BLEND]), static_cast<int>(wv.mseg[MSEG_REV]),
+                     static_cast<int>(wv.mseg[MSEG_RET]), static_cast<int>(wv.mseg[MSEG_LIM]));
     }
     if(++g_calls % 20u != 0u) return;
     const uint32_t n = g_n;
@@ -344,6 +386,10 @@ void cb_profile_report(bench::Board& hw)
                  static_cast<int>(g_sum_seg[0][SEG_SEND] / n), static_cast<int>(g_sum_seg[1][SEG_SMOOTH] / n),
                  static_cast<int>(g_sum_seg[1][SEG_GRIT] / n), static_cast<int>(g_sum_seg[1][SEG_FLUX] / n),
                  static_cast<int>(g_sum_seg[1][SEG_COMP] / n), static_cast<int>(g_sum_seg[1][SEG_SEND] / n));
+    hw.PrintLine("CBP_SUM5 xo=%d xd=%d xr=%d xt=%d xl=%d",
+                 static_cast<int>(g_sum_mseg[MSEG_OBS] / n), static_cast<int>(g_sum_mseg[MSEG_BLEND] / n),
+                 static_cast<int>(g_sum_mseg[MSEG_REV] / n), static_cast<int>(g_sum_mseg[MSEG_RET] / n),
+                 static_cast<int>(g_sum_mseg[MSEG_LIM] / n));
     for(int h = 0; h < 3; ++h)
     {
         const uint32_t* p = g_hist + h * 8;

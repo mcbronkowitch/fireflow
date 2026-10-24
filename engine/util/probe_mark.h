@@ -26,6 +26,14 @@ extern volatile uint32_t* probe_clock;          // defined by the host
 // [3] after GRIT, [4] after FLUX, [5] after the tap, the FX mix and COMP
 // (just before the send law). Deck end = the caller's d1 / d2 stamp.
 using ProbePartSlots = uint32_t[6];
+// Four stamps per sample in the mix, after both decks (fault R4, the reverb
+// split): [0] after the lamp observers and the dry / deck taps (just before
+// the MORPH blend), [1] after the blend, the reverb's dry / wet smoothers and
+// the duck (just before the reverb runs), [2] after AmbientReverb::process,
+// [3] after the return gain and the sleep check (just before the master
+// limiter). Mix end = the next sample's top stamp. On a sample whose reverb
+// is asleep or absent, [1]..[3] fall together where it would have run.
+using ProbeMixSlots = uint32_t[4];
 // Where the Part::process overloads that take no slots write their stamps
 // (tests, the bench's single-part workloads): nobody reads it. Defined by
 // the host.
@@ -35,22 +43,38 @@ extern ProbePartSlots probe_part_scratch;
 // sample i; p1[i] / p2[i]: the priority / the yielding deck's two inner
 // stamps of sample i (fault R4, 2026-10-24: the deck split into mod, engine
 // and FX). pri is the priority deck (PART_A or PART_B) of the block's last
-// sample.
+// sample. mx[i]: the mix's four stamps of sample i.
 void probe_block(const uint32_t* ts, const uint32_t* d1, const uint32_t* d2,
                  const ProbePartSlots* p1, const ProbePartSlots* p2,
-                 int n, int pri);                // defined by the host
+                 const ProbeMixSlots* mx, int n, int pri);   // defined by the host
+// The reverb's clear-on-sleep (and the boot prime's clear), stamped around
+// AmbientReverb::clear() inside the sample loop. Rare, so the global stores
+// are fine here, as for ProbeSwap below.
+struct ProbeRevClear {
+    uint32_t n;            // clears so far
+    uint32_t last, max;    // cycles of the last one / the worst one
+};
+extern ProbeRevClear probe_rev_clear;            // defined in instrument.cpp
 } // namespace spky
 #define SPKY_PROBE_DECL          uint32_t _probe_ts[129], _probe_d1[128], _probe_d2[128]; \
                                  ::spky::ProbePartSlots _probe_p1[128], _probe_p2[128]; \
+                                 ::spky::ProbeMixSlots  _probe_mx[128]; \
                                  int _probe_pri = 0; \
                                  volatile uint32_t* const _probe_clk = ::spky::probe_clock
 #define SPKY_PROBE_IDX(i)        ((i) < 128 ? (i) : 127)
 #define SPKY_PROBE_STAMP(i)      (_probe_ts[(i) < 128 ? (i) : 128] = *_probe_clk)
 #define SPKY_PROBE_DECK1(i, p)   (_probe_d1[SPKY_PROBE_IDX(i)] = *_probe_clk, _probe_pri = (p))
 #define SPKY_PROBE_DECK2(i)      (_probe_d2[SPKY_PROBE_IDX(i)] = *_probe_clk)
+#define SPKY_PROBE_MIX(i, k)     (_probe_mx[SPKY_PROBE_IDX(i)][k] = *_probe_clk)
 #define SPKY_PROBE_END(n)        ::spky::probe_block(_probe_ts, _probe_d1, _probe_d2, \
-                                     _probe_p1, _probe_p2, \
+                                     _probe_p1, _probe_p2, _probe_mx, \
                                      static_cast<int>((n) < 128 ? (n) : 128), _probe_pri)
+// Around AmbientReverb::clear() in the sample loop.
+#define SPKY_PROBE_CLEAR_BEGIN   const uint32_t _probe_c0 = *_probe_clk
+#define SPKY_PROBE_CLEAR_END     do { const uint32_t _c = *_probe_clk - _probe_c0; \
+                                      ::spky::probe_rev_clear.last = _c; \
+                                      if (_c > ::spky::probe_rev_clear.max) ::spky::probe_rev_clear.max = _c; \
+                                      ::spky::probe_rev_clear.n = ::spky::probe_rev_clear.n + 1u; } while (0)
 // Part::process's side: the clock and the slots travel as trailing parameters
 // of the always-inlined call, so after inlining they are the caller's locals.
 #define SPKY_PROBE_PART_PARAMS   , volatile uint32_t* const _probe_clk, uint32_t* const _probe_slot
@@ -79,6 +103,9 @@ extern ProbeSwap probe_swap;                    // defined in part.cpp
 #define SPKY_PROBE_DECK1(i, p)   ((void)0)
 #define SPKY_PROBE_DECK2(i)      ((void)0)
 #define SPKY_PROBE_END(n)        ((void)0)
+#define SPKY_PROBE_MIX(i, k)     ((void)0)
+#define SPKY_PROBE_CLEAR_BEGIN   static_assert(true, "")
+#define SPKY_PROBE_CLEAR_END     ((void)0)
 #define SPKY_PROBE_PART_PARAMS
 #define SPKY_PROBE_PART_ARGS1(i)
 #define SPKY_PROBE_PART_ARGS2(i)
