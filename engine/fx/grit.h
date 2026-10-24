@@ -4,6 +4,7 @@
 #include "Effects/decimator.h"
 #include "Effects/sampleratereducer.h"
 #include "fx/fx_util.h"
+#include "util/probe_mark.h"
 
 namespace spky {
 
@@ -18,7 +19,7 @@ public:
     void set_intensity(float norm);
     float mix() const { return _mix.Stage(); }
     void set_mix(float norm) { _mix.SetStage(norm); }
-    void process(float& l, float& r);
+    void process(float& l, float& r SPKY_PROBE_PART_PARAMS);
 
 private:
     void apply();
@@ -39,7 +40,7 @@ public:
     void set_intensity(float norm);
     float mix() const { return _mix.Stage(); }
     void set_mix(float norm) { _mix.SetStage(norm); }
-    void process(float& l, float& r);
+    void process(float& l, float& r SPKY_PROBE_PART_PARAMS);
 
 private:
     void apply();
@@ -65,7 +66,15 @@ public:
     void set_intensity(float norm);   // applies to the active mode (original behavior)
     float intensity() const;
     void set_mix(float norm);         // single GRIT MIX layer param -> both modes
-    void process(float& l, float& r);
+    // The parameters exist only in the callback profile's build
+    // (util/probe_mark.h, fault R4): PartFx::process forwards its stamp clock
+    // and slots, and the asm label keeps the name shell/itcm_hot.ld lists
+    // (GNU toolchains only).
+    void process(float& l, float& r SPKY_PROBE_PART_PARAMS)
+#if defined(SPKY_PROBE_MARKS) && defined(__GNUC__) && !defined(_MSC_VER)
+        __asm__("_ZN4spky4Grit7processERfS1_")
+#endif
+        ;
     // Observer only, for tests: the raw MIX layer norm set_mix() last
     // received (both GritDrive/GritReduce apply the same value; there is no
     // per-mode split to read back).

@@ -39,8 +39,15 @@ extern volatile uint32_t* probe_clock;          // defined by the host
 // advance and a wrap's events, [14] after the step search and a step entry
 // (in FLOW: the target). [14]..[10] is the slew, RANGE, the S&H latch and
 // the two output stores. Full order: 6, 12, 13, 14, 10, 11, 7, 8, 9, 0, 1,
-// 2, 3, 4, 5.
-using ProbePartSlots = uint32_t[15];
+// 2, 3, 4, 5. Grit::process, handed the same array, splits [2]..[3]: [15]
+// at its top (what lies before it is PartFx's FX setters and the call in),
+// [16] after the SoftSwitch, then per channel [17] / [19] after stage 1
+// (DRIVE: the Overdrive; CRSH: the Decimator) and [18] / [20] after stage 2
+// (DRIVE: nothing; CRSH: the SampleRateReducer). [20]..[3] is the dry / wet
+// XFade and the switch crossfade. With GRIT idle or neither FX block
+// engaged, [15]..[20] fall together. Full order: 6, 12, 13, 14, 10, 11, 7,
+// 8, 9, 0, 1, 2, 15, 16, 17, 18, 19, 20, 3, 4, 5.
+using ProbePartSlots = uint32_t[21];
 // Four stamps per sample in the mix, after both decks (fault R4, the reverb
 // split): [0] after the lamp observers and the dry / deck taps (just before
 // the MORPH blend), [1] after the blend, the reverb's dry / wet smoothers and

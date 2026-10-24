@@ -57,7 +57,7 @@ void PartFx::process(float& l, float& r, float& send_l, float& send_r
         // clock/stage state.
         _flux.set_time_mod(v[FXT_FLUX_TIME]);
         const float dry_l = l, dry_r = r;
-        _grit.process(l, r);
+        _grit.process(l, r SPKY_PROBE_PART_FWD);
         SPKY_PROBE_PART_MARK(3);   // GRIT ends here
 
         // Tape tap capture point (spec §6: "the part's echo playback signal,
@@ -98,6 +98,8 @@ void PartFx::process(float& l, float& r, float& send_l, float& send_r
         // freeze at a stale value").
         _tape_tap = 0.f;
         // Nothing engaged: the GRIT and FLUX segments are empty by stamp.
+        SPKY_PROBE_PART_MARK(15); SPKY_PROBE_PART_MARK(16); SPKY_PROBE_PART_MARK(17);
+        SPKY_PROBE_PART_MARK(18); SPKY_PROBE_PART_MARK(19); SPKY_PROBE_PART_MARK(20);
         SPKY_PROBE_PART_MARK(3);
         SPKY_PROBE_PART_MARK(4);
     }

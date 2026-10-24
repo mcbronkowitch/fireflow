@@ -28,9 +28,16 @@ void GritDrive::apply() {
     _drive.SetDrive(dbfs2lin(daisysp::fmap(_intensity, -6.f, 0.f)));
 }
 
-void GritDrive::process(float& l, float& r) {
+void GritDrive::process(float& l, float& r SPKY_PROBE_PART_PARAMS) {
+    // Callback profile only: stage 1 is the Overdrive (attenuation
+    // included), stage 2 is empty in this mode -- its two stamps sit back
+    // to back so the slots mean the same in both modes.
     float d0 = _drive.Process(l) * _attenuation;
+    SPKY_PROBE_PART_MARK(17);
+    SPKY_PROBE_PART_MARK(18);
     float d1 = _drive.Process(r) * _attenuation;
+    SPKY_PROBE_PART_MARK(19);
+    SPKY_PROBE_PART_MARK(20);
     _mix.Process(l, r, d0, d1, l, r);
 }
 
@@ -54,9 +61,19 @@ void GritReduce::apply() {
         daisysp::fmap(1.f - _intensity, 0.5f, 0.7f, daisysp::Mapping::EXP));
 }
 
-void GritReduce::process(float& l, float& r) {
-    float r0 = _reducer.Process(_decimator.Process(l));
-    float r1 = _reducer.Process(_decimator.Process(r));
+void GritReduce::process(float& l, float& r SPKY_PROBE_PART_PARAMS) {
+    // Same call order as one nested expression per channel (the mono
+    // objects are shared across L/R, so the order is the sound); split
+    // into statements only so the callback profile can stamp stage 1 (the
+    // Decimator) and stage 2 (the SampleRateReducer).
+    const float c0 = _decimator.Process(l);
+    SPKY_PROBE_PART_MARK(17);
+    float r0 = _reducer.Process(c0);
+    SPKY_PROBE_PART_MARK(18);
+    const float c1 = _decimator.Process(r);
+    SPKY_PROBE_PART_MARK(19);
+    float r1 = _reducer.Process(c1);
+    SPKY_PROBE_PART_MARK(20);
     _mix.Process(l, r, r0, r1, l, r);
 }
 
@@ -90,12 +107,18 @@ void Grit::set_mix(float norm) {
     _reduce.set_mix(_mix_norm);
 }
 
-void Grit::process(float& l, float& r) {
+void Grit::process(float& l, float& r SPKY_PROBE_PART_PARAMS) {
+    SPKY_PROBE_PART_MARK(15);   // callback profile only: GRIT starts here
     float k = _sw.process();
-    if (_sw.is_idle()) return;   // fully off: bit-exact dry
+    if (_sw.is_idle()) {        // fully off: bit-exact dry
+        SPKY_PROBE_PART_MARK(16); SPKY_PROBE_PART_MARK(17); SPKY_PROBE_PART_MARK(18);
+        SPKY_PROBE_PART_MARK(19); SPKY_PROBE_PART_MARK(20);
+        return;
+    }
     float gl = l, gr = r;
-    if (_mode == GritMode::Drive) _drive.process(gl, gr);
-    else                          _reduce.process(gl, gr);
+    SPKY_PROBE_PART_MARK(16);   // the switch ends here
+    if (_mode == GritMode::Drive) _drive.process(gl, gr SPKY_PROBE_PART_FWD);
+    else                          _reduce.process(gl, gr SPKY_PROBE_PART_FWD);
     l = gl * k + l * (1.f - k);
     r = gr * k + r * (1.f - k);
 }
