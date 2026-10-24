@@ -22,6 +22,16 @@ class AmbientReverb {
 public:
     void init(float sample_rate);
     void clear();                 // empty the room (buffer + loop filter state); params survive
+    // The same clear spread over calls (fault R4: clear() is 128 KB in one go,
+    // 393 k cycles inside one audio sample on the board). begin_clear() resets
+    // everything but the buffer; each clear_step() zeroes the next
+    // kClearChunk floats. While clearing() is true process() must not run --
+    // the Instrument keeps the room asleep until it is false. Done, the room
+    // is exactly what clear() leaves.
+    static constexpr int kClearChunk = 1024;   // 4 KB: 32 steps for the room
+    void begin_clear();
+    void clear_step();
+    bool clearing() const { return _clear_pos < clouds::Oliverb::kBufferSize; }
     void set_size(float norm);    // room size; smoothed inside -> Doppler ride
     void set_decay(float norm);   // loop gain; crosses 100% at 0.8 (bloom above)
     // Knob -> loop gain, as a plain number where 1.0 means 100%. Public and
@@ -64,6 +74,7 @@ private:
     float _lim_target = 1.f;  // recomputed on the control raster
     float _pk_rel = 0.f, _lim_down = 0.f, _lim_up = 0.f;
     float _buffer[clouds::Oliverb::kBufferSize];
+    int _clear_pos = clouds::Oliverb::kBufferSize;   // next float a spread clear zeroes
     // Last norm handed to set_diffuser_mod_depth()/set_mod_depth() -- see the
     // _for_test getters above.
     float _diffuser_mod_norm = 0.f;

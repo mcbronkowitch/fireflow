@@ -287,8 +287,9 @@ void cb_profile_report(bench::Board& hw)
                      static_cast<int>(s.bbd), static_cast<int>(s.total_max),
                      static_cast<int>(s.bbd_max));
     }
-    // Every reverb clear (fault R4): the clear-on-sleep, or the boot prime's.
-    // Printed once per new clear, copied first, as CBP_SWAP above.
+    // The sleeping reverb's spread clear (fault R4): n counts clear steps
+    // (32 per sleep), last / max their cycles. Printed when n has moved since
+    // the last report, copied first, as CBP_SWAP above.
     static uint32_t clears_seen = 0;
     if(spky::probe_rev_clear.n != clears_seen)
     {

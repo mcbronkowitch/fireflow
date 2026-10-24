@@ -454,3 +454,41 @@ TEST_CASE("reverb: return_level reads 0 fresh, rises with a bloom, forgets on cl
     s_rev.clear();
     CHECK(s_rev.return_level() == 0.f);       // clear() forgets the ride
 }
+
+// Fault R4: a whole clear() is 128 KB in one call, which on the board costs
+// 393 k cycles inside one audio sample. The instrument's sleep spreads it:
+// begin_clear() resets everything but the buffer at once, clear_step() zeroes
+// one chunk per control tick. Done, the room must be empty -- silence in,
+// exact silence out, as the clear() case above demands -- with its parameters
+// intact. (clear() itself now runs the same steps, so a twin cleared through
+// clear() would not be an independent reference.)
+TEST_CASE("reverb: a spread clear takes 32 steps and leaves an empty room") {
+    static AmbientReverb rv;             // BIG object: never stack-allocate
+    rv.init(48000.f);
+    rv.set_decay(0.85f);
+    CHECK_FALSE(rv.clearing());          // a fresh room is empty already
+    float l, r;
+    for (int i = 0; i < 24000; ++i) {    // ring up a tail
+        const float in = (i % 4800 == 0) ? 0.9f : 0.f;
+        rv.process(in, in, l, r);
+    }
+    float energy = 0.f;
+    for (int i = 0; i < 4800; ++i) { rv.process(0.f, 0.f, l, r); energy += l * l + r * r; }
+    REQUIRE(energy > 1e-6f);             // the room is audibly ringing
+    rv.begin_clear();
+    CHECK(rv.clearing());
+    CHECK(rv.return_level() == 0.f);     // begin_clear() forgets the ride at once
+    int steps = 0;
+    while (rv.clearing() && steps < 1000) { rv.clear_step(); ++steps; }
+    CHECK(steps == 32);
+    int loud = 0;
+    for (int i = 0; i < 9600; ++i) {
+        rv.process(0.f, 0.f, l, r);
+        if (l != 0.f || r != 0.f) ++loud;
+    }
+    CHECK(loud == 0);
+    rv.process(0.9f, 0.9f, l, r);        // parameters survived: the room still rings
+    float energy2 = 0.f;
+    for (int i = 0; i < 9600; ++i) { rv.process(0.f, 0.f, l, r); energy2 += l * l + r * r; }
+    CHECK(energy2 > 1e-6f);
+}
