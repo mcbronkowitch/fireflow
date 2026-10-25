@@ -4,6 +4,7 @@
 #include "mod/super_modulator.h"
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 #include <vector>
 
 using namespace spky;
@@ -180,4 +181,47 @@ TEST_CASE("lane STEP re-slot: TIDE turns on a whole SuperModulator land on the r
     CHECK(step_d == 0);
     CHECK(ref.moves > 1000);
     CHECK(dut.moves == ref.moves);
+}
+
+// The slew behind the re-slot (fault R4): a lane that stays in STEP keeps its
+// slew pair through set_step, because the STEP slew reads no slot count. So
+// a lane re-slotted from 8 to n must hold the very coefficient bits a lane
+// built at n from the start holds, at every count, rate, SMOOTH and with a
+// kick's rate offset standing -- and must not have rebuilt for it.
+TEST_CASE("lane STEP re-slot: the kept slew is bit for bit the one a rebuild at the new count gives") {
+    long checked = 0, coef_d = 0, tick_d = 0, rebuilt = 0;
+    const float rates[] = {0.0003f, 0.05f, 0.7f, 3.f, 11.f};
+    const float smooths[] = {0.f, 0.15f, 0.6f, 1.f};
+    for (bool melodic : {false, true})
+    for (float rate : rates)
+    for (float sm : smooths)
+    for (bool kicked : {false, true})
+    for (int n = 1; n <= 64; ++n) {
+        if (n == 8) continue;
+        auto make = [&](int steps) {
+            ModLane l;
+            l.set_melodic(melodic);
+            l.init(48000.f, 99);
+            l.set_rate_hz(rate);
+            l.set_smooth(sm);
+            l.set_step(true, steps);
+            for (int i = 0; i < 64; ++i) l.process();
+            if (kicked) { l.kick(0.2f, 0.f); l.process(); l.refresh_slew(); }
+            return l;
+        };
+        ModLane moved = make(8);
+        const uint32_t before = moved.slew_update_count_for_test();
+        moved.set_step(true, n);
+        rebuilt += moved.slew_update_count_for_test() != before;
+        const ModLane fresh = make(n);
+        const float a = moved.slew_coef_for_test(), b = fresh.slew_coef_for_test();
+        const float c = moved.slew_tick_coef_for_test(), d = fresh.slew_tick_coef_for_test();
+        coef_d += std::memcmp(&a, &b, sizeof a) != 0;
+        tick_d += std::memcmp(&c, &d, sizeof c) != 0;
+        ++checked;
+    }
+    CHECK(checked == 2 * 5 * 4 * 2 * 63);
+    CHECK(coef_d == 0);
+    CHECK(tick_d == 0);
+    CHECK(rebuilt == 0);
 }
