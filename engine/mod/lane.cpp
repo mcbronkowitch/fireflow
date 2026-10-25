@@ -2,6 +2,7 @@
 #include "mod/waveforms.h"
 #include "mod/range.h"
 #include "util/math.h"
+#include "util/probe_law.h"
 #include <cmath>
 #include <limits>
 
@@ -139,7 +140,10 @@ void ModLane::set_rate_hz(float hz) {
     // unchanged rate only owes the _ev_rate refresh, as in set_smooth.
     if (_skip_unchanged && _inc_applied && same_bits(r, _rate_hz)) { refresh_slew(); return; }
     _rate_hz = r;
+    SPKY_PROBE_LAW_BEGIN(rinc);
     _update_inc();
+    SPKY_PROBE_LAW_END(rinc, rinc);
+    SPKY_PROBE_LAW_COUNT(n_rinc);
 }
 void ModLane::set_shape(float s)      { _shape = clampf(s, 0.f, 1.f); }
 void ModLane::set_range(float r)      { _range = clampf(r, 0.f, 1.f); }
@@ -257,6 +261,7 @@ void ModLane::set_step(bool on, int steps) {
         // _cur_step is derived from the stored _phase (assigned first) using
         // the same warped lookup as process(), so a same-tick SPOT kick() +
         // STEPS turn is absorbed into this rescale (accepted trade).
+        SPKY_PROBE_LAW_BEGIN(reslot);
         const float ph = static_cast<float>(_phase);
         if (_grid_cache_on) {
             // Fault R4: a TIDE turn re-slots four lanes per deck at once, and
@@ -285,6 +290,8 @@ void ModLane::set_step(bool on, int steps) {
             _cur_step = shuffle_step_index(
                 static_cast<float>(_phase), new_steps, _shuffle_latched);
         }
+        SPKY_PROBE_LAW_END(reslot, reslot);
+        SPKY_PROBE_LAW_COUNT(n_reslot);
     }
     _step_mode = on;
     _steps = new_steps;
@@ -297,7 +304,10 @@ void ModLane::set_step(bool on, int steps) {
     if (entering_step && _melodic_at_init &&
         _song.patterns[1].pattern_groove.len == 0)
         _song.new_pending = true;
+    SPKY_PROBE_LAW_BEGIN(sinc);
     _update_inc();
+    SPKY_PROBE_LAW_END(sinc, sinc);
+    SPKY_PROBE_LAW_COUNT(n_sinc);
 }
 
 // Spec 2026-07-17 step-clock: STEP runs RATE as a step clock with an 8-step

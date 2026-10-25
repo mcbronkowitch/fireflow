@@ -303,7 +303,8 @@ target_link_libraries(render PRIVATE nlohmann_json daisysp_min)
 # it, so the stamp sites cannot rot between board sessions, and the stamp
 # ORDER per sample is checked against a running clock. Not the cost: that is
 # the board's (shell/cb_profile.cpp). Its own executable because the define
-# changes Part::process's signature.
+# changes Part::process's signature. Also built with SPKY_PROBE_LAW=1
+# (engine/util/probe_law.h), the control law's TIDE split, for the same reason.
 add_executable(spky_probe_tests
     tests/test_probe_marks.cpp
     engine/mod/lane.cpp
@@ -330,7 +331,7 @@ add_executable(spky_probe_tests
     engine/body/body_voice.cpp
 )
 target_include_directories(spky_probe_tests PRIVATE engine third_party)
-target_compile_definitions(spky_probe_tests PRIVATE SPKY_PROBE_MARKS=1)
+target_compile_definitions(spky_probe_tests PRIVATE SPKY_PROBE_MARKS=1 SPKY_PROBE_LAW=1)
 target_link_libraries(spky_probe_tests PRIVATE doctest daisysp_min)
 add_test(NAME spky_probe_tests COMMAND spky_probe_tests)
 

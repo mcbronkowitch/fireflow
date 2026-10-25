@@ -22,6 +22,7 @@
 #include "panel_step.h"
 #include "pot_owner.h"
 #include "scan_value.h"
+#include "util/probe_law.h"
 #if !SHELL_COUPON_PROBE
 #include "control/clock_law.hpp"
 #include "gate_latch.h"
@@ -127,6 +128,14 @@ volatile uint32_t g_led_cycles_last = 0;
 // observer followers and FLUX phase, none of which the two windows above see.
 volatile uint32_t g_cb_cycles_max = 0;
 volatile uint32_t g_cb_cycles_last = 0;
+#if defined(SPKY_PROBE_LAW)
+// The TIDE split of the block that set g_law_cycles_max (util/probe_law.h,
+// fault R4): the engine sums into spky::probe_law during one control tick,
+// and a new maximum copies it here. g_law_split_n counts the copies; the
+// foreground reads between two equal readings.
+spky::ProbeLaw    g_law_split = {};
+volatile uint32_t g_law_split_n = 0;
+#endif
 // All three worst cases ignore the first second (500 blocks): a cold-cache
 // first tick or an interrupt during boot would otherwise pin them for good.
 constexpr uint32_t kLawWarmupBlocks = 500;
@@ -179,6 +188,9 @@ void panel_scan_init(bench::Board& hw)
     // The DWT counter the law's cycle report reads; libDaisy never starts it,
     // and without this it reads zero forever (cycles.h).
     cycles_init();
+#if defined(SPKY_PROBE_LAW)
+    spky::probe_law_clock = &DWT->CYCCNT;
+#endif
     cb_profile_init();
 }
 
@@ -262,11 +274,21 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
     // Once per block, the whole vector (spec 2026-10-09 section 4.2).
     const bool     warm = g_law_blocks >= kLawWarmupBlocks;
     if(!warm) ++g_law_blocks;
+#if defined(SPKY_PROBE_LAW)
+    spky::probe_law = {};
+#endif
     const uint32_t c0 = cycles_now();
     const control::Events ev = control_tick(g_knobs, inst, measured_bpm);
     const uint32_t dc = cycles_now() - c0;
     g_law_cycles_last = dc;
-    if(warm && dc > g_law_cycles_max) g_law_cycles_max = dc;
+    if(warm && dc > g_law_cycles_max)
+    {
+        g_law_cycles_max = dc;
+#if defined(SPKY_PROBE_LAW)
+        g_law_split   = spky::probe_law;
+        g_law_split_n = g_law_split_n + 1u;
+#endif
+    }
 
     // The law's events (spec 2026-10-18-rev-a-p6b2 section 5). On a genuine
     // entry into the BBD, FLUX drops to 0 as VCV's knob does, and the FLUX pot
@@ -449,6 +471,26 @@ void run_panel_scan_report(bench::Board& hw)
                      static_cast<int>(g_led_cycles_max),
                      static_cast<int>(g_cb_cycles_last),
                      static_cast<int>(g_cb_cycles_max));
+#if defined(SPKY_PROBE_LAW)
+        // The cyc_max block's TIDE split, in cycles and in calls (two lines,
+        // each inside the 128-byte log buffer): the law around it is cyc_max.
+        spky::ProbeLaw t;
+        uint32_t       tn;
+        do
+        {
+            tn = g_law_split_n;
+            std::atomic_signal_fence(std::memory_order_seq_cst);
+            t = g_law_split;
+            std::atomic_signal_fence(std::memory_order_seq_cst);
+        } while(tn != g_law_split_n);
+        hw.PrintLine("SHELL_PLAY_TIDE n=%d tide=%d steps=%d reslot=%d sinc=%d rate=%d rinc=%d",
+                     static_cast<int>(tn), static_cast<int>(t.tide), static_cast<int>(t.steps),
+                     static_cast<int>(t.reslot), static_cast<int>(t.sinc),
+                     static_cast<int>(t.rate), static_cast<int>(t.rinc));
+        hw.PrintLine("SHELL_PLAY_TIDEN tide=%d reslot=%d sinc=%d rinc=%d",
+                     static_cast<int>(t.n_tide), static_cast<int>(t.n_reslot),
+                     static_cast<int>(t.n_sinc), static_cast<int>(t.n_rinc));
+#endif
         cb_profile_report(hw);
         hw.Delay(500);
     }
