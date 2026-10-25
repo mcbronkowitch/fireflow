@@ -1,8 +1,17 @@
 #include "mod/super_modulator.h"
 #include "util/math.h"
+#include "util/probe_law.h"
 #include <cmath>
 
 using namespace spky;
+
+#if defined(SPKY_PROBE_LAW)
+namespace {
+volatile uint32_t s_probe_law_idle = 0;   // read until the host points the clock
+} // namespace
+ProbeLaw spky::probe_law = {};
+volatile uint32_t* spky::probe_law_clock = &s_probe_law_idle;
+#endif
 
 namespace {
 constexpr float kLaneRatio[LANE_COUNT] = { 2.f, 0.5f, 1.f, 0.75f, 1.5f };
@@ -33,6 +42,7 @@ void SuperModulator::_update_rate() {
 }
 
 void SuperModulator::_apply_rate() {
+    SPKY_PROBE_LAW_BEGIN(rate);
     _master_hz = _base_hz * _pitch_scale;
     for (int i = 0; i < LANE_COUNT; ++i) {
         if (_step_on) {
@@ -48,6 +58,7 @@ void SuperModulator::_apply_rate() {
             _lanes[i].set_rate_hz(_base_hz * s * kLaneRatio[i]);
         }
     }
+    SPKY_PROBE_LAW_END(rate, rate);
 }
 
 void SuperModulator::_apply_steps() {
@@ -56,6 +67,7 @@ void SuperModulator::_apply_steps() {
     // rational ladder here, even when the global SYNC switch is Free -- a
     // continuous factor is the one TIDE setting that cannot be expressed as
     // an integer slot count.
+    SPKY_PROBE_LAW_BEGIN(steps);
     const float tide = kTideRatios[tide_index(_tide_norm)];
     for (int i = 0; i < LANE_COUNT; ++i) {
         const int slots = _step_on ? lane_slots(i, _deck_steps, tide)
@@ -63,17 +75,22 @@ void SuperModulator::_apply_steps() {
         _lanes[i].set_step(_step_on, slots);
     }
     _steps_applied = true;
+    SPKY_PROBE_LAW_END(steps, steps);
 }
 
 void SuperModulator::set_tide(float norm) {
+    SPKY_PROBE_LAW_BEGIN(tide);
+    SPKY_PROBE_LAW_COUNT(n_tide);
     const float n = clampf(norm, 0.f, 1.f);
     // Early-out: see set_tempo_bpm (super_modulator.h).
     if (_skip_unchanged && _tide_applied && same_bits(n, _tide_norm)) {
         _refresh_slews();
+        SPKY_PROBE_LAW_END(tide, tide);
         return;
     }
     _tide_norm = n;
     _update_tide();
+    SPKY_PROBE_LAW_END(tide, tide);
 }
 
 void SuperModulator::_update_tide() {

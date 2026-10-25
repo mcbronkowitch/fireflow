@@ -14,6 +14,7 @@
 #include <thread>
 #include <vector>
 #include "instrument.h"
+#include "util/probe_law.h"
 #include "util/probe_mark.h"
 
 namespace {
@@ -282,4 +283,41 @@ TEST_CASE("probe marks: GRIT's stamps come in order with GRIT running, both mode
     int bad = 0;
     for (size_t k = 1; k < g_blocks.size(); ++k) bad += out_of_order(g_blocks[k]);
     CHECK(bad == 0);
+}
+
+// The control law's TIDE split (util/probe_law.h, fault R4), built into this
+// executable with SPKY_PROBE_LAW=1. Counts and nesting, not cost: one TIDE
+// turn that re-slots lanes is one set_tide, one re-slot and one slew rebuild
+// per lane whose slot count moved, and each part's cycles fit inside the
+// part around it. An unchanged TIDE stamps only its early-out.
+TEST_CASE("probe law: a TIDE turn's re-slots and slew rebuilds are counted and nest") {
+    Spinner spin;
+    spky::probe_law_clock = &g_clock;
+    spky::SuperModulator m;
+    m.init(48000.f, 4242u);
+    m.set_tide(0.5f);
+    m.set_step(true, 8);
+    for (int i = 0; i < 4800; ++i) m.process(spky::probe_clock, spky::probe_part_scratch);
+
+    spky::probe_law = {};
+    m.set_tide(0.95f);
+    const spky::ProbeLaw t = spky::probe_law;
+    // TIDE 0.5 -> 0.95 moves the texture lanes' slot counts (lane_slots),
+    // not the pitch lane's; every lane that moved re-slots live (it has run).
+    CHECK(t.n_tide == 1);
+    CHECK(t.n_reslot >= 1);
+    CHECK(t.n_reslot < spky::LANE_COUNT);
+    CHECK(t.n_sinc == t.n_reslot);
+    CHECK(t.tide - t.steps - t.rate < 0x80000000u);       // steps and rate inside tide
+    CHECK(t.steps - t.reslot - t.sinc < 0x80000000u);     // re-slots and rebuilds inside steps
+    CHECK(t.rate - t.rinc < 0x80000000u);
+
+    spky::probe_law = {};
+    m.set_tide(0.95f);
+    const spky::ProbeLaw u = spky::probe_law;
+    CHECK(u.n_tide == 1);
+    CHECK(u.n_reslot == 0);
+    CHECK(u.n_sinc == 0);
+    CHECK(u.steps == 0);
+    CHECK(u.rate == 0);
 }
