@@ -126,8 +126,9 @@ public:
     // early-outs existed: the reference side of the bit-identity gate.
     void set_skip_unchanged_for_test(bool on) { _skip_unchanged = on; }
     // false = process()'s STEP branch searches the grid on every sample, as
-    // before the step cache existed: the reference side of its equivalence
-    // test. Both are CLASS-wide (see _grid_cache_on): every lane's searches
+    // before the step cache existed, and set_step's live re-slot runs its
+    // original search + fmod form: the reference side of both equivalence
+    // tests. Both are CLASS-wide (see _grid_cache_on): every lane's searches
     // count into one total, and the switch flips every lane at once.
     static void set_step_cache_for_test(bool on) { _grid_cache_on = on; }
     static uint32_t step_searches_for_test() { return _grid_searches; }
