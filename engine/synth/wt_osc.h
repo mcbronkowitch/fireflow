@@ -82,6 +82,12 @@ public:
 
     void reset_phase(float ph = 0.f) { _phase = clampf(ph, 0.f, 0.999999f); }
 
+    // always_inline: with the fade's lone-source read below, arm-none-eabi-g++
+    // -O3 stopped inlining this into VoiceT<WtOsc>::process and `bl`-called a
+    // 764-byte copy twice per voice sample (fault R4, read off the linked
+    // ELF); engine/parts/part.h's Part::process has the same attribute and
+    // the caveats that come with it.
+    __attribute__((always_inline)) inline
     float process() {
         _phase += _inc;
         if (_phase >= 1.f) _phase -= 1.f;
