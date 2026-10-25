@@ -348,6 +348,18 @@ private:
             return _grid_cur;
         return _grid_search(phase);
     }
+    // The same step for a caller that holds a likely answer and does not need
+    // the cache rebuilt: set_step's re-slot. The texture lanes' STEP path
+    // never asks _grid_step, so their cache is cold at every re-slot (fault
+    // R4: 0 hits in 1 600 on the noon patch), while _cur_step already is the
+    // searched step in 93 % of them. shuffle_step_index_near tests the guess
+    // and searches only when it misses.
+    int _grid_step_near(float phase, int guess) const {
+        if (_grid_cache_on && _steps == _grid_steps && _shuffle_latched == _grid_shuffle &&
+            phase >= _grid_lo && phase < _grid_hi)
+            return _grid_cur;
+        return shuffle_step_index_near(phase, _steps, _shuffle_latched, guess);
+    }
     int  _grid_search(float phase);
     void  _generate_pattern_a();
     void  _derive_pattern_b();
