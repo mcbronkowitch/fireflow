@@ -19,6 +19,7 @@ down) is parsed into the worst table the report prints below the windows.
 Call:
     python read_cbp.py capture.txt                 # every window
     python read_cbp.py capture.txt --from 5 --to 14   # those windows, plus their means
+    python read_cbp.py capture.txt --hot 920000       # a lower bar for the hot-block table
 
 Lines read (transcribed from cb_profile.cpp's PrintLine calls):
     CBP_WIN  w=N cb= cb_max= proc= a= b= mix= law=
@@ -32,6 +33,17 @@ Lines read (transcribed from cb_profile.cpp's PrintLine calls):
     CBP_WORST w=N last= am= al= at= ae= af= bm= bl= bt= be= bf= x=
     CBP_BOOT patch= eng_a= eng_b=          (the last one seen)
     CBP_RVCLR n= last= max=                (every one; the report lists them)
+    CBP_REC  blk=N cb= proc= law= led= maxs=V@I med= ev=HEX
+    CBP_REC2 blk=N a= b= mix= va= vb=
+    CBP_REC3 blk=N am= ae= af= bm= be= bf=
+    CBP_REC4 blk=N al= at= ax= bl= bt= bx=
+The CBP_REC* lines are the ring's single blocks (one above the firmware's
+kHot, or one in which a phrase advanced), joined by blk. Those above --hot
+(default 930000, the firmware's kHot) are tabulated with their excess over
+the window means: which segment makes a peak block (fault R4, the noon
+peaks). CBP_REC3 / CBP_REC4 exist since that split; a record without them
+prints dashes. A hot block's am+ae+af must equal its a exactly (raw sums,
+no floors).
 Everything else, SHELL_PLAY_* included, is ignored. A window with a CBP_WIN
 but no CBP_WIN2 / CBP_WIN3 / CBP_WIN4 (an image from before that split)
 prints dashes. am+ae+af is a's three parts, as+ag+ax+ac+an is af's five
@@ -66,6 +78,17 @@ _WORST = re.compile(r"^CBP_WORST w=(\d+) last=(\d+) am=(\d+) al=(\d+) at=(\d+) a
 WORST_FIELDS = ("last", "am", "al", "at", "ae", "af", "bm", "bl", "bt", "be", "bf", "x")
 _BOOT = re.compile(r"^CBP_BOOT patch=(\d+) eng_a=(-?\d+) eng_b=(-?\d+)\s*$")
 _RVCLR = re.compile(r"^CBP_RVCLR n=(\d+) last=(\d+) max=(\d+)\s*$")
+_REC = re.compile(r"^CBP_REC blk=(\d+) cb=(\d+) proc=(\d+) law=(\d+) led=(\d+) maxs=(\d+)@(\d+)"
+                  r" med=(\d+) ev=([0-9a-f]+)\s*$")
+_REC2 = re.compile(r"^CBP_REC2 blk=(\d+) a=(\d+) b=(\d+) mix=(\d+) va=(-?\d+) vb=(-?\d+)\s*$")
+_REC3 = re.compile(r"^CBP_REC3 blk=(\d+) am=(\d+) ae=(\d+) af=(\d+) bm=(\d+) be=(\d+) bf=(\d+)\s*$")
+_REC4 = re.compile(r"^CBP_REC4 blk=(\d+) al=(\d+) at=(\d+) ax=(\d+) bl=(\d+) bt=(\d+) bx=(\d+)\s*$")
+# A hot block's columns; every one but ev also names a window field, so the
+# excess row can subtract the window mean.
+REC_FIELDS = ("cb", "law", "a", "am", "al", "at", "ae", "af", "ax",
+              "b", "bm", "bl", "bt", "be", "bf", "bx", "mix")
+REC_SPLITS = (("a", ("am", "ae", "af")), ("b", ("bm", "be", "bf")))
+kHot = 930000
 
 FIELDS = ("cb", "cb_max", "a", "am", "ap", "al", "aq", "aqc", "aqh", "aqs", "aqt", "ao", "au", "ai", "at", "ar", "ae", "af",
           "as", "ag", "agp", "agw", "ag1", "ag2", "agx", "ax", "ac", "an",
@@ -83,12 +106,31 @@ SPLITS = (("a", ("am", "ae", "af")), ("b", ("bm", "be", "bf")),
 kSplitSlack = 6   # cycles: up to five floors against one
 
 
-def parse(lines, clears=None, worst=None):
+def parse(lines, clears=None, worst=None, recs=None):
     """-> (windows: {w: {field: int}}, boot: (patch, eng_a, eng_b) or None).
     clears, if a list, collects every CBP_RVCLR as (n, last, max); worst, if
-    a dict, collects every CBP_WORST as {w: {field: int}}."""
+    a dict, collects every CBP_WORST as {w: {field: int}}; recs, if a dict,
+    collects the CBP_REC* lines as {blk: {field: int}} (ev as an int)."""
     wins, boot = {}, None
     for line in lines:
+        if recs is not None and line.startswith("CBP_REC"):
+            m = _REC.match(line)
+            if m:
+                d = recs.setdefault(int(m.group(1)), {})
+                for k, name in enumerate(("cb", "proc", "law", "led", "maxs", "maxi", "med")):
+                    d[name] = int(m.group(2 + k))
+                d["ev"] = int(m.group(9), 16)
+                continue
+            for rx, names in ((_REC2, ("a", "b", "mix", "va", "vb")),
+                              (_REC3, ("am", "ae", "af", "bm", "be", "bf")),
+                              (_REC4, ("al", "at", "ax", "bl", "bt", "bx"))):
+                m = rx.match(line)
+                if m:
+                    d = recs.setdefault(int(m.group(1)), {})
+                    for k, name in enumerate(names):
+                        d[name] = int(m.group(2 + k))
+                    break
+            continue
         m = _WIN.match(line)
         if m:
             w = int(m.group(1))
@@ -173,6 +215,36 @@ def split_gaps(wins):
     return out
 
 
+def hot_blocks(recs, hot=kHot):
+    """The ring's blocks above hot, in block order: [(blk, {field: int})]."""
+    return [(b, d) for b, d in sorted(recs.items()) if d.get("cb", 0) > hot]
+
+
+def rec_gaps(recs):
+    """Records whose deck split does not equal its deck: [(blk, whole, gap)]."""
+    out = []
+    for b, d in sorted(recs.items()):
+        for whole, parts in REC_SPLITS:
+            if whole in d and all(p in d for p in parts):
+                gap = d[whole] - sum(d[p] for p in parts)
+                if gap != 0:
+                    out.append((b, whole, gap))
+    return out
+
+
+def hot_excess(rows, win_mean):
+    """Mean of the hot blocks minus the window mean, per REC_FIELDS column
+    both sides carry: {field: float}, or None without a hot block."""
+    if not rows:
+        return None
+    out = {}
+    for f in REC_FIELDS:
+        vals = [d[f] for _, d in rows if f in d]
+        if len(vals) == len(rows) and f in win_mean:
+            out[f] = sum(vals) / len(vals) - win_mean[f]
+    return out
+
+
 def means(wins, lo, hi):
     """Per-field means over the windows lo..hi (both ends) that carry every
     field the capture's image prints (a pre-split image has fewer), or None."""
@@ -191,7 +263,28 @@ def fmt_row(label, d):
     return " ".join(cells)
 
 
-def report(wins, boot, lo, hi, out=sys.stdout, clears=(), worst=None):
+def report_hot(recs, win_mean, hot, out):
+    """The hot-block table and its excess row; False on a record gap."""
+    rows = hot_blocks(recs, hot)
+    print("hot blocks (cb > %d): %d" % (hot, len(rows)), file=out)
+    if rows:
+        print(" ".join(["%8s" % "blk", "%7s" % "ev"] + ["%8s" % f for f in REC_FIELDS]), file=out)
+        for b, d in rows:
+            cells = ["%8d" % b, "%7x" % d.get("ev", 0)]
+            cells += ["%8s" % ("-" if d.get(f) is None else "%d" % d[f]) for f in REC_FIELDS]
+            print(" ".join(cells), file=out)
+        ex = hot_excess(rows, win_mean or {})
+        if ex:
+            cells = ["  excess", "%7s" % ""]
+            cells += ["%8s" % ("-" if f not in ex else "%+d" % round(ex[f])) for f in REC_FIELDS]
+            print(" ".join(cells) + "   (hot mean - window mean)", file=out)
+    gaps = rec_gaps(recs)
+    for b, whole, gap in gaps:
+        print("FAIL block %d: %s is %d cycles off its split" % (b, whole, gap), file=out)
+    return not gaps
+
+
+def report(wins, boot, lo, hi, out=sys.stdout, clears=(), worst=None, recs=None, hot=kHot):
     if boot:
         print("boot patch=%d eng_a=%d eng_b=%d" % boot, file=out)
     for c in clears:
@@ -212,10 +305,13 @@ def report(wins, boot, lo, hi, out=sys.stdout, clears=(), worst=None):
                 print(" ".join(["%6d" % w] + ["%8d" % worst[w][f] for f in WORST_FIELDS]), file=out)
         mean = {f: sum(d[f] for d in rows) / len(rows) for f in WORST_FIELDS}
         print(" ".join(["  mean"] + ["%8d" % round(mean[f]) for f in WORST_FIELDS]), file=out)
+    rec_ok = True
+    if recs:
+        rec_ok = report_hot(recs, m[0] if m else {}, hot, out)
     gaps = split_gaps(wins)
     for w, whole, gap in gaps:
         print("FAIL window %d: %s is %d cycles off its split" % (w, whole, gap), file=out)
-    return bool(wins) and not gaps
+    return bool(wins) and not gaps and rec_ok
 
 
 def main(argv):
@@ -223,14 +319,15 @@ def main(argv):
     ap.add_argument("capture")
     ap.add_argument("--from", dest="lo", type=int, default=0)
     ap.add_argument("--to", dest="hi", type=int, default=1 << 30)
+    ap.add_argument("--hot", type=int, default=kHot)
     a = ap.parse_args(argv)
     with open(a.capture, encoding="utf-8", errors="replace") as f:
-        clears, worst = [], {}
-        wins, boot = parse(f.read().splitlines(), clears, worst)
+        clears, worst, recs = [], {}, {}
+        wins, boot = parse(f.read().splitlines(), clears, worst, recs)
     if not wins:
         print("no CBP_WIN line in %s" % a.capture, file=sys.stderr)
         return 1
-    return 0 if report(wins, boot, a.lo, a.hi, clears=clears, worst=worst) else 1
+    return 0 if report(wins, boot, a.lo, a.hi, clears=clears, worst=worst, recs=recs, hot=a.hot) else 1
 
 
 if __name__ == "__main__":

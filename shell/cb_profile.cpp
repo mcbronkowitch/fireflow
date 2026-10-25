@@ -89,12 +89,18 @@ int      g_step[2][spky::LANE_COUNT];
 bool     g_have_prev = false;
 
 // One ring entry: a block above kHot, or any block in which a phrase advanced.
+// Since fault R4's noon peaks each entry also carries its own deck split, so
+// a hot block can be read against the window means: per deck modulation +
+// control / engine / FX (CBP_REC3), and the lanes, the control tick and
+// FLUX inside them (CBP_REC4).
 constexpr uint32_t kHot = 930000u;
 struct Rec {
     uint32_t blk, cb, proc, law, led, maxs, med, ev;
     int      maxi;
     uint32_t deck[2], mix;
     int      voices[2];
+    uint32_t mod[2], eng[2], fx[2];
+    uint32_t lanes[2], tick[2], flux[2];
 };
 constexpr int     kRing = 64;
 Rec               g_ring[kRing];
@@ -429,7 +435,17 @@ void cb_profile_block_end(uint32_t cb, uint32_t law, uint32_t led, bool warm,
         Rec& r = g_ring[g_ring_w % kRing];
         r = Rec{blk, cb, g_proc, law, led, g_maxs, g_med, ev, g_maxi,
                 {g_deck[0], g_deck[1]}, g_mix,
-                {inst.probe_voices(0), inst.probe_voices(1)}};
+                {inst.probe_voices(0), inst.probe_voices(1)},
+                {}, {}, {}, {}, {}, {}};
+        for(int p = 0; p < 2; ++p)
+        {
+            r.mod[p] = g_seg[p][SEG_MOD];
+            r.eng[p] = g_seg[p][SEG_ENG];
+            for(int s = SEG_FX_FIRST; s < SEG_COUNT; ++s) r.fx[p] += g_seg[p][s];
+            r.lanes[p] = g_dseg[p][DSEG_LANES];
+            r.tick[p]  = g_dseg[p][DSEG_TICK];
+            r.flux[p]  = g_seg[p][SEG_FLUX];
+        }
         std::atomic_signal_fence(std::memory_order_seq_cst);
         g_ring_w = g_ring_w + 1u;
     }
@@ -460,6 +476,20 @@ void cb_profile_report(bench::Board& hw)
         hw.PrintLine("CBP_REC2 blk=%d a=%d b=%d mix=%d va=%d vb=%d", static_cast<int>(r.blk),
                      static_cast<int>(r.deck[0]), static_cast<int>(r.deck[1]),
                      static_cast<int>(r.mix), r.voices[0], r.voices[1]);
+        // The block's own deck split (CBP_WIN2's fields): am + ae + af = a,
+        // bm + be + bf = b. At most ~80 bytes.
+        hw.PrintLine("CBP_REC3 blk=%d am=%d ae=%d af=%d bm=%d be=%d bf=%d",
+                     static_cast<int>(r.blk), static_cast<int>(r.mod[0]),
+                     static_cast<int>(r.eng[0]), static_cast<int>(r.fx[0]),
+                     static_cast<int>(r.mod[1]), static_cast<int>(r.eng[1]),
+                     static_cast<int>(r.fx[1]));
+        // Inside it: the lanes and the control tick of am / bm (CBP_WIN5's al
+        // / at), FLUX of af / bf (CBP_WIN3's ax). At most ~80 bytes.
+        hw.PrintLine("CBP_REC4 blk=%d al=%d at=%d ax=%d bl=%d bt=%d bx=%d",
+                     static_cast<int>(r.blk), static_cast<int>(r.lanes[0]),
+                     static_cast<int>(r.tick[0]), static_cast<int>(r.flux[0]),
+                     static_cast<int>(r.lanes[1]), static_cast<int>(r.tick[1]),
+                     static_cast<int>(r.flux[1]));
     }
     // Every engine swap (fault R2): its whole cost and BbdEngine::reset()'s
     // share, printed once per new swap. Copied before printing; a swap landing
