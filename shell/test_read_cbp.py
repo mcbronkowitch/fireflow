@@ -44,6 +44,14 @@ CBP_WIN7 w=6 aqc=500 aqh=4000 aqs=20000 aqt=5500 bqc=500 bqh=4000 bqs=20000 bqt=
 CBP_WIN8 w=6 agp=100 agw=200 ag1=300 ag2=200 agx=200 bgp=100 bgw=200 bg1=500 bg2=0 bgx=200
 CBP_WORST w=6 last=1000 am=1000 al=500 at=400 ae=21000 af=1500 bm=800 bl=500 bt=250 be=9000 bf=1400 x=1600
 CBP_WIN w=7 cb=920000 cb_max=970000 proc=890000 a=364000 b=384000 mix=154000 law=12400
+CBP_REC blk=100 cb=960000 proc=900000 law=12500 led=1300 maxs=33000@95 med=9000 ev=20000
+CBP_REC2 blk=100 a=362000 b=430000 mix=152000 va=1 vb=4
+CBP_REC3 blk=100 am=101000 ae=201000 af=60000 bm=91000 be=259000 bf=80000
+CBP_REC4 blk=100 al=40000 at=46000 ax=40000 bl=40000 bt=37000 bx=60000
+CBP_REC blk=101 cb=890000 proc=840000 law=12400 led=1300 maxs=33000@95 med=8500 ev=84
+CBP_REC2 blk=101 a=355000 b=340000 mix=152000 va=1 vb=4
+CBP_REC blk=200 cb=940000 proc=890000 law=12500 led=1300 maxs=33000@95 med=8900 ev=d8000
+CBP_REC2 blk=200 a=361000 b=391000 mix=152000 va=1 vb=4
 """.splitlines()
 
 wins, boot = r.parse(FIXTURE)
@@ -69,14 +77,33 @@ check("the worst-sample lines are collected", sorted(worst) == [5, 6]
 clears = []
 r.parse(FIXTURE, clears)
 check("a reverb clear is collected", clears == [(1, 393216, 393216)])
+recs = {}
+r.parse(FIXTURE, None, None, recs)
+check("a ring record joins its four lines", sorted(recs) == [100, 101, 200]
+      and recs[100]["cb"] == 960000 and recs[100]["ev"] == 0x20000 and recs[100]["b"] == 430000
+      and recs[100]["be"] == 259000 and recs[100]["bx"] == 60000 and recs[100]["maxi"] == 95)
+check("a record from before the split has no deck split", "am" not in recs[200] and recs[200]["ev"] == 0xd8000)
+check("record lines do not reach the windows", r.parse(FIXTURE)[0] == wins)
+check("only blocks above the bar are hot", [b for b, _ in r.hot_blocks(recs)] == [100, 200]
+      and [b for b, _ in r.hot_blocks(recs, 950000)] == [100])
+ex = r.hot_excess(r.hot_blocks(recs, 950000), r.means(wins, 5, 6)[0])
+check("the excess is the hot block against the window mean",
+      ex["cb"] == 55000 and ex["b"] == 49000 and ex["be"] == 48500 and ex["bm"] == 500 and ex["law"] == 400)
+ex2 = r.hot_excess(r.hot_blocks(recs), r.means(wins, 5, 6)[0])
+check("a column some hot block lacks has no excess", "be" not in ex2 and ex2["cb"] == 45000)
+check("no hot block, no excess", r.hot_excess([], {}) is None)
+check("a record's split adds up exactly", r.rec_gaps(recs) == [])
 m = r.means(wins, 5, 6)
 check("means run over the complete windows only", m is not None and m[1] == 2
       and m[0]["cb"] == 905000 and m[0]["ae"] == 200500 and m[0]["an"] == 3997.5)
 check("a range with no complete window has no mean", r.means(wins, 7, 7) is None)
 check("a split a few cycles short is within slack", r.split_gaps(wins) == [])
 out = io.StringIO()
-check("the report succeeds on the fixture", r.report(wins, boot, 0, 1 << 30, out, clears, worst) is True)
+check("the report succeeds on the fixture", r.report(wins, boot, 0, 1 << 30, out, clears, worst, recs) is True)
 text = out.getvalue()
+check("the report prints the hot blocks and their excess",
+      "hot blocks (cb > 930000): 2" in text and "\n     100   20000   960000" in text
+      and "  excess" in text and "  +45000" in text)
 check("the report prints the worst-sample table and its mean",
       "worst sample, window means:" in text and "   20500" in text)
 check("the report lists the reverb clear", "reverb clear n=1 last=393216 max=393216" in text)
@@ -112,6 +139,14 @@ check("sabotage: a pitch-lane split above its whole goes red",
       r.split_gaps(bad) == [(5, "bq", -1000), (6, "bq", -1000)])
 bad = r.parse([l.replace("ag1=300 ag2=200 agx=200", "ag1=300 ag2=100 agx=200") for l in FIXTURE])[0]
 check("sabotage: a GRIT split short of its whole goes red", r.split_gaps(bad) == [(6, "ag", 100)])
+bad = {}
+r.parse([l.replace("be=259000", "be=258000") for l in FIXTURE], None, None, bad)
+check("sabotage: a record split one engine short goes red",
+      r.rec_gaps(bad) == [(100, "b", 1000)]
+      and r.report(wins, None, 0, 99, io.StringIO(), recs=bad) is False)
+bad = {}
+r.parse([l.replace("cb=960000", "cb=930000") for l in FIXTURE], None, None, bad)
+check("sabotage: a block at the bar is not hot", [b for b, _ in r.hot_blocks(bad)] == [200])
 check("sabotage: a capture with no window is a failure",
       r.parse(["SHELL_PLAY_LAW cyc_last=1 cyc_max=2 led_last=3 led_max=4 cb_last=5 cb_max=6"])[0] == {})
 check("sabotage: a malformed window line is not a window",
@@ -128,6 +163,17 @@ check("the R4 capture's mean covers the fields its image printed",
       m4 is not None and m4[1] == 5 and 939000 < m4[0]["cb"] < 940000 and "am" not in m4[0])
 check("window 43 of the R4 capture reads as the record says",
       w4[43]["cb"] == 939268 and w4[43]["a"] == 369133 and w4[43]["b"] == 388728)
+
+# --- a committed noon capture's ring: real CBP_REC / CBP_REC2 lines ----------
+FX = os.path.join(HERE, "..", "docs", "hardware", "captures", "reva-play-2026-10-24-r4-fx-setters.txt")
+with open(FX, encoding="utf-8", errors="replace") as f:
+    rx = {}
+    wx, _ = r.parse(f.read().splitlines(), None, None, rx)
+hx = r.hot_blocks(rx)
+exx = r.hot_excess(hx, r.means(wx, 0, 1 << 30)[0])
+check("the noon capture's 18 hot blocks parse, deck B carries their excess",
+      len(hx) == 18 and hx[0][0] == 2582 and 50000 < exx["b"] < 52000 and exx["a"] < 7000
+      and "be" not in exx)
 
 print("%d failed" % len(FAILS) if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)
