@@ -330,7 +330,7 @@ void cb_profile_block_end(uint32_t cb, uint32_t law, uint32_t led, bool warm,
     g_eng[1] = static_cast<int>(inst.engine_id(1));
     for(int p = 0; p < 2; ++p)
     {
-        const spky::WaveEngine::ProbeEng& e = inst.part(p).wave().probe_eng();
+        const spky::WaveEngine::ProbeEng& e = inst.probe_wave(p).probe_eng();
         spky::WaveEngine::ProbeEng&       q = g_weng_prev[p];
         g_weng[p][WENG_PEND]   = e.pend - q.pend;
         g_weng[p][WENG_CTRL]   = e.ctrl - q.ctrl;
