@@ -48,6 +48,9 @@ CBP_REC blk=100 cb=960000 proc=900000 law=12500 led=1300 maxs=33000@95 med=9000 
 CBP_REC2 blk=100 a=362000 b=430000 mix=152000 va=1 vb=4
 CBP_REC3 blk=100 am=101000 ae=201000 af=60000 bm=91000 be=259000 bf=80000
 CBP_REC4 blk=100 al=40000 at=46000 ax=40000 bl=40000 bt=37000 bx=60000
+CBP_REC5 blk=100 d=1 wp=15000 wc=9000 wv=180000 ti=2 ta=3
+CBP_WIN9 w=5 awp=0 awc=0 awv=0 ati=0 ata=0 bwp=500 bwc=9000 bwv=160000 bti=10 bta=20
+CBP_WIN9 w=6 awp=0 awc=0 awv=0 ati=0 ata=0 bwp=700 bwc=9200 bwv=162000 bti=30 bta=40
 CBP_REC blk=101 cb=890000 proc=840000 law=12400 led=1300 maxs=33000@95 med=8500 ev=84
 CBP_REC2 blk=101 a=355000 b=340000 mix=152000 va=1 vb=4
 CBP_REC blk=200 cb=940000 proc=890000 law=12500 led=1300 maxs=33000@95 med=8900 ev=d8000
@@ -93,6 +96,14 @@ ex2 = r.hot_excess(r.hot_blocks(recs), r.means(wins, 5, 6)[0])
 check("a column some hot block lacks has no excess", "be" not in ex2 and ex2["cb"] == 45000)
 check("no hot block, no excess", r.hot_excess([], {}) is None)
 check("a record's split adds up exactly", r.rec_gaps(recs) == [])
+check("a WAVE engine record lands on its deck's columns",
+      recs[100].get("bwv") == 180000 and recs[100].get("bti") == 2 and recs[100].get("bta") == 3
+      and "awv" not in recs[100] and "bwp" not in recs[200])
+check("a window joins its WAVE split, strikes per block",
+      wins[5]["bwv"] == 160000 and wins[6]["bwp"] == 700 and wins[5]["bti"] == 0.01
+      and wins[6]["bta"] == 0.04 and "bwv" not in wins[7])
+check("the excess covers the WAVE split", ex["bwv"] == 19000 and ex["bwp"] == 14400
+      and abs(ex["bti"] - 1.98) < 1e-9 and ex["bta"] == 2.97)
 m = r.means(wins, 5, 6)
 check("means run over the complete windows only", m is not None and m[1] == 2
       and m[0]["cb"] == 905000 and m[0]["ae"] == 200500 and m[0]["an"] == 3997.5)
@@ -113,7 +124,8 @@ check("the report prints the boot line, every window and the mean",
 check("a missing split prints dashes", "       -" in text.splitlines()[5])
 # A pre-split capture still gets a mean over the fields its image printed.
 old = r.parse([l for l in FIXTURE
-               if not l.startswith(("CBP_WIN2", "CBP_WIN3", "CBP_WIN4", "CBP_WIN5", "CBP_WIN6", "CBP_WIN7", "CBP_WIN8"))])[0]
+               if not l.startswith(("CBP_WIN2", "CBP_WIN3", "CBP_WIN4", "CBP_WIN5", "CBP_WIN6", "CBP_WIN7", "CBP_WIN8",
+                                    "CBP_WIN9"))])[0]
 mo = r.means(old, 5, 7)
 check("a pre-split capture's mean covers its own fields",
       mo is not None and mo[1] == 3 and mo[0]["cb"] == 910000 and "am" not in mo[0])
@@ -144,6 +156,10 @@ r.parse([l.replace("be=259000", "be=258000") for l in FIXTURE], None, None, bad)
 check("sabotage: a record split one engine short goes red",
       r.rec_gaps(bad) == [(100, "b", 1000)]
       and r.report(wins, None, 0, 99, io.StringIO(), recs=bad) is False)
+bad = {}
+r.parse([l.replace("CBP_REC5 blk=100 d=1", "CBP_REC5 blk=100 d=0") for l in FIXTURE], None, None, bad)
+check("sabotage: a deck-A WAVE record does not land on deck B",
+      "bwv" not in bad[100] and bad[100].get("awv") == 180000)
 bad = {}
 r.parse([l.replace("cb=960000", "cb=930000") for l in FIXTURE], None, None, bad)
 check("sabotage: a block at the bar is not hot", [b for b, _ in r.hot_blocks(bad)] == [200])
