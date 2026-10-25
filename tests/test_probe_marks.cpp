@@ -321,3 +321,35 @@ TEST_CASE("probe law: a TIDE turn's re-slots and slew rebuilds are counted and n
     CHECK(u.steps == 0);
     CHECK(u.rate == 0);
 }
+
+TEST_CASE("probe marks: WAVE's voice calls are counted by voice state") {
+    // Fault R4: every voice call of a block lands in exactly one bin. Before
+    // a note all four voices idle; a note far from the voices' init pitch
+    // (220 Hz -> 880 Hz) moves the mip, so its voice starts in attack + mip
+    // crossfade, and the three others stay idle.
+    Spinner spin;
+    spky::WaveEngine e;
+    e.init(48000.f);
+    auto bins = [&] {
+        const auto& p = e.probe_eng();
+        return std::array<uint32_t, 5>{p.vcnt[0], p.vcnt[1], p.vcnt[2], p.vcnt[3], p.vcnt[4]};
+    };
+    float l = 0.f, r = 0.f;
+    for (int i = 0; i < 96; ++i) e.process(l, r);
+    const auto idle = bins();
+    CHECK(idle[4] == 4u * 96u);
+    CHECK(idle[0] + idle[1] + idle[2] + idle[3] == 0u);
+
+    e.trigger(1.f);
+    for (int i = 0; i < 96; ++i) e.process(l, r);
+    const auto played = bins();
+    uint32_t calls = 0;
+    for (int k = 0; k < 5; ++k) calls += played[k] - idle[k];
+    CHECK(calls == 4u * 96u);
+    CHECK(played[4] - idle[4] == 3u * 96u);   // three voices still idle
+    CHECK(played[3] - idle[3] > 0u);          // attack + crossfade
+    uint64_t cyc = 0;
+    for (int k = 0; k < 5; ++k) cyc += e.probe_eng().vcyc[k];
+    CHECK(cyc > 0u);
+    CHECK(cyc <= e.probe_eng().voices);       // the bins sit inside voices
+}

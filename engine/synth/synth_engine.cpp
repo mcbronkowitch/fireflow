@@ -419,7 +419,19 @@ void SynthEngineT<V>::process(float& outL, float& outR) {
 #endif
     const float gain = _level.process(_targets[LANE_LEVEL] * _filt_gain) * kVoiceGain;
     float l = 0.f, r = 0.f;
+#if defined(SPKY_PROBE_MARKS)
+    for (auto& v : _voices) {
+        int bin = 0;
+        if constexpr (std::is_same_v<V, VoiceT<WtOsc>> || std::is_same_v<V, VoiceT<MorphOsc>>)
+            bin = v.probe_bin();
+        const uint32_t pv = *pclk;
+        v.process(l, r);
+        _probe_eng.vcyc[bin] += *pclk - pv;
+        ++_probe_eng.vcnt[bin];
+    }
+#else
     for (auto& v : _voices) v.process(l, r);
+#endif
     outL = l * gain;
     outR = r * gain;
 #if defined(SPKY_PROBE_MARKS)

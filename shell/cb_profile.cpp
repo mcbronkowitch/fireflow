@@ -86,6 +86,10 @@ enum { WENG_PEND = 0, WENG_CTRL, WENG_VOICES, WENG_COUNT };
 uint32_t g_weng[2][WENG_COUNT] = {};
 uint32_t g_wti[2] = {0, 0}, g_wta[2] = {0, 0};
 spky::WaveEngine::ProbeEng g_weng_prev[2] = {};
+// Inside the voices: cycles and process() calls per voice state (ProbeEng's
+// bins: decay, decay + crossfade, attack, attack + crossfade, idle).
+constexpr int kVBins = spky::WaveEngine::kProbeBins;
+uint32_t g_vcyc[2][kVBins] = {}, g_vcnt[2][kVBins] = {};
 
 uint32_t g_block = 0;    // blocks since StartAudio
 int      g_eng[2] = {-1, -1};  // each deck's engine id at the last block end
@@ -112,6 +116,7 @@ struct Rec {
     uint32_t lanes[2], tick[2], flux[2];
     uint32_t weng[2][WENG_COUNT], wti[2], wta[2];
     int      wave[2];   // the deck was on WAVE
+    uint32_t vcyc[2][kVBins], vcnt[2][kVBins];
 };
 constexpr int     kRing = 64;
 Rec               g_ring[kRing];
@@ -145,9 +150,11 @@ struct Win {
     uint32_t wmix, wlast;
     uint32_t weng[2][WENG_COUNT];   // means, as the other splits
     uint32_t wti[2], wta[2];        // totals over the window's blocks
+    uint32_t vcyc[2][kVBins], vcnt[2][kVBins];   // totals, too
 };
 uint64_t g_wsum_weng[2][WENG_COUNT] = {};
 uint32_t g_wsum_wti[2] = {0, 0}, g_wsum_wta[2] = {0, 0};
+uint32_t g_wsum_vcyc[2][kVBins] = {}, g_wsum_vcnt[2][kVBins] = {};
 uint64_t          g_wsum_cb = 0, g_wsum_proc = 0, g_wsum_deck[2] = {0, 0}, g_wsum_mix = 0,
                   g_wsum_law = 0, g_wsum_seg[2][SEG_COUNT] = {}, g_wsum_mseg[MSEG_COUNT] = {},
                   g_wsum_dseg[2][DSEG_COUNT] = {}, g_wsum_lseg[2][LSEG_COUNT] = {},
@@ -337,7 +344,12 @@ void cb_profile_block_end(uint32_t cb, uint32_t law, uint32_t led, bool warm,
         g_weng[p][WENG_VOICES] = e.voices - q.voices;
         g_wti[p]               = e.trig_in - q.trig_in;
         g_wta[p]               = e.trig_all - q.trig_all;
-        q                      = e;
+        for(int k = 0; k < kVBins; ++k)
+        {
+            g_vcyc[p][k] = e.vcyc[k] - q.vcyc[k];
+            g_vcnt[p][k] = e.vcnt[k] - q.vcnt[k];
+        }
+        q = e;
     }
     if(!warm) return;
     for(int p = 0; p < 2; ++p)
@@ -345,6 +357,11 @@ void cb_profile_block_end(uint32_t cb, uint32_t law, uint32_t led, bool warm,
         for(int s = 0; s < WENG_COUNT; ++s) g_wsum_weng[p][s] += g_weng[p][s];
         g_wsum_wti[p] += g_wti[p];
         g_wsum_wta[p] += g_wta[p];
+        for(int k = 0; k < kVBins; ++k)
+        {
+            g_wsum_vcyc[p][k] += g_vcyc[p][k];
+            g_wsum_vcnt[p][k] += g_vcnt[p][k];
+        }
     }
     g_sum_cb += cb;
     g_sum_proc += g_proc;
@@ -455,6 +472,12 @@ void cb_profile_block_end(uint32_t cb, uint32_t law, uint32_t led, bool warm,
             g_win_pub.wti[p] = g_wsum_wti[p];
             g_win_pub.wta[p] = g_wsum_wta[p];
             g_wsum_wti[p] = g_wsum_wta[p] = 0;
+            for(int k = 0; k < kVBins; ++k)
+            {
+                g_win_pub.vcyc[p][k] = g_wsum_vcyc[p][k];
+                g_win_pub.vcnt[p][k] = g_wsum_vcnt[p][k];
+                g_wsum_vcyc[p][k] = g_wsum_vcnt[p][k] = 0;
+            }
         }
         g_win_pub.wmix  = static_cast<uint32_t>(g_wsum_wmix / kWinBlocks);
         g_win_pub.wlast = g_wsum_wlast;
@@ -479,10 +502,15 @@ void cb_profile_block_end(uint32_t cb, uint32_t law, uint32_t led, bool warm,
         r = Rec{blk, cb, g_proc, law, led, g_maxs, g_med, ev, g_maxi,
                 {g_deck[0], g_deck[1]}, g_mix,
                 {inst.probe_voices(0), inst.probe_voices(1)},
-                {}, {}, {}, {}, {}, {}, {}, {}, {}, {}};
+                {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}};
         for(int p = 0; p < 2; ++p)
         {
             for(int s = 0; s < WENG_COUNT; ++s) r.weng[p][s] = g_weng[p][s];
+            for(int k = 0; k < kVBins; ++k)
+            {
+                r.vcyc[p][k] = g_vcyc[p][k];
+                r.vcnt[p][k] = g_vcnt[p][k];
+            }
             r.wti[p]  = g_wti[p];
             r.wta[p]  = g_wta[p];
             r.wave[p] = g_eng[p] == static_cast<int>(spky::ENGINE_WAVE) ? 1 : 0;
@@ -547,6 +575,19 @@ void cb_profile_report(bench::Board& hw)
                              static_cast<int>(r.weng[p][WENG_CTRL]),
                              static_cast<int>(r.weng[p][WENG_VOICES]), static_cast<int>(r.wti[p]),
                              static_cast<int>(r.wta[p]));
+        // Inside wv: cycles (c) and process() calls (n) per voice state --
+        // decay (0), decay + crossfade (1), attack (2), attack + crossfade
+        // (3), idle (4). The c's sum to wv less the level smoother and the
+        // loop. One line per deck on WAVE. At most ~120 bytes.
+        for(int p = 0; p < 2; ++p)
+            if(r.wave[p])
+                hw.PrintLine("CBP_REC6 blk=%d d=%d c0=%d n0=%d c1=%d n1=%d c2=%d n2=%d c3=%d n3=%d c4=%d n4=%d",
+                             static_cast<int>(r.blk), p,
+                             static_cast<int>(r.vcyc[p][0]), static_cast<int>(r.vcnt[p][0]),
+                             static_cast<int>(r.vcyc[p][1]), static_cast<int>(r.vcnt[p][1]),
+                             static_cast<int>(r.vcyc[p][2]), static_cast<int>(r.vcnt[p][2]),
+                             static_cast<int>(r.vcyc[p][3]), static_cast<int>(r.vcnt[p][3]),
+                             static_cast<int>(r.vcyc[p][4]), static_cast<int>(r.vcnt[p][4]));
     }
     // Every engine swap (fault R2): its whole cost and BbdEngine::reset()'s
     // share, printed once per new swap. Copied before printing; a swap landing
@@ -599,6 +640,11 @@ void cb_profile_report(bench::Board& hw)
             for(int s = 0; s < WENG_COUNT; ++s) wv.weng[p][s] = g_win_pub.weng[p][s];
             wv.wti[p] = g_win_pub.wti[p];
             wv.wta[p] = g_win_pub.wta[p];
+            for(int k = 0; k < kVBins; ++k)
+            {
+                wv.vcyc[p][k] = g_win_pub.vcyc[p][k];
+                wv.vcnt[p][k] = g_win_pub.vcnt[p][k];
+            }
         }
         wv.wmix  = g_win_pub.wmix;
         wv.wlast = g_win_pub.wlast;
@@ -700,6 +746,27 @@ void cb_profile_report(bench::Board& hw)
                      static_cast<int>(wv.weng[1][WENG_PEND]), static_cast<int>(wv.weng[1][WENG_CTRL]),
                      static_cast<int>(wv.weng[1][WENG_VOICES]), static_cast<int>(wv.wti[1]),
                      static_cast<int>(wv.wta[1]));
+        // Each WAVE deck's voice states over the window: cycles per call
+        // (m, the c / n of CBP_REC6) and calls (n, totals). A deck with no
+        // calls counted prints nothing. At most ~115 bytes (cycle totals
+        // would not fit the 128-byte log buffer).
+        for(int p = 0; p < 2; ++p)
+        {
+            uint32_t calls = 0, m[kVBins];
+            for(int k = 0; k < kVBins; ++k)
+            {
+                calls += wv.vcnt[p][k];
+                m[k] = wv.vcnt[p][k] ? wv.vcyc[p][k] / wv.vcnt[p][k] : 0u;
+            }
+            if(calls == 0) continue;
+            hw.PrintLine("CBP_WIN10 w=%d d=%d m0=%d n0=%d m1=%d n1=%d m2=%d n2=%d m3=%d n3=%d m4=%d n4=%d",
+                         static_cast<int>(wn), p,
+                         static_cast<int>(m[0]), static_cast<int>(wv.vcnt[p][0]),
+                         static_cast<int>(m[1]), static_cast<int>(wv.vcnt[p][1]),
+                         static_cast<int>(m[2]), static_cast<int>(wv.vcnt[p][2]),
+                         static_cast<int>(m[3]), static_cast<int>(wv.vcnt[p][3]),
+                         static_cast<int>(m[4]), static_cast<int>(wv.vcnt[p][4]));
+        }
     }
     if(++g_calls % 20u != 0u) return;
     const uint32_t n = g_n;
