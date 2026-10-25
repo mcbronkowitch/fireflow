@@ -8,6 +8,7 @@
 #include "synth/voice.h"
 #include "synth/wt_osc.h"
 #include "util/onepole.h"
+#include "util/probe_mark.h"
 #include "body/body_voice.h"
 
 namespace spky {
@@ -118,6 +119,17 @@ public:
     // Part::_flatten_for_sampler collapses the chord for the SAMPLER only and
     // leaves the synth's chord surface intact. Not used on the audio path.
     int chord_n() const { return _chord_n; }
+#if defined(SPKY_PROBE_MARKS)
+    // Callback profile only (fault R4, the noon peaks: 12.2 k per note
+    // trigger inside the engine, not split yet). Running totals the host
+    // differences once per block, so nothing outside the engine writes here:
+    // cycles in process()'s three parts -- the strewn chord tones and the
+    // drone promise (pend), the control tick (ctrl), the level smoother and
+    // the voices (voices) -- and the strikes landed inside process()
+    // (trig_in) against all strikes (trig_all, the fire path's included).
+    struct ProbeEng { uint32_t pend, ctrl, voices, trig_in, trig_all; };
+    const ProbeEng& probe_eng() const { return _probe_eng; }
+#endif
 #ifdef SPKY_TESTING
     // The accent set_accent() last stored, same idiom as the SPKY_TESTING
     // accessors in engine/instrument.h, engine/mod/lane.h and
@@ -147,6 +159,9 @@ private:
     std::array<V, kVoices> _voices;
     std::array<uint32_t, kVoices> _order {};   // trigger sequence per voice
     uint32_t _seq = 0;
+#if defined(SPKY_PROBE_MARKS)
+    ProbeEng _probe_eng {};
+#endif
     uint32_t _seed = 0xC0FFEEu;
 
     float _sr = 48000.f;

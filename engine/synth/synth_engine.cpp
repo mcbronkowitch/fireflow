@@ -201,6 +201,9 @@ void SynthEngineT<V>::_do_trigger(float pitch_norm, float vel, int chord_slot) {
     }
     _next_rr = (pick + 1) % kVoices;
     _order[pick] = ++_seq;
+#if defined(SPKY_PROBE_MARKS)
+    ++_probe_eng.trig_all;
+#endif
 
     if (_flow) {
         if (chord_slot == 0) _demote_all();   // a new chord replaces the surface
@@ -373,6 +376,12 @@ void SynthEngineT<V>::_update_control() {
 
 template <class V>
 void SynthEngineT<V>::process(float& outL, float& outR) {
+#if defined(SPKY_PROBE_MARKS)
+    // Callback profile only (synth_engine.h, ProbeEng): three stamps.
+    volatile uint32_t* const pclk = ::spky::probe_clock;
+    const uint32_t pt0 = *pclk;
+    const uint32_t ptrig = _probe_eng.trig_all;
+#endif
     if (_pending_n > 0) {                        // strewed stab tones land here
         int w = 0;
         for (int i = 0; i < _pending_n; ++i) {
@@ -387,6 +396,11 @@ void SynthEngineT<V>::process(float& outL, float& outR) {
         _auto_pending = false;
         trigger_chord(_chord, _chord_n);         // full chord at current COLOR
     }
+#if defined(SPKY_PROBE_MARKS)
+    const uint32_t pt1 = *pclk;
+    _probe_eng.pend += pt1 - pt0;
+    _probe_eng.trig_in += _probe_eng.trig_all - ptrig;
+#endif
     // Part::_ctrl_ctr (engine/parts/part.h) is phase-locked to this counter:
     // both init to 0 and advance once per call to their respective
     // process(), so they tick on the same samples as long as this engine
@@ -399,11 +413,18 @@ void SynthEngineT<V>::process(float& outL, float& outR) {
         _ctrl_ctr = kCtrlInterval;
         _update_control();
     }
+#if defined(SPKY_PROBE_MARKS)
+    const uint32_t pt2 = *pclk;
+    _probe_eng.ctrl += pt2 - pt1;
+#endif
     const float gain = _level.process(_targets[LANE_LEVEL] * _filt_gain) * kVoiceGain;
     float l = 0.f, r = 0.f;
     for (auto& v : _voices) v.process(l, r);
     outL = l * gain;
     outR = r * gain;
+#if defined(SPKY_PROBE_MARKS)
+    _probe_eng.voices += *pclk - pt2;
+#endif
 }
 
 template <class V>

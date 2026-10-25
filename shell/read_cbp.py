@@ -31,12 +31,19 @@ Lines read (transcribed from cb_profile.cpp's PrintLine calls):
     CBP_WIN7 w=N aqc= aqh= aqs= aqt= bqc= bqh= bqs= bqt=
     CBP_WIN8 w=N agp= agw= ag1= ag2= agx= bgp= bgw= bg1= bg2= bgx=
     CBP_WORST w=N last= am= al= at= ae= af= bm= bl= bt= be= bf= x=
+    CBP_WIN9 w=N awp= awc= awv= ati= ata= bwp= bwc= bwv= bti= bta=
+                                           (a WAVE deck's engine: strewn tones,
+                                           control tick, voices; strikes inside
+                                           process() and all, window totals --
+                                           read as per-block means)
     CBP_BOOT patch= eng_a= eng_b=          (the last one seen)
     CBP_RVCLR n= last= max=                (every one; the report lists them)
     CBP_REC  blk=N cb= proc= law= led= maxs=V@I med= ev=HEX
     CBP_REC2 blk=N a= b= mix= va= vb=
     CBP_REC3 blk=N am= ae= af= bm= be= bf=
     CBP_REC4 blk=N al= at= ax= bl= bt= bx=
+    CBP_REC5 blk=N d=0|1 wp= wc= wv= ti= ta=   (deck d on WAVE: CBP_WIN9's
+                                           fields for that block, a* / b*)
 The CBP_REC* lines are the ring's single blocks (one above the firmware's
 kHot, or one in which a phrase advanced), joined by blk. Those above --hot
 (default 930000, the firmware's kHot) are tabulated with their excess over
@@ -73,6 +80,10 @@ _WIN7 = re.compile(r"^CBP_WIN7 w=(\d+) aqc=(\d+) aqh=(\d+) aqs=(\d+) aqt=(\d+)"
                    r" bqc=(\d+) bqh=(\d+) bqs=(\d+) bqt=(\d+)\s*$")
 _WIN8 = re.compile(r"^CBP_WIN8 w=(\d+) agp=(\d+) agw=(\d+) ag1=(\d+) ag2=(\d+) agx=(\d+)"
                    r" bgp=(\d+) bgw=(\d+) bg1=(\d+) bg2=(\d+) bgx=(\d+)\s*$")
+_WIN9 = re.compile(r"^CBP_WIN9 w=(\d+) awp=(\d+) awc=(\d+) awv=(\d+) ati=(\d+) ata=(\d+)"
+                   r" bwp=(\d+) bwc=(\d+) bwv=(\d+) bti=(\d+) bta=(\d+)\s*$")
+WIN9_FIELDS = ("awp", "awc", "awv", "ati", "ata", "bwp", "bwc", "bwv", "bti", "bta")
+kWinBlocks = 1000   # cb_profile.cpp: a window's blocks; ti / ta print as totals
 _WORST = re.compile(r"^CBP_WORST w=(\d+) last=(\d+) am=(\d+) al=(\d+) at=(\d+) ae=(\d+) af=(\d+)"
                     r" bm=(\d+) bl=(\d+) bt=(\d+) be=(\d+) bf=(\d+) x=(\d+)\s*$")
 WORST_FIELDS = ("last", "am", "al", "at", "ae", "af", "bm", "bl", "bt", "be", "bf", "x")
@@ -83,10 +94,11 @@ _REC = re.compile(r"^CBP_REC blk=(\d+) cb=(\d+) proc=(\d+) law=(\d+) led=(\d+) m
 _REC2 = re.compile(r"^CBP_REC2 blk=(\d+) a=(\d+) b=(\d+) mix=(\d+) va=(-?\d+) vb=(-?\d+)\s*$")
 _REC3 = re.compile(r"^CBP_REC3 blk=(\d+) am=(\d+) ae=(\d+) af=(\d+) bm=(\d+) be=(\d+) bf=(\d+)\s*$")
 _REC4 = re.compile(r"^CBP_REC4 blk=(\d+) al=(\d+) at=(\d+) ax=(\d+) bl=(\d+) bt=(\d+) bx=(\d+)\s*$")
+_REC5 = re.compile(r"^CBP_REC5 blk=(\d+) d=([01]) wp=(\d+) wc=(\d+) wv=(\d+) ti=(\d+) ta=(\d+)\s*$")
 # A hot block's columns; every one but ev also names a window field, so the
 # excess row can subtract the window mean.
 REC_FIELDS = ("cb", "law", "a", "am", "al", "at", "ae", "af", "ax",
-              "b", "bm", "bl", "bt", "be", "bf", "bx", "mix")
+              "b", "bm", "bl", "bt", "be", "bf", "bx", "mix") + WIN9_FIELDS
 REC_SPLITS = (("a", ("am", "ae", "af")), ("b", ("bm", "be", "bf")))
 kHot = 930000
 
@@ -94,7 +106,7 @@ FIELDS = ("cb", "cb_max", "a", "am", "ap", "al", "aq", "aqc", "aqh", "aqs", "aqt
           "as", "ag", "agp", "agw", "ag1", "ag2", "agx", "ax", "ac", "an",
           "b", "bm", "bp", "bl", "bq", "bqc", "bqh", "bqs", "bqt", "bo", "bu", "bi", "bt", "br", "be", "bf",
           "bs", "bg", "bgp", "bgw", "bg1", "bg2", "bgx", "bx", "bc", "bn",
-          "mix", "xo", "xd", "xr", "xt", "xl", "law")
+          "mix", "xo", "xd", "xr", "xt", "xl", "law") + WIN9_FIELDS
 # A whole and the parts that must add up to it, within kSplitSlack.
 SPLITS = (("a", ("am", "ae", "af")), ("b", ("bm", "be", "bf")),
           ("af", ("as", "ag", "ax", "ac", "an")), ("bf", ("bs", "bg", "bx", "bc", "bn")),
@@ -120,6 +132,13 @@ def parse(lines, clears=None, worst=None, recs=None):
                 for k, name in enumerate(("cb", "proc", "law", "led", "maxs", "maxi", "med")):
                     d[name] = int(m.group(2 + k))
                 d["ev"] = int(m.group(9), 16)
+                continue
+            m = _REC5.match(line)
+            if m:
+                d = recs.setdefault(int(m.group(1)), {})
+                k = "ab"[int(m.group(2))]
+                for j, name in enumerate(("wp", "wc", "wv", "ti", "ta")):
+                    d[k + name] = int(m.group(3 + j))
                 continue
             for rx, names in ((_REC2, ("a", "b", "mix", "va", "vb")),
                               (_REC3, ("am", "ae", "af", "bm", "be", "bf")),
@@ -186,6 +205,15 @@ def parse(lines, clears=None, worst=None, recs=None):
             d = wins.setdefault(w, {})
             for k, name in enumerate(("agp", "agw", "ag1", "ag2", "agx", "bgp", "bgw", "bg1", "bg2", "bgx")):
                 d[name] = int(m.group(2 + k))
+            continue
+        m = _WIN9.match(line)
+        if m:
+            w = int(m.group(1))
+            d = wins.setdefault(w, {})
+            for k, name in enumerate(WIN9_FIELDS):
+                v = int(m.group(2 + k))
+                # Strikes print as window totals; per block, like the rest.
+                d[name] = v / kWinBlocks if name.endswith(("ti", "ta")) else v
             continue
         m = _WORST.match(line)
         if m:
