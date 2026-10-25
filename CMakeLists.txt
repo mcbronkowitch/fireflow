@@ -56,6 +56,7 @@ add_executable(spky_tests
     tests/test_lane.cpp
     tests/test_lane_sh.cpp
     tests/test_lane_step_cache.cpp
+    tests/test_lane_step_rescale.cpp
     tests/test_lane_tick.cpp
     tests/test_engine_map.cpp
     tests/test_melody_reachable.cpp
