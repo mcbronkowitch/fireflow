@@ -8,16 +8,20 @@
   Everything below the comment is public.
 -->
 
-## FireFlow 2.23.2
+## FireFlow 2.23.3
 
-**CPU work only. Nothing should sound different.** Turning TIDE used to cost
-the hardware's control code one expensive block. Every lane rebuilt its
-smoothing even where nothing had changed, and every lane whose step count moved
-searched the shuffle grid twice. Both now do only the work that changes
-something. Tests show the output is bit-identical to 2.23.1. In Rack you will
-not notice it. On the hardware, TIDE's block on the stress patch now stays at
-26 156 cycles, under the 28 000 at which the control code would have
-to be split across two audio blocks.
+**CPU work only. Nothing should sound different.** TIDE's control block on the
+hardware got cheaper again. When TIDE changes how many steps a lane has, the
+lane used to search the shuffle grid for the step it was on, although it
+usually knew it already. It now checks that step first and only searches if it
+is wrong. It also no longer rebuilds its smoothing: in STEP the smoothing time
+does not depend on the step count at all. The step positions are bit-identical
+to 2.23.2. The smoothing coefficients can differ in the last float digit or
+two (at most 2.3e-7 relative), about as much as they already changed from one
+step count to the next. In Rack you will not notice it. On the hardware, TIDE
+alone on the init patch now costs 17 235 cycles instead of 20 809, and on the
+stress patch about 19 400 instead of 26 156, well under the 28 000 at which the
+control code would have to be split across two audio blocks.
 
 This is a development alpha. Saved patches may break between releases.
 
