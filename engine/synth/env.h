@@ -68,6 +68,7 @@ public:
     }
 
     bool  active() const { return _stage != Stage::Idle; }
+    bool  attacking() const { return _stage == Stage::Attack; }
     float value()  const { return _level; }
 
 private:

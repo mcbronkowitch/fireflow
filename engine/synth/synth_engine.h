@@ -127,7 +127,16 @@ public:
     // drone promise (pend), the control tick (ctrl), the level smoother and
     // the voices (voices) -- and the strikes landed inside process()
     // (trig_in) against all strikes (trig_all, the fire path's included).
-    struct ProbeEng { uint32_t pend, ctrl, voices, trig_in, trig_all; };
+    // Inside voices, each voice's process() call is timed on its own and
+    // counted by the voice's state when the call starts (VoiceT::probe_bin):
+    // decay (0), decay + mip crossfade (1), attack (2), attack + crossfade
+    // (3), idle (4). Only a WAVE voice has a crossfade to report; SYNTH and
+    // BODY land in 0, 2 and 4 or in 0 alone.
+    static constexpr int kProbeBins = 5;
+    struct ProbeEng {
+        uint32_t pend, ctrl, voices, trig_in, trig_all;
+        uint32_t vcyc[kProbeBins], vcnt[kProbeBins];
+    };
     const ProbeEng& probe_eng() const { return _probe_eng; }
 #endif
 #ifdef SPKY_TESTING

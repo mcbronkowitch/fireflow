@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <type_traits>
 #include "util/svf_lp.h"
 #include "synth/morph_osc.h"
 #include "synth/env.h"
@@ -53,6 +54,18 @@ public:
     void process(float& accL, float& accR);   // adds into the accumulators
 
     bool  active() const { return _env.active(); }
+#if defined(SPKY_PROBE_MARKS)
+    // Callback profile only (SynthEngineT::ProbeEng): this voice's state as a
+    // bin -- 0 decay, 1 decay + a mip crossfade on either osc, 2 attack, 3
+    // attack + crossfade, 4 idle. MorphOsc has no crossfade.
+    int probe_bin() const {
+        if (!_env.active()) return 4;
+        bool xf = false;
+        if constexpr (!std::is_same_v<OscT, MorphOsc>)
+            xf = _osc_a.mip_crossfading() || _osc_b.mip_crossfading();
+        return (xf ? 1 : 0) | (_env.attacking() ? 2 : 0);
+    }
+#endif
     float env_value() const { return _env.value(); }
     float detune_cents() const { return _detune_ct; }
 
