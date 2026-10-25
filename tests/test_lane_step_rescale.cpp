@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 #include "mod/lane.h"
 #include "mod/shuffle_grid.h"
+#include "mod/super_modulator.h"
 #include <cstdint>
 #include <cstring>
 #include <vector>
@@ -116,4 +117,67 @@ TEST_CASE("shuffle_step_index_near returns the search's step for any guess") {
             }
     CHECK(mismatches == 0);
     CHECK(wrong_guesses > checked / 2);
+}
+
+// The re-slot on the path TIDE really takes: a whole SuperModulator in STEP,
+// TIDE moved every 480 samples. Its texture lanes never ask process()'s grid
+// cache, so every re-slot finds it cold and takes its old step from
+// _cur_step's test instead (fault R4) -- wrong now and then, after SHUFFLE
+// moved or a wrap, which the fallback search must absorb. All five lanes'
+// output, phase and step bits against the reference form.
+namespace {
+
+struct ModRun {
+    std::vector<float> out, phase;
+    std::vector<int>   step;
+    int moves = 0;         // TIDE pushes that changed some lane's slot count
+};
+
+ModRun run_mod(bool cheap) {
+    ModLane::set_step_cache_for_test(cheap);
+    SuperModulator m;
+    m.init(48000.f, 4242u);
+    m.set_rate(0.8f);
+    m.set_step(true, 8);
+    m.set_shuffle(0.6f);
+    uint32_t seed = 777;
+    ModRun r;
+    for (int i = 0; i < kSamples; ++i) {
+        if (i > 0 && i % kEvery == 0) {
+            int before[LANE_COUNT];
+            for (int l = 0; l < LANE_COUNT; ++l) before[l] = m.lane_slots_for_test(l);
+            m.set_tide(static_cast<float>(next(seed) % 1000u) / 999.f);
+            bool moved = false;
+            for (int l = 0; l < LANE_COUNT; ++l) moved |= m.lane_slots_for_test(l) != before[l];
+            r.moves += moved;
+        }
+        if (i % (kEvery * 7) == 240) m.set_shuffle(static_cast<float>(next(seed) % 1000u) / 999.f);
+        m.process();
+        for (int l = 0; l < LANE_COUNT; ++l) {
+            r.out.push_back(m.lane_output(l));
+            r.phase.push_back(m.lane_phase(l));
+            r.step.push_back(m.lane_cur_step(l));
+        }
+    }
+    ModLane::set_step_cache_for_test(true);
+    return r;
+}
+
+} // namespace
+
+TEST_CASE("lane STEP re-slot: TIDE turns on a whole SuperModulator land on the reference form's bits") {
+    const ModRun ref = run_mod(false);
+    const ModRun dut = run_mod(true);
+    REQUIRE(ref.out.size() == dut.out.size());
+    long out_d = 0, phase_d = 0, step_d = 0;
+    for (size_t i = 0; i < ref.out.size(); ++i) {
+        out_d   += std::memcmp(&ref.out[i], &dut.out[i], sizeof(float)) != 0;
+        phase_d += std::memcmp(&ref.phase[i], &dut.phase[i], sizeof(float)) != 0;
+        step_d  += ref.step[i] != dut.step[i];
+    }
+    CHECK(out_d == 0);
+    CHECK(phase_d == 0);
+    CHECK(step_d == 0);
+    CHECK(ref.moves > 1000);
+    CHECK(dut.moves == ref.moves);
 }

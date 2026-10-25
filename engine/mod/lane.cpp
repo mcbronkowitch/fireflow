@@ -267,12 +267,13 @@ void ModLane::set_step(bool on, int steps) {
             // Fault R4: a TIDE turn re-slots four lanes per deck at once, and
             // the form below ran two grid searches and two fmods per lane in
             // one control block. The same bits, cheaper: the old step comes
-            // from process()'s cache (a pure function of its key), the
+            // from process()'s cache (a pure function of its key) or, when
+            // that is cold, from testing _cur_step before any search; the
             // position wraps by exact subtraction (old_step + old_frac stays
             // far below 2^24, where each x - n is exact, and fmod's result is
             // exactly the remainder), and the new step is tested against
             // int(pos) before any search.
-            const int old_step = _grid_step(ph);
+            const int old_step = _grid_step_near(ph, _cur_step);
             const float old_frac = shuffle_step_fraction(ph, old_step, _steps, _shuffle_latched);
             const float n = static_cast<float>(new_steps);
             float pos = static_cast<float>(old_step) + old_frac;
