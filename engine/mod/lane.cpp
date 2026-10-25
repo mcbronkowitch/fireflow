@@ -62,6 +62,7 @@ static int slot_of(int32_t pos, int slots) {
 
 void ModLane::init(float sample_rate, uint32_t seed) {
     _sr = sample_rate;
+    _inc_applied = false;
     _note_min_samples   = static_cast<int>(kFlowNoteMinS * _sr);
     _phrase_min_samples = kFlowPhraseSlots * _note_min_samples;
     _prime_floors();                        // primed: the first boundary fires
@@ -131,7 +132,15 @@ float ModLane::phase_eff() const {
     return static_cast<float>(p - std::floor(p));
 }
 
-void ModLane::set_rate_hz(float hz)   { _rate_hz = hz > 0.f ? hz : 0.f; _update_inc(); }
+void ModLane::set_rate_hz(float hz) {
+    const float r = hz > 0.f ? hz : 0.f;
+    // A TIDE or STEP push hands every lane its rate again, also the lanes it
+    // does not retime (fault R4: 20 slew rebuilds per turned TIDE tick). An
+    // unchanged rate only owes the _ev_rate refresh, as in set_smooth.
+    if (_skip_unchanged && _inc_applied && same_bits(r, _rate_hz)) { refresh_slew(); return; }
+    _rate_hz = r;
+    _update_inc();
+}
 void ModLane::set_shape(float s)      { _shape = clampf(s, 0.f, 1.f); }
 void ModLane::set_range(float r)      { _range = clampf(r, 0.f, 1.f); }
 void ModLane::set_variation(float v)  { _variation = clampf(v, -1.f, 1.f); }
@@ -217,6 +226,12 @@ void ModLane::set_flow_melody(bool on) {
 }
 
 void ModLane::set_step(bool on, int steps) {
+    // The same pair again changes nothing below but the slew rebuild in
+    // _update_inc (see set_rate_hz for why it arrives).
+    if (_skip_unchanged && _inc_applied && on == _step_mode && (steps < 1 ? 1 : steps) == _steps) {
+        refresh_slew();
+        return;
+    }
     const bool entering_step = on && !_step_mode;
     const bool mode_changed  = on != _step_mode;
     if (entering_step) _shuffle_latched = _shuffle_target;
@@ -273,6 +288,7 @@ void ModLane::set_step(bool on, int steps) {
 // pattern-clock behavior.
 void ModLane::_update_inc() {
     _phase_inc = (double(_rate_hz) / double(_sr)) * double(clock_scale());
+    _inc_applied = true;
     _update_slew();     // SMOOTH's tau is a fraction of the interval this sets
 }
 
