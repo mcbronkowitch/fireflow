@@ -306,7 +306,16 @@ void ModLane::set_step(bool on, int steps) {
         _song.patterns[1].pattern_groove.len == 0)
         _song.new_pending = true;
     SPKY_PROBE_LAW_BEGIN(sinc);
-    _update_inc();
+    if (on && !mode_changed && _inc_applied) {
+        // Still in STEP: the slew reads no slot count (_update_slew's STEP
+        // interval), so a new one leaves it as it is and only the phase
+        // advance moves (fault R4: eight rebuilds per TIDE turn). _ev_rate
+        // may have moved since the last rebuild; refresh_slew owes that.
+        _phase_inc = (double(_rate_hz) / double(_sr)) * double(clock_scale());
+        refresh_slew();
+    } else {
+        _update_inc();
+    }
     SPKY_PROBE_LAW_END(sinc, sinc);
     SPKY_PROBE_LAW_COUNT(n_sinc);
 }
@@ -462,7 +471,6 @@ void ModLane::_update_slew() {
         const double denom = _phase_inc * (1.0 + double(_ev_rate));
         double interval = 0.0;                 // in SAMPLES
         if (denom > 0.0) {
-            const double cycle = 1.0 / denom;
             if (_step_mode) {
                 // One STEP of THIS lane. Note the slot count CANCELS: in STEP
                 // clock_scale() is 8/_steps, so cycle/_steps is
@@ -474,8 +482,16 @@ void ModLane::_update_slew() {
                 // attenuation table shows (monotone in slots). Spec 2.3's prose
                 // explains it as "a different tau per lane"; that mechanism is
                 // wrong, its numbers are not. Corrected 2026-08-15.
-                interval = cycle / double(_steps);
+                //
+                // Written with the slot count cancelled, so its BITS do not
+                // depend on _steps either (fault R4, 2026-10-25): the old
+                // cycle / _steps went through the rounded 8.f / _steps and
+                // moved the coefficients by up to 2.3e-7 relative from one
+                // slot count to the next. That is what lets set_step skip
+                // the rebuild when a TIDE turn re-slots a lane in STEP.
+                interval = double(_sr) / (8.0 * double(_rate_hz) * (1.0 + double(_ev_rate)));
             } else if (_flow_melody_on()) {
+                const double cycle = 1.0 / denom;
                 // One SLOT, floored at the note minimum: where the floor
                 // decimates, the raw slot is far shorter than the notes
                 // actually are, and using it would glide much tighter than
@@ -486,7 +502,7 @@ void ModLane::_update_slew() {
             } else {
                 // FLOW LFO: the lane cycle. NOTE _effective_length() is wrong
                 // here -- it returns _steps on this path, not 1.
-                interval = cycle;
+                interval = 1.0 / denom;
             }
         }
         const float top = _melodic ? kFlowSlewFrac : kSmoothTopTexture;

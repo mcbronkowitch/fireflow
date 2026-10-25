@@ -88,8 +88,15 @@ TEST_CASE("skip-unchanged: each retiming setter rebuilds the slews on a change o
         const uint32_t s0 = slews(in);
         in.set_step(PART_A, true, 8);
         CHECK(slews(in) == s0);
-        in.set_step(PART_A, true, 12);              // STEPS only
-        CHECK(slews(in) >= s0 + LANE_COUNT);
+        // STEPS only. A lane that stays in STEP keeps its slew -- the STEP
+        // slew reads no slot count (lane.cpp, _update_slew; fault R4) -- so
+        // what shows the change got through is the slot count itself.
+        int at8[LANE_COUNT];
+        for (int l = 0; l < LANE_COUNT; ++l) at8[l] = in.lane_slots_for_test(PART_A, l);
+        in.set_step(PART_A, true, 12);
+        CHECK(in.lane_slots_for_test(PART_A, LANE_PITCH) == 12);
+        for (int l = 0; l < LANE_COUNT; ++l)
+            CHECK(in.lane_slots_for_test(PART_A, l) != at8[l]);
         const uint32_t s1 = slews(in);
         in.set_step(PART_A, false, 12);             // the flag only
         CHECK(slews(in) >= s1 + LANE_COUNT);

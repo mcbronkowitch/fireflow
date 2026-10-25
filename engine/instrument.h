@@ -140,6 +140,9 @@ public:
     uint32_t lane_slew_updates_for_test(int p, int lane) const {
         return _parts[p].mod().lane_slew_updates_for_test(lane);
     }
+    int lane_slots_for_test(int p, int lane) const {
+        return _parts[p].mod().lane_slots_for_test(lane);
+    }
     void set_skip_unchanged_for_test(bool on) {
         for (auto& p : _parts) p.mod().set_skip_unchanged_for_test(on);
     }

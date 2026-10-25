@@ -122,6 +122,9 @@ public:
     // unchanged-value early-outs (a repeated identical push must not
     // recompute, a changed one must).
     uint32_t slew_update_count_for_test() const { return _slew_updates; }
+    // The slew pair's coefficients, per sample and per tick.
+    float slew_coef_for_test() const      { return _slew.coef(); }
+    float slew_tick_coef_for_test() const { return _slew_tick.coef(); }
     // false = every setter takes its full path again, as before the
     // early-outs existed: the reference side of the bit-identity gate.
     void set_skip_unchanged_for_test(bool on) { _skip_unchanged = on; }
