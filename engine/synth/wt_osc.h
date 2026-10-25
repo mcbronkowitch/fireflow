@@ -7,6 +7,19 @@
 
 namespace spky {
 
+namespace detail {
+// A mip fade's mix on its i-th sample, (i + 1) / N: the same correctly
+// rounded quotient the division gave at run time (WtOsc::kXfadeMix).
+template <int N>
+struct XfadeMix {
+    float v[N];
+    constexpr XfadeMix() : v() {
+        for (int i = 0; i < N; ++i) v[i] = static_cast<float>(i + 1) / N;
+    }
+    constexpr float operator[](int i) const { return v[i]; }
+};
+} // namespace detail
+
 class WtOsc {
 public:
     static constexpr int kRampSamples = 96;
@@ -42,6 +55,7 @@ public:
                 for (int mip = 0; mip < wt::kMipCount; ++mip)
                     _mip_source_weight[mip] *= 1.f - completed;
                 _mip_source_weight[_mip] += completed;
+                _src_mip = -1;                     // a weighted mix now
             } else {
                 _set_mip_source(_mip);
             }
@@ -78,12 +92,17 @@ public:
             if (_position_remaining == 0) _position = _position_target;
         }
 
-        const float current = _read_mip(_mip);
+        const Frames f = _frames();
+        const float current = _read_mip(_mip, f);
         if (_mip_xfade_remaining == 0) return current;
 
-        const float old = _read_mip_source();
-        const float mix = static_cast<float>(kRampSamples - _mip_xfade_remaining + 1)
-            / kRampSamples;
+        // The fade's own sample doubled a WAVE voice's cost on the board
+        // (fault R4, docs/hardware/reva-bring-up.md): the source read through
+        // the seven-weight loop and a division per sample. Both shortcuts
+        // below give the same bits: a lone source of weight 1 reads as
+        // 0 + 1 * x == 0 + x, and kXfadeMix holds the division's quotients.
+        const float old = _src_mip >= 0 ? 0.f + _read_mip(_src_mip, f) : _read_mip_source(f);
+        const float mix = kXfadeMix[kRampSamples - _mip_xfade_remaining];
         const float output = lerpf(old, current, mix);
         --_mip_xfade_remaining;
         if (_mip_xfade_remaining == 0) {
@@ -101,6 +120,17 @@ public:
 private:
     static constexpr float kI16Scale = 1.f / 32112.f;
 
+    static constexpr detail::XfadeMix<kRampSamples> kXfadeMix{};
+
+    // The two frames a read blends and their weight, shared by the current
+    // mip and the fade's source on the same sample.
+    struct Frames { int f0, f1; float blend; };
+    Frames _frames() const {
+        const int frame0 = static_cast<int>(_position);
+        const int frame1 = frame0 < wt::kFrameCount - 1 ? frame0 + 1 : frame0;
+        return {frame0, frame1, _position - frame0};
+    }
+
     int _select_mip(float hz) const {
         float base_hz = _sr / 1024.f;
         int mip = 0;
@@ -111,11 +141,8 @@ private:
         return mip;
     }
 
-    float _read_mip(int mip) const {
-        const int frame0 = static_cast<int>(_position);
-        const int frame1 = frame0 < wt::kFrameCount - 1 ? frame0 + 1 : frame0;
-        const float blend = _position - frame0;
-        return lerpf(_read_frame(frame0, mip), _read_frame(frame1, mip), blend);
+    float _read_mip(int mip, const Frames& f) const {
+        return lerpf(_read_frame(f.f0, mip), _read_frame(f.f1, mip), f.blend);
     }
 
     float _read_frame(int frame, int mip) const {
@@ -131,13 +158,14 @@ private:
     void _set_mip_source(int mip) {
         for (int i = 0; i < wt::kMipCount; ++i) _mip_source_weight[i] = 0.f;
         _mip_source_weight[mip] = 1.f;
+        _src_mip = mip;
     }
 
-    float _read_mip_source() const {
+    float _read_mip_source(const Frames& f) const {
         float value = 0.f;
         for (int mip = 0; mip < wt::kMipCount; ++mip) {
             if (_mip_source_weight[mip] != 0.f)
-                value += _mip_source_weight[mip] * _read_mip(mip);
+                value += _mip_source_weight[mip] * _read_mip(mip, f);
         }
         return value;
     }
@@ -156,6 +184,7 @@ private:
     int _old_mip = 0; // Snap-state contract; active sources live in the weight array.
     int _mip_xfade_remaining = 0;
     float _mip_source_weight[wt::kMipCount] = {};
+    int _src_mip = 0;   // the lone weight-1 source, or -1 for a weighted mix
 };
 
 } // namespace spky
