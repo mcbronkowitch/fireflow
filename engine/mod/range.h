@@ -30,11 +30,10 @@ inline float apply_range(float v, float r) {
 // The two laws agree at both ends of the knob: 0 at r = 0, and v at r = 1 --
 // bit for bit on the 2^-23 grid, within one rounding step (6e-8) elsewhere,
 // because apply_range's blend is uni + (v - uni) (tests/test_range.cpp
-// "both laws agree at full range"). ModLane::_ranged
-// picks between them on the engine class (_note_lane()): the PITCH lane of a
-// deck whose engine plays notes gets this one; the SAMPLER's and the BBD's
-// PITCH lane (a read position and a delay clock, not a note) and every
-// texture lane keep apply_range.
+// "both laws agree at full range"). ModLane::_ranged picks between them on the
+// engine class (_note_lane()): the PITCH lane of a deck whose engine plays
+// notes gets this one; the SAMPLER's and the BBD's PITCH lane (a read position
+// and a delay clock, not a note) and every texture lane keep apply_range.
 inline float apply_range_centred(float v, float r) {
     r = clampf(r, 0.f, 1.f);
     if (r <= 0.f) return 0.f;
