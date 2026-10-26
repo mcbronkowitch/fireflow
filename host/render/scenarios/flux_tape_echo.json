@@ -9,6 +9,7 @@
     {"action":"set_step","part":0,"flag":true,"ivalue":6},
     {"action":"set_shape","part":0,"value":1.0},
     {"action":"set_range","part":0,"value":0.4},
+    {"_comment":"base raised by min(RANGE, 1 - RANGE) for spec 2026-10-26 pitch-range-law 4.6, which keeps the old centre","action":"set_target_base","part":0,"slot":2,"value":0.9},
     {"action":"set_density","part":0,"value":0.4},
     {"action":"set_voice_attack","part":0,"value":0.0},
     {"action":"set_voice_decay","part":0,"value":0.1},
