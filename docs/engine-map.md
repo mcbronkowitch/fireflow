@@ -747,8 +747,8 @@ steps, VARY 0, TUNE 0.5, 200 Part-style seeds, today's law → the new one:
 | 1.00 | 4.1 → 2.7 % | 7.9 → 7.9 % | 9.8 → 3.4 % | 19.2 → 13.1 % | 12.30 → 12.17 |
 
 The old law's worst position was RANGE 0.5 (29.4 % one-note phrases, 58.0 % rail
-notes); under the new one it is the bottom of the knob, where the width is under
-two semitones and the phrase is a drone with a little motion (50.5 % one-note
+notes); under the new one it is the bottom of the knob, where a phrase
+spans about one semitone and is a drone with a little motion (50.5 % one-note
 phrases at 0.1). Spec D2 asked whether to put a floor there; the default, "no
 floor", is what the build does, and it is not yet confirmed by ear
 ([`by-ear-decisions.md`](by-ear-decisions.md)). The left of each arrow is the
@@ -756,7 +756,8 @@ old law under the same seeds, not the table this section carried before.
 
 The superseded table claimed that at RANGE 0.1 a deck plays the entire phrase
 on one scale degree, "every FORM, every SONG, every seed". With Part-style seeds
-that is the one-note column above: 50.5 % of phrases, not all of them.
+that is the one-note column above: 39.0 % of phrases under the old law and
+50.5 % under the new one, not all of them.
 
 ### And the inversion, which has since inverted
 

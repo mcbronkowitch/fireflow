@@ -219,7 +219,10 @@ every scenario that never sets RANGE, since a lane starts at `_range = 1`
 2^-23 grid P4 sampled. Off that grid `apply_range(v, 1)` computes
 `uni + (v − uni)` and differs from `v` by one ulp in 415 of 2001 evenly spaced
 values (max 5.96e-8). The two laws are equal on P4's grid and within one ulp
-elsewhere; the renders at RANGE 1 did not move in the build.*
+elsewhere. Evidence that the renders at RANGE 1 did not move in the build: in
+Task 1's build `ctrl_identity`, which never sets RANGE and so runs at RANGE 1,
+kept its hash; and in A7's before/after comparison every render that moved is
+explained by RANGE below 1 or by the §4.2 reflection.*
 
 ### 4.2 One reflection instead of two clamps on a note deck
 

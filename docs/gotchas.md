@@ -206,8 +206,9 @@ by ear are a different list: [`docs/by-ear-decisions.md`](by-ear-decisions.md).
   part sounds flat, raise the target BASE, don't raise MOD. A note deck's
   PITCH lane no longer uses it: there the PITCH base is the melody's centre at
   every RANGE (spec 2026-10-26 pitch-range-law). The SAMPLER's and the BBD's
-  PITCH lanes are still on `apply_range`, as are the texture/FX targets — for
-  those a high PITCH base still pins the top.
+  PITCH lanes are still on `apply_range`, as are the texture/FX targets. For
+  the SAMPLER's and the BBD's PITCH lanes (the texture lanes have no pitch
+  base) a high PITCH base still pins the top.
 - **`Part::set_depth` / `Instrument::set_depth(int,float)` is the lane MOD
   macro** (scales the 4 texture lanes + FX targets) — unrelated to the reverb
   DEPTH knob removed in M4.9. Don't confuse the two in old code or specs.
