@@ -2595,7 +2595,7 @@ inst.set_target_base(p, spky::LANE_PITCH,
     if "set_fx_target_base(p,spky::FXT_FLUX_TIME,params[p?STAGES_B:STAGES_A]" in push_n:
         issues.append("STAGES is coupled to the tape TIME target")
     if "constboolbbdPart=inst.engine_id(p)==spky::ENGINE_BBD;" not in push_n:
-        issues.append("LANE_PITCH routing lacks the BBD-only gate")
+        issues.append("LANE_PITCH routing lacks the bbdPart flag that picks STAGES on BBD, 0.5f otherwise")
     return issues
 
 

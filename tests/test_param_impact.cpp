@@ -383,7 +383,7 @@ TEST_CASE("param impact: a live parameter works in both operating modes") {
     //   (apply_range_centred, mod/range.h) both move audio in both modes.
     //   FORM_A's dead FLOW reading was the lane sitting on the top of the
     //   span ("pre-quantize 36.0 throughout", the 2026-10-19 trace at ROOT_A 5):
-    //   under apply_range the unipolar half of RANGE lifts a melody by 1 - r,
+    //   under apply_range the unipolar half of RANGE lifts a melody by min(r, 1 - r),
     //   and the clamp in the pitch chain parks the sum on 1.0. Centred on its
     //   base the same lane is a melody again. The group stays, empty, so that
     //   the rule above stays in force.

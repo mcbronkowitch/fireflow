@@ -22,8 +22,9 @@ inline float apply_range(float v, float r) {
 // a width around the PITCH base, nothing else. apply_range above is an
 // amplitude law -- right for a modulation lane, where RANGE 0.5 means "swing
 // 0..1 upward from the base" -- but on a note lane its unipolar half leans the
-// whole melody up by 1 - r and parks it against the top of the span, which a
-// quantizer then collapses onto the root. Here the lane keeps its sign and
+// whole melody up by min(r, 1 - r) (r below the knob's centre, 1 - r above it)
+// and parks it against the top of the span, which a quantizer then collapses
+// onto the root. Here the lane keeps its sign and
 // scales by r, so the melody stays centred on the base at every RANGE.
 //   r <= 0 : off (0), like apply_range
 //   else   : v * r

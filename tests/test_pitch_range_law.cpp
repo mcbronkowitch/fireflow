@@ -353,7 +353,9 @@ TEST_CASE("pitch range law: a deck that visited BBD comes back centred") {
     // BBD (STAGES), and never again: a deck that leaves BBD keeps STAGES as its
     // melody centre. Readings, 2026-10-26 (spec P5): on BBD the base reads 1.0
     // (deck A) / 0.0 (deck B); after returning, stock stays 1.0 / 0.0 and plays
-    // semitone 36 / 0; the fix reads 0.5 / 0.5 and plays 19 / 7.
+    // semitone 36 / 0; the fix reads 0.5 / 0.5 and plays 19 / 7. (On this
+    // branch, with the reflection but before the control-law fix, deck B read
+    // 12: the reflection mirrors base 0 + TUNE -11.7 back into the span.)
     LawRig r;
     r.run_seconds(4.f);
     const int engine_a = r.inst->engine_id(0), engine_b = r.inst->engine_id(1);
@@ -379,7 +381,9 @@ TEST_CASE("pitch range law: the factory patch keeps its drones") {
     // The init patch is two drones: deck A on semitone 19, deck B on 7
     // (pitch_cv * 36, rounded), 60 s after the settle. The note deck's sum is
     // built around the base 0.5; a centre of 12 or 24 semitones moves both.
-    // Green on stock -- its red is the centre-24 sabotage in the task report.
+    // Green on stock. Red proof, 2026-10-26: adding (24.f - 18.f) / 36.f to the
+    // note-deck sum in pitch_pre_quant() made 30000 of 30000 blocks fail on
+    // both decks.
     LawRig r;
     r.run_seconds(4.f);
     int bad_a = 0, bad_b = 0;

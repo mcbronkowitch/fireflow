@@ -316,7 +316,8 @@ void Part::_control_tick() {
     // quantizer) writes _tg[LANE_PITCH] unconditionally, so target_raw's value
     // for that slot was only ever discarded. Nothing between the two points
     // reads _tg[LANE_PITCH] -- the only statements in between are
-    // pitch_pre_quant(), which recomputes target_raw(LANE_PITCH) from members
+    // pitch_pre_quant(), which builds its sum from members (on a note deck
+    // _base[LANE_PITCH] + _mod_term(LANE_PITCH), elsewhere target_raw(LANE_PITCH))
     // instead of reading the cache, _quant.process(), whose Quantizer holds no
     // reference to this Part and touches only its own state, and the _pitch_q
     // assignment.
