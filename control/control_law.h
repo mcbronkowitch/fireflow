@@ -673,9 +673,12 @@ private:
             //   - LANE_SIZE:  sampler (SUB_A -> GENE SIZE) and FEED
             //                 (DETUNE_A -> SPREAD), restored to 0.5f below
             //                 when the deck is neither.
-            //   - LANE_PITCH: BBD-only (STAGES_A/B). Other engines retain
-            //                 their existing base; this movement only rehomes
-            //                 the preserved STAGES state while BBD is active.
+            //   - LANE_PITCH: BBD-only (STAGES_A/B), restored to 0.5f when
+            //                 the deck is not BBD -- the LANE_SIZE pattern.
+            //                 A note deck centres its melody on this base
+            //                 (spec 2026-10-26 pitch-range-law section 3.6),
+            //                 and a BBD visit used to leave STAGES behind as
+            //                 that centre, for good.
             //   - LANE_MOTION: the DPTH knob's base, on every engine, since
             //                 2026-08-19 (no more FEED-only ternary). Before
             //                 2026-08-18 this host never wrote this base at
@@ -694,9 +697,8 @@ private:
             // params array; the exact index has moved with the layout). The
             // explicit ternary is required, exactly as for DRIVE/LINK.
             //
-            if (bbdPart)
-                inst.set_target_base(p, spky::LANE_PITCH,
-                    prm(p ? STAGES_B : STAGES_A));
+            inst.set_target_base(p, spky::LANE_PITCH,
+                bbdPart ? prm(p ? STAGES_B : STAGES_A) : 0.5f);
 
             if (_bbdRestoring[p]) {
                 if (inst.engine_id(p) == id) _bbdRestoring[p] = false;

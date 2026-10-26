@@ -3,7 +3,9 @@
 //
 // A1 pins the law on the lane itself (4.1): a note lane emits r times its
 // RANGE-1 stream, exactly. A3 pins what that is for -- a melody at noon --
-// through the real pitch chain on a SYNTH deck.
+// through the real pitch chain on a SYNTH deck. A10 and A5 pin the control
+// law's half: a note deck's PITCH base is 0.5 again after a BBD visit, so
+// the factory drones keep their pitches.
 #include <doctest/doctest.h>
 #include <algorithm>
 #include <cmath>
@@ -13,6 +15,8 @@
 #include "instrument.h"
 #include "mod/lane.h"
 #include "util/math.h"
+#include "control/control_law.h"
+#include "control/params.hpp"
 using namespace spky;
 
 namespace {
@@ -312,4 +316,79 @@ TEST_CASE("pitch range law: TUNE away from the centre does not pile notes") {
     CAPTURE(got.one_note);
     CAPTURE(got.rail);
     CHECK(got.rail_share() < 0.155f);
+}
+
+namespace {
+
+// A real Instrument and the control law, run as the hosts run them: process a
+// 96-sample block, tick the law every block (the shell's ctrlDiv). The knobs
+// start on the factory patch; a test moves ENGINE_A/B through `k`.
+struct LawRig {
+    std::unique_ptr<Instrument> inst = std::make_unique<Instrument>();
+    control::ControlLaw law;
+    float k[ffctl::NUM_PARAMS];
+    float il[96] = {}, ir[96] = {}, ol[96], orr[96];
+    LawRig() {
+        inst->init(48000.f);
+        for (int i = 0; i < ffctl::NUM_PARAMS; ++i) k[i] = ffctl::kInitParamDefaults[i];
+        law.on_restore();
+    }
+    void block() {
+        inst->process(il, ir, ol, orr, 96);
+        law.tick(k, control::Options{}, *inst);
+    }
+    void run_seconds(float s) {
+        const int blocks = int(s * 48000.f / 96.f);
+        for (int b = 0; b < blocks; ++b) block();
+    }
+    int semis(int p) const {
+        return int(std::lround(inst->pitch_cv(p) * Quantizer::SPAN_SEMIS));
+    }
+};
+
+} // namespace
+
+TEST_CASE("pitch range law: a deck that visited BBD comes back centred") {
+    // Stock Part::set_target_base(LANE_PITCH) is written only while a deck is
+    // BBD (STAGES), and never again: a deck that leaves BBD keeps STAGES as its
+    // melody centre. Readings, 2026-10-26 (spec P5): on BBD the base reads 1.0
+    // (deck A) / 0.0 (deck B); after returning, stock stays 1.0 / 0.0 and plays
+    // semitone 36 / 0; the fix reads 0.5 / 0.5 and plays 19 / 7.
+    LawRig r;
+    r.run_seconds(4.f);
+    const int engine_a = r.inst->engine_id(0), engine_b = r.inst->engine_id(1);
+    r.k[ffctl::ENGINE_A] = 4.f;                 // BBD
+    r.k[ffctl::ENGINE_B] = 4.f;
+    r.run_seconds(4.f);
+    REQUIRE(r.inst->engine_id(0) == ENGINE_BBD);
+    REQUIRE(r.inst->engine_id(1) == ENGINE_BBD);
+    CHECK(r.inst->part(0).target_raw(LANE_PITCH) == 1.f);   // STAGES still owns it
+    CHECK(r.inst->part(1).target_raw(LANE_PITCH) == 0.f);
+    r.k[ffctl::ENGINE_A] = ffctl::kInitParamDefaults[ffctl::ENGINE_A];
+    r.k[ffctl::ENGINE_B] = ffctl::kInitParamDefaults[ffctl::ENGINE_B];
+    r.run_seconds(6.f);
+    REQUIRE(r.inst->engine_id(0) == engine_a);
+    REQUIRE(r.inst->engine_id(1) == engine_b);
+    CHECK(r.inst->part(0).target_raw(LANE_PITCH) == 0.5f);
+    CHECK(r.inst->part(1).target_raw(LANE_PITCH) == 0.5f);
+    CHECK(r.semis(0) == 19);
+    CHECK(r.semis(1) == 7);
+}
+
+TEST_CASE("pitch range law: the factory patch keeps its drones") {
+    // The init patch is two drones: deck A on semitone 19, deck B on 7
+    // (pitch_cv * 36, rounded), 60 s after the settle. The note deck's sum is
+    // built around the base 0.5; a centre of 12 or 24 semitones moves both.
+    // Green on stock -- its red is the centre-24 sabotage in the task report.
+    LawRig r;
+    r.run_seconds(4.f);
+    int bad_a = 0, bad_b = 0;
+    const int blocks = int(60.f * 48000.f / 96.f);
+    for (int b = 0; b < blocks; ++b) {
+        r.block();
+        if (r.semis(0) != 19) ++bad_a;
+        if (r.semis(1) != 7)  ++bad_b;
+    }
+    CHECK(bad_a == 0);
+    CHECK(bad_b == 0);
 }
