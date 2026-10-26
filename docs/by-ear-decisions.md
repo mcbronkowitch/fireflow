@@ -541,3 +541,36 @@ a lamp yet, in Rack or on the board:
   holds the lamp at step 1 for seconds after the input stops.
 
 Do not "finish" any of these without watching them.
+
+## Pitch RANGE law (2026-10-26) — defaults accepted, NOT YET HEARD
+
+The centred RANGE law shipped on branch `pitch-range-law`, spec
+`docs/superpowers/specs/2026-10-26-pitch-range-law-design.md`. Its two decisions
+for Bastian (§6) were accepted **together with the spec on 2026-10-26, as the
+spec's defaults** — that is a go-ahead on the recommendation, not a verdict from
+listening. Neither has been through a listening pass; A9 (§11) is that pass.
+Recorded so nobody later reads them as tuned.
+
+- **D1: the melody's centre is semitone 18** (plus TUNE plus the song offset),
+  unchanged from today. Chosen because it leaves the factory patch alone: the
+  init drones stay on semitones 19 and 7 (G, G), and test A5 pins that. 12 was
+  ruled out on the numbers (it puts deck B's drone on the bottom edge of the
+  span and reflects about half of deck B's notes at every RANGE from 0.1 up).
+  **24 against 18 is taste, and open**: 24 makes both decks circle the root but
+  moves both drones from G to C, the same kind of change Bastian rejected in
+  the ROOT spec ("centre on the tonic" moved the init patch's centre from F# to
+  C). If a listening pass picks 24, A5 pins the new drones instead and this
+  entry says why. The renders for that pass are
+  `renders/pitch-range-law/1-today.wav` … `4-new-centre-24.wav` (gitignored).
+- **D2: no floor at the bottom of the knob.** At RANGE 0.1 a phrase spans about
+  one semitone and is a drone with a little motion (50.5 % one-note phrases,
+  against 8.8 % with a floor of 0.3); the first touch above 0 stays a small
+  step. A floor f would map RANGE r > 0 to the width f + (1 − f)·r and make the
+  first touch jump to ±10.8 semitones. The default answers a drone band that
+  the deleted terrain generator drew (`melody-reachable` §1.3, now retired), and
+  assumes a player who wants a wider melody turns the knob. Listening:
+  `5-range-0.1-no-floor.wav` against `6-range-0.1-floor-0.3.wav`.
+
+What A9 asks, in Rack or on the board, on the init patch: RANGE swept from 0 to
+full. Noon should play a melody, and no deck should sit on one note above
+RANGE 0.3. Bastian's verdict on D1 and D2 goes into this entry.

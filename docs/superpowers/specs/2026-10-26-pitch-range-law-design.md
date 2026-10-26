@@ -215,6 +215,12 @@ this half alone changes nothing for a deck at RANGE 0 or RANGE 1 — including
 every scenario that never sets RANGE, since a lane starts at `_range = 1`
 (`lane.h:411`).
 
+*Correction (2026-10-26, Task 1 measurement): the "bit for bit" holds on the
+2^-23 grid P4 sampled. Off that grid `apply_range(v, 1)` computes
+`uni + (v − uni)` and differs from `v` by one ulp in 415 of 2001 evenly spaced
+values (max 5.96e-8). The two laws are equal on P4's grid and within one ulp
+elsewhere; the renders at RANGE 1 did not move in the build.*
+
 ### 4.2 One reflection instead of two clamps on a note deck
 
 On a deck whose engine plays notes, `Part::pitch_pre_quant()` sums first and

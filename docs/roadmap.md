@@ -359,9 +359,10 @@ is actually built today, and what is still design-only.
   guard moves, from `_flow_melody_on()` to `_melodic && _flow_melody`, and
   exactly one of the six reachable lane states changes with it; in rendered
   audio FORM_B moves 9 of 13 STEP terrains against 1 of 13 before.
-  **§2.2 of its spec, the pitch RANGE law, was deliberately not built** and is
-  still unspecified — see "The melody becomes reachable" under "Done" and the
-  open thread under "Planned"); before that,
+  **§2.2 of its spec, the pitch RANGE law, was deliberately not built** then;
+  it was designed and built on 2026-10-26 instead, as a centred width law —
+  spec `docs/superpowers/specs/2026-10-26-pitch-range-law-design.md`, see the
+  entry "The pitch RANGE law" under "Planned"); before that,
   2026-08-13 (SHAPE/SMOOTH rework: its spec is written —
   `docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md` — after two
   merged-axis drafts were rejected by review; the third repairs the four measured
@@ -697,7 +698,7 @@ is actually built today, and what is still design-only.
 | **VCV engine-aware captions** | Every state-dependent panel caption now comes from one `DYNAMIC_CAPTIONS` generator table instead of hand-written special cases: BODY gets honest VOICE words (`HIT`/`DAMP`/`CHAR`/`EXCIT`/`BRITE`) and BBD gets its own (`TAIL`/`TILT`/`FEED`/`LOSS`); the FX-box word collisions are resolved by renaming FLUX `RATE`→`DIV`, FLUX `TIME`→`MULT`, per-deck `ROOM`→`SEND`, `MASTER_DRIVE`→`PUSH` and BBD `PITCH`→`BEND` (collision with the orbit's `PITCH` eyebrow); the GRIT mode pad now shows its own state, `SAT`/`CRSH`, instead of the word `GRIT` it collided with; MELODY drives Sampler `SCAN` only, no longer also `set_variation`; the permanently-printed `SCAN`/`LEN` second words are deleted from the static plate | ✅ **done** (VCV host + generator; spec `docs/superpowers/specs/2026-08-03-vcv-engine-aware-captions-design.md`; landed on `main` 2026-08-03 (`0c03e3c`), released in 2.18.0) |
 | **PACE** | One global modulation time-stretch, ×1/32 … ×1 … ×4: a new `Instrument::set_pace()` normalized knob, `pace_mult()` curve (`engine/mod/divisions.h`), a `Transport` pace anchor so the grid re-locks on a change instead of jumping phase, `Flux::set_rhythm_pace`, a `PACE` knob on `Fireflow` beside `TEMPO`, and render-host coverage. Fixes the two controls that looked like a speed knob and were not: TEMPO is inert in the free world, and TIDE never reached the melodic lane | ✅ **done** (engine + VCV host + render host; spec `docs/superpowers/specs/2026-08-12-modulation-pace-design.md`, plan `docs/superpowers/plans/2026-08-12-modulation-pace.md`; branch `2026-08-12-modulation-pace`, fast-forwarded onto `main` 2026-08-13 (tip `338e6eb`, so there is no merge commit to cite), released in 2.21.2) |
 | **FLOW melody engine** | The free mode's melodic lane walks an 8-slot phrase instead of running a continuous LFO — DENSITY, FORM and SONG all reach it for the first time, bounded by two rate floors and a slew clamp; SAMPLER and BBD keep the old continuous LFO unchanged | ✅ **done** (engine; spec `docs/superpowers/specs/2026-08-13-flow-melody-engine-design.md`, plan `docs/superpowers/plans/2026-08-13-flow-melody-engine.md`; branch `flow-melody-engine`, merged to `main` 2026-08-13 (`ad3bb93`), released in 2.21.2; **owner's listening checks answered 2026-08-13 — all three renders accepted** — see "FLOW melody engine" under "Done") |
-| **Melody reachable in STEP** | A note deck's melodic lane emits its composed phrase in STEP exactly as it already did in FLOW: one guard in `ModLane::_compute_raw()` changes from `_flow_melody_on()` to `_melodic && _flow_melody` (an engine-class flag, so SAMPLER and BBD are excluded in both modes). FORM and SONG become audible at every SHAPE position instead of only above 0.75 — measured, FORM_B moves rendered audio on 9 of 13 STEP terrains against 1 of 13 under the old guard. Exactly one of the six reachable lane states changes | ✅ **done** (engine; spec `docs/superpowers/specs/2026-08-14-melody-reachable-design.md` §2.1, plan `docs/superpowers/plans/2026-08-14-melody-reachable.md`; landed on `main` 2026-08-14 (`07d5b9d`), released in 2.21.2. **§2.2, the pitch RANGE law, is not built** — see "The melody becomes reachable" under "Done") |
+| **Melody reachable in STEP** | A note deck's melodic lane emits its composed phrase in STEP exactly as it already did in FLOW: one guard in `ModLane::_compute_raw()` changes from `_flow_melody_on()` to `_melodic && _flow_melody` (an engine-class flag, so SAMPLER and BBD are excluded in both modes). FORM and SONG become audible at every SHAPE position instead of only above 0.75 — measured, FORM_B moves rendered audio on 9 of 13 STEP terrains against 1 of 13 under the old guard. Exactly one of the six reachable lane states changes | ✅ **done** (engine; spec `docs/superpowers/specs/2026-08-14-melody-reachable-design.md` §2.1, plan `docs/superpowers/plans/2026-08-14-melody-reachable.md`; landed on `main` 2026-08-14 (`07d5b9d`), released in 2.21.2. **§2.2, the pitch RANGE law, was not built here** — superseded by `docs/superpowers/specs/2026-10-26-pitch-range-law-design.md`; see "The melody becomes reachable" under "Done" and "The pitch RANGE law" under "Planned") |
 | **SMOOTH becomes interval-relative** | The slew law is `τ = smooth · TOP · interval` instead of absolute wall-clock seconds, so SMOOTH means the same thing at every rate; `kSmoothTopTexture = 0.5` chosen by ear, factory defaults converted to preserve the shipped sound, five gates behind it. SHAPE is deliberately not delivered and goes to the Marbles round | ✅ **done** (engine + VCV defaults; spec `docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md`, plan `docs/superpowers/plans/2026-08-14-smooth-interval-relative.md`; merged to `main` 2026-08-15 (`4493d67`), released in 2.21.2) |
 | **60 HP plate** | The hardware panel gets its layout and then its drawing: the redistribution round's placement reaches `gen_hw_panel.py` (2.21.2), and design round 2a, "Technical Blueprint", replaces the organic light plate with a dark anodised one in three tinted zones, a printed airflow/ember silhouette and framed fields with numbered legends — no control moved for it. Three fixes follow: frames hug their own ink with 3 mm between rows, one caption distance (3.6 mm) for every control instead of one per size class, and three knob lines through the MOTION/VOICE/TIMING band instead of five | ✅ **done** as a design study (VCV `FireflowHW` panel + generator; spec `docs/superpowers/specs/2026-08-10-hw-panel-redistribution-design.md`; released in 2.21.2 and 2.21.3; still labelled `DRAFT`, and no hardware is ordered — see "M6 — Hardware prototype" under "Planned") |
 | **STEP accent** | A note deck's melodic lane derives a per-note accent from the groove rank it already computes — 0 at the rank-0 anchor, 1 at the rank DENSE last reveals (`ModLane::note_accent()`) — and `Part` pushes it into the active engine on every STEP fire. The engine spends it twice, on velocity and on decay, the decay half gated by the DEC knob so DEC 0 leaves ring time untouched. **No new control**, no new RNG draw, and FLOW is unaffected (the accent is 0 there). SYNTH, WAVE and BODY take it; SAMPLER and BBD take neither half | ✅ **done** (engine; spec `docs/superpowers/specs/2026-08-15-step-accent-design.md`, plan `docs/superpowers/plans/2026-08-15-step-accent.md`; merged to `main` 2026-08-16 (`83d29e1`), released in 2.21.4; **both depth floors are first-try 0.3 and have not been through a listening session** — see "The STEP accent" under "Done") |
@@ -2860,7 +2861,9 @@ PITCH lane is the delay clock, not a note.
 
 **The spec's §2.2 — the pitch RANGE law — was deliberately not built.** The
 plan says so in its own header: §2.2 is unspecified in the spec and needs a
-design pass first. It is the one open thread this round leaves behind.
+design pass first. It was the one open thread this round left behind; the
+design pass happened on 2026-10-26 and replaced §2.2 with a different law —
+spec `docs/superpowers/specs/2026-10-26-pitch-range-law-design.md`.
 
 The plan also deviates from the spec on purpose and says why: the spec asked
 for `_flow_melody` to be **renamed** `_note_engine` in the same commit, which
@@ -3262,8 +3265,8 @@ The SHAPE/SMOOTH rework's SMOOTH half has shipped — see "SMOOTH becomes
 interval-relative" under "Done". Its SHAPE half was handed to the round below
 rather than delivered, per spec §5, so **the Marbles round is the only designed
 round left before M5k**, followed by loose threads that have no round of their
-own yet (the pitch RANGE law, and two carried out of the SWARM withdrawal, all
-below it). **LED feedback** was opened on 2026-08-16 and stood here as the next
+own yet (two carried out of the SWARM withdrawal, below it; the pitch RANGE law
+was one until 2026-10-26 and is now built, see its entry under "Planned"). **LED feedback** was opened on 2026-08-16 and stood here as the next
 round for exactly as long as it took to spec, build and release it — 2.21.5,
 the same week — so it no longer sits ahead of anything; what it left behind is
 four by-ear constants that need real hardware rather than a round, and they are
@@ -3424,35 +3427,39 @@ argument for taking the SHAPE/SMOOTH rework first.
 
 Needs a spec.
 
-### Open thread — the pitch RANGE law ⬜ (unscheduled, no round yet)
+### The pitch RANGE law ✅ built (2026-10-26, branch `pitch-range-law`), ⏳ two decisions owed to ears
 
-Left behind by the melody-reachable round, whose plan excluded it on purpose:
-spec §2.2 is stated but not designed, and it needs a design pass before anyone
-builds it.
+Spec `docs/superpowers/specs/2026-10-26-pitch-range-law-design.md`. This was
+the open thread left by the melody-reachable round (its §2.2). The design pass
+found that the old measurements ("ambitus peaks at RANGE 0.5, 54.2 % clamped at
+1.0") came from small probe seeds, and that with the instrument's own lane seeds
+RANGE 0.5 is the *worst* position: `apply_range` is the centred width law plus
+an upward tent (spec §3.1), and a note deck at noon sat on the top of the span.
 
-`apply_range` (`engine/mod/range.h`) is an **amplitude** law — unipolar below
-r = 0.5, scaled by `2r`. On the quantized pitch axis that produces two measured
-defects: too little ambitus at the bottom of the knob, and clipping over the
-whole top half. Measured through the real path at STEP 8, SHAPE 1.0, TUNE 0.5,
-mean of 6 seeds, the ambitus **peaks at RANGE ≈ 0.5 (7.23 semitones) and falls
-for the entire upper half** — 29.2 % of samples clamped at RANGE 0.75 and
-54.2 % at 1.00, because `pitch_pre_quant`'s `clampf(…, 0, 1)` starts discarding
-samples at r ≈ 0.55. The clip's position moves with TUNE, since
-`part.cpp` adds `(_tune − 0.5)` before clamping. An earlier draft blamed a
-unipolar/bipolar seam at r = 0.5; **that seam does not exist** — `apply_range`
-is provably continuous there, and the mechanism was mislabelled while the
-residue was real.
+What landed on the branch (not merged yet):
 
-Two things constrain whoever picks it up:
+- `apply_range_centred` (`engine/mod/range.h`): on a note lane RANGE is a pure
+  width, `v·r`; `ModLane::_ranged` picks it on `_note_lane()`. The SAMPLER's and
+  the BBD's PITCH lanes and the texture lanes keep `apply_range`
+  (`109f57b7`, `3bc09a58`).
+- `reflect_unit` (`engine/util/math.h`): a note deck's pitch sum
+  `base + mod + (TUNE − 0.5) + offset` is reflected into [0, 1] instead of
+  passing two clamps; `ctrl_identity` re-baselined (`ce20fb00`).
+- The control law writes PITCH base 0.5 on every non-BBD tick, so a deck that
+  visited BBD comes back centred (`695ff3e4`).
+- Seven render scenarios got PITCH base += min(r, 1 − r) to keep their register;
+  the gotcha about keeping a PITCH base low is retired (`f51d2cdc`).
+- Measured through the tests (`tests/test_pitch_range_law.cpp`): one-note
+  phrases at noon 53.0 % → 5.0 %, rail notes 69.9 % → 0.1 %. FORM_A and FORM_B
+  left the sample-bound group of `test_param_impact`.
 
-- **The gate must be the engine class, not the slot.** `kBbdFlowRangeMax`
-  derives its `2` from `apply_range`'s unipolar behaviour, so a degree floor
-  applied to a BBD deck would void that constant and the owner's 2026-08-07
-  ruling that a BBD's PITCH lane is the delay clock, not a note.
-- **The measurements above came through a rig that no longer exists.** §1.3's
-  drone RANGE band and its terrain statistics were read off `engine/flow/`,
-  deleted one day later on 2026-08-14. The numbers stand as measured; anything
-  new has to be re-measured through a different setup.
+Still open: **D1 (the centre, semitone 18) and D2 (no floor) are the spec's
+defaults, accepted with it on 2026-10-26 and not confirmed by a listening
+pass** — that pass is A9: RANGE swept 0 → full on the init patch, in Rack or on
+the board; noon should play a melody, and no deck should sit on one note above
+RANGE 0.3. Until then `docs/by-ear-decisions.md` lists them as untested
+defaults. The firmware images (`shell/`) and the Rack module were rebuilt for
+this change; flashing is Bastian's, and `bench/` must rebuild on its next run.
 
 ### LED feedback — what the instrument shows ✅ built (2026-08-16), ⏳ four constants owed to real hardware
 
