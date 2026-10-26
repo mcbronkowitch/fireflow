@@ -5,12 +5,14 @@
 // RANGE-1 stream, exactly. A3 pins what that is for -- a melody at noon --
 // through the real pitch chain on a SYNTH deck.
 #include <doctest/doctest.h>
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <memory>
 #include <vector>
 #include "instrument.h"
 #include "mod/lane.h"
+#include "util/math.h"
 using namespace spky;
 
 namespace {
@@ -204,4 +206,110 @@ TEST_CASE("pitch range law: noon plays a melody") {
     CAPTURE(got.rail);
     CHECK(got.one_note_share() < 0.20f);
     CHECK(got.rail_share() < 0.05f);
+}
+
+TEST_CASE("pitch range law: reflect_unit folds the reachable interval") {
+    // The pitch sum of a note deck lives in [-2, 3] (spec section 9: base 0..1,
+    // MOD +/-1, TUNE +/-0.5, offset -5/36..+6/36 reach [-1.64, 2.67]). In that
+    // interval reflect_unit is the triangle wave of period 2 -- mirrored at 0
+    // and at 1 -- and inside [0, 1] it is the identity, bit for bit.
+    for (int i = 0; i < 5001; ++i) {
+        const float x = -2.f + 5.f * static_cast<float>(i) / 5000.f;
+        double t = std::fmod(static_cast<double>(x), 2.0);
+        if (t < 0.0) t += 2.0;
+        const double want = t > 1.0 ? 2.0 - t : t;
+        const float got = reflect_unit(x);
+        CAPTURE(x);
+        CHECK(got >= 0.f);
+        CHECK(got <= 1.f);
+        CHECK(std::fabs(static_cast<double>(got) - want) < 1e-6);
+    }
+    for (int i = 0; i < 1001; ++i) {
+        const float x = static_cast<float>(i) / 1000.f;
+        CAPTURE(x);
+        CHECK(reflect_unit(x) == x);
+    }
+}
+
+TEST_CASE("pitch range law: the pitch sum stays inside the fold's interval") {
+    // The bound the fold's two passes rest on (spec section 9): the sum
+    // base + mod + (tune - 0.5) + offset, recomputed from the part's own terms
+    // (the unreflected value pitch_pre_quant() folds), never leaves [-2, 3].
+    // Eight corners -- PITCH base 0 and 1, TUNE 0 and 1, root 6 and 7, the two
+    // song-offset extremes +6 and -5 (part.h song_offset_for_root) -- each in
+    // FLOW and in STEP 8, 30 s, RANGE 1, PITCH MOD depth 1, VARY 1 (the widest
+    // lane). The offset latches on a phrase rebuild, so each run asks for a
+    // fresh phrase every 2 s and reads the offset the part actually holds.
+    // Measured 2026-10-26: the sum runs from -1.6389 (= -1 - 0.5 - 5/36) to
+    // 2.6667 (= 1 + 1 + 0.5 + 6/36), so the lane does reach +/-1 and the
+    // algebraic corners are met; 0.36 inside the bound at the bottom, 0.33 at
+    // the top.
+    float lo = 1e9f, hi = -1e9f;
+    for (bool step : {false, true})
+    for (float base : {0.f, 1.f})
+    for (float tune : {0.f, 1.f})
+    for (int root : {6, 7}) {
+        auto inst = std::make_unique<Instrument>();
+        inst->init(48000.f);
+        inst->set_engine(PART_A, ENGINE_SYNTH);
+        inst->set_sync(true);
+        inst->set_step(PART_A, step, 8);
+        inst->set_root(PART_A, root);
+        inst->set_tune(PART_A, tune);
+        inst->set_variation(PART_A, 1.f);
+        inst->set_smooth(PART_A, 0.f);
+        inst->set_range(PART_A, 1.f);
+        inst->set_target_base(PART_A, LANE_PITCH, base);
+        inst->set_target_depth(PART_A, LANE_PITCH, 1.f);
+        inst->new_phrase(PART_A);
+        float l[48], r[48];
+        for (long i = 0; i < 48000L * 30 / 48; ++i) {
+            if (i % 2000 == 1999) inst->new_phrase(PART_A);
+            inst->process(nullptr, nullptr, l, r, 48);
+            const Part& p = inst->part(PART_A);
+            const float sum = base + p.lane_excursion(LANE_PITCH) + (tune - 0.5f)
+                            + static_cast<float>(p.song_offset()) / Quantizer::SPAN_SEMIS;
+            lo = std::min(lo, sum);
+            hi = std::max(hi, sum);
+        }
+    }
+    CAPTURE(lo);
+    CAPTURE(hi);
+    CHECK(lo >= -2.f);
+    CHECK(hi <= 3.f);
+    // A bound that nothing approaches is not a bound: the corners must reach
+    // past the span on both sides, or the rig drives nothing.
+    CHECK(lo < 0.f);
+    CHECK(hi > 1.f);
+}
+
+TEST_CASE("pitch range law: TUNE away from the centre does not pile notes") {
+    // A3's deck at a TUNE that sits off the centre: Minor pent, TUNE 0.1747,
+    // VARY 0.671, RANGE 1, 200 phrases. The centred law keeps the lane inside
+    // +/-1 around the base, but base + lane + TUNE still leaves [0, 1] and
+    // Part::pitch_pre_quant()'s clamp parks the overshoot on a rail (the
+    // quantizer then calls both rails the root, semitone 0 or 36). The fold
+    // mirrors it back instead.
+    //
+    // Readings, 2026-10-26, rail notes of 1600 (one-note phrases of 200):
+    //   stock            496 = 31.0 %  (9)
+    //   law, no fold     496 = 31.0 %  (9)
+    //   law + fold       126 =  7.9 %  (0)
+    // Stock and the law alone read the same by construction: at RANGE 1 both
+    // laws are the identity on the lane (range.h), so only the fold moves this
+    // deck. The threshold sits between them at 15.5 %: 2.0x below the old
+    // reading and 1.97x above the new one -- the 3.9x gap between the two
+    // does not leave a factor of two on both sides, so this is the geometric
+    // mean, not the two-fold margin A3 has.
+    PitchRig rig;
+    rig.scale = SCALE_MIN_PENT;
+    rig.tune  = 0.1747f;
+    rig.vary  = 0.671f;
+    rig.range = 1.f;
+    const PhraseReading got = read_phrases(rig);
+    REQUIRE(got.phrases == rig.phrases);
+    REQUIRE(got.notes >= 4 * rig.phrases);
+    CAPTURE(got.one_note);
+    CAPTURE(got.rail);
+    CHECK(got.rail_share() < 0.155f);
 }

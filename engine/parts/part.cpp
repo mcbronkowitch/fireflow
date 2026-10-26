@@ -181,10 +181,25 @@ float Part::target_raw(int slot) const {
 // added BEFORE the quantizer so a song rebuilt in D quantizes onto D's grid
 // exactly where the same song in C lands on C's, moved by the distance --
 // the quantizer mask is root-relative, so this is exact except where the
-// moved note would leave the 0..36 span (spec 2026-10-18 §3, measured), and
-// the clamp below is what folds it back there. Added last, inside the clamp:
-// at offset 0 it is + 0.0f on the same sum, so the result is bit-identical.
+// moved note would leave the 0..36 span (spec 2026-10-18 §3, measured).
+// Added last: at offset 0 it is + 0.0f on the same sum, so the result is
+// bit-identical.
+//
+// On a note deck the bound comes AFTER all of it (spec 2026-10-26
+// pitch-range-law §4.2): base + MOD + TUNE + offset is summed unclamped and
+// reflect_unit mirrors a note that leaves the span at the edge, back inside
+// by as far as it went out. The two clamps this replaces (the lane's, in
+// target_raw, then this one) parked every overshoot on a rail, and the
+// quantizer calls both rails the root: TUNE or a ROOT turn away from the
+// centre piled the melody onto one note. A sum inside [0, 1] is untouched,
+// bit for bit. Off a note deck (SAMPLER read position, BBD clock) the two
+// clamps stay as they were. The sum is within [-2, 3] by construction (base
+// 0..1, MOD +/-1, TUNE +/-0.5, offset -5/36..+6/36), which is what the two
+// passes of reflect_unit cover.
 float Part::pitch_pre_quant() const {
+    if (_note_deck())
+        return reflect_unit(_base[LANE_PITCH] + _mod_term(LANE_PITCH)
+                            + (_tune - 0.5f) + _offset_norm());
     return clampf(target_raw(LANE_PITCH) + (_tune - 0.5f) + _offset_norm(), 0.f, 1.f);
 }
 

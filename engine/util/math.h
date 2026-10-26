@@ -10,6 +10,19 @@ inline float clampf(float x, float lo, float hi) {
     return x < lo ? lo : (x > hi ? hi : x);
 }
 
+// Mirror x into [0, 1] at both edges: a value that leaves the span by d comes
+// back d inside it (-0.2 -> 0.2, 1.3 -> 0.7). Two branch-only passes are exact
+// on [-2, 3], which is the whole reach of a note deck's pitch sum (Part::
+// pitch_pre_quant); the clamp behind them only keeps anything further out from
+// escaping the span. No libm: this runs per control tick.
+inline float reflect_unit(float x) {
+    for (int i = 0; i < 2; ++i) {
+        if (x < 0.f)      x = -x;
+        else if (x > 1.f) x = 2.f - x;
+    }
+    return clampf(x, 0.f, 1.f);
+}
+
 inline float lerpf(float a, float b, float t) {
     return a + (b - a) * t;
 }
