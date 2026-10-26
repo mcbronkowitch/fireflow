@@ -147,6 +147,9 @@ void ModLane::set_rate_hz(float hz) {
 }
 void ModLane::set_shape(float s)      { _shape = clampf(s, 0.f, 1.f); }
 void ModLane::set_range(float r)      { _range = clampf(r, 0.f, 1.f); }
+float ModLane::_ranged(float v) const {
+    return _note_lane() ? apply_range_centred(v, _range) : apply_range(v, _range);
+}
 void ModLane::set_variation(float v)  { _variation = clampf(v, -1.f, 1.f); }
 
 void ModLane::set_form(Principle form) {
@@ -653,7 +656,7 @@ float ModLane::follow(int32_t deck_step, float frac, float shuffle) {
     _phase = shuffle_phase_for_position(
         static_cast<float>(here) + frac, slots, shuffle);
 
-    const float out = apply_range(_slew_tick.process(_target), _range);
+    const float out = _ranged(_slew_tick.process(_target));
     _latch_stepped(out);
 #ifdef SPKY_TESTING
     _last_out = out;
@@ -998,7 +1001,7 @@ float ModLane::process(SPKY_PROBE_MOD_PARAMS) {
     }
     SPKY_PROBE_PART_MARK(14);   // the step search (or the FLOW target) ends here
 
-    const float out = apply_range(_slew.process(_target), _range);
+    const float out = _ranged(_slew.process(_target));
     _latch_stepped(out);
 #ifdef SPKY_TESTING
     _last_out = out;
@@ -1249,7 +1252,7 @@ float ModLane::tick() {
     if (!_step_mode && !_flow_melody_on() && !_frozen)
         _target = _compute_raw();
 
-    const float out = apply_range(_slew_tick.process(_target), _range);
+    const float out = _ranged(_slew_tick.process(_target));
     _latch_stepped(out);
 #ifdef SPKY_TESTING
     _last_out = out;

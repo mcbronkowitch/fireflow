@@ -6,9 +6,11 @@
 // orders them that way (super_modulator.cpp:14-15). A probe in the other
 // order measures a lane whose RNG stream was spent on a contour walk.
 #include <doctest/doctest.h>
+#include <cmath>
 #include <set>
 #include <vector>
 #include "mod/lane.h"
+#include "mod/range.h"
 using namespace spky;
 
 namespace {
@@ -63,7 +65,7 @@ TEST_CASE("melody-reachable: FORM changes the sequence at every SHAPE") {
 // The full emitted stream, for sample-exact comparison.
 namespace {
 std::vector<float> stream(bool melodic, bool step, bool note_engine,
-                          float shape, uint32_t seed) {
+                          float shape, uint32_t seed, float range = 1.f) {
     ModLane l;
     l.set_melodic(melodic);
     l.init(48000.f, seed);
@@ -72,7 +74,7 @@ std::vector<float> stream(bool melodic, bool step, bool note_engine,
     l.set_rate_hz(0.5f);
     l.set_shape(shape);
     l.set_smooth(0.f);
-    l.set_range(1.f);
+    l.set_range(range);
     l.set_variation(0.f);
     std::vector<float> out(48000 * 5);
     for (float& v : out) v = l.process();
@@ -111,6 +113,29 @@ TEST_CASE("melody-reachable: SAMPLER and BBD PITCH lanes are untouched") {
         std::set<float> vals(s.begin(), s.end());
         CHECK(vals.size() > 8);          // still a waveform, not an 8-slot phrase
     }
+    // And RANGE keeps the amplitude law on them (spec 2026-10-26
+    // pitch-range-law A2): apply_range of the RANGE-1 stream, sample for
+    // sample. RED against a variant that gates the centred law on _melodic
+    // alone -- which is what a slot gate amounts to, since only LANE_PITCH is
+    // melodic (super_modulator.cpp:23) -- because the SAMPLER's and the BBD's
+    // PITCH lane is melodic too and would take v * r. "Sample for sample"
+    // to 5e-7, not to the bit: the RANGE-1 stream is itself apply_range(v, 1),
+    // which sits one rounding step (6e-8) off v for some v -- see "range: both
+    // laws agree at full range" -- and the reference is built from it.
+    for (bool step : {false, true}) {
+        const std::vector<float> full = stream(true, step, false, 0.50f, 999u);
+        for (float r : {0.1f, 0.25f, 0.5f, 0.75f}) {
+            CAPTURE(step);
+            CAPTURE(r);
+            const std::vector<float> got =
+                stream(true, step, false, 0.50f, 999u, r);
+            REQUIRE(got.size() == full.size());
+            bool same = true;
+            for (size_t i = 0; i < got.size(); ++i)
+                if (std::fabs(got[i] - apply_range(full[i], r)) > 5e-7f) { same = false; break; }
+            CHECK(same);
+        }
+    }
 }
 
 TEST_CASE("melody-reachable: non-melodic lanes are untouched") {
@@ -126,5 +151,22 @@ TEST_CASE("melody-reachable: non-melodic lanes are untouched") {
         const std::vector<float> s = stream(false, step, false, 0.50f, 999u);
         std::set<float> vals(s.begin(), s.end());
         CHECK(vals.size() > 8);
+    }
+    // The RANGE law on a non-melodic lane (spec 2026-10-26 pitch-range-law
+    // A2). Same boundary-pin status as above: every plausible gate for the
+    // centred law leads with `_melodic &&`, so no variant of it reddens this.
+    for (bool step : {false, true}) {
+        const std::vector<float> full = stream(false, step, false, 0.50f, 999u);
+        for (float r : {0.1f, 0.25f, 0.5f, 0.75f}) {
+            CAPTURE(step);
+            CAPTURE(r);
+            const std::vector<float> got =
+                stream(false, step, false, 0.50f, 999u, r);
+            REQUIRE(got.size() == full.size());
+            bool same = true;
+            for (size_t i = 0; i < got.size(); ++i)
+                if (std::fabs(got[i] - apply_range(full[i], r)) > 5e-7f) { same = false; break; }
+            CHECK(same);
+        }
     }
 }
