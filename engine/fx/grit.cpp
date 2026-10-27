@@ -42,10 +42,12 @@ void GritDrive::process(float& l, float& r SPKY_PROBE_PART_PARAMS) {
 }
 
 void GritReduce::init(float /*sample_rate*/) {
-    _decimator.Init();
-    _decimator.SetBitsToCrush(16);
-    _reducer.Init();
-    _reducer.SetFreq(0.6f);
+    for (int c = 0; c < 2; ++c) {
+        _decimator[c].Init();
+        _decimator[c].SetBitsToCrush(16);
+        _reducer[c].Init();
+        _reducer[c].SetFreq(0.6f);
+    }
     _mix.SetStage(0.5f);
     apply();
 }
@@ -56,23 +58,25 @@ void GritReduce::set_intensity(float norm) {
 }
 
 void GritReduce::apply() {
-    _decimator.SetDownsampleFactor(_intensity);
-    _decimator.SetBitcrushFactor(
-        daisysp::fmap(1.f - _intensity, 0.5f, 0.7f, daisysp::Mapping::EXP));
+    const float crush =
+        daisysp::fmap(1.f - _intensity, 0.5f, 0.7f, daisysp::Mapping::EXP);
+    for (int c = 0; c < 2; ++c) {
+        _decimator[c].SetDownsampleFactor(_intensity);
+        _decimator[c].SetBitcrushFactor(crush);
+    }
 }
 
 void GritReduce::process(float& l, float& r SPKY_PROBE_PART_PARAMS) {
-    // Same call order as one nested expression per channel (the mono
-    // objects are shared across L/R, so the order is the sound); split
-    // into statements only so the callback profile can stamp stage 1 (the
+    // One Decimator + SampleRateReducer per channel (see grit.h); split into
+    // statements only so the callback profile can stamp stage 1 (the
     // Decimator) and stage 2 (the SampleRateReducer).
-    const float c0 = _decimator.Process(l);
+    const float c0 = _decimator[0].Process(l);
     SPKY_PROBE_PART_MARK(17);
-    float r0 = _reducer.Process(c0);
+    float r0 = _reducer[0].Process(c0);
     SPKY_PROBE_PART_MARK(18);
-    const float c1 = _decimator.Process(r);
+    const float c1 = _decimator[1].Process(r);
     SPKY_PROBE_PART_MARK(19);
-    float r1 = _reducer.Process(c1);
+    float r1 = _reducer[1].Process(c1);
     SPKY_PROBE_PART_MARK(20);
     _mix.Process(l, r, r0, r1, l, r);
 }
