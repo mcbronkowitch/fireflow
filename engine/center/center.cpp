@@ -67,6 +67,10 @@ void Center::init(float sample_rate, uint32_t seed) {
 
     _couple = 0.f; _phase_err = 0.f;
 
+    // The grid servo's offset and remembered clock scale: a stale pair would
+    // survive a re-init, and _rebase_grid returns early on an unchanged scale.
+    for (int i = 0; i < 2; ++i) { _grid_off[i] = 0.f; _grid_cs[i] = 1.f; }
+
     _drift_target = 0.f; _drift = 0.f;
     _drift_smooth.init(_cr, 0.3f);
     _drift_smooth.reset(0.f);
