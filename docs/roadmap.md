@@ -3427,7 +3427,7 @@ argument for taking the SHAPE/SMOOTH rework first.
 
 Needs a spec.
 
-### The pitch RANGE law ✅ built (2026-10-26, branch `pitch-range-law`, merged to `main` 2026-10-27 (`3c67b218`), released in 2.23.4), ⏳ two decisions owed to ears
+### The pitch RANGE law ✅ built (2026-10-26, branch `pitch-range-law`, merged to `main` 2026-10-27 (`3c67b218`), released in 2.23.4), heard on the board 2026-10-27
 
 Spec `docs/superpowers/specs/2026-10-26-pitch-range-law-design.md`. This was
 the open thread left by the melody-reachable round (its §2.2). The design pass
@@ -3453,13 +3453,12 @@ What landed:
   phrases at noon 53.0 % → 5.0 %, rail notes 69.9 % → 0.1 %. FORM_A and FORM_B
   left the sample-bound group of `test_param_impact`.
 
-Still open: **D1 (the centre, semitone 18) and D2 (no floor) are the spec's
-defaults, accepted with it on 2026-10-26 and not confirmed by a listening
-pass** — that pass is A9: RANGE swept 0 → full on the init patch, in Rack or on
-the board; noon should play a melody, and no deck should sit on one note above
-RANGE 0.3. Until then `docs/by-ear-decisions.md` lists them as untested
-defaults. The firmware images (`shell/`) and the Rack module were rebuilt for
-this change; flashing is Bastian's, and `bench/` must rebuild on its next run.
+**A9, the listening pass, is done.** On 2026-10-27 Bastian heard the 2.23.4
+play image (`7130d13`, `SHELL_PANEL_SCAN=1 SHELL_KEYS_NC=1`) on the Rev A board
+and accepted it (*"ja passt ist abgenommen"*), so both of the spec's defaults
+stand by ear: **D1, the centre at semitone 18**, and **D2, no floor**;
+`docs/by-ear-decisions.md` records them as heard. `bench/` must rebuild on its
+next run.
 
 ### LED feedback — what the instrument shows ✅ built (2026-08-16), ⏳ four constants owed to real hardware
 
