@@ -33,6 +33,7 @@ public:
     void set_cycle(float seconds) override;
     void set_flow(bool flow) override;
     void set_hold(bool on) override;
+    void silence() override;
     void set_width(float n) override;
     void set_accent(float a) override;
 

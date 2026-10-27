@@ -136,6 +136,12 @@ void SynthEngineT<V>::set_hold(bool on) {
 }
 
 template <class V>
+void SynthEngineT<V>::silence() {
+    for (int v = 0; v < kVoices; ++v) _voices[v].silence();
+    _pending_n = 0;                    // strewn chord tones not yet landed
+}
+
+template <class V>
 void SynthEngineT<V>::trigger(float pitch_norm) { _do_trigger(pitch_norm, 1.f, 0); }
 
 template <class V>

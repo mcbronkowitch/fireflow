@@ -219,7 +219,8 @@ inline void generate_phrase(Principle p, Rng& rng, int steps,
 // Regenerate renewal unit `unit` in place across ALL its slots (every sibling
 // instance of its motif id(s); for CallResponse both the Q and A of the pair).
 // Arrangement is deterministic and re-derived here, so motif_id[]/layout stay
-// authoritative and untouched. RNG consumed in ascending motif-id order.
+// authoritative and untouched. RNG consumed in ascending motif-id order; the
+// last unit then also regenerates the tail (STEPS 13/15), drawn after its ids.
 inline void regenerate_unit(Principle p, Rng& rng, const PhraseLayout& layout,
                             const uint8_t* /*motif_id*/, int unit,
                             float* pitch, bool* gate) {
@@ -250,6 +251,18 @@ inline void regenerate_unit(Principle p, Rng& rng, const PhraseLayout& layout,
                 pitch[slot] = cp[i];
                 gate[slot]  = cg[i];
             }
+        }
+    }
+    // The r-slot tail has no unit of its own; it renews with the last unit, drawn
+    // after it, exactly as generate_phrase writes it (own id n_ids = maxid + 1).
+    int r = layout.tail_len;
+    if (r > 0 && unit == layout.motif_count - 1) {
+        float tp[32]; bool tg[32];
+        pg_gen_motif(p, rng, maxid + 1, r, tp, tg);
+        for (int i = 0; i < r; ++i) {
+            int slot = k * L + i;
+            pitch[slot] = tp[i];
+            gate[slot]  = tg[i];
         }
     }
 }

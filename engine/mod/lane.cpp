@@ -577,6 +577,17 @@ void ModLane::nudge_slots(int n, float dshape) {
     _kick_shape += dshape;
 }
 
+float ModLane::_boundary_pos(int slot, int slots) const {
+    // A quarter-slot offset on two-slot lanes only. The grid phase (0) samples
+    // a sine at 0 and 0.5, both 0, so the lane sits dead; the slot centre (0.5)
+    // samples a triangle at 0.25 and 0.75, both 0, so that dies instead. Any
+    // two-point sampling of the SHAPE morph has a null somewhere in its blends;
+    // a quarter keeps every pure wave swinging (sine 1.42, triangle and ramp
+    // 1.0 p2p, pulse 2.0). Three or more slots keep the exact grid phase.
+    constexpr float kTwoSlotOffset = 0.25f;
+    return static_cast<float>(slot) + (slots == 2 ? kTwoSlotOffset : 0.f);
+}
+
 float ModLane::follow(int32_t deck_step, float frac, float shuffle) {
     _fired   = false;
     _wrapped = false;
@@ -621,7 +632,7 @@ float ModLane::follow(int32_t deck_step, float frac, float shuffle) {
     bool entered = false;
     if (land_only) {
         _phase = shuffle_phase_for_position(
-            static_cast<float>(here), slots, shuffle);
+            _boundary_pos(here, slots), slots, shuffle);
         _enter_step(here);
         entered = true;
     } else {
@@ -629,9 +640,11 @@ float ModLane::follow(int32_t deck_step, float frac, float shuffle) {
         for (int32_t k = 1; k <= elapsed; ++k) {
             const int slot = slot_of(prev + k, slots);
             // Boundary targets are evaluated at the exact grid phase, the same
-            // sampling tick() documents for its edge walk.
+            // sampling tick() documents for its edge walk -- except on
+            // two-slot lanes, which sample a quarter slot past it
+            // (_boundary_pos above).
             _phase = shuffle_phase_for_position(
-                static_cast<float>(slot), slots, shuffle);
+                _boundary_pos(slot, slots), slots, shuffle);
             if (slot == 0) {
                 _wrapped = true;
                 _wrap_events();      // before the new cycle's step 0, as in tick()
@@ -646,7 +659,7 @@ float ModLane::follow(int32_t deck_step, float frac, float shuffle) {
         _follow_jumped = false;
         if (!entered) {
             _phase = shuffle_phase_for_position(
-                static_cast<float>(here), slots, shuffle);
+                _boundary_pos(here, slots), slots, shuffle);
             _enter_step(here);
         }
     }

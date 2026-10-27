@@ -2,6 +2,7 @@
 #include "mod/phrase_gen.h"
 #include "mod/rng.h"
 #include <cmath>
+#include <cstring>
 #include <initializer_list>
 #include <algorithm>
 
@@ -160,6 +161,61 @@ TEST_CASE("regenerate_unit gates match generate_phrase at the same slots") {
     for (int i = 0; i < 8; ++i) if (std::fabs(p[16 + i] - u1_before[i]) > 1e-6f) changed = true;
     CHECK(changed);
     for (int i = 0; i < 8; ++i) CHECK(g[16 + i] == gbefore[i]); // gate pattern still position-stable
+}
+
+// Part-style seed, the way the pitch lane re-seeds a renewal.
+static uint32_t rg_part_seed(int k) { return 0x1234abcdu + (uint32_t)(k + 2) * 2654435761u; }
+
+TEST_CASE("regenerate_unit: the last unit renews the tail") {
+    for (int steps : {13, 15}) {
+        for (int pi = 0; pi < (int)Principle::kCount; ++pi) {
+            Principle pr = (Principle)pi;
+            bool tail_moved = false;
+            for (int k = 0; k < 32; ++k) {
+                Rng r; r.seed(rg_part_seed(100 + k));
+                float p[32]; bool g[32]; uint8_t m[32]; PhraseLayout L;
+                generate_phrase(pr, r, steps, p, g, m, L);
+                REQUIRE(L.tail_len == 1);
+                float before = p[steps - 1]; bool gbefore = g[steps - 1];
+                Rng r2; r2.seed(rg_part_seed(k));
+                regenerate_unit(pr, r2, L, m, L.motif_count - 1, p, g);
+                if (std::fabs(p[steps - 1] - before) > 1e-6f || g[steps - 1] != gbefore)
+                    tail_moved = true;
+            }
+            CHECK(tail_moved);
+        }
+    }
+}
+
+TEST_CASE("regenerate_unit: tail-less step counts are bit-identical to before") {
+    // FNV-1a over the pitch bits after generate_phrase + regenerate_unit of every
+    // unit, 32 seeds; snapshot taken from the code before the tail fix.
+    static const uint32_t kSnap[2][5] = {
+        {2087330516u, 2260394085u, 2281788437u, 4099527355u, 1210677581u},  // STEPS 12
+        {1623748988u, 154687205u, 156666149u, 92400171u, 1887493797u},      // STEPS 16
+    };
+    int si = 0;
+    for (int steps : {12, 16}) {
+        for (int pi = 0; pi < (int)Principle::kCount; ++pi) {
+            uint32_t h = 2166136261u;
+            for (int k = 0; k < 32; ++k) {
+                Rng r; r.seed(rg_part_seed(100 + k));
+                float p[32]; bool g[32]; uint8_t m[32]; PhraseLayout L;
+                generate_phrase((Principle)pi, r, steps, p, g, m, L);
+                for (int u = 0; u < L.motif_count; ++u) {
+                    Rng r2; r2.seed(rg_part_seed(k * 8 + u));
+                    regenerate_unit((Principle)pi, r2, L, m, u, p, g);
+                }
+                for (int i = 0; i < steps; ++i) {
+                    uint32_t bits; std::memcpy(&bits, &p[i], 4);
+                    h = (h ^ bits) * 16777619u;
+                    h = (h ^ (g[i] ? 1u : 0u)) * 16777619u;
+                }
+            }
+            CHECK(h == kSnap[si][pi]);
+        }
+        ++si;
+    }
 }
 
 TEST_CASE("groove: deterministic per seed, valid permutation, anchor rank 0") {

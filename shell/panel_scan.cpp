@@ -293,7 +293,8 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
     // The law's events (spec 2026-10-18-rev-a-p6b2 section 5). On a genuine
     // entry into the BBD, FLUX drops to 0 as VCV's knob does, and the FLUX pot
     // is released: FLUX stays at 0 until that pot is moved. control_tick()
-    // has already turned the deck's excite_other_deck on. rec_started is
+    // has already turned the deck's excite_other_deck on (on BBD) or off
+    // (leaving BBD). rec_started is
     // ignored: the hardware has no sample path to clear (spec section 3).
     apply_law_events(ev, g_knobs, g_owner, g_flux_idx);
 #if !SHELL_COUPON_PROBE

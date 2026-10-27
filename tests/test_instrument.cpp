@@ -623,6 +623,58 @@ TEST_CASE("instrument: RST restarts both loops at the bar start") {
     CHECK(inst.lane_fired(PART_B, LANE_PITCH));
 }
 
+TEST_CASE("Instrument: a re-init leaves no stale grid offset") {
+    // A STEPS change under SYNC leaves the grid servo with a non-zero offset
+    // and a remembered clock scale. init() must reset both: with the scale
+    // unchanged after a re-init, _rebase_grid returns early and the stale
+    // offset pulls the deck at the lock cap (0.650x its rate).
+    static Instrument A, B;
+    auto push = [](Instrument& in) {
+        in.set_sync(true);
+        in.set_step(PART_A, true, 5);
+        in.set_step(PART_B, true, 8);
+    };
+    std::vector<float> l(96), r(96);
+    A.init(48000.f);
+    A.set_sync(true);
+    A.set_step(PART_A, true, 8);
+    A.set_step(PART_B, true, 8);
+    for (int b = 0; b < 1000; ++b) A.process(nullptr, nullptr, l.data(), r.data(), 96);
+    A.set_step(PART_A, true, 5);
+    for (int b = 0; b < 1000; ++b) A.process(nullptr, nullptr, l.data(), r.data(), 96);
+    A.init(48000.f);
+    push(A);
+    B.init(48000.f);
+    push(B);
+
+    auto adv = [](float now, float prev) {
+        float d = now - prev;
+        if (d < 0.f) d += 1.f;           // phase wrapped inside the block
+        return d;
+    };
+    float min_ratio = 1e9f, max_ratio = 0.f;
+    int compared = 0;   // without it, a B that never advances passes both CHECKs
+    float pa = A.part(PART_A).mod().pitch_phase();
+    float pb = B.part(PART_A).mod().pitch_phase();
+    for (int b = 0; b < 1000; ++b) {
+        A.process(nullptr, nullptr, l.data(), r.data(), 96);
+        B.process(nullptr, nullptr, l.data(), r.data(), 96);
+        const float na = A.part(PART_A).mod().pitch_phase();
+        const float nb = B.part(PART_A).mod().pitch_phase();
+        const float da = adv(na, pa), db = adv(nb, pb);
+        pa = na; pb = nb;
+        if (db > 1e-6f) {
+            ++compared;
+            const float ratio = da / db;
+            if (ratio < min_ratio) min_ratio = ratio;
+            if (ratio > max_ratio) max_ratio = ratio;
+        }
+    }
+    CHECK(compared > 900);
+    CHECK(min_ratio > 0.999f);
+    CHECK(max_ratio < 1.001f);
+}
+
 TEST_CASE("instrument: shared shuffle reaches both STEP parts") {
     Instrument inst;
     inst.init(48000.f);

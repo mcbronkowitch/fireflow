@@ -56,6 +56,15 @@ public:
     void process(float& accL, float& accR);
 
     bool  active() const { return _follower > kFloor || _hold_samples > 0; }
+    // Drop the ringing note now (see IPartEngine::silence).
+    void  silence() {
+        _exciter.stop();
+        _str_a.reset();
+        _str_b.reset();
+        _bank.reset();
+        _follower = _peak = 0.f;
+        _hold_samples = 0;
+    }
     float env_value() const { return _follower; }
     float detune_cents() const { return _detune_ct; }
 
@@ -90,7 +99,7 @@ private:
     // Loudness tilt derived from _brightness -- see set_cutoff_hz. 1 at the
     // brightest setting, so a voice that never sees FILTER is unaffected.
     float _bright_gain = 1.f;
-    float _vel = 1.f, _vel_target = 1.f;
+    float _vel_target = 1.f;
     float _attack_s = 0.f, _decay_s = 0.f;   // last times pushed, unscaled
     float _decay_scale = 1.f;
     bool  _env_seen = false;                 // has set_env_times run yet?

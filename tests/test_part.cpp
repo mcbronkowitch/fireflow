@@ -277,6 +277,172 @@ TEST_CASE("part: engine switch test tone <-> synth is click-free") {
     CHECK(p.engine_id() == ENGINE_SYNTH);   // second switch completed
 }
 
+// An unselected engine is not processed, so its voices freeze mid-note. Swapped
+// back in STEP the old note used to resume where it stopped (SYNTH/WAVE at
+// envelope 0.9065 after 30 s away); Part now silences the incoming engine in
+// STEP. In FLOW the frozen drone resuming is the intended behaviour.
+namespace {
+struct SwapRun {
+    float rms_note = 0.f;    // 150..200 ms into the 3rd PITCH fire's note
+    float rms_back = 0.f;    // swap landing .. next fire (capped at 1 s)
+    int   back_samples = 0;
+};
+
+float rms_of(const std::vector<float>& v) {
+    double s = 0.0;
+    for (float x : v) s += double(x) * x;
+    return v.empty() ? 0.f : float(std::sqrt(s / double(v.size())));
+}
+
+// norm -> master_hz is monotonic; the free-rate law is not worth copying here.
+float rate_norm_for_hz(Part& p, float hz) {
+    float lo = 0.f, hi = 1.f;
+    for (int i = 0; i < 40; ++i) {
+        const float mid = 0.5f * (lo + hi);
+        p.mod().set_rate(mid);
+        (p.mod().master_hz() < hz ? lo : hi) = mid;
+    }
+    return 0.5f * (lo + hi);
+}
+
+SwapRun step_swap_run(EngineId eng) {
+    Part p;
+    p.init(48000.f, 0x1234abcdu + 2u * 2654435761u);
+    p.set_engine(eng);
+    p.set_voice_attack(0.f);
+    p.set_voice_decay(1.f);
+    p.set_step(true, 8);
+    p.mod().set_density(0.f);          // downbeat only: one fire per cycle
+    p.mod().set_rate(rate_norm_for_hz(p, 0.15f));
+    float l, r;
+    SwapRun out;
+    int fires = 0;
+    for (int i = 0; i < 48000 * 30 && fires < 3; ++i) {
+        p.process(l, r);
+        if (p.lane_fired(LANE_PITCH)) ++fires;
+    }
+    REQUIRE(fires == 3);
+    REQUIRE(p.engine_id() == eng);
+    std::vector<float> note;
+    for (int i = 0; i < 9600; ++i) {    // 200 ms
+        p.process(l, r);
+        if (i >= 7200) note.push_back(l);
+    }
+    out.rms_note = rms_of(note);
+    p.set_engine(ENGINE_SAMPLER);       // silent, takes the fires while away
+    for (int i = 0; i < 48000 * 2; ++i) p.process(l, r);
+    REQUIRE(p.engine_id() == ENGINE_SAMPLER);
+    p.set_engine(eng);
+    int guard = 0;
+    while (p.engine_id() != eng && guard++ < 2000) p.process(l, r);
+    REQUIRE(p.engine_id() == eng);
+    std::vector<float> back;
+    for (int i = 0; i < 48000; ++i) {
+        p.process(l, r);
+        if (p.lane_fired(LANE_PITCH)) break;
+        back.push_back(l);
+    }
+    out.back_samples = int(back.size());
+    out.rms_back = rms_of(back);
+    return out;
+}
+
+float flow_rms_before_and_back(EngineId eng, float& rms_back) {
+    Part p;
+    p.init(48000.f, 0x1234abcdu + 2u * 2654435761u);
+    p.set_engine(eng);
+    p.set_step(false, 8);
+    float l, r;
+    for (int i = 0; i < 48000 * 2; ++i) p.process(l, r);
+    std::vector<float> before;
+    for (int i = 0; i < 24000; ++i) { p.process(l, r); before.push_back(l); }
+    p.set_engine(ENGINE_SAMPLER);
+    for (int i = 0; i < 48000 * 2; ++i) p.process(l, r);
+    p.set_engine(eng);
+    int guard = 0;
+    while (p.engine_id() != eng && guard++ < 2000) p.process(l, r);
+    std::vector<float> back;
+    for (int i = 0; i < 24000; ++i) { p.process(l, r); back.push_back(l); }
+    rms_back = rms_of(back);
+    return rms_of(before);
+}
+} // namespace
+
+TEST_CASE("Part: a STEP deck swapped away and back does not resume its old note") {
+    const struct { const char* name; EngineId id; } engines[] = {
+        { "SYNTH", ENGINE_SYNTH }, { "WAVE", ENGINE_WAVE },
+        { "BODY", ENGINE_BODY },   { "FEED", ENGINE_FEED },
+    };
+    for (const auto& e : engines) {
+        SUBCASE(e.name) {
+            const SwapRun run = step_swap_run(e.id);
+            REQUIRE(run.rms_note > 1e-3f);          // the note really sounded
+            REQUIRE(run.back_samples >= 4800);      // at least 100 ms observed
+            CHECK(run.rms_back < 1e-3f * run.rms_note);
+        }
+    }
+}
+
+// ENGINE turned A -> B -> A inside the 4 ms fade re-points the pending engine
+// back to A, so the swap lands on the engine that was already playing. That
+// is no swap: its ringing note must survive.
+TEST_CASE("Part: a STEP swap that lands on the same engine keeps the note") {
+    Part p;
+    p.init(48000.f, 0x1234abcdu + 2u * 2654435761u);
+    p.set_engine(ENGINE_SYNTH);
+    p.set_voice_attack(0.f);
+    p.set_voice_decay(1.f);
+    p.set_step(true, 8);
+    p.mod().set_density(0.f);
+    p.mod().set_rate(rate_norm_for_hz(p, 0.15f));
+    float l, r;
+    int fires = 0;
+    for (int i = 0; i < 48000 * 30 && fires < 3; ++i) {
+        p.process(l, r);
+        if (p.lane_fired(LANE_PITCH)) ++fires;
+    }
+    REQUIRE(fires == 3);
+    std::vector<float> note;
+    for (int i = 0; i < 9600; ++i) {
+        p.process(l, r);
+        if (i >= 7200) note.push_back(l);
+    }
+    const float rms_note = rms_of(note);
+    REQUIRE(rms_note > 1e-3f);
+    const uint32_t epoch = p.engine_epoch();
+    p.set_engine(ENGINE_SAMPLER);
+    for (int i = 0; i < 48; ++i) p.process(l, r);   // 1 ms: still fading out
+    REQUIRE(p.engine_epoch() == epoch);
+    p.set_engine(ENGINE_SYNTH);
+    int guard = 0;
+    while (p.engine_epoch() == epoch && guard++ < 2000) p.process(l, r);
+    REQUIRE(guard < 2000);
+    REQUIRE(p.engine_id() == ENGINE_SYNTH);
+    std::vector<float> after;
+    for (int i = 0; i < 4800; ++i) {
+        p.process(l, r);
+        if (p.lane_fired(LANE_PITCH)) break;
+        if (i >= 2400) after.push_back(l);
+    }
+    REQUIRE(after.size() == 2400u);
+    CHECK(rms_of(after) > 0.1f * rms_note);
+}
+
+TEST_CASE("Part: a FLOW deck swapped away and back keeps sounding") {
+    const struct { const char* name; EngineId id; } engines[] = {
+        { "SYNTH", ENGINE_SYNTH }, { "WAVE", ENGINE_WAVE },
+        { "BODY", ENGINE_BODY },   { "FEED", ENGINE_FEED },
+    };
+    for (const auto& e : engines) {
+        SUBCASE(e.name) {
+            float back = 0.f;
+            const float before = flow_rms_before_and_back(e.id, back);
+            REQUIRE(before > 1e-3f);
+            CHECK(back > 0.1f * before);
+        }
+    }
+}
+
 TEST_CASE("part: engine ids stay patch-stable when BBD is appended") {
     CHECK(ENGINE_TEST_TONE == 0);
     CHECK(ENGINE_SYNTH == 1);

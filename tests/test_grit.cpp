@@ -109,3 +109,66 @@ TEST_CASE("grit: switching on mid-signal is click-free") {
 
     CHECK(max_delta_ramped <= max_delta_baseline + 1e-4f);
 }
+
+TEST_CASE("GRIT Reduce: an input on one channel reaches the output") {
+    // One shared Decimator latched on the R call at some intensities (0.55,
+    // 0.8), so an L-only input never reached the wet path at all.
+    auto in = sine(48000);   // 220 Hz at 0.5: only the level matters here
+    auto rms_db = [](const std::vector<float>& v) {
+        double acc = 0.0;
+        for (size_t i = v.size() / 2; i < v.size(); ++i) acc += (double)v[i] * v[i];
+        return 10.0 * std::log10(acc / (v.size() - v.size() / 2) + 1e-20);
+    };
+    for (float inten : {0.f, 0.3f, 0.55f, 0.8f, 1.f}) {
+        INFO("intensity " << inten);
+        double db[2][2];   // [fed side][output channel]
+        for (int fed = 0; fed < 2; ++fed) {
+            Grit g;
+            g.init(48000.f);
+            g.set_mode(GritMode::Reduce);
+            g.set_intensity(inten);
+            g.set_mix(1.f);
+            g.set_on(true, true);
+            std::vector<float> ol, orr;
+            for (float s : in) {
+                float l = fed == 0 ? s : 0.f, r = fed == 1 ? s : 0.f;
+                g.process(l, r);
+                ol.push_back(l);
+                orr.push_back(r);
+            }
+            db[fed][0] = rms_db(ol);
+            db[fed][1] = rms_db(orr);
+        }
+        CHECK(db[0][0] > -30.0);   // L-only: L output
+        CHECK(db[1][1] > -30.0);   // R-only: R output
+        CHECK(std::fabs(db[0][0] - db[1][1]) < 0.5);
+    }
+}
+
+TEST_CASE("GRIT Reduce: per-channel state keeps the inherited crush rate") {
+    // The shared Decimator counted once per channel call, so it latched
+    // twice as often per frame as a per-channel one does: at intensity 0.55
+    // the old R output changed 3201 times per second. A per-channel pair
+    // must keep that rate, not halve it. A rising ramp under the sine makes
+    // every latched value differ; a change event is the first changed
+    // sample after a held one (the SampleRateReducer smears each step over
+    // a sample or two).
+    Grit g;
+    g.init(48000.f);
+    g.set_mode(GritMode::Reduce);
+    g.set_intensity(0.55f);
+    g.set_mix(1.f);
+    g.set_on(true, true);
+    int events = 0;
+    float prev = 0.f, prev2 = 0.f;
+    for (int n = 0; n < 48000; ++n) {
+        float l = 0.5f * std::sin(6.2831853f * 220.f * n / 48000.f) + 1e-4f * n;
+        float r = 0.f;
+        g.process(l, r);
+        if (n >= 2 && l != prev && prev == prev2) ++events;
+        prev2 = prev;
+        prev = l;
+    }
+    CHECK(events > 3201 * 0.9);
+    CHECK(events < 3201 * 1.1);
+}

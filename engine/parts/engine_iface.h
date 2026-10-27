@@ -139,6 +139,12 @@ public:
     //     gives it -- it does not inherit whatever accent the last STEP fire
     //     left in the engine (spec section 4).
     virtual void set_accent(float /*a*/) {}
+
+    // Drop every sounding voice to zero now. Part calls it on a STEP swap-in:
+    // an unselected engine is not processed, so its voices froze mid-note and
+    // would resume that note on return. Default no-op (the BBD has its own
+    // reset, the sampler and the test tone hold no frozen note).
+    virtual void silence() {}
 };
 
 } // namespace spky

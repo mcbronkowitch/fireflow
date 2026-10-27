@@ -31,8 +31,19 @@ private:
 };
 
 // Port of the original firmware's Reduce (src/core/fx.reduce.*): Decimator +
-// SampleRateReducer. NOTE: like the original, the mono DSP objects are shared
-// across L/R — part of the original sound identity, kept as-is.
+// SampleRateReducer. Unlike the original, each channel owns its own pair, for
+// two reasons:
+// - Separate state: the Decimator latches when its counter passes
+//   floor(i^2 * 96), and where that threshold + 1 is even (intensity 0.55,
+//   0.8) every latch fell on the R call of a shared object, so the wet path
+//   never saw L.
+// - Inherited rate: the shared pair was stepped twice per frame (L, then R),
+//   so it latched twice as often and its reducer phase advanced 2 x 0.6 per
+//   frame. Each per-channel object is stepped twice per frame with the same
+//   input to keep that crush character; a factor mapping cannot (hold
+//   lengths are whole samples, the old ones averaged half-samples), and the
+//   reducer clamps its frequency at 1.0. For L == R the output equals the
+//   shared pair's sample for sample.
 class GritReduce {
 public:
     void init(float sample_rate);
@@ -45,8 +56,8 @@ public:
 private:
     void apply();
 
-    daisysp::Decimator _decimator;
-    daisysp::SampleRateReducer _reducer;
+    daisysp::Decimator _decimator[2];
+    daisysp::SampleRateReducer _reducer[2];
     XFade _mix;
     float _intensity = 0.55f;
 };

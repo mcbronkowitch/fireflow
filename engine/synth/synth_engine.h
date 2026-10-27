@@ -80,6 +80,7 @@ public:
     void set_cycle(float seconds) override;
     void set_flow(bool flow) override;
     void set_hold(bool on) override;
+    void silence() override;
 
     // Excitation bus (spec 2026-07-26 body-resonator, §6, Task 9): forwards
     // to every voice unconditionally, same idiom as set_hold/set_material_
@@ -294,6 +295,7 @@ struct VoiceCountProbe {
     void set_drift_amount(float /*a*/) {}
     void update_control(float /*dt_s*/) {}
     void process(float& accL, float& accR) { if (_active) { accL += 0.f; accR += 0.f; } }
+    void silence() { _active = false; }
     void set_hold(bool /*on*/) {}
     void set_excitation(float /*x*/) {}
     void set_material_character(float /*c*/) {}

@@ -24,9 +24,10 @@ void control_boot(float* knobs);
 
 // Once per block, the whole vector (spec 2026-10-09 section 4.2). Returns the
 // law's events for the caller to apply to the knob vector (P6b-2 spec section
-// 5). On bbd_edge[p] this function itself sets deck p's excite_other_deck in
-// the persistent control::Options it passes the law, as VCV does; it takes
-// effect from the next tick on, as in VCV.
+// 5). This function itself runs apply_excite_events() (panel_step.h) on the
+// persistent control::Options it passes the law: deck p's excite_other_deck is
+// on while the deck is on BBD and off again when it leaves; it takes effect
+// from the next tick on, as in VCV.
 // measured_bpm is control::ClockOut::measured_bpm from this block's clock law
 // step (control/clock_law.hpp), 0 = the TEMPO knob sets the tempo; the coupon,
 // which reads no gate pin, passes 0.

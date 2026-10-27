@@ -152,6 +152,41 @@ TEST_CASE("panel step: a bbd_edge drops FLUX to 0 and holds it until the pot mov
     CHECK(k.v[ffctl::FLUX_A] > 0.f);
 }
 
+TEST_CASE("panel step: excite_other_deck follows the BBD visit") {
+    control::Options opt;
+    REQUIRE_FALSE(opt.deck[0].excite_other_deck);
+    REQUIRE_FALSE(opt.deck[1].excite_other_deck);
+
+    // Entry: the edge and the level arrive together.
+    control::Events ev;
+    ev.bbd_edge[0] = true;
+    ev.bbd_part[0] = true;
+    shell::apply_excite_events(ev, opt);
+    CHECK(opt.deck[0].excite_other_deck);
+    CHECK_FALSE(opt.deck[1].excite_other_deck);
+
+    // Still on BBD: no edge, the flag stays.
+    ev = control::Events{};
+    ev.bbd_part[0] = true;
+    shell::apply_excite_events(ev, opt);
+    CHECK(opt.deck[0].excite_other_deck);
+    CHECK_FALSE(opt.deck[1].excite_other_deck);
+
+    // Left BBD: the flag goes, deck 1 (never on BBD) stays false throughout.
+    ev = control::Events{};
+    shell::apply_excite_events(ev, opt);
+    CHECK_FALSE(opt.deck[0].excite_other_deck);
+    CHECK_FALSE(opt.deck[1].excite_other_deck);
+
+    // Deck 1 on its own visit leaves deck 0 alone.
+    ev = control::Events{};
+    ev.bbd_edge[1] = true;
+    ev.bbd_part[1] = true;
+    shell::apply_excite_events(ev, opt);
+    CHECK_FALSE(opt.deck[0].excite_other_deck);
+    CHECK(opt.deck[1].excite_other_deck);
+}
+
 TEST_CASE("panel step: rec_started changes no knob and releases no pot") {
     int flux[2];
     shell::flux_channels(shell::kRevaTable, shell::kRevaChain, flux);

@@ -88,7 +88,6 @@ void BodyVoice::init(float sample_rate, uint32_t seed) {
     _follower = 0.f;
     _peak = 0.f;
     _hold_samples = 0;
-    _vel = _vel_target;
 
     set_pitch_hz(220.f);
     update_control(0.f);
@@ -111,8 +110,7 @@ void BodyVoice::set_pitch_hz(float freq_hz) {
 }
 
 void BodyVoice::set_vel(float v) {
-    _vel_target = clampf(v, 0.f, 1.f);
-    if (!active()) _vel = _vel_target;      // idle: snap -- nothing can click
+    _vel_target = clampf(v, 0.f, 1.f);      // read by the next strike only
 }
 
 void BodyVoice::set_morph(float m)          { _matl = m; }
@@ -259,7 +257,7 @@ void BodyVoice::process(float& accL, float& accR) {
 
     // Equal-power blend along MATL. The two gains are computed in
     // _apply_params, NOT here: MATL is a control-rate parameter.
-    const float s_raw = (string * _mix_string + modal * _mix_modal) * _vel;
+    const float s_raw = (string * _mix_string + modal * _mix_modal);
 
     // FLOW's bounding nonlinearity. A struck resonator decays; a continuously
     // driven one accumulates until dissipation balances the input, and the
@@ -300,9 +298,8 @@ void BodyVoice::update_control(float dt_s) {
     _follower = _peak > _follower ? _peak : _follower * fall;
     _peak = 0.f;
 
-    // Velocity slew + drift LFOs: copied verbatim from VoiceT::update_control.
-    _vel += 0.35f * (_vel_target - _vel);     // ~10 ms at the 96-sample tick
-
+    // Drift LFOs: copied verbatim from VoiceT::update_control. There is no
+    // velocity slew: velocity lives in the strike alone (Exciter::strike).
     _drift_pan_phase += _drift_pan_hz * dt_s;
     _drift_pan_phase -= std::floor(_drift_pan_phase);
     _drift_det_phase += _drift_det_hz * dt_s;

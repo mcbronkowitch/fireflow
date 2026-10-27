@@ -86,6 +86,14 @@ public:
         _set_pan(p, pan);
     }
 
+    // Every pair to exact silence now, with no glide. The phases and histories
+    // stay: the ring runs on regardless (spec 2.1), only its amplitude is gone.
+    void silence() {
+        for (int i = 0; i < P; ++i) {
+            _p[i].amp = _p[i].t_amp = _p[i].d_amp = 0.f;
+        }
+    }
+
     void set_target(int i, float hz, float amp, float pan) {
         FeedPair& p = _p[i];
         p.t_inc_c = hz * _inv_sr;

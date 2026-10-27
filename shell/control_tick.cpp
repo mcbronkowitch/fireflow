@@ -6,6 +6,7 @@
 
 #include "control_tick.h"
 #include "boot_patch.h"
+#include "panel_step.h"
 #include "control/led_law.hpp"
 #include "generated_boot_patch_noon.h"
 #include "generated_panel_map.h"
@@ -15,7 +16,8 @@ namespace shell {
 namespace {
 control::ControlLaw g_law;
 // Persistent, like VCV's per-deck SamplerPartState: the law's bbd_edge event
-// turns excite_other_deck on and nothing on the hardware turns it off again.
+// turns excite_other_deck on, and apply_excite_events() turns it off again on
+// the first tick the deck is off BBD (the panel has no checkbox to clear it).
 control::Options    g_opt;
 spkyled::Panel      g_panel;
 } // namespace
@@ -56,8 +58,7 @@ control::Events control_tick(const float* knobs, spky::Instrument& inst, float m
     // (control_law.h); the clock law hands over 0 when the knob owns the tempo.
     g_opt.measured_bpm = measured_bpm;
     const control::Events ev = g_law.tick(knobs, g_opt, inst);
-    for(int p = 0; p < 2; ++p)
-        if(ev.bbd_edge[p]) g_opt.deck[p].excite_other_deck = true;
+    apply_excite_events(ev, g_opt);
     return ev;
 }
 

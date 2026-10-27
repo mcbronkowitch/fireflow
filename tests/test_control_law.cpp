@@ -213,8 +213,14 @@ TEST_CASE("law: BBD edge fires once per genuine entry, never on restore") {
     CHECK_FALSE(r.tick().bbd_edge[0]);                // restore seeded it
     r.inst.eng[0] = spky::ENGINE_SYNTH; r.k[ENGINE_A] = 0.f; r.tick();
     r.inst.eng[0] = spky::ENGINE_BBD; r.k[ENGINE_A] = 4.f;
-    CHECK(r.tick().bbd_edge[0]);
-    CHECK_FALSE(r.tick().bbd_edge[0]);
+    control::Events ev = r.tick();
+    CHECK(ev.bbd_edge[0]);
+    CHECK(ev.bbd_part[0]);            // the level, not only the edge
+    ev = r.tick();
+    CHECK_FALSE(ev.bbd_edge[0]);
+    CHECK(ev.bbd_part[0]);            // still on BBD after the edge tick
+    r.inst.eng[0] = spky::ENGINE_SYNTH; r.k[ENGINE_A] = 0.f;
+    CHECK_FALSE(r.tick().bbd_part[0]);   // and off once the deck leaves
 }
 
 TEST_CASE("law: SONG rung change re-rolls, the first tick after restore does not") {

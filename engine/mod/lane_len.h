@@ -24,7 +24,9 @@ inline constexpr float kLaneLenFactor[LANE_COUNT] = {
 // A single slot would put the lane's only boundary at phase 0, so it would
 // emit a constant value. 64 bounds the other end; the contour buffer is 32
 // slots (ModLane::kSeqSlots) and repeats inside longer cycles, which is
-// accepted for texture lanes and documented in the spec.
+// accepted for texture lanes and documented in the spec. Two slots only swing
+// because ModLane::follow samples them a quarter slot past the grid
+// (_boundary_pos): the grid phases 0 and 0.5 would both read 0 on a sine.
 inline constexpr int kLaneSlotsMin = 2;
 inline constexpr int kLaneSlotsMax = 64;
 

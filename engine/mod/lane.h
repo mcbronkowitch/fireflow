@@ -295,6 +295,9 @@ private:
     void  _update_slew();
     void  _update_inc();            // step-clock: inc = rate/sr * (STEP ? 8/steps : 1)
     void  _enter_step(int step, bool latch_now = false);
+    // follow()'s boundary position in grid slots: the slot index, or a quarter
+    // slot past it on a two-slot lane.
+    float _boundary_pos(int slot, int slots) const;
     void  _on_boundary();
     void  _wrap_events();           // regen/EVOLVE/groove events at a cycle wrap
     float _compute_raw() const;

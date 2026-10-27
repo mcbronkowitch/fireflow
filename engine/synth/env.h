@@ -48,6 +48,9 @@ public:
 
     void trigger() { _stage = Stage::Attack; }           // rises from current level
 
+    // Silence now, no release tail (a swap-in must not resume a frozen note).
+    void kill() { _level = 0.f; _stage = Stage::Idle; }
+
     float process() {
         switch (_stage) {
             case Stage::Idle:
