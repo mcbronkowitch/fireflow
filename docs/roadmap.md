@@ -3427,7 +3427,7 @@ argument for taking the SHAPE/SMOOTH rework first.
 
 Needs a spec.
 
-### The pitch RANGE law ✅ built (2026-10-26, branch `pitch-range-law`), ⏳ two decisions owed to ears
+### The pitch RANGE law ✅ built (2026-10-26, branch `pitch-range-law`, merged to `main` 2026-10-27 (`3c67b218`), released in 2.23.4), ⏳ two decisions owed to ears
 
 Spec `docs/superpowers/specs/2026-10-26-pitch-range-law-design.md`. This was
 the open thread left by the melody-reachable round (its §2.2). The design pass
@@ -3436,7 +3436,7 @@ found that the old measurements ("ambitus peaks at RANGE 0.5, 54.2 % clamped at
 RANGE 0.5 is the *worst* position: `apply_range` is the centred width law plus
 an upward tent (spec §3.1), and a note deck at noon sat on the top of the span.
 
-What landed on the branch (not merged yet):
+What landed:
 
 - `apply_range_centred` (`engine/mod/range.h`): on a note lane RANGE is a pure
   width, `v·r`; `ModLane::_ranged` picks it on `_note_lane()`. The SAMPLER's and
