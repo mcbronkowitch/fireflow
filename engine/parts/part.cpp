@@ -581,6 +581,10 @@ void Part::_engine_swap() {
     tb0 = *probe_clock;
 #endif
     if (_engine_id == ENGINE_BBD) _bbd.reset();
+    // Same reason for every other engine in STEP: an unselected engine is not
+    // processed, so its voices froze mid-note and would resume it on return.
+    // FLOW keeps the frozen drone -- resuming it is the intended behaviour.
+    if (_step_on) _engine->silence();
 #if defined(SPKY_PROBE_MARKS)
     tb1 = *probe_clock;
 #endif

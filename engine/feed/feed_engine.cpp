@@ -323,6 +323,14 @@ void FeedEngine::set_flow(bool flow) {
     _auto_pending = flow && !_hold && !_env.active();
 }
 
+// The envelope alone is not enough: the bank's amplitudes glide toward their
+// targets over ~8 ms, so a frozen deck would still sound its old level until
+// the next control tick caught up.
+void FeedEngine::silence() {
+    _env.kill();
+    _bank.silence();
+}
+
 void FeedEngine::set_hold(bool on) {
     if (on == _hold) return;
     _hold = on;

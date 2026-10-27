@@ -54,6 +54,7 @@ public:
     void process(float& accL, float& accR);   // adds into the accumulators
 
     bool  active() const { return _env.active(); }
+    void  silence() { _env.kill(); }      // see IPartEngine::silence
 #if defined(SPKY_PROBE_MARKS)
     // Callback profile only (SynthEngineT::ProbeEng): this voice's state as a
     // bin -- 0 decay, 1 decay + a mip crossfade on either osc, 2 attack, 3

@@ -101,6 +101,10 @@ public:
         _lp.reset();   // clean impulse response per strike, no bleed-through
     }
 
+    // Ends the strike now. A continuous (bow) exciter keeps running: that is
+    // the mode's contract, and BodyVoice::silence() is only called in STEP.
+    void stop() { _env = 0.f; }
+
     float process() {
         if (_env <= 0.f && !_continuous) return 0.f;
 
