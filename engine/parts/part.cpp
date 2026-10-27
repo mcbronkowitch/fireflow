@@ -559,6 +559,9 @@ void Part::_engine_swap() {
     const uint32_t t0 = *probe_clock;
     uint32_t tb0 = t0, tb1 = t0;
 #endif
+    // ENGINE turned A -> B -> A inside the fade re-points _pending_engine back
+    // to A: the swap then lands on the engine that was playing all along.
+    const bool changed = _pending_engine != _engine_id;
     _engine_id = _pending_engine;
     ++_engine_epoch;
     _engine = _engine_for(_engine_id);
@@ -581,13 +584,14 @@ void Part::_engine_swap() {
     tb0 = *probe_clock;
 #endif
     if (_engine_id == ENGINE_BBD) _bbd.reset();
-    // Same reason for every other engine in STEP: an unselected engine is not
-    // processed, so its voices froze mid-note and would resume it on return.
-    // FLOW keeps the frozen drone -- resuming it is the intended behaviour.
-    if (_step_on) _engine->silence();
 #if defined(SPKY_PROBE_MARKS)
     tb1 = *probe_clock;
 #endif
+    // Same reason for every other engine in STEP: an unselected engine is not
+    // processed, so its voices froze mid-note and would resume it on return.
+    // FLOW keeps the frozen drone -- resuming it is the intended behaviour.
+    // A landing on the same engine was never away, so its note rings on.
+    if (_step_on && changed) _engine->silence();
     _engine->set_flow(!_step_on);                          // re-sync state
     _engine->set_hold(_inhibit);
     _engine->set_gate(_last_gate);   // the freshly swapped-in engine

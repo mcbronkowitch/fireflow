@@ -383,6 +383,51 @@ TEST_CASE("Part: a STEP deck swapped away and back does not resume its old note"
     }
 }
 
+// ENGINE turned A -> B -> A inside the 4 ms fade re-points the pending engine
+// back to A, so the swap lands on the engine that was already playing. That
+// is no swap: its ringing note must survive.
+TEST_CASE("Part: a STEP swap that lands on the same engine keeps the note") {
+    Part p;
+    p.init(48000.f, 0x1234abcdu + 2u * 2654435761u);
+    p.set_engine(ENGINE_SYNTH);
+    p.set_voice_attack(0.f);
+    p.set_voice_decay(1.f);
+    p.set_step(true, 8);
+    p.mod().set_density(0.f);
+    p.mod().set_rate(rate_norm_for_hz(p, 0.15f));
+    float l, r;
+    int fires = 0;
+    for (int i = 0; i < 48000 * 30 && fires < 3; ++i) {
+        p.process(l, r);
+        if (p.lane_fired(LANE_PITCH)) ++fires;
+    }
+    REQUIRE(fires == 3);
+    std::vector<float> note;
+    for (int i = 0; i < 9600; ++i) {
+        p.process(l, r);
+        if (i >= 7200) note.push_back(l);
+    }
+    const float rms_note = rms_of(note);
+    REQUIRE(rms_note > 1e-3f);
+    const uint32_t epoch = p.engine_epoch();
+    p.set_engine(ENGINE_SAMPLER);
+    for (int i = 0; i < 48; ++i) p.process(l, r);   // 1 ms: still fading out
+    REQUIRE(p.engine_epoch() == epoch);
+    p.set_engine(ENGINE_SYNTH);
+    int guard = 0;
+    while (p.engine_epoch() == epoch && guard++ < 2000) p.process(l, r);
+    REQUIRE(guard < 2000);
+    REQUIRE(p.engine_id() == ENGINE_SYNTH);
+    std::vector<float> after;
+    for (int i = 0; i < 4800; ++i) {
+        p.process(l, r);
+        if (p.lane_fired(LANE_PITCH)) break;
+        if (i >= 2400) after.push_back(l);
+    }
+    REQUIRE(after.size() == 2400u);
+    CHECK(rms_of(after) > 0.1f * rms_note);
+}
+
 TEST_CASE("Part: a FLOW deck swapped away and back keeps sounding") {
     const struct { const char* name; EngineId id; } engines[] = {
         { "SYNTH", ENGINE_SYNTH }, { "WAVE", ENGINE_WAVE },
