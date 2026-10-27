@@ -8,25 +8,29 @@
   Everything below the comment is public.
 -->
 
-## FireFlow 2.23.4
+## FireFlow 2.23.5
 
-**Melodies come back.** On a deck that plays notes (SYNTH, WAVE, BODY), the
-PITCH RANGE knob used to do two things at once: it set how wide the melody
-could move, and it pushed the melody's centre upward, by a whole octave and a
-half at the knob's centre. That put the melody against the top of the pitch
-span, where half of every phrase was clipped onto one note. Around noon a deck
-mostly repeated the root, and the centre of the knob was its worst position.
+**TUNE goes one octave lower.** On a deck that plays notes (SYNTH, WAVE, BODY,
+FEED), turning TUNE fully left now reaches one octave further down than before,
+to 55 Hz. Noon and the right half of the knob are unchanged; the left half is
+simply wider. A melody near the bottom is folded back at 55 Hz instead of at
+110 Hz. SAMPLER and BBD keep their old TUNE range.
 
-RANGE is now only a width around a centre that stays put. The width at every
-knob position is the same as before. A note that would leave the span is folded
-back into it instead of being clipped, so it still moves. On the noon patch,
-phrases stuck on one note drop from 53 % to 5 %. SAMPLER and BBD keep their
-old RANGE behaviour, since their PITCH is playback speed and delay time, not a
-note.
+The factory patch's deck B sits in TUNE's left half, so its knob value was
+adjusted to keep exactly the pitch it had.
 
-A second route to the same symptom is fixed too: a deck that was switched to
-BBD and back kept BBD's pitch setting and came back at the top of the span. It
-now returns to the centre.
+**Seven quiet bugs fixed.**
+
+- BODY applied a note's velocity twice, so a soft accent came out far too quiet
+  and a weak note after a strong one could sound louder.
+- A STEP deck switched back in starts silent instead of resuming an old note.
+- RENEW now also renews the last step of an odd-length phrase.
+- GRIT's Reduce mode no longer drops the left channel at some settings.
+- Texture lanes at STEPS 2 to 4 move with SHAPE sine again instead of standing
+  still.
+- The hardware firmware stops a deck exciting the other one once it leaves BBD.
+- A re-initialised instrument no longer drags a deck's clock from a stale
+  offset.
 
 This is a development alpha. Saved patches may break between releases.
 
