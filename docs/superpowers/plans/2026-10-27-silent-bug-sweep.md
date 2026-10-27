@@ -173,8 +173,8 @@ Decision: on the firmware the flag is on exactly while the deck's engine choice 
 ## Listening list for Bastian (before merge)
 
 - **BODY, STEP with accents** (Task 1): accents are now about 10 dB deep instead of about 22 dB, and no longer smeared by the note before.
-- **GRIT Reduce at the default 0.55** (Task 5): it was mono-from-R before and is stereo now.
-- **SOURCE/LEVEL at STEPS 2–4 with SHAPE near sine** (Task 6): they move now, where they stood still.
+- **GRIT Reduce at the default 0.55** (Task 5): it was mono-from-R before and is stereo now. Only stereo is new: GRIT keeps its old crush rate (for L = R the output equals the old one sample for sample).
+- **SOURCE/LEVEL at STEPS 2–4 with SHAPE near sine** (Task 6): they move now, where they stood still. On two-slot lanes every pure SHAPE changes: sine 0 → 1.42 p2p, triangle 2.0 → 1.0, ramp lean −0.5 → −0.25, pulse stays 2.0; blends near SHAPE ~0.15 null.
 
 ## Finding 6 (GROW edge pile-up) — re-measured, not in this plan
 
@@ -188,3 +188,9 @@ The sweep's lane probe showed GROW's random walk (`_mutate_slot`: step up to 2 a
 | 1.0 | 14.2 % / 21.7 % | 0.5 % / 0.0 % | 3.40 / 3.70 |
 
 The pile-up is real, but it is not the RANGE bug's shape: GROW is the setting with the *most* movement. Flat phrases drop from 22 % to under 1 %. The two commonest notes take less share than at LOOP (deck A at RANGE noon: 49.9 % → 25.5 %), or the same (deck B at RANGE 1: 26.4 % → 26.8 %). The table is at the noon frame's RANGE; the edge shares are the same at RANGE 1. The edge notes split over two pitches (centre ± RANGE). Up to MELODY 0.75 (the init patch sits at 0.69) the edge share stays under 9 %. `kGravity` is tuned by ear. Verdict: no code change. Only if a listening pass at MELODY 1 finds the line "sticking to the walls" is it worth reopening, with a stronger pull or a reflection like the pitch chain's.
+
+## Amendments during execution
+
+- **Task 6:** the slot-centre rule (slot + 0.5) killed the triangle (SHAPE 0.25), and its p2p > 1.5 threshold contradicted its own ramp prediction (±0.5). A probe over offsets 0.10–0.40 and SHAPE 0..1 found no offset that keeps every SHAPE blend alive (blend nulls; S&H ends near 0.13 at any offset). Shipped: slot + 0.25 on two-slot lanes, gated at the pure SHAPEs {0, 0.25, 0.5, 0.75} with p2p > 0.9. Effects: sine 0 → 1.42, triangle 2.0 → 1.0, ramp lean −0.5 → −0.25, pulse 2.0; blend nulls near SHAPE ~0.15.
+- **Task 5:** per-channel objects halved the crush rate (the shared pair was stepped twice per frame). The rate was restored by stepping each per-channel object twice per frame; a downsample-factor mapping could not match it (whole-sample holds) and the reducer clamps its frequency at 1.0.
+- **Task 2:** `silence()` runs only when the engine id changes, so ENGINE A → B → A inside the fade keeps A's note; it also left the `probe_swap.bbd` timing window.
