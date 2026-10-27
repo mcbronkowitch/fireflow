@@ -640,7 +640,9 @@ float ModLane::follow(int32_t deck_step, float frac, float shuffle) {
         for (int32_t k = 1; k <= elapsed; ++k) {
             const int slot = slot_of(prev + k, slots);
             // Boundary targets are evaluated at the exact grid phase, the same
-            // sampling tick() documents for its edge walk.
+            // sampling tick() documents for its edge walk -- except on
+            // two-slot lanes, which sample a quarter slot past it
+            // (_boundary_pos above).
             _phase = shuffle_phase_for_position(
                 _boundary_pos(slot, slots), slots, shuffle);
             if (slot == 0) {

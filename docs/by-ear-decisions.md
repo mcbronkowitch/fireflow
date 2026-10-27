@@ -127,8 +127,10 @@ From the FLUX BBD rewrite's ear pass (2026-07-27/28) and its close-out:
   "restore" stereo FLUX, do not add a widening layer. A listening pair exists
   if ever reopened (`host/render/scenarios/flux_mono_{dry,verb}.json`). The
   mono/stereo angle is essentially mined out: the synth voice, `Comp` and
-  `Grit` already share state across L and R — what differs per channel is
-  duplicated *calls*, not duplicated state.
+  `Grit`'s Drive share state across L and R — what differs per channel is
+  duplicated *calls*, not duplicated state. (`Grit`'s Reduce owns one
+  Decimator and SampleRateReducer per channel since 2026-10-27: the shared
+  pair dropped L at some intensities.)
 
 ## BODY
 
