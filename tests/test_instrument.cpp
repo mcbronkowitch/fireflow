@@ -653,6 +653,7 @@ TEST_CASE("Instrument: a re-init leaves no stale grid offset") {
         return d;
     };
     float min_ratio = 1e9f, max_ratio = 0.f;
+    int compared = 0;   // without it, a B that never advances passes both CHECKs
     float pa = A.part(PART_A).mod().pitch_phase();
     float pb = B.part(PART_A).mod().pitch_phase();
     for (int b = 0; b < 1000; ++b) {
@@ -663,11 +664,13 @@ TEST_CASE("Instrument: a re-init leaves no stale grid offset") {
         const float da = adv(na, pa), db = adv(nb, pb);
         pa = na; pb = nb;
         if (db > 1e-6f) {
+            ++compared;
             const float ratio = da / db;
             if (ratio < min_ratio) min_ratio = ratio;
             if (ratio > max_ratio) max_ratio = ratio;
         }
     }
+    CHECK(compared > 900);
     CHECK(min_ratio > 0.999f);
     CHECK(max_ratio < 1.001f);
 }
