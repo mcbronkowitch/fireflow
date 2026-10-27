@@ -144,3 +144,31 @@ TEST_CASE("GRIT Reduce: an input on one channel reaches the output") {
         CHECK(std::fabs(db[0][0] - db[1][1]) < 0.5);
     }
 }
+
+TEST_CASE("GRIT Reduce: per-channel state keeps the inherited crush rate") {
+    // The shared Decimator counted once per channel call, so it latched
+    // twice as often per frame as a per-channel one does: at intensity 0.55
+    // the old R output changed 3201 times per second. A per-channel pair
+    // must keep that rate, not halve it. A rising ramp under the sine makes
+    // every latched value differ; a change event is the first changed
+    // sample after a held one (the SampleRateReducer smears each step over
+    // a sample or two).
+    Grit g;
+    g.init(48000.f);
+    g.set_mode(GritMode::Reduce);
+    g.set_intensity(0.55f);
+    g.set_mix(1.f);
+    g.set_on(true, true);
+    int events = 0;
+    float prev = 0.f, prev2 = 0.f;
+    for (int n = 0; n < 48000; ++n) {
+        float l = 0.5f * std::sin(6.2831853f * 220.f * n / 48000.f) + 1e-4f * n;
+        float r = 0.f;
+        g.process(l, r);
+        if (n >= 2 && l != prev && prev == prev2) ++events;
+        prev2 = prev;
+        prev = l;
+    }
+    CHECK(events > 3201 * 0.9);
+    CHECK(events < 3201 * 1.1);
+}

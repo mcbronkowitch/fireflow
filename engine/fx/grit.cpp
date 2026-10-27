@@ -67,15 +67,21 @@ void GritReduce::apply() {
 }
 
 void GritReduce::process(float& l, float& r SPKY_PROBE_PART_PARAMS) {
-    // One Decimator + SampleRateReducer per channel (see grit.h); split into
+    // One Decimator + SampleRateReducer per channel, each stepped twice per
+    // frame with the same input (see grit.h): that is the rate the shared
+    // pair ran at, so the crush keeps its inherited speed. Split into
     // statements only so the callback profile can stamp stage 1 (the
     // Decimator) and stage 2 (the SampleRateReducer).
+    _decimator[0].Process(l);
     const float c0 = _decimator[0].Process(l);
     SPKY_PROBE_PART_MARK(17);
+    _reducer[0].Process(c0);
     float r0 = _reducer[0].Process(c0);
     SPKY_PROBE_PART_MARK(18);
+    _decimator[1].Process(r);
     const float c1 = _decimator[1].Process(r);
     SPKY_PROBE_PART_MARK(19);
+    _reducer[1].Process(c1);
     float r1 = _reducer[1].Process(c1);
     SPKY_PROBE_PART_MARK(20);
     _mix.Process(l, r, r0, r1, l, r);
