@@ -3137,7 +3137,7 @@ def test_sampler_preset_init_snapshot():
         "RANGE_B": 0.0,
         "MELODY_B": 0.671083927,
         "MOD_B": 0.710844219,
-        "TUNE_B": 0.174666643,
+        "TUNE_B": 0.304799974,  # -11.712 st; was 0.174666643 before TUNE's left half reached -30 st
         "ATTACK_B": 1.0,
         "DECAY_B": 1.0,
         "RES_B": 0.539999962,

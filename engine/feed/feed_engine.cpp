@@ -1,4 +1,5 @@
 #include "feed/feed_engine.h"
+#include "pitch/quantizer.h"
 #include "synth/synth_engine.h"
 #include "util/fast_sin.h"
 #include "util/fast_tanh.h"
@@ -19,8 +20,11 @@ namespace {
 // namespace. If the two ever disagree, every engine plays a different scale --
 // tests/test_feed_engine.cpp's pitch_to_hz_ref is a third copy for exactly
 // that reason, so a gate compares against the law and not against this line.
+// A note deck reaches one octave below 0 (Quantizer::NOTE_FLOOR_NORM, 55 Hz).
 // std::pow at control rate only, never per sample.
-inline float pitch_to_hz(float p) { return 110.f * std::pow(8.f, clampf(p, 0.f, 1.f)); }
+inline float pitch_to_hz(float p) {
+    return 110.f * std::pow(8.f, clampf(p, Quantizer::NOTE_FLOOR_NORM, 1.f));
+}
 
 }  // namespace
 
@@ -56,7 +60,7 @@ void FeedEngine::init(float sample_rate) {
 void FeedEngine::set_targets(const float* t, float /*tune*/) {
     _bond     = clampf(t[LANE_SOURCE], 0.f, 1.f);
     _spread_n = clampf(t[LANE_SIZE],   0.f, 1.f);
-    _pitch_n  = clampf(t[LANE_PITCH],  0.f, 1.f);
+    _pitch_n  = clampf(t[LANE_PITCH],  Quantizer::NOTE_FLOOR_NORM, 1.f);
     _depth_n  = clampf(t[LANE_MOTION], 0.f, 1.f);
     _level    = clampf(t[LANE_LEVEL],  0.f, 1.f);
 }
@@ -263,7 +267,7 @@ void FeedEngine::process(float& outL, float& outR) {
 void FeedEngine::trigger(float pitch_norm) {
     // A trigger RETUNES the ring and injects energy; it does not start it
     // (spec 2.1). The network was already running.
-    _chord[0] = clampf(pitch_norm, 0.f, 1.f);
+    _chord[0] = clampf(pitch_norm, Quantizer::NOTE_FLOOR_NORM, 1.f);
     _chord_n = 1;
     _pitch_named = true;
     // The hit half of the accent, composed the way SynthEngineT composes it:
@@ -298,7 +302,7 @@ void FeedEngine::set_chord(const float* p, int n) {
 // the root, so a chord that grows upward leaves pair 0 -- and every pair whose
 // index is 0 mod the voiced count -- exactly where it was (G25).
 void FeedEngine::_set_chord_tones(const float* p, int n) {
-    for (int i = 0; i < n; ++i) _chord[i] = clampf(p[i], 0.f, 1.f);
+    for (int i = 0; i < n; ++i) _chord[i] = clampf(p[i], Quantizer::NOTE_FLOOR_NORM, 1.f);
     // Insertion sort, n <= 4.
     for (int i = 1; i < n; ++i) {
         const float v = _chord[i];

@@ -1,4 +1,5 @@
 #pragma once
+#include "pitch/quantizer.h"
 #include "util/math.h"
 
 namespace spky {
@@ -100,8 +101,9 @@ inline float chord_character(const float* pitches_norm, int n) {
 
     // Pitches arrive on the 0..1 = 36-semitone contract (engine/pitch/chord.h,
     // synth_engine.cpp::pitch_to_hz), and slot 0 is the root. Clamping to the
-    // contract first is what makes out-of-range input harmless.
-    const float root = clampf(pitches_norm[0], 0.f, 1.f);
+    // contract first (down to a note deck's floor, Quantizer::
+    // NOTE_FLOOR_NORM) is what makes out-of-range input harmless.
+    const float root = clampf(pitches_norm[0], Quantizer::NOTE_FLOOR_NORM, 1.f);
 
     float sum = 0.f;   // net direction
     float mag = 0.f;   // how far from natural, regardless of direction
@@ -109,7 +111,7 @@ inline float chord_character(const float* pitches_norm, int n) {
         // Interval in semitones, folded into one octave. The bounded while
         // loops replace fmod: the input is clamped, so |s| <= 36 and each
         // loop runs at most three times. No libm anywhere on this path.
-        float pc = (clampf(pitches_norm[i], 0.f, 1.f) - root) * 36.f;
+        float pc = (clampf(pitches_norm[i], Quantizer::NOTE_FLOOR_NORM, 1.f) - root) * 36.f;
         while (pc < 0.f)   pc += 12.f;
         while (pc >= 12.f) pc -= 12.f;
 

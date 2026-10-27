@@ -60,10 +60,15 @@ public:
     // Full rebuild at trigger time. Searches the lay (each non-root slot may
     // shift by an octave) for minimal movement vs. the previous chord, span-
     // limited by COLOR. Latches the slot intervals, returns n, fills
-    // out_norm[kMaxNotes].
-    int build(float root_norm, uint16_t mask, int root_semi, float* out_norm) {
-        const float root_s = clampf(root_norm, 0.f, 1.f) * Quantizer::SPAN_SEMIS;
-        const int ref = nearest(static_cast<int>(root_s + 0.5f), mask, root_semi);
+    // out_norm[kMaxNotes]. floor_semis is the quantizer's (Quantizer::
+    // NOTE_FLOOR_SEMIS on a note deck, else 0): no tone is laid below it.
+    int build(float root_norm, uint16_t mask, int root_semi, float* out_norm,
+              int floor_semis = 0) {
+        const float floor_s = static_cast<float>(floor_semis);
+        const float root_s = clampf(root_norm, floor_s / Quantizer::SPAN_SEMIS, 1.f)
+                           * Quantizer::SPAN_SEMIS;
+        const int ref = nearest(static_cast<int>(std::floor(root_s + 0.5f)), mask,
+                                root_semi, floor_semis);
         const int n = _count;
         int nom[kMaxNotes] = { 0, 0, 0, 0 };   // _nominal fills only [0..n-1]
         _nominal(ref, mask, root_semi, n, _ninth, nom);
@@ -87,7 +92,7 @@ public:
             bool ok = true;
             for (int i = 0; i < n; ++i) {
                 cand[i] = root_s + static_cast<float>(nom[i] + off[i]);
-                if (cand[i] < 0.f || cand[i] > Quantizer::SPAN_SEMIS) ok = false;
+                if (cand[i] < floor_s || cand[i] > Quantizer::SPAN_SEMIS) ok = false;
                 if (cand[i] < lo) lo = cand[i];
                 if (cand[i] > hi) hi = cand[i];
                 sum += cand[i];
@@ -134,15 +139,18 @@ public:
     // (grow = take the new slot's nominal tone; shrink = drop the last slot).
     // Never runs a lay search. The zero-interval slot returns the root
     // BIT-EXACTLY (never through the semis round-trip) — invariant.
-    int apply(float root_norm, uint16_t mask, int root_semi, float* out_norm) {
+    int apply(float root_norm, uint16_t mask, int root_semi, float* out_norm,
+              int floor_semis = 0) {
         if (_n != _count || _ninth_applied != _ninth)
-            _refresh_slots(root_norm, mask, root_semi);
-        const float root_s = clampf(root_norm, 0.f, 1.f) * Quantizer::SPAN_SEMIS;
+            _refresh_slots(root_norm, mask, root_semi, floor_semis);
+        const float floor_s = static_cast<float>(floor_semis);
+        const float root_s = clampf(root_norm, floor_s / Quantizer::SPAN_SEMIS, 1.f)
+                           * Quantizer::SPAN_SEMIS;
         for (int i = 0; i < _n; ++i) {
             if (_intervals[i] == 0) { out_norm[i] = root_norm; continue; }
             float s = root_s + static_cast<float>(_intervals[i]);
             while (s > Quantizer::SPAN_SEMIS) s -= 12.f;
-            while (s < 0.f) s += 12.f;
+            while (s < floor_s) s += 12.f;
             out_norm[i] = s / Quantizer::SPAN_SEMIS;
         }
         return _n;
@@ -154,9 +162,10 @@ public:
         if (deg < 0) deg += 12;
         return (mask >> deg) & 1;
     }
-    static int nearest(int center, uint16_t mask, int root) {
+    static int nearest(int center, uint16_t mask, int root, int floor_semis) {
         for (int d = 0; d <= 12; ++d) {           // lower wins ties (deterministic)
-            if (center - d >= 0 && allowed(center - d, mask, root)) return center - d;
+            if (center - d >= floor_semis && allowed(center - d, mask, root))
+                return center - d;
             if (allowed(center + d, mask, root)) return center + d;
         }
         return center;                             // unreachable, non-empty mask
@@ -194,9 +203,12 @@ private:
         if (n >= 4) iv[3] = stack_tone(ref, 3, mask, root) - ref;   // seventh
     }
 
-    void _refresh_slots(float root_norm, uint16_t mask, int root_semi) {
-        const float root_s = clampf(root_norm, 0.f, 1.f) * Quantizer::SPAN_SEMIS;
-        const int ref = nearest(static_cast<int>(root_s + 0.5f), mask, root_semi);
+    void _refresh_slots(float root_norm, uint16_t mask, int root_semi, int floor_semis) {
+        const float root_s = clampf(root_norm, static_cast<float>(floor_semis)
+                                                   / Quantizer::SPAN_SEMIS, 1.f)
+                           * Quantizer::SPAN_SEMIS;
+        const int ref = nearest(static_cast<int>(std::floor(root_s + 0.5f)), mask,
+                                root_semi, floor_semis);
         int nom[kMaxNotes];
         _nominal(ref, mask, root_semi, kMaxNotes, _ninth, nom);
         if (_ninth_applied != _ninth && _count >= 2)

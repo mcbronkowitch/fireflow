@@ -62,9 +62,16 @@ constexpr uint16_t CHROM_MASK = 0x0FFF;
 // Scale quantizer on the pitch contract: normalized 0..1 = 36 semitones
 // (3 octaves). Part applies it as the last stage of the PITCH target; voices
 // later apply it to the target + V/Oct sum. FREE returns the input untouched.
+//
+// A note deck reaches one octave below the contract's 0 (NOTE_FLOOR_SEMIS,
+// 55 Hz), so TUNE fully left is an octave lower than the span's bottom. The
+// floor is a per-call argument, not state: Part passes it only while the deck
+// is a note deck, and SAMPLER/BBD keep the plain 0..1 span.
 class Quantizer {
 public:
     static constexpr float SPAN_SEMIS = 36.f;
+    static constexpr int   NOTE_FLOOR_SEMIS = -12;
+    static constexpr float NOTE_FLOOR_NORM  = NOTE_FLOOR_SEMIS / SPAN_SEMIS;
     static constexpr float HYST_SEMIS = 0.30f;   // switch ~15 cents past midpoint
 
     // call_interval = how many samples pass between process() calls. Part
@@ -126,7 +133,7 @@ public:
     uint16_t scale_mask() const { return _scale; }   // last active scale (survives FREE)
     int      root_semis() const { return _root; }
 
-    float process(float norm) {
+    float process(float norm, int floor_semis = 0) {
         if (!_quantizing()) {                  // FREE, and no note bound
             _last_out = norm;
             _have_out = true;
@@ -136,8 +143,9 @@ public:
         const uint16_t mask = _grav_on ? _grav_mask
                             : (_mode == QuantMode::Chrom ? CHROM_MASK : _scale);
         const int root = _grav_on ? 0 : _root;
-        const float semis = clampf(norm, 0.f, 1.f) * SPAN_SEMIS;
-        int note = nearest_note(semis, mask, root);
+        const float semis = clampf(norm, static_cast<float>(floor_semis) / SPAN_SEMIS, 1.f)
+                          * SPAN_SEMIS;
+        int note = nearest_note(semis, mask, root, floor_semis);
         if (_have_note && note != _last_note && allowed(_last_note, mask, root)) {
             const float d_last = std::fabs(semis - static_cast<float>(_last_note));
             const float d_note = std::fabs(semis - static_cast<float>(note));
@@ -193,11 +201,11 @@ private:
     // Outward search from the rounded center: the first allowed note at
     // integer distance d is the float-nearest up to the lo/hi tie, which is
     // resolved by comparing real distances (equal -> lower note wins).
-    int nearest_note(float semis, uint16_t mask, int root) const {
-        const int center = static_cast<int>(semis + 0.5f);
+    int nearest_note(float semis, uint16_t mask, int root, int floor_semis) const {
+        const int center = static_cast<int>(std::floor(semis + 0.5f));
         for (int d = 0; d <= 12; ++d) {
             const int lo = center - d, hi = center + d;
-            const bool lo_ok = lo >= 0 && allowed(lo, mask, root);
+            const bool lo_ok = lo >= floor_semis && allowed(lo, mask, root);
             const bool hi_ok = hi <= 36 && allowed(hi, mask, root);
             if (lo_ok && hi_ok && lo != hi)
                 return std::fabs(semis - static_cast<float>(hi))

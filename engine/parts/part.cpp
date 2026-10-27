@@ -113,7 +113,7 @@ void Part::init(float sample_rate, uint32_t seed_base,
     // count as seen makes _control_tick latch only on the NEXT rebuild.
     _seen_builds = _mod.pitch_phrase_builds();
     _song_offset = song_offset_for_root(_quant.root_semis());
-    _pitch_q = _quant.process(pitch_pre_quant());
+    _pitch_q = _quant.process(pitch_pre_quant(), _pitch_floor_semis());
     _chord.init();
 }
 
@@ -187,20 +187,22 @@ float Part::target_raw(int slot) const {
 //
 // On a note deck the bound comes AFTER all of it (spec 2026-10-26
 // pitch-range-law §4.2): base + MOD + TUNE + offset is summed unclamped and
-// reflect_unit mirrors a note that leaves the span at the edge, back inside
+// reflect_into mirrors a note that leaves the span at the edge, back inside
 // by as far as it went out. The two clamps this replaces (the lane's, in
 // target_raw, then this one) parked every overshoot on a rail, and the
 // quantizer calls both rails the root: TUNE or a ROOT turn away from the
 // centre piled the melody onto one note. A sum inside [0, 1] is untouched,
 // bit for bit. Off a note deck (SAMPLER read position, BBD clock) the two
 // clamps stay as they were. The sum is within [-2, 3] by construction (base
-// 0..1, MOD +/-1, TUNE +/-0.5, offset -5/36..+6/36), which is what the two
-// passes of reflect_unit cover.
+// 0..1, MOD +/-1, TUNE -30/36..+0.5 (_tune_norm), offset -5/36..+6/36), which
+// is what the two passes of reflect_into cover. The fold's lower edge is the
+// note floor, one octave below 0 (Quantizer::NOTE_FLOOR_SEMIS, 55 Hz).
 float Part::pitch_pre_quant() const {
     if (_note_deck())
-        return reflect_unit(_base[LANE_PITCH] + _mod_term(LANE_PITCH)
-                            + (_tune - 0.5f) + _offset_norm());
-    return clampf(target_raw(LANE_PITCH) + (_tune - 0.5f) + _offset_norm(), 0.f, 1.f);
+        return reflect_into(_base[LANE_PITCH] + _mod_term(LANE_PITCH)
+                            + _tune_norm() + _offset_norm(),
+                            _pitch_floor_norm());
+    return clampf(target_raw(LANE_PITCH) + _tune_norm() + _offset_norm(), 0.f, 1.f);
 }
 
 float Part::target_value(int slot) const {
@@ -238,7 +240,7 @@ void Part::trigger_manual() {
     _gate_ctr = _gate_len;
     float chord[ChordBuilder::kMaxNotes];
     const int n = _chord.build(target_value(LANE_PITCH), _chord_mask(),
-                               _quant.root_semis(), chord);
+                               _quant.root_semis(), chord, _pitch_floor_semis());
     // A manual strike is an anchor by definition, not a groove note -- it
     // gets accent 0 (full strength) regardless of whatever accent the
     // sequencer's last STEP fire left in the engine. Same precedent as CHOKE:
@@ -342,7 +344,7 @@ void Part::_control_tick() {
     // SYNTH note does follow a mask change (24000/24000 samples differ,
     // max |d| 0.544), so no re-trigger machinery is needed here.
     _quant.set_gravity(_grav_mask, _grav_bound);
-    const float pitch_quantized = _quant.process(pitch_raw);
+    const float pitch_quantized = _quant.process(pitch_raw, _pitch_floor_semis());
 
     // The SAMPLER does not quantize. The quantizer is a melody device: it snaps
     // a lane's pitch onto the scale so composed notes land in key. The sampler
@@ -366,7 +368,8 @@ void Part::_control_tick() {
     _pitch_q = (_engine_id == ENGINE_SAMPLER ||
                 (_engine_id == ENGINE_BBD && !_step_on)) ? pitch_raw
                                                          : pitch_quantized;
-    _tg[LANE_PITCH] = clampf(_pitch_q + _detune_cents * (1.f / 3600.f), 0.f, 1.f);
+    _tg[LANE_PITCH] = clampf(_pitch_q + _detune_cents * (1.f / 3600.f),
+                             _pitch_floor_norm(), 1.f);
 
     // MOTION's base reaches a sampler deck scaled, not discarded. Same layer,
     // same reasoning as _flatten_for_sampler and the disabled PITCH lane: the
@@ -484,7 +487,7 @@ void Part::_control_tick() {
     // make the first synth tick after an engine switch depend on how long the
     // part had been a sampler. Same reasoning as the quantizer call above.
     int nch = _chord.apply(_tg[LANE_PITCH], _chord_mask(),
-                           _quant.root_semis(), chord);
+                           _quant.root_semis(), chord, _pitch_floor_semis());
     // PULL, leader side. Taken here rather than after the flatten because the
     // flatten is a sampler-only collapse and a sampler publishes nothing
     // anyway -- reading before it keeps the two concerns separate.
@@ -637,7 +640,7 @@ void Part::_fire_trigger() {
     // build() unconditionally, for the same state reason as apply() in
     // _control_tick.
     int nch = _chord.build(_tg[LANE_PITCH], _chord_mask(),
-                           _quant.root_semis(), chord);
+                           _quant.root_semis(), chord, _pitch_floor_semis());
     nch = _flatten_for_sampler(chord, nch);
     // Before the strike, like set_material_character inside the engine: the
     // note being triggered must be struck with ITS OWN accent, not with the

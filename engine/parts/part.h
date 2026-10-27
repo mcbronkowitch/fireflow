@@ -827,6 +827,24 @@ private:
         return _note_deck() ? static_cast<float>(_song_offset) / Quantizer::SPAN_SEMIS
                             : 0.f;
     }
+    // The lowest note this deck may play: one octave below the contract's 0 on
+    // a note deck (Quantizer::NOTE_FLOOR_SEMIS, 55 Hz), the contract's 0 on
+    // SAMPLER and BBD, where PITCH is a read position or a clock bend.
+    int _pitch_floor_semis() const {
+        return _note_deck() ? Quantizer::NOTE_FLOOR_SEMIS : 0;
+    }
+    float _pitch_floor_norm() const {
+        return static_cast<float>(_pitch_floor_semis()) / Quantizer::SPAN_SEMIS;
+    }
+    // TUNE as a lane-span fraction. The right half is +18 semitones at full on
+    // every engine; on a note deck the left half reaches the floor's extra
+    // octave, -30 semitones at full, so the knob's far left is one octave
+    // lower than it was and noon is still 0. SAMPLER and BBD keep +/-18.
+    float _tune_norm() const {
+        const float t = _tune - 0.5f;
+        if (t >= 0.f || !_note_deck()) return t;
+        return t * ((18.f - static_cast<float>(Quantizer::NOTE_FLOOR_SEMIS)) / 18.f);
+    }
     uint16_t _chord_mask() const {
         return _quant.mode() == QuantMode::Chrom ? CHROM_MASK : _quant.scale_mask();
     }

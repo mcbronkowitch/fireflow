@@ -31,7 +31,7 @@ static constexpr float kInitParamDefaults[] = {
     0.0f, // RANGE_B
     0.671083927f, // MELODY_B
     0.710844219f, // MOD_B
-    0.174666643f, // TUNE_B
+    0.304799974f, // TUNE_B
     1.0f, // ATTACK_B
     1.0f, // DECAY_B
     0.539999962f, // RES_B

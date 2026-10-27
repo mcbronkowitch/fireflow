@@ -23,6 +23,18 @@ inline float reflect_unit(float x) {
     return clampf(x, 0.f, 1.f);
 }
 
+// reflect_unit with a lower edge below 0: mirror x into [lo, 1]. A note deck
+// folds at Quantizer::NOTE_FLOOR_SEMIS (lo = -1/3), and the interval is then
+// 4/3 wide, so two passes cover [-2, 3] here too. At lo = 0 every branch is
+// reflect_unit's, so the two agree bit for bit.
+inline float reflect_into(float x, float lo) {
+    for (int i = 0; i < 2; ++i) {
+        if (x < lo)       x = 2.f * lo - x;
+        else if (x > 1.f) x = 2.f - x;
+    }
+    return clampf(x, lo, 1.f);
+}
+
 inline float lerpf(float a, float b, float t) {
     return a + (b - a) * t;
 }

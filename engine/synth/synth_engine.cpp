@@ -10,9 +10,12 @@ namespace {
 constexpr float kVoiceGain = 0.22f;
 constexpr float kPanFan[4] = { -1.f, 1.f, -0.5f, 0.5f };
 
-// Pitch contract (identical numbers to TestToneEngine): 0..1 = 36 semitones.
-// std::pow is fine here - trigger/control rate, never per sample.
-inline float pitch_to_hz(float p) { return 110.f * std::pow(8.f, clampf(p, 0.f, 1.f)); }
+// Pitch contract (identical numbers to TestToneEngine): 0..1 = 36 semitones,
+// and a note deck reaches one octave below 0 (Quantizer::NOTE_FLOOR_NORM,
+// 55 Hz). std::pow is fine here - trigger/control rate, never per sample.
+inline float pitch_to_hz(float p) {
+    return 110.f * std::pow(8.f, clampf(p, Quantizer::NOTE_FLOOR_NORM, 1.f));
+}
 
 // FILTER target: exponential 60 Hz .. 14 kHz (spec).
 inline float filter_hz(float n) {

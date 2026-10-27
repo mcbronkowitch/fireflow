@@ -214,7 +214,7 @@ TEST_CASE("pitch range law: noon plays a melody") {
 
 TEST_CASE("pitch range law: reflect_unit folds the reachable interval") {
     // The pitch sum of a note deck lives in [-2, 3] (spec section 9: base 0..1,
-    // MOD +/-1, TUNE +/-0.5, offset -5/36..+6/36 reach [-1.64, 2.67]). In that
+    // MOD +/-1, TUNE -30/36..+0.5, offset -5/36..+6/36 reach [-1.97, 2.67]). In that
     // interval reflect_unit is the triangle wave of period 2 -- mirrored at 0
     // and at 1 -- and inside [0, 1] it is the identity, bit for bit.
     for (int i = 0; i < 5001; ++i) {
@@ -237,7 +237,7 @@ TEST_CASE("pitch range law: reflect_unit folds the reachable interval") {
 
 TEST_CASE("pitch range law: the pitch sum stays inside the fold's interval") {
     // The bound the fold's two passes rest on (spec section 9): the sum
-    // base + mod + (tune - 0.5) + offset, recomputed from the part's own terms
+    // base + mod + TUNE + offset, recomputed from the part's own terms
     // (the unreflected value pitch_pre_quant() folds), never leaves [-2, 3].
     // Eight corners -- PITCH base 0 and 1, TUNE 0 and 1, root 6 and 7, the two
     // song-offset extremes +6 and -5 (part.h song_offset_for_root) -- each in
@@ -246,8 +246,9 @@ TEST_CASE("pitch range law: the pitch sum stays inside the fold's interval") {
     // fresh phrase every 2 s and reads the offset the part actually holds.
     // Measured 2026-10-26: the sum runs from -1.6389 (= -1 - 0.5 - 5/36) to
     // 2.6667 (= 1 + 1 + 0.5 + 6/36), so the lane does reach +/-1 and the
-    // algebraic corners are met; 0.36 inside the bound at the bottom, 0.33 at
-    // the top.
+    // algebraic corners are met. Since TUNE's left half reaches -30 semitones
+    // (2026-10-27, note floor) the bottom corner is -1 - 30/36 - 5/36 =
+    // -1.9722, 0.03 inside the bound; the top is unchanged.
     float lo = 1e9f, hi = -1e9f;
     for (bool step : {false, true})
     for (float base : {0.f, 1.f})
@@ -271,7 +272,9 @@ TEST_CASE("pitch range law: the pitch sum stays inside the fold's interval") {
             if (i % 2000 == 1999) inst->new_phrase(PART_A);
             inst->process(nullptr, nullptr, l, r, 48);
             const Part& p = inst->part(PART_A);
-            const float sum = base + p.lane_excursion(LANE_PITCH) + (tune - 0.5f)
+            const float tune_term = tune < 0.5f ? (tune - 0.5f) * (30.f / 18.f)
+                                                : tune - 0.5f;
+            const float sum = base + p.lane_excursion(LANE_PITCH) + tune_term
                             + static_cast<float>(p.song_offset()) / Quantizer::SPAN_SEMIS;
             lo = std::min(lo, sum);
             hi = std::max(hi, sum);
@@ -288,7 +291,7 @@ TEST_CASE("pitch range law: the pitch sum stays inside the fold's interval") {
 }
 
 TEST_CASE("pitch range law: TUNE away from the centre does not pile notes") {
-    // A3's deck at a TUNE that sits off the centre: Minor pent, TUNE 0.1747,
+    // A3's deck at a TUNE that sits off the centre: Minor pent, TUNE -11.7 st,
     // VARY 0.671, RANGE 1, 200 phrases. The centred law keeps the lane inside
     // +/-1 around the base, but base + lane + TUNE still leaves [0, 1] and
     // Part::pitch_pre_quant()'s clamp parks the overshoot on a rail (the
@@ -307,7 +310,7 @@ TEST_CASE("pitch range law: TUNE away from the centre does not pile notes") {
     // mean, not the two-fold margin A3 has.
     PitchRig rig;
     rig.scale = SCALE_MIN_PENT;
-    rig.tune  = 0.1747f;
+    rig.tune  = 0.3048f;   // deck B's init, -11.7 st (0.1747 before TUNE's left half reached -30)
     rig.vary  = 0.671f;
     rig.range = 1.f;
     const PhraseReading got = read_phrases(rig);
@@ -395,4 +398,88 @@ TEST_CASE("pitch range law: the factory patch keeps its drones") {
     }
     CHECK(bad_a == 0);
     CHECK(bad_b == 0);
+}
+
+// ---- The note floor: TUNE fully left reaches 55 Hz -------------------------
+//
+// A note deck's pitch reaches one octave below the 0..1 contract's bottom
+// (Quantizer::NOTE_FLOOR_SEMIS, -12 = 55 Hz). TUNE's left half spans -30
+// semitones instead of -18, so the knob's far left is one octave lower and its
+// right half is unchanged. SAMPLER and BBD keep the 0..1 span and the old TUNE.
+
+namespace {
+
+// Deck A alone on `e`, FLOW, PITCH lane at depth 0, so the pitch is the base
+// 0.5 plus TUNE. Settles 1 s (an engine switch crossfades) before returning.
+std::unique_ptr<Instrument> floor_deck(EngineId e, float tune) {
+    auto inst = std::make_unique<Instrument>();
+    inst->init(48000.f);
+    inst->set_engine(PART_A, e);
+    inst->set_root(PART_A, 0);
+    inst->set_tune(PART_A, tune);
+    inst->set_target_base(PART_A, LANE_PITCH, 0.5f);
+    inst->set_target_depth(PART_A, LANE_PITCH, 0.f);
+    float l[96], r[96];
+    for (int b = 0; b < 500; ++b) inst->process(nullptr, nullptr, l, r, 96);
+    return inst;
+}
+
+float pitch_semis(const Instrument& inst) {
+    return inst.target_value(PART_A, LANE_PITCH) * Quantizer::SPAN_SEMIS;
+}
+
+// Energy of x between lo_hz and hi_hz, summed over 1 Hz DFT bins (Goertzel).
+// A plain f0 estimate cannot tell the two floors apart: autocorrelation over a
+// window holding both 55 and 110 Hz reads ~53 Hz on a 110 Hz deck, because
+// two periods correlate as well as one.
+double band_energy(const std::vector<float>& x, float sr, int lo_hz, int hi_hz) {
+    double e = 0.0;
+    for (int f = lo_hz; f <= hi_hz; ++f) {
+        const double w = 2.0 * 3.14159265358979 * f / sr;
+        const double c = 2.0 * std::cos(w);
+        double s1 = 0.0, s2 = 0.0;
+        for (float v : x) { const double s0 = v + c * s1 - s2; s2 = s1; s1 = s0; }
+        e += s1 * s1 + s2 * s2 - c * s1 * s2;
+    }
+    return e;
+}
+
+} // namespace
+
+TEST_CASE("note floor: TUNE fully left reaches semitone -12 on every note engine") {
+    for (EngineId e : {ENGINE_SYNTH, ENGINE_WAVE, ENGINE_BODY, ENGINE_FEED}) {
+        CAPTURE(int(e));
+        CHECK(std::fabs(pitch_semis(*floor_deck(e, 0.f)) + 12.f) < 1e-3f);
+        CHECK(std::lround(pitch_semis(*floor_deck(e, 0.25f))) == 3);   // halfway: -15
+        CHECK(std::lround(pitch_semis(*floor_deck(e, 0.5f)))  == 17);  // 18 is F#, not Dorian
+        CHECK(std::lround(pitch_semis(*floor_deck(e, 0.75f))) == 27);  // right half as before
+        CHECK(std::lround(pitch_semis(*floor_deck(e, 1.f)))   == 36);
+    }
+}
+
+TEST_CASE("note floor: SAMPLER and BBD keep the 0..1 span and the old TUNE") {
+    for (EngineId e : {ENGINE_SAMPLER, ENGINE_BBD}) {
+        CAPTURE(int(e));
+        CHECK(pitch_semis(*floor_deck(e, 0.25f)) == doctest::Approx(9.f));
+        CHECK(pitch_semis(*floor_deck(e, 0.f))   == doctest::Approx(0.f));
+    }
+}
+
+TEST_CASE("note floor: a SYNTH deck at TUNE 0 sounds at 55 Hz") {
+    // The engine's own Hz clamp is the last place the old floor could hold:
+    // a deck clamped onto 110 Hz has next to no energy around 55 Hz. SUB off:
+    // its sine sits an octave below the note, on 55 Hz for a 110 Hz deck.
+    auto inst = floor_deck(ENGINE_SYNTH, 0.f);
+    inst->set_voice_sub(PART_A, 0.f);
+    std::vector<float> x;
+    float l[96], r[96];
+    for (int b = 0; b < 1000; ++b) {
+        inst->process(nullptr, nullptr, l, r, 96);
+        x.insert(x.end(), l, l + 96);
+    }
+    const double low  = band_energy(x, 48000.f, 50, 60);
+    const double high = band_energy(x, 48000.f, 105, 115);
+    CAPTURE(low);
+    CAPTURE(high);
+    CHECK(low > 0.25 * high);
 }

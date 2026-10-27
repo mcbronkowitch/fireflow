@@ -759,6 +759,18 @@ on one scale degree, "every FORM, every SONG, every seed". With Part-style seeds
 that is the one-note column above: 39.0 % of phrases under the old law and
 50.5 % under the new one, not all of them.
 
+**The note floor (2026-10-27).** A note deck (SYNTH, WAVE, BODY, FEED) reaches
+one octave below the contract's 0: `Quantizer::NOTE_FLOOR_SEMIS` = −12, 55 Hz.
+The pitch sum folds at −12 and 36 (`reflect_into`), and the quantizer, the chord
+builder and every `pitch_to_hz` clamp take the same floor. TUNE's left half
+spans −30 semitones at full instead of −18 (`Part::_tune_norm`); noon and the
+right half are unchanged. SAMPLER and BBD keep 0..1 and ±18. Measured
+(`tests/test_pitch_range_law.cpp`, "note floor"): base 0.5 with the lane at
+depth 0 plays semitone −12 at TUNE 0 and 3 at TUNE 0.25; a SYNTH deck at TUNE 0
+with SUB off puts its energy at 55 Hz. The pitch sum's bottom corner moved from
+−1.639 to −1.972, still inside the fold's [−2, 3]. The factory patch's TUNE_B
+was re-baked 0.1747 → 0.3048 to keep deck B at −11.7 semitones.
+
 ### And the inversion, which has since inverted
 
 This section used to close on FORM being unreachable rather than inert: at SHAPE
