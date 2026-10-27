@@ -90,7 +90,7 @@ private:
     // Loudness tilt derived from _brightness -- see set_cutoff_hz. 1 at the
     // brightest setting, so a voice that never sees FILTER is unaffected.
     float _bright_gain = 1.f;
-    float _vel = 1.f, _vel_target = 1.f;
+    float _vel_target = 1.f;
     float _attack_s = 0.f, _decay_s = 0.f;   // last times pushed, unscaled
     float _decay_scale = 1.f;
     bool  _env_seen = false;                 // has set_env_times run yet?

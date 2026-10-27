@@ -752,3 +752,108 @@ TEST_CASE("BodyVoice: DETUNE's ceiling is exactly the bank's ceiling") {
     for (float s : at_ceiling) peak = std::max(peak, std::fabs(s));
     CHECK(peak > 0.001f);
 }
+
+// --- Velocity applies once (silent-bug sweep 2026-10-27, task 1) -----------
+
+namespace {
+constexpr uint32_t kVelSeed = 0x1234abcdu + 2u * 2654435761u;
+
+void vel_voice(BodyVoice& v, float reso) {
+    v.init(48000.f, kVelSeed);
+    v.set_env_times(0.005f, 2.f);
+    v.set_resonance(reso);
+    v.set_cutoff_hz(8000.f);
+    v.set_detune_cents(0.f);
+    v.set_sub_level(0.f);
+    v.set_pan(0.f);
+    v.set_drift_amount(0.f);
+    v.set_morph(0.5f);
+    v.set_vel(1.f);
+    v.update_control(96.f / 48000.f);
+}
+
+// Appends `samples` of the left channel to `out`.
+void vel_run(BodyVoice& v, int samples, std::vector<float>& out) {
+    for (int i = 0; i < samples; ++i) {
+        if (i % 96 == 0) v.update_control(96.f / 48000.f);
+        float a = 0.f, b = 0.f;
+        v.process(a, b);
+        out.push_back(a);
+    }
+}
+
+float vel_peak(const std::vector<float>& x, size_t from = 0) {
+    float p = 0.f;
+    for (size_t i = from; i < x.size(); ++i) p = std::max(p, std::fabs(x[i]));
+    return p;
+}
+} // namespace
+
+TEST_CASE("BODY: a STEP accent scales the strike once") {
+    for (float reso : {0.f, 1.f}) {          // click zone, ping zone
+        BodyVoice weak, strong;
+        vel_voice(weak, reso);
+        vel_voice(strong, reso);
+        weak.set_vel(0.3f);
+        strong.set_vel(1.f);
+        weak.trigger(220.f);
+        strong.trigger(220.f);
+        std::vector<float> w, s;
+        vel_run(weak, 24000, w);
+        vel_run(strong, 24000, s);
+        const float ratio = vel_peak(w) / vel_peak(s);
+        INFO("reso " << reso << " ratio " << ratio);
+        CHECK(ratio >= 0.27f);
+        CHECK(ratio <= 0.33f);
+    }
+}
+
+TEST_CASE("BODY: a strike's level does not depend on the previous note") {
+    auto second_strike = [](float first_vel, float second_vel, bool strike_second) {
+        BodyVoice v;
+        vel_voice(v, 0.f);
+        v.set_vel(first_vel);
+        v.trigger(220.f);
+        std::vector<float> out;
+        vel_run(v, 12000, out);                 // 0.25 s
+        v.set_vel(second_vel);
+        if (strike_second) v.trigger(220.f);
+        vel_run(v, 12000, out);
+        return out;
+    };
+    const auto x  = second_strike(1.f, 0.3f, true);
+    const auto z  = second_strike(1.f, 0.3f, false);
+    const auto y  = second_strike(0.3f, 0.3f, true);
+    const auto z2 = second_strike(0.3f, 0.3f, false);
+    std::vector<float> dx(x.size()), dy(y.size());
+    for (size_t i = 0; i < x.size(); ++i) dx[i] = x[i] - z[i];
+    for (size_t i = 0; i < y.size(); ++i) dy[i] = y[i] - z2[i];
+    const float db = 20.f * std::log10(vel_peak(dx, 12000) / vel_peak(dy, 12000));
+    INFO("second strike after strong vs after weak: " << db << " dB");
+    CHECK(db >= -0.5f);
+    CHECK(db <= 0.5f);
+}
+
+TEST_CASE("BODY: FLOW level follows the strike velocity once") {
+    auto rms = [](float vel) {
+        BodyVoice v;
+        vel_voice(v, 0.f);
+        // String only, short decay: keeps s_raw under FLOW's tanh ceiling
+        // (0.4), where the level is linear in the strike. At the default
+        // MATL 0.5 / 2 s decay the ceiling compresses 0.3 vs 1 to ~0.68.
+        v.set_morph(0.f);
+        v.set_env_times(0.005f, 0.05f);
+        v.set_sustaining(true);
+        v.set_vel(vel);
+        v.trigger(220.f);
+        std::vector<float> out;
+        vel_run(v, 96000, out);
+        double e = 0.0;
+        for (size_t i = 48000; i < out.size(); ++i) e += double(out[i]) * out[i];
+        return std::sqrt(e / 48000.0);
+    };
+    const double ratio = rms(0.3f) / rms(1.f);
+    INFO("FLOW rms ratio " << ratio);
+    CHECK(ratio >= 0.27);
+    CHECK(ratio <= 0.33);
+}
