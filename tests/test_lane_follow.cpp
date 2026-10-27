@@ -1,6 +1,10 @@
 #include <doctest/doctest.h>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
 #include <vector>
 #include "mod/lane.h"
+#include "mod/super_modulator.h"
 using namespace spky;
 
 // Follower mode (spec 2026-07-25 mod-lane-step-grid-lock). A lane in STEP
@@ -199,4 +203,96 @@ TEST_CASE("follow: two lanes of different length never diverge") {
     CHECK(fb == 200000);
     CHECK(a.cur_step() == static_cast<int>((200000 - 1) % 8));
     CHECK(b.cur_step() == static_cast<int>((200000 - 1) % 16));
+}
+
+namespace {
+// A whole SuperModulator in STEP at a Part-style seed (k = 0), SHUFFLE 0,
+// SMOOTH 0, VARY 0, TIDE neutral. Collects what `lane` emits over `seconds`:
+// its peak-to-peak, and the first `want` distinct output values it steps to.
+struct LaneRun {
+    float p2p = 0.f;
+    std::vector<uint32_t> fired_bits;
+};
+
+LaneRun run_lane(int lane, int steps, float shape, float seconds, size_t want = 0) {
+    SuperModulator m;
+    m.init(kSr, 0x1234abcdu + 2u * 2654435761u);
+    m.set_rate(0.8f);
+    m.set_tide(0.5f);
+    m.set_shape(shape);
+    m.set_smooth(0.f);
+    m.set_variation(0.f);
+    m.set_shuffle(0.f);
+    m.set_step(true, steps);
+    LaneRun r;
+    float lo = 1e9f, hi = -1e9f;
+    uint32_t last_bits = 0x7fc00000u;       // a NaN pattern: the first sample counts
+    const int n = static_cast<int>(seconds * kSr);
+    for (int i = 0; i < n; ++i) {
+        m.process();
+        const float o = m.lane_output(lane);
+        if (o < lo) lo = o;
+        if (o > hi) hi = o;
+        // lane_output is a 96-sample raster and, at SMOOTH 0, steps straight to
+        // each new target: every change of value is one fired target.
+        uint32_t b;
+        std::memcpy(&b, &o, sizeof b);
+        if (b != last_bits && r.fired_bits.size() < want) r.fired_bits.push_back(b);
+        last_bits = b;
+    }
+    r.p2p = hi - lo;
+    return r;
+}
+} // namespace
+
+TEST_CASE("follow: a two-slot lane swings at every pure SHAPE") {
+    // kLaneSlotsMin = 2 exists so a lane does not emit a constant. Sampled at
+    // the grid phases 0 and 0.5 the sine is 0 at both, so SOURCE at STEPS 2
+    // (one slot, clamped to two) sat dead still at SHAPE 0; at the slot centre
+    // the triangle dies instead. The quarter-slot offset keeps all four pure
+    // waves alive. Measured p2p (offset 0.25 / unmodified grid):
+    //   SHAPE 0.00 sine     1.416 / 0.000
+    //   SHAPE 0.25 triangle 1.000 / 2.000
+    //   SHAPE 0.50 ramp     1.000 / 1.000   (mean -0.25 / -0.50)
+    //   SHAPE 0.75 pulse    2.000 / 2.000
+    // The blends between them have nulls at any offset, so only the pure
+    // waves are gated.
+    for (float shape : {0.f, 0.25f, 0.5f, 0.75f}) {
+        const LaneRun r = run_lane(LANE_SOURCE, 2, shape, 30.f);
+        INFO("shape " << shape << " p2p " << r.p2p);
+        CHECK(r.p2p > 0.9f);
+    }
+}
+
+TEST_CASE("follow: lanes with three or more slots are unchanged") {
+    // Snapshot of the first 64 boundary outputs, taken from the code before
+    // the two-slot centre sampling landed: three or more slots must not move.
+    // SOURCE at STEPS 8 is a 4-slot lane and LEVEL at STEPS 16 a 12-slot one;
+    // the 64 captured values repeat the stored cycle exactly (bits, not Approx).
+    struct Case {
+        int lane, steps;
+        float shape;
+        std::vector<uint32_t> cycle;
+    };
+    const Case cases[] = {
+        {LANE_SOURCE, 8, 0.f,
+         {0x00000000u, 0x3f800000u, 0x00000000u, 0xbf800000u}},
+        {LANE_SOURCE, 8, 0.45f,
+         {0xbf800000u, 0xbeccccccu, 0x3e4cccd0u, 0x3eccccccu}},
+        {LANE_LEVEL, 16, 0.f,
+         {0x00000000u, 0x3f000000u, 0x3f5dddddu, 0x3f800000u, 0x3f5dddddu,
+          0x3f000000u, 0x00000000u, 0xbefffffeu, 0xbf5ddde0u, 0xbf800000u,
+          0xbf5ddde0u, 0xbefffffeu}},
+        {LANE_LEVEL, 16, 0.45f,
+         {0xbf800000u, 0xbf4cccccu, 0xbf199998u, 0xbeccccccu, 0xbe4cccc8u,
+          0x00000000u, 0x3e4cccd0u, 0x3e888889u, 0x3eaaaaabu, 0x3eccccccu,
+          0x3eeeeeecu, 0x3f088888u}},
+    };
+    for (const Case& c : cases) {
+        const LaneRun r = run_lane(c.lane, c.steps, c.shape, 60.f, 64);
+        INFO("lane " << c.lane << " steps " << c.steps << " shape " << c.shape);
+        REQUIRE(r.fired_bits.size() == 64);
+        for (size_t i = 0; i < 64; ++i)
+            CHECK(r.fired_bits[i] == c.cycle[i % c.cycle.size()]);
+    }
 }
