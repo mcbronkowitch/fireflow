@@ -166,9 +166,9 @@ Decision: on the firmware the flag is on exactly while the deck's engine choice 
 
 ### Task 8: Finish
 
-- [ ] Full Release build and `ctest --test-dir build --output-on-failure -E "^reva_"`, read the output yourself.
-- [ ] `host/vcv/build-local.sh install`; tell Bastian to restart Rack.
-- [ ] Add each fix as one line to `docs/roadmap.md`'s status, and put Task 5 and Task 6 on the listening list below.
+- [x] Full Release build and `ctest --test-dir build --output-on-failure -E "^reva_"`, read the output yourself.
+- [x] `host/vcv/build-local.sh install`; tell Bastian to restart Rack.
+- [x] Add each fix as one line to `docs/roadmap.md`'s status, and put Task 5 and Task 6 on the listening list below.
 
 ## Listening list for Bastian (before merge)
 
