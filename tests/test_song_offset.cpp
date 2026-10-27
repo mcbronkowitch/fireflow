@@ -78,9 +78,9 @@ uint32_t builds(const Instrument& inst) {
 
 // Compare X against Y for `s` seconds, block by block, and require X to sit
 // exactly `want` semitones above Y wherever both are clear of the span edges
-// (at the edges an offset song folds back onto the nearest in-range note --
-// spec §3, measured). Returns the number of blocks compared. Any further rigs
-// are rendered in lockstep alongside.
+// (at the edges an offset song is mirrored at the span edge -- spec §3,
+// measured; spec 2026-10-26 pitch-range-law §4.2). Returns the number of
+// blocks compared. Any further rigs are rendered in lockstep alongside.
 template <typename... Rest>
 int compare_distance(Instrument& x, Instrument& y, float want, float s, Rest&... rest) {
     const int n = static_cast<int>(s * kBlocksPerSec);
@@ -273,7 +273,7 @@ TEST_CASE("song offset: init latches the current root") {
     CHECK(inst->song_offset_for_test(PART_A) == 5);
 }
 
-TEST_CASE("song offset: clamp holds at the span edge") {
+TEST_CASE("song offset: the pitch stays inside the span at the edge") {
     auto inst = make_rig();
     inst->set_root(PART_A, 6);
     inst->new_phrase(PART_A);
@@ -284,7 +284,9 @@ TEST_CASE("song offset: clamp holds at the span edge") {
         block(*inst);
         const float q   = inst->target_value(PART_A, LANE_PITCH);
         // The quantizer clamps its own input, so target_value alone could not
-        // see a missing clamp; the pre-quantize value is where it would show.
+        // see a missing bound; the pre-quantize value is where it would show.
+        // What keeps it inside is the reflection in pitch_pre_quant(), not a
+        // clamp: the note that leaves the span is mirrored back in.
         const float pre = inst->part(PART_A).pitch_pre_quant();
         if (q < 0.f || q > 1.f || pre < 0.f || pre > 1.f) ++out;
     }

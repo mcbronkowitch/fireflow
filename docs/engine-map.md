@@ -100,6 +100,14 @@ a count of rounding outcomes, which is exactly what §5 says not to trust. **The
 p2p of those rows, which is the load-bearing figure, reproduces exactly.** No test
 pins either count; the §1 case pins the melodic rows only.
 
+**Seeds (2026-10-26).** Every per-state number in this section, the ten-seed
+ambitus distribution below included, was measured with small seeds (12345, 999,
+7, 4242 …), whose first xorshift32 draws sit near −1 (§6, "Seeds are part of
+the measurement"). They describe the raw lane, before the pitch chain, and were
+**not re-measured** with Part-style seeds; read the phrase figures as
+small-seed measurements. The figures that go through RANGE and the quantizer
+are re-measured, in §7.
+
 **`_flow_melody_on()` is false whenever `_step_mode` is true — but the pitch
 output no longer is.** The predicate still reads as written above and still
 excludes STEP; what changed on 2026-08-14 (spec `melody-reachable`) is that
@@ -495,7 +503,7 @@ State seed, rate, duration, and construction order beside every number.
 int main(){
     spky::ModLane l;
     l.set_melodic(false);              // BEFORE init() -- see above
-    l.init(48000.f, /*seed*/ 12345);
+    l.init(48000.f, 0x1234abcdu + 2u * 2654435761u);   // a Part-style seed, k = 0 -- see "Seeds" below
     l.set_step(false, 8);
     l.set_rate_hz(0.5f); l.set_shape(1.0f); l.set_smooth(0.f);
     l.set_range(1.f); l.set_variation(0.f);
@@ -509,6 +517,26 @@ Set `set_smooth(0.f)` when you want to see the raw target; the slew otherwise
 hides everything the target does. Count `distinct` values alongside p2p — that is
 what separates "a waveform" from "a two-value square", and p2p alone will not tell
 you.
+
+### Seeds are part of the measurement, and small ones lie (2026-10-26)
+
+**Probe with Part-style seeds: `0x1234abcd + (k + 2)·2654435761`** (32-bit
+wrap), k = 0..199 for a distribution; k = 0 is the seed deck A's PITCH lane
+gets. That is how the instrument seeds its lanes (`SuperModulator::init`:
+`seed_base + i·2654435761`), and the skeleton above uses it for that reason.
+
+Do not use a small seed (7, 999, 1, 777, 4242, 12345 …) for anything that goes
+through the pitch chain. `spky::Rng` is a bare xorshift32, and a small seed's
+first draws sit near −1: **7 of this file's 10 probe seeds draw −0.86 or lower
+first**, and their first composed phrases average −0.33 to −0.85. A phrase
+sitting low like that stays inside the span at RANGE 0.5, so the old upward
+shift of `apply_range` never showed — which is how the RANGE table in §7 came
+to say the opposite of what the instrument does. Deck A's real PITCH-lane seed
+draws +0.168 first and composes a phrase averaging +0.020; deck B's draws
++0.935 and averages +0.658. Measured in
+[`2026-10-26-pitch-range-law-design`](superpowers/specs/2026-10-26-pitch-range-law-design.md)
+§3.4. The per-state numbers of §1 are small-seed measurements too (marked there);
+they describe the raw lane, before the pitch chain, and were not re-measured.
 
 ### Measured: ROOT reaches BBD only in STEP; the song offset never does (2026-10-19)
 
@@ -691,21 +719,45 @@ phrase at every SHAPE.
 The pitch axis is 36 semitones over `0..1` (`part.cpp:228-229`; the
 `_detune_cents * 1/3600` at `:244` corroborates), and `LANE_PITCH` is handed
 depth 1.0 unconditionally (`part.cpp:98`), so a lane value lands on that axis
-directly. What the phrase then moves, after quantizing (Aeolian, STEP, 8 steps,
-VARY 0, mean of seeds 12345/777/4242):
+directly.
 
-| RANGE | span (semitones) | distinct scale degrees |
-|---|---|---|
-| 1.0 | 8.42 | 4 |
-| 0.4 | 4.11 | 3 |
-| 0.25 | 2.57 | 2 |
-| **0.1** | **1.03** | **1** |
+**Superseded 2026-10-26** by the centred RANGE law
+([`2026-10-26-pitch-range-law-design`](superpowers/specs/2026-10-26-pitch-range-law-design.md)).
+This section used to say that the ambitus peaks at RANGE 0.5 and that the gate
+was **unsolved**. Both were artefacts of the probe seeds (12345 / 777 / 4242 are
+small seeds; see §6, "Seeds are part of the measurement"): on a note lane
+`apply_range` was the centred law plus an upward tent, and with seeds like the
+instrument's the knob's centre was its *worst* position. On a note lane RANGE is
+now a pure width, `v·r`, around a fixed centre (semitone 18 plus TUNE plus the
+song offset), and a note deck's pitch sum is reflected into the span rather than
+clamped. What the phrase moves, after quantizing — spec §5.1, Dorian, STEP, 8
+steps, VARY 0, TUNE 0.5, 200 Part-style seeds, today's law → the new one:
 
-At the bottom of the RANGE knob a deck plays the entire phrase — every FORM,
-every SONG, every seed — on **one** scale degree. (The two boundary values were
-chosen because they were the ends of the band the deleted terrain generator drew
-for a drone; the measurement is the lane's, not the generator's, and stands
-without it.)
+| RANGE | one-note phrases | off the span (clamped → reflected) | rail notes | root share | span (semitones) |
+|---|---|---|---|---|---|
+| 0.10 | 39.0 → 50.5 % | 0 → 0 % | 0 → 0 % | 8.4 → 0.0 % | 1.09 → 1.11 |
+| 0.20 | 16.3 → 20.1 % | 0 → 0 % | 0 → 0 % | 30.2 → 2.0 % | 2.78 → 2.66 |
+| 0.25 | 14.4 → 15.0 % | 0 → 0 % | 0.4 → 0 % | 17.4 → 3.3 % | 3.26 → 3.30 |
+| 0.30 | 14.2 → 12.0 % | 1.5 → 0 % | 2.7 → 0 % | 13.0 → 8.4 % | 4.00 → 4.06 |
+| 0.40 | 13.3 → 8.2 % | 15.5 → 0 % | 22.0 → 0 % | 24.0 → 13.8 % | 4.58 → 5.46 |
+| **0.50** | **29.4 → 5.6 %** | **45.0 → 0 %** | **58.0 → 0.5 %** | **58.5 → 14.6 %** | **3.89 → 6.78** |
+| 0.60 | 13.9 → 5.4 % | 23.2 → 1.1 % | 27.3 → 0.4 % | 34.4 → 13.7 % | 6.21 → 8.01 |
+| 0.75 | 6.1 → 4.9 % | 11.0 → 2.7 % | 13.2 → 1.0 % | 24.2 → 14.5 % | 9.08 → 9.76 |
+| 0.90 | 5.3 → 3.1 % | 7.7 → 4.8 % | 9.0 → 1.9 % | 19.8 → 14.5 % | 11.25 → 11.27 |
+| 1.00 | 4.1 → 2.7 % | 7.9 → 7.9 % | 9.8 → 3.4 % | 19.2 → 13.1 % | 12.30 → 12.17 |
+
+The old law's worst position was RANGE 0.5 (29.4 % one-note phrases, 58.0 % rail
+notes); under the new one it is the bottom of the knob, where a phrase
+spans about one semitone and is a drone with a little motion (50.5 % one-note
+phrases at 0.1). Spec D2 asked whether to put a floor there; the default, "no
+floor", is what the build does, and it is not yet confirmed by ear
+([`by-ear-decisions.md`](by-ear-decisions.md)). The left of each arrow is the
+old law under the same seeds, not the table this section carried before.
+
+The superseded table claimed that at RANGE 0.1 a deck plays the entire phrase
+on one scale degree, "every FORM, every SONG, every seed". With Part-style seeds
+that is the one-note column above: 39.0 % of phrases under the old law and
+50.5 % under the new one, not all of them.
 
 ### And the inversion, which has since inverted
 
@@ -753,9 +805,10 @@ fifth.
 So the instrument still moves less
 pitch with the phrase than it moved with the decoy that carried no melodic
 information; what changed is that the phrase is now what it moves. How much of
-those semitones survives quantization is the RANGE gate above, which is
-**unsolved** — it is what §2.2 of the `melody-reachable` spec is about, and
-nothing on this branch touched it. Settled, and no longer a question for a
+those semitones survives quantization is the RANGE gate above, which was
+**unsolved** when this was written and is closed since 2026-10-26: see
+[`2026-10-26-pitch-range-law-design`](superpowers/specs/2026-10-26-pitch-range-law-design.md).
+Settled, and no longer a question for a
 SHAPE/SMOOTH design: where on the SHAPE axis the melody lives. Everywhere, on a
 note deck.
 

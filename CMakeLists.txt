@@ -62,6 +62,7 @@ add_executable(spky_tests
     tests/test_melody_reachable.cpp
     tests/test_flow_melody.cpp
     tests/test_song_offset.cpp
+    tests/test_pitch_range_law.cpp
     tests/test_rhythm_ring.cpp
     tests/test_gate_density.cpp
     tests/test_step_accent.cpp
@@ -352,7 +353,11 @@ add_test(
         # lanes (Part::init, the boot default engine is ENGINE_SYNTH) -- both
         # decks step through phrase slots instead of running the old
         # continuous LFO, which is the entire point of this task.
-        -DEXPECTED=2b836457ff2d20d9f0e7b1c4141b548b8a6a5bd846ff08454521254d6dd4655f
+        # Moved again (spec 2026-10-26 pitch-range-law §4.2): the scenario
+        # never sets RANGE, so the centred law leaves it bit-identical, and the
+        # reflection mirrors the pitch sums that leave the span instead of
+        # clamping them.
+        -DEXPECTED=d64d9a28c2feda30a2e041884235065b880f2bf45c012f0aa2552fb0ad8a0eb7
         -DOUT_DIR=${CMAKE_BINARY_DIR}
         -P ${CMAKE_SOURCE_DIR}/tests/check_render_hash.cmake
 )

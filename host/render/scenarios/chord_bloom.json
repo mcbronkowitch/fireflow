@@ -10,7 +10,7 @@
   { "action": "set_sync", "ivalue": 1 },
   { "action": "set_rate", "part": 0, "value": 0.125 },
   { "action": "set_density", "part": 0, "value": 0.3 },
-  { "action": "set_target_base", "part": 0, "slot": 2, "value": 0.25 },
+  { "_comment":"base raised by min(RANGE, 1 - RANGE) for spec 2026-10-26 pitch-range-law 4.6, which keeps the old centre", "action": "set_target_base", "part": 0, "slot": 2, "value": 0.55 },
   { "action": "set_range", "part": 0, "value": 0.3 },
   { "action": "set_voice_decay", "part": 0, "value": 0.8 },
   { "action": "set_reverb_mix", "value": 0.4 }

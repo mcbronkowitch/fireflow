@@ -348,8 +348,8 @@ TEST_CASE("param impact: a live parameter works in both operating modes") {
     //   any note deck, in STEP as in FLOW (_note_lane()), and FORM_A now moves
     //   audio in both modes -- measured 0.797 at a FLOW point and 0.143 at a
     //   STEP one -- so it drops off this list exactly as DENSITY did. FORM_A
-    //   and FORM_B move in both modes; see SAMPLE-BOUND below for why this
-    //   gate still reports both as mode-exclusive.
+    //   and FORM_B move in both modes (the SAMPLE-BOUND group below held both
+    //   as mode-exclusive until 2026-10-26; see the dated note there).
     bool expected_proven[P_COUNT] = {};
     for (int p : { P_STEPS_A, P_STEPS_B, P_SHUFFLE, P_TEMPO_BPM, P_COUPLE })
         expected_proven[p] = true;
@@ -378,55 +378,16 @@ TEST_CASE("param impact: a live parameter works in both operating modes") {
     // that sample changes. Nothing may be added here without a measurement
     // over a wider sample showing the parameter alive in both modes.
     //
-    // FORM_B: was PROVEN until 2026-08-14 on the S&H mechanism above, and the
-    //   melody-reachable change did reach it. Measured on 2026-08-14, while the
-    //   generator still existed, with this rig's own filters over masters
-    //   1..59, both guards, FORM_B moving audio at a STEP
-    //   point: 1 of 13 under the old guard (master 43 only), 9 of 13 under
-    //   the new one (masters 11, 13, 16, 19, 31, 43, 44, 51, 58; 0.314 ..
-    //   1.183). Several of those are far below the old SHAPE 0.75 gate --
-    //   master 11 at SHAPE_B 0.325, 19 at 0.483, 31 at 0.468 -- and read
-    //   exactly 0.0 under the old guard, which only the phrase path explains.
-    //
-    //   What is left is a sampling accident, not an asymmetry: the two frozen
-    //   STEP points are masters 3 and 8, which are two of the four STEP draws
-    //   where FORM_B read exactly 0.0. A FORM reading of exactly 0.0 at a given
-    //   point is ordinary in BOTH modes -- FORM_A reads 0.0 on FLOW masters
-    //   1, 5, 7 and 9 -- so "dead in STEP" here is a property of two draws.
-    //   Not the drawn step counts either: forcing steps_a = steps_b = 8 on
-    //   masters 3 and 8 leaves FORM_B at exactly 0.0 on both.
-    //
-    //   Do NOT go hunting a mechanism downstream of the lane for this. The
-    //   sample is frozen (removal spec 4.3), so this entry is now permanent
-    //   unless the frozen points are re-authored by hand.
-    //   The asymmetry is deliberate and is the whole difference between this
-    //   group and UNTRACED above: WIDENING the sample may retire an entry,
-    //   NARROWING it to keep one is the abuse UNTRACED names.
-    //
-    // FORM_A: joined 2026-10-19 with the song offset (spec 2026-10-18
-    //   root-and-wobl-knobs §2.1). Both FLOW points carry ROOT_A 6, and since
-    //   the offset a song rebuilt there -- here on the first sample, the
-    //   preroll rebuild after apply_patch() -- is the C song moved +6. Two
-    //   consequences, both measured with this rig's compare() at the two FLOW
-    //   points, sweeping ROOT_A 0..11 and holding everything else:
-    //   - master 2 now reads exactly 0.0 at EVERY root. Away from the span
-    //     edges the offset makes a song sit in its key the same way whatever
-    //     the root (spec §3), and here its slow FLOW drift (RATE_A 0.069) stays
-    //     on one note for the whole window under both FORM settings (traced at
-    //     the frozen root 6: quantized pitch 28.0 throughout on lo and hi,
-    //     pre-quantize 27.77..28.98). Before the offset the unmoved song on
-    //     F#'s grid straddled a note edge and read 0.966.
-    //   - master 1 reads 0.656 .. 0.793 at nine roots (0..3, 7..11) and 0.0 at
-    //     roots 4, 5 and 6, where the offset lifts the lane onto the top of the
-    //     36-semitone span (traced at root 5: pre-quantize 36.0 throughout, on
-    //     both FORM settings). Root 6 is one of the three, and it read 0.0
-    //     before the offset as well.
-    //   So FORM_A is alive in FLOW wherever the sample allows; "dead in FLOW"
-    //   here is the frozen ROOT_A 6 meeting these two draws, the same kind of
-    //   accident as FORM_B's. STEP still sees it (master 3, 0.214).
+    // FORM_A and FORM_B: retired from this group 2026-10-26 (spec
+    //   pitch-range-law). Under the centred RANGE law on a note lane
+    //   (apply_range_centred, mod/range.h) both move audio in both modes.
+    //   FORM_A's dead FLOW reading was the lane sitting on the top of the
+    //   span ("pre-quantize 36.0 throughout", the 2026-10-19 trace at ROOT_A 5):
+    //   under apply_range the unipolar half of RANGE lifts a melody by min(r, 1 - r),
+    //   and the clamp in the pitch chain parks the sum on 1.0. Centred on its
+    //   base the same lane is a melody again. The group stays, empty, so that
+    //   the rule above stays in force.
     bool expected_sample_bound[P_COUNT] = {};
-    for (int p : { P_FORM_A, P_FORM_B })
-        expected_sample_bound[p] = true;
 
     bool expected[P_COUNT] = {};
     for (int p = 0; p < P_COUNT; ++p)

@@ -329,6 +329,11 @@ private:
     // by-ear rationale survives in docs/attic/taste-by-ear-notes.md, "The BBD
     // flow bend budget".
     bool _note_lane() const { return _melodic && _flow_melody; }
+    // The RANGE law at this lane's output (spec 2026-10-26 pitch-range-law,
+    // 4.1): a width around the base on a note lane, the amplitude law
+    // everywhere else. Gated on the engine class above, for the reasons given
+    // there; all three output sites (follow, process, tick) go through it.
+    float _ranged(float v) const;
     void _prime_floors() { _since_fire = _note_min_samples;
                            _since_phrase = _phrase_min_samples; }
     int   _groove_k() const;              // DENSE -> how many ranked cell notes play

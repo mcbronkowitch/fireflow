@@ -74,6 +74,16 @@ can move it; only the in-lane offsets can, and they total ±0.40 on the melodic 
 
 ### 1.3 Where the phrase *is* already playing, RANGE flattens it
 
+> **Superseded (2026-10-26) — see
+> [`2026-10-26-pitch-range-law-design.md`](2026-10-26-pitch-range-law-design.md)
+> §3.** The probes behind this section used small seeds (999, 7, 1, …), whose
+> first draws sit near −1; with the instrument's own lane seeds the picture
+> inverts: RANGE 0.5 is the worst position (29.4 % one-note phrases, 58.0 % rail
+> notes), not the peak, and RANGE 1.0 clamps 7.9 % of notes (4.3 % at the top, 3.6 % at the bottom),
+not 54.2 %. The
+> figures below are kept as the record of what this spec was argued on; the new
+> spec is the authority.
+
 On a FLOW deck with a note engine the phrase is emitted directly at
 `lane.cpp:556`, at **every** SHAPE — `shape_value` is never called. That is not a
 corner case: `kArchWeight` drone = 0.50 (`taste.h:656`), and `mode_of` puts
@@ -165,6 +175,13 @@ SHAPE work.
 
 ### 2.2 `LANE_PITCH` gets a pitch-shaped RANGE law
 
+> **Superseded (2026-10-26) — see
+> [`2026-10-26-pitch-range-law-design.md`](2026-10-26-pitch-range-law-design.md)
+> §4 and §6.** The law this section asked for, in scale degrees with a floor, was
+> never built; the note lane now gets a centred width law (`v·r`), and the floor
+> is that spec's decision D2 (default: none). The gate described below,
+> `_melodic && _flow_melody`, is the one the new law kept (`_note_lane()`).
+
 `apply_range` (`range.h:12-19`) is an **amplitude** law: unipolar below r = 0.5,
 scaled by `2r`. Applied to a quantized pitch axis it produces §1.3's two defects —
 too little ambitus at the bottom of the band, and clipping over the whole top half.
@@ -198,8 +215,8 @@ Each must be shown RED once (`fireflow-tests-must-be-able-to-fail`).
 |---|---|---|
 | G1 | **FORM changes the emitted sequence at SHAPE 0.0.** With five `Principle`s, STEP 8, seed 999: at least three must differ from `TwoMotif`, and the result must differ across seeds | §2.1 did not land. *Proven RED against stock: today all five are identical, 5 distinct values, identical across four seeds.* |
 | G2 | A melodic lane's output is **identical at SHAPE 0.00 / 0.25 / 0.50 / 0.75 / 1.00**, sample for sample | the bank still reaches the melody |
-| G3 | On a drone-band terrain (RANGE ≤ 0.4) the phrase clears **≥ 3 scale degrees** | the pitch RANGE floor is absent or too low |
-| G4 | At RANGE 1.0 fewer than **5 %** of emitted samples are clamped at `part.cpp:132` | the clip §1.3 measures at 54.2 % survived |
+| G3 | On a drone-band terrain (RANGE ≤ 0.4) the phrase clears **≥ 3 scale degrees** | the pitch RANGE floor is absent or too low. **Retired 2026-10-26:** it measured a drone band of the deleted terrain generator; whether the bottom of the knob wants a floor is now D2 of `2026-10-26-pitch-range-law-design.md` (default: none) |
+| G4 | At RANGE 1.0 fewer than **5 %** of emitted samples are clamped at `part.cpp:132` | the clip §1.3 measures at 54.2 % survived. **Retired 2026-10-26:** a note deck's pitch sum is reflected into the span instead of clamped, so clamped samples are zero by construction and the gate cannot go red; its intent is carried by A4 of `2026-10-26-pitch-range-law-design.md` |
 | G5 | A **non-melodic** lane's output is unchanged by both changes, sample for sample, in both modes | the change leaked off the melody |
 | G6 | A **SAMPLER** and a **BBD** deck's PITCH lane is unchanged, sample for sample, in **both** modes | the gate was written as `_melody_engine_on()` instead of `_melodic && _flow_melody` (I3). *Proven RED against that variant: it moves the STEP case from 1.750/9 to 0.351/8.* |
 

@@ -2583,18 +2583,19 @@ inst.set_fx_target_base(p, spky::FXT_FLUX_TIME, 0.5f);
 """
     if push is None or compact_cpp(expected_base) not in compact_cpp(push):
         issues.append("FXT_FLUX_TIME must be pinned to the neutral 0.5 base")
+    # STAGES on a BBD deck, 0.5f on every other engine (pitch-range-law spec
+    # section 3.6: a BBD visit must not leave STAGES as a note deck's centre).
     pitch = """
-if (bbdPart)
-    inst.set_target_base(p, spky::LANE_PITCH,
-        prm(p ? STAGES_B : STAGES_A));
+inst.set_target_base(p, spky::LANE_PITCH,
+    bbdPart ? prm(p ? STAGES_B : STAGES_A) : 0.5f);
 """
     push_n = compact_cpp(push) if push else ""
     if push is None or push_n.count(compact_cpp(pitch)) != 1:
-        issues.append("STAGES must route exactly once to BBD LANE_PITCH")
+        issues.append("STAGES must route exactly once to BBD LANE_PITCH, 0.5f otherwise")
     if "set_fx_target_base(p,spky::FXT_FLUX_TIME,params[p?STAGES_B:STAGES_A]" in push_n:
         issues.append("STAGES is coupled to the tape TIME target")
     if "constboolbbdPart=inst.engine_id(p)==spky::ENGINE_BBD;" not in push_n:
-        issues.append("LANE_PITCH routing lacks the BBD-only gate")
+        issues.append("LANE_PITCH routing lacks the bbdPart flag that picks STAGES on BBD, 0.5f otherwise")
     return issues
 
 
