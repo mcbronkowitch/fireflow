@@ -67,6 +67,7 @@ struct Options {
 // ignores them (the firmware: a physical pot cannot be turned back).
 struct Events {
     bool bbd_edge[2]    = {};   // genuine entry into BBD: FLUX to 0, exciteOtherDeck on
+    bool bbd_part[2]    = {};   // this tick's engine choice is BBD (level, not edge)
     bool rec_started[2] = {};   // REC began: the buffer no longer matches its source
 };
 
@@ -704,6 +705,7 @@ private:
                 if (inst.engine_id(p) == id) _bbdRestoring[p] = false;
                 _bbdEdge[p].rearm();
             }
+            ev.bbd_part[p] = bbdPart;
             if (_bbdEdge[p].tick(bbdPart)) {
                 // Entry into BBD, a player-driven one: a restore is re-armed
                 // and held until its engine has landed (_bbdRestoring above).

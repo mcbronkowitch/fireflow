@@ -18,7 +18,7 @@
 #include "pot_owner.h"
 #include "scan_value.h"
 
-namespace control { struct Events; struct ClockOut; }
+namespace control { struct Events; struct ClockOut; struct Options; }
 
 namespace shell {
 
@@ -41,9 +41,17 @@ bool pot_row_step(const ControlEntry& e, PotOwner& owner, PotFilter& filter,
 // 0, as VCV's does, and the FLUX pot (owners[flux_idx[p]], skipped when -1) is
 // released, so FLUX holds 0 until that pot moves past kPotTouch again.
 // rec_started is ignored: the hardware has no sample path to clear (spec
-// section 3). excite_other_deck is control_tick()'s job, not this one's.
+// section 3). excite_other_deck is apply_excite_events()'s job, not this one's.
 void apply_law_events(const control::Events& ev, float* knobs, PotOwner* owners,
                       const int flux_idx[2]);
+
+// excite_other_deck on the hardware, in the persistent Options the law is
+// handed: on at a deck's entry into BBD (bbd_edge, as VCV's checkbox is set),
+// off on every tick the law reports the deck off BBD (!bbd_part). VCV's is a
+// checkbox the player can clear; the panel has none, so without this one BBD
+// visit would leave a sampler recording the other deck and two BODY decks
+// coupled for good. Takes effect from the next tick on, as in VCV.
+void apply_excite_events(const control::Events& ev, control::Options& opt);
 
 // The mux channel (g_mux_raw / owner index) of the FLUX_A row in out[0] and
 // the FLUX_B row in out[1], -1 where the table has none (the coupon). Found

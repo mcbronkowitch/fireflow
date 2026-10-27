@@ -30,6 +30,15 @@ void apply_law_events(const control::Events& ev, float* knobs, PotOwner* owners,
     }
 }
 
+void apply_excite_events(const control::Events& ev, control::Options& opt)
+{
+    for(int p = 0; p < 2; ++p)
+    {
+        if(ev.bbd_edge[p])        opt.deck[p].excite_other_deck = true;
+        else if(!ev.bbd_part[p])  opt.deck[p].excite_other_deck = false;
+    }
+}
+
 namespace {
 
 // The mux channel of the row that sends `param`, -1 if none: found the way
