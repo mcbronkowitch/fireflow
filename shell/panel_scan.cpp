@@ -218,12 +218,21 @@ void finish_take(const bool was_bbd[2])
 float             g_pub_knobs[ffctl::NUM_PARAMS];
 bool              g_pub_excite[2] = {false, false};
 volatile uint32_t g_pub_seq       = 0;
-#if SHELL_PERSIST_STRESS_ON
-// panel_scan_block_end()'s per-save window, probe image only.
+#ifndef SHELL_CB_WINDOW
+#define SHELL_CB_WINDOW 0
+#endif
+#if SHELL_PERSIST_STRESS_ON || SHELL_CB_WINDOW
+// panel_scan_block_end()'s per-save window (stress image) or per-frame window
+// (SHELL_CB_WINDOW, C_USER_FLAGS), probe images only.
 volatile uint32_t g_win_gap_max    = 0;
 volatile uint32_t g_win_cb_max     = 0;
+volatile uint32_t g_win_over       = 0;
+volatile uint32_t g_win_blocks     = 0;
 volatile bool     g_win_reset      = false;
 uint32_t          g_win_prev_entry = 0;
+// A block above this counts in g_win_over: the low end of the measured
+// deadline band (docs/gotchas.md, ~930-960 k).
+constexpr uint32_t kWinOverCycles  = 930000;
 #endif
 #endif
 
@@ -501,22 +510,27 @@ void panel_scan_block_end(uint32_t c0)
     const uint32_t dc = cycles_now() - c0;
     g_cb_cycles_last  = dc;
     if(g_law_blocks >= kLawWarmupBlocks && dc > g_cb_cycles_max) g_cb_cycles_max = dc;
-#if SHELL_PERSIST_STRESS_ON
+#if SHELL_PERSIST_STRESS_ON || SHELL_CB_WINDOW
     // The probe image's per-save window (plan Task 6 probe 1): the worst
     // callback and the worst interval between two callback entries since the
     // foreground's last save line. A callback held off by the QSPI shows in
     // the interval even when its own cycles do not. The foreground asks for
     // the reset; the callback does it, so the counters have one writer.
+    // SHELL_CB_WINDOW resets it once per printed frame instead.
     if(g_win_reset)
     {
         g_win_gap_max = 0;
         g_win_cb_max  = 0;
+        g_win_over    = 0;
+        g_win_blocks  = 0;
         g_win_reset   = false;
     }
     if(g_win_prev_entry != 0 && c0 - g_win_prev_entry > g_win_gap_max)
         g_win_gap_max = c0 - g_win_prev_entry;
     g_win_prev_entry = c0;
     if(dc > g_win_cb_max) g_win_cb_max = dc;
+    if(dc > kWinOverCycles) g_win_over = g_win_over + 1u;
+    g_win_blocks = g_win_blocks + 1u;
 #endif
     if(g_inst != nullptr)
         cb_profile_block_end(dc, g_law_cycles_last, g_led_cycles_last,
@@ -693,6 +707,20 @@ void run_panel_scan_report(bench::Board& hw)
                      static_cast<int>(g_led_cycles_max),
                      static_cast<int>(g_cb_cycles_last),
                      static_cast<int>(g_cb_cycles_max));
+#if SHELL_CB_WINDOW && !SHELL_PERSIST_STRESS_ON
+        // Since the previous frame: the worst callback, the worst interval
+        // between two callback entries (a late block shows here even when its
+        // own cycles stay under the deadline), the blocks above
+        // kWinOverCycles, and how many blocks the window held.
+        {
+            const uint32_t win = g_win_cb_max, gap = g_win_gap_max;
+            const uint32_t over = g_win_over, n = g_win_blocks;
+            g_win_reset = true;
+            hw.PrintLine("SHELL_PLAY_WIN win=%u gap=%u over=%u n=%u",
+                         static_cast<unsigned>(win), static_cast<unsigned>(gap),
+                         static_cast<unsigned>(over), static_cast<unsigned>(n));
+        }
+#endif
 #if defined(SPKY_PROBE_LAW)
         // The cyc_max block's TIDE split, in cycles and in calls (two lines,
         // each inside the 128-byte log buffer): the law around it is cyc_max.
