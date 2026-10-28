@@ -224,8 +224,37 @@ def test_constants_match_the_firmware():
     check("kRawWindowSweeps = %d;" % r.RAW_WINDOW_SWEEPS in pc,
           "RAW_WINDOW_SWEEPS is not panel_scan.cpp's kRawWindowSweeps")
     # raw_lines() transcribes these three; a change on either side shows here.
-    for piece in ('"SHELL_PLAY_R w=%u r=%d"', '" %u:%u"', "r0 += 6"):
+    for piece in ('"SHELL_PLAY_R w=%u r=%d"', '" %u:%u"', "r0 += 6",
+                  '"SHELL_PLAY_RC w=%u zero=%u:%u rail=%u:%u"'):
         check(piece in pc, "panel_scan.cpp no longer prints %s" % piece)
+
+
+def cal_line(w, zero=(0, 9), rail=(63470, 63490)):
+    """One SHELL_PLAY_RC line as run_panel_scan_report() prints it."""
+    return "SHELL_PLAY_RC w=%d zero=%d:%d rail=%d:%d" % ((w,) + zero + rail)
+
+
+def test_cal_windows_parse_and_skip_the_boot_window():
+    lines = [cal_line(1, rail=(60000, 63490)), cal_line(2), cal_line(2, rail=(0, 65535)),
+             cal_line(3, zero=(0, 4), rail=(63400, 63490))]
+    ws = r.parse_cal_windows(lines)
+    check([w["w"] for w in ws] == [1, 2, 3], "expected windows 1, 2, 3, got %r"
+          % ([w["w"] for w in ws],))
+    sp = r.cal_spreads(ws)
+    check(sp.get("rail", {}).get("worst") == 90 and sp["rail"]["w"] == 3,
+          "rail worst should be 90 in window 3 (boot window and repeat skipped), got %r"
+          % (sp.get("rail"),))
+    check(sp.get("zero", {}).get("worst") == 9, "zero worst should be 9, got %r"
+          % (sp.get("zero"),))
+    check(r.cal_spreads([]) == {}, "no CAL window should give no spreads")
+
+
+def test_raw_report_prints_the_cal_spread():
+    out = io.StringIO()
+    r.report_raw(r.parse_raw_windows(raw_lines(2)), out=out,
+                 cal=r.parse_cal_windows([cal_line(2, rail=(63450, 63491))]))
+    check("CAL rail" in out.getvalue() and "worst 41" in out.getvalue(),
+          "the raw report does not print the CAL rail spread 41")
 
 
 def test_row_senses_come_from_the_generated_header():

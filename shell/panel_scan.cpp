@@ -604,6 +604,19 @@ void run_panel_scan_report(bench::Board& hw)
                 }
                 hw.PrintLine("%s", line);
             }
+            // The two calibration channels in the same window (fault R3): low
+            // source impedance on SENSE_0's own mux, so their spread tells the
+            // pin's floor from the pots' share of it.
+            const int zi = mux_channel(kActiveChain,
+                                       step_of(kActiveChain, kRevaCalZero.group, kRevaCalZero.ch),
+                                       kActiveChain.sense_of_group[kRevaCalZero.group]);
+            const int ri = mux_channel(kActiveChain,
+                                       step_of(kActiveChain, kRevaCalRail.group, kRevaCalRail.ch),
+                                       kActiveChain.sense_of_group[kRevaCalRail.group]);
+            hw.PrintLine("SHELL_PLAY_RC w=%u zero=%u:%u rail=%u:%u",
+                         static_cast<unsigned>(w),
+                         static_cast<unsigned>(raw_lo[zi]), static_cast<unsigned>(raw_hi[zi]),
+                         static_cast<unsigned>(raw_lo[ri]), static_cast<unsigned>(raw_hi[ri]));
             raw_printed = w;
         }
 #endif
