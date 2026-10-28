@@ -79,6 +79,12 @@ and the firmware's audio starts about 3.1 s later (bootloader wait).
 ENGINE on the panel runs 0..5 (`control/params.hpp`): BBD is round(5 v) = 4,
 about 70-90 % of travel.
 
+The second case was audibly wrong: with the recorded excite (off) the BBD had
+nothing to hear. Bastian chose "as live": `fdc3a06b` excites a deck the take
+turns onto BBD. Re-run on that image, same record (seq 577, Sampler) and
+ENGINE A still on BBD: `boot ex=1,0 eng=5,1 take=1`, `chg=0`
+(`…-bbd-boot-excite.txt`).
+
 ## Found on the way
 
 - **`System::GetNow()` runs slow on the board.** The save after the 5-min floor
