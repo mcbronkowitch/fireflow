@@ -21,6 +21,12 @@ control::ControlLaw g_law;
 // the first tick the deck is off BBD (the panel has no checkbox to clear it).
 control::Options    g_opt;
 spkyled::Panel      g_panel;
+#if SHELL_PERSIST_ON
+// A restored excite_other_deck, held until its deck's BBD engine has landed
+// (apply_excite_hold(), panel_step.h): the boot runs another engine first,
+// and bbd_part follows the running one.
+bool                g_excite_hold[2] = {false, false};
+#endif
 } // namespace
 
 void control_boot(float* knobs)
@@ -68,7 +74,11 @@ void control_boot(float* knobs)
 #if SHELL_PERSIST_ON
 void control_set_excite(const bool excite[2])
 {
-    for(int p = 0; p < 2; ++p) g_opt.deck[p].excite_other_deck = excite[p];
+    for(int p = 0; p < 2; ++p)
+    {
+        g_opt.deck[p].excite_other_deck = excite[p];
+        g_excite_hold[p]                = excite[p];
+    }
 }
 
 void control_get_excite(bool excite_out[2])
@@ -86,6 +96,9 @@ control::Events control_tick(const float* knobs, spky::Instrument& inst, float m
     g_opt.measured_bpm = measured_bpm;
     const control::Events ev = g_law.tick(knobs, g_opt, inst);
     apply_excite_events(ev, g_opt);
+#if SHELL_PERSIST_ON
+    apply_excite_hold(ev, knobs, g_excite_hold, g_opt);
+#endif
     return ev;
 }
 

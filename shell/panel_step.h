@@ -53,6 +53,21 @@ void apply_law_events(const control::Events& ev, float* knobs, PotOwner* owners,
 // coupled for good. Takes effect from the next tick on, as in VCV.
 void apply_excite_events(const control::Events& ev, control::Options& opt);
 
+// Panel-state persistence (spec 2026-10-28 section 4.3), after
+// apply_excite_events() on every tick: a restored excite_other_deck held
+// across the engine switch. bbd_part follows the RUNNING engine, and a
+// restored BBD deck boots on another engine until the law's fade-and-swap
+// lands, so apply_excite_events() alone would clear the restored bit on the
+// first tick and nothing would set it again (on_restore() suppresses the
+// bbd_edge). Per deck with hold[p]:
+//   - the ENGINE knob no longer asks for BBD -> hold released, nothing forced
+//     (apply_excite_events() clears the bit off BBD as always);
+//   - the BBD engine is running (bbd_part)    -> hold released, the bit stays
+//     on by apply_excite_events()'s own rule from here;
+//   - otherwise (still switching)             -> the bit is forced on.
+void apply_excite_hold(const control::Events& ev, const float* knobs, bool hold[2],
+                       control::Options& opt);
+
 // The mux channel (g_mux_raw / owner index) of the FLUX_A row in out[0] and
 // the FLUX_B row in out[1], -1 where the table has none (the coupon). Found
 // the way panel_scan_tick() walks a step -- group_at() / channel_at() per

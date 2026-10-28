@@ -187,6 +187,53 @@ TEST_CASE("panel step: excite_other_deck follows the BBD visit") {
     CHECK(opt.deck[1].excite_other_deck);
 }
 
+// Panel-state persistence (spec 2026-10-28 section 4.3): a restored BBD deck
+// boots on another engine until the swap lands, and bbd_part follows the
+// running engine, so the restored bit has to be held across the swap -- one
+// tick of apply_excite_events() alone would clear it for good.
+TEST_CASE("panel step: restored excite is held until the BBD engine runs") {
+    Knobs k;
+    k.v[ffctl::ENGINE_A] = static_cast<float>(shell::kEngineSlotBbd);
+    control::Options opt;
+    opt.deck[0].excite_other_deck = true;            // as restored
+    bool hold[2] = {true, false};
+
+    // Still switching: bbd_part false, no edge (on_restore()): forced on.
+    control::Events ev;
+    for (int tick = 0; tick < 50; ++tick) {
+        shell::apply_excite_events(ev, opt);
+        shell::apply_excite_hold(ev, k.v, hold, opt);
+        CHECK(opt.deck[0].excite_other_deck);
+        CHECK(hold[0]);
+        CHECK_FALSE(opt.deck[1].excite_other_deck);   // no hold, never forced
+    }
+    // Landed: the hold lets go, the bit stays by the ordinary rule.
+    ev.bbd_part[0] = true;
+    shell::apply_excite_events(ev, opt);
+    shell::apply_excite_hold(ev, k.v, hold, opt);
+    CHECK(opt.deck[0].excite_other_deck);
+    CHECK_FALSE(hold[0]);
+    // Off BBD later: cleared as always, nothing forces it back.
+    ev = control::Events{};
+    k.v[ffctl::ENGINE_A] = 1.0f;
+    shell::apply_excite_events(ev, opt);
+    shell::apply_excite_hold(ev, k.v, hold, opt);
+    CHECK_FALSE(opt.deck[0].excite_other_deck);
+}
+
+TEST_CASE("panel step: excite hold lets go when ENGINE leaves BBD before it lands") {
+    Knobs k;
+    k.v[ffctl::ENGINE_A] = 1.0f;                     // moved off BBD mid-switch
+    control::Options opt;
+    opt.deck[0].excite_other_deck = true;
+    bool hold[2] = {true, false};
+    control::Events ev;
+    shell::apply_excite_events(ev, opt);
+    shell::apply_excite_hold(ev, k.v, hold, opt);
+    CHECK_FALSE(hold[0]);
+    CHECK_FALSE(opt.deck[0].excite_other_deck);
+}
+
 TEST_CASE("panel step: rec_started changes no knob and releases no pot") {
     int flux[2];
     shell::flux_channels(shell::kRevaTable, shell::kRevaChain, flux);

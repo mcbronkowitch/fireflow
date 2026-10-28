@@ -28,10 +28,13 @@ namespace shell {
 // control_boot by its mangled name.
 void control_boot(float* knobs);
 
-// Panel-state persistence only (SHELL_PERSIST_ON), all three from the audio
-// interrupt, where control_tick() runs too:
-// - control_set_excite(): deck p's excite_other_deck, after the boot take
-//   (spec 4.3: only where the deck's ENGINE is BBD, excite_after_take()).
+// Panel-state persistence only (SHELL_PERSIST_ON). Called from the audio
+// interrupt, where control_tick() runs too -- except control_set_excite()'s
+// first call, from control_boot() before StartAudio():
+// - control_set_excite(): deck p's excite_other_deck, at boot from the record
+//   and again after the boot take (spec 4.3: only where the deck's ENGINE is
+//   BBD, excite_after_take()). A bit set here is held across the engine switch
+//   until the BBD engine runs (apply_excite_hold(), panel_step.h).
 // - control_get_excite(): the current bits, for the published snapshot.
 // - control_rearm_after_take(): the boot take is a restore, not a player move
 //   (spec 4.4 step 4): on_restore() again, so an ENGINE it wrote fires no

@@ -1,6 +1,8 @@
 // The playing image's per-block glue: see panel_step.h.
 #include "panel_step.h"
 
+#include <cmath>
+
 #include "control/clock_law.hpp"
 #include "control/control_law.h"
 
@@ -36,6 +38,20 @@ void apply_excite_events(const control::Events& ev, control::Options& opt)
     {
         if(ev.bbd_edge[p])        opt.deck[p].excite_other_deck = true;
         else if(!ev.bbd_part[p])  opt.deck[p].excite_other_deck = false;
+    }
+}
+
+void apply_excite_hold(const control::Events& ev, const float* knobs, bool hold[2],
+                       control::Options& opt)
+{
+    for(int p = 0; p < 2; ++p)
+    {
+        if(!hold[p]) continue;
+        const float eng = knobs[p ? ffctl::ENGINE_B : ffctl::ENGINE_A];
+        if(static_cast<int>(std::lround(eng)) != kEngineSlotBbd || ev.bbd_part[p])
+            hold[p] = false;
+        else
+            opt.deck[p].excite_other_deck = true;
     }
 }
 
