@@ -190,6 +190,7 @@ static void AudioCallback(daisy::AudioHandle::InputBuffer  in,
     inst.process(in[0], in[1], out[0], out[1], size);
 
 #if SHELL_PANEL_SCAN
+    shell::panel_scan_gate(out[0], out[1], size);
     shell::panel_scan_block_end(cb0);
 #endif
 

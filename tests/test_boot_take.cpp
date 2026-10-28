@@ -249,3 +249,39 @@ TEST_CASE("boot take: one sweep of kRevaChain reaches every kRevaTable row") {
     }
     CHECK(shell::boot_take_ready(b, t));
 }
+
+// The boot mute (probe 4, 2026-10-28): until the take is done the engine
+// still plays the record's knob values -- on the board, about 30 ms of the
+// saved FILT A with the pot already turned shut. The gate silences that and
+// fades in once the take has written.
+TEST_CASE("boot gate: silent until the take is done, then a fade-in, then unity") {
+    shell::BootGate g{};
+    float l[48], r[48];
+    auto fill = [&] { for (int i = 0; i < 48; ++i) { l[i] = 0.5f; r[i] = -0.5f; } };
+
+    fill();
+    shell::boot_gate_apply(g, false, l, r, 48);
+    for (int i = 0; i < 48; ++i) { CHECK(l[i] == 0.0f); CHECK(r[i] == 0.0f); }
+
+    // Done: the fade starts at zero gain and rises monotonically.
+    float last = -1.0f;
+    int   blocks = 0;
+    for (; blocks < 100; ++blocks) {
+        fill();
+        shell::boot_gate_apply(g, true, l, r, 48);
+        for (int i = 0; i < 48; ++i) {
+            CHECK(l[i] >= last);
+            CHECK(r[i] == doctest::Approx(-l[i]));
+            last = l[i];
+        }
+        if (l[47] == 0.5f) break;
+    }
+    // About kBootFadeSamples long: whole blocks, at least one partial.
+    CHECK((blocks + 1) * 48 >= shell::kBootFadeSamples);
+    CHECK(blocks * 48 <= shell::kBootFadeSamples);
+    // Once faded in, the signal passes untouched, done or not (no re-mute).
+    fill();
+    shell::boot_gate_apply(g, false, l, r, 48);
+    CHECK(l[0] == 0.5f);
+    CHECK(r[47] == -0.5f);
+}

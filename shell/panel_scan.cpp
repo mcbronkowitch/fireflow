@@ -471,6 +471,18 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
     }
 }
 
+void panel_scan_gate(float* l, float* r, size_t n)
+{
+#if SHELL_PERSIST_ON
+    // The boot mute: silent until the take has written, then the fade-in
+    // (boot_gate_apply(), host tested). Same context as panel_scan_tick().
+    static BootGate gate;
+    boot_gate_apply(gate, g_take.done, l, r, n);
+#else
+    (void)l; (void)r; (void)n;   // without a take the init patch boots unmuted
+#endif
+}
+
 void panel_scan_block_end(uint32_t c0)
 {
     const uint32_t dc = cycles_now() - c0;

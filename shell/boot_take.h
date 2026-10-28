@@ -9,6 +9,7 @@
 //
 // Spec: ../docs/superpowers/specs/2026-10-28-panel-state-persistence-design.md
 // section 4.4.
+#include <cstddef>
 #include <cstdint>
 #include "controls.h"
 #include "scan_value.h"
@@ -42,5 +43,21 @@ bool boot_take_ready(const BootTake& b, const ControlTable& t);
 // done -- except with an invalid span or a table larger than kMaxRows, which
 // write nothing and leave done false.
 void boot_take_apply(BootTake& b, const ControlTable& t, const Span& span, float* knobs);
+
+// The boot mute (probe 4, docs/hardware/persist-measured.md): until the take
+// is done the engine plays the record's knob values, not the pots' -- on the
+// board about 30 ms of a saved FILT A with the pot already turned shut. The
+// audio callback runs every block's output through the gate after process():
+// silence while the take is open, then a linear fade-in over
+// kBootFadeSamples (20 ms at 48 kHz) so a sustained patch does not click on,
+// then pass-through for good.
+inline constexpr int kBootFadeSamples = 960;
+
+struct BootGate
+{
+    int faded = 0;   // fade samples played; kBootFadeSamples = open for good
+};
+
+void boot_gate_apply(BootGate& g, bool take_done, float* l, float* r, size_t n);
 
 } // namespace shell

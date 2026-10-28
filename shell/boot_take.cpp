@@ -51,4 +51,23 @@ void boot_take_apply(BootTake& b, const ControlTable& t, const Span& span, float
     b.done = true;
 }
 
+void boot_gate_apply(BootGate& g, bool take_done, float* l, float* r, size_t n)
+{
+    if(g.faded >= kBootFadeSamples) return;
+    if(!take_done)
+    {
+        for(size_t i = 0; i < n; ++i) l[i] = r[i] = 0.0f;
+        return;
+    }
+    for(size_t i = 0; i < n; ++i)
+    {
+        const float k = g.faded < kBootFadeSamples
+                            ? static_cast<float>(g.faded) / static_cast<float>(kBootFadeSamples)
+                            : 1.0f;
+        l[i] *= k;
+        r[i] *= k;
+        if(g.faded < kBootFadeSamples) ++g.faded;
+    }
+}
+
 } // namespace shell
