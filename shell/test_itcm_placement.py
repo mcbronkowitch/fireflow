@@ -60,6 +60,15 @@ check("a section past 64 KB is refused",
       refusals(nm=NM.replace("00000200 A __itcm_hot_end__", "00010004 A __itcm_hot_end__")) != [])
 check("a load address outside QSPI_COLD is refused",
       refusals(nm=NM.replace("90118000 A __itcm_hot_load__", "24030000 A __itcm_hot_load__")) != [])
+# The top two sectors hold the panel-state records (spec 2026-10-28 section
+# 5.2): a load address inside them, or a load image that runs into them, is
+# refused. The fixture's section is 0x100 bytes long (0x100..0x200).
+check("a load address in the panel-state sectors is refused",
+      refusals(nm=NM.replace("90118000 A __itcm_hot_load__", "907fe000 A __itcm_hot_load__")) != [])
+check("a load image running into the panel-state sectors is refused",
+      refusals(nm=NM.replace("90118000 A __itcm_hot_load__", "907fdf80 A __itcm_hot_load__")) != [])
+check("a load image ending exactly at the panel-state sectors passes",
+      refusals(nm=NM.replace("90118000 A __itcm_hot_load__", "907fdf00 A __itcm_hot_load__")) == [])
 check("missing section symbols are refused",
       refusals(nm="\n".join(l for l in NM.splitlines() if "__itcm_hot_" not in l) + "\n") != [])
 

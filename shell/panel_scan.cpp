@@ -23,6 +23,13 @@
 #include "pot_owner.h"
 #include "scan_value.h"
 #include "util/probe_law.h"
+#include "persist_flash.h"
+#if SHELL_PERSIST_ON
+#include <cmath>
+#include <cstring>
+#include "boot_take.h"
+#include "persist_policy.h"
+#endif
 #if !SHELL_COUPON_PROBE
 #include "control/clock_law.hpp"
 #include "gate_latch.h"
@@ -155,6 +162,71 @@ uint32_t g_led_frame     = 0;
 float    g_block_dt      = 0.0f;
 uint32_t g_block_samples = 0;
 
+#if SHELL_PERSIST_ON
+// Panel-state persistence (spec 2026-10-28-panel-state-persistence-design.md).
+//
+// The boot take (section 4.4 steps 3-5): until it is done, every reading with
+// a valid span is collected instead of going through pot_row_step(); once
+// every row has one, they are written ENGINE rows first (boot_take_apply()),
+// every pot is released, and the law is re-armed as for a restore.
+BootTake g_take = {};
+// The fallback: the walk reaches every row once per sweep (host test "one
+// sweep of kRevaChain reaches every kRevaTable row"), so a complete take is
+// done at the end of the first sweep with a valid span. Should a row ever go
+// unread, the take is applied anyway after kTakeSweeps sweeps that ended with
+// a valid span, with the rows seen so far -- a panel whose pots never write
+// again would be the alternative. g_take_partial is the seen-row count of
+// such a take for the foreground's one line, 0 when the take was complete.
+constexpr uint32_t kTakeSweeps     = 3;
+uint32_t           g_take_sweeps   = 0;
+volatile int       g_take_partial  = 0;
+
+// After the take has written: every pot lets go -- from here on a pot writes
+// only once moved past kPotTouch, as before -- and the law is re-armed as for
+// a restore, so an ENGINE the take changed fires no bbd_edge (FLUX stays at
+// its pot). The record's excite_other_deck survives only on a deck that is on
+// BBD after the take (spec 4.3).
+// Excite during the boot: the law's bbd_part follows the RUNNING engine, and
+// a restored BBD deck runs another engine until the fade-and-swap lands
+// (roughly the first 100 ms, from reading the code, not measured). Without a
+// hold, apply_excite_events() clears the restored bit on the first tick;
+// control_set_excite() therefore holds it across the switch
+// (apply_excite_hold(), panel_step.h), both at boot and here, where the take
+// may have finished before the engine landed.
+// Which decks' ENGINE knob is on BBD, read before the take writes: a deck
+// the take turns onto BBD gets excite as a live turn would (excite_after_take()).
+void engines_on_bbd(const float* knobs, bool out[2])
+{
+    out[0] = static_cast<int>(std::round(knobs[ffctl::ENGINE_A])) == kEngineSlotBbd;
+    out[1] = static_cast<int>(std::round(knobs[ffctl::ENGINE_B])) == kEngineSlotBbd;
+}
+
+void finish_take(const bool was_bbd[2])
+{
+    for(PotOwner& o : g_owner) pot_release(o);
+    control_rearm_after_take();
+    bool excite[2];
+    excite_after_take(persist_boot_excite(), was_bbd, g_knobs, excite);
+    control_set_excite(excite);
+}
+// The snapshot the foreground saves from (section 5.1), published once per
+// sweep after the boot take, in the g_raw_win / g_law_split_n manner but as a
+// sequence lock: g_pub_seq is odd while the callback writes, and the
+// foreground copies between two equal, even readings. The callback cannot be
+// interrupted by the foreground, so its own write never sees a torn copy; a
+// foreground copy the callback cut into is retried. 0 = nothing published yet.
+float             g_pub_knobs[ffctl::NUM_PARAMS];
+bool              g_pub_excite[2] = {false, false};
+volatile uint32_t g_pub_seq       = 0;
+#if SHELL_PERSIST_STRESS_ON
+// panel_scan_block_end()'s per-save window, probe image only.
+volatile uint32_t g_win_gap_max    = 0;
+volatile uint32_t g_win_cb_max     = 0;
+volatile bool     g_win_reset      = false;
+uint32_t          g_win_prev_entry = 0;
+#endif
+#endif
+
 } // namespace
 
 void panel_scan_init(bench::Board& hw)
@@ -185,7 +257,9 @@ void panel_scan_init(bench::Board& hw)
 #else
     (void)hw;
 #endif
-    // The firmware's boot is a patch restore of the init patch (spec 4.1).
+    // The firmware's boot is a patch restore of the init patch (spec 4.1), or
+    // with SHELL_PERSIST_ON of the init patch plus the newest saved record
+    // (spec 2026-10-28 section 4.4).
     control_boot(g_knobs);
     // The DWT counter the law's cycle report reads; libDaisy never starts it,
     // and without this it reads zero forever (cycles.h).
@@ -238,6 +312,18 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
 #endif
         const ControlEntry* e = find_control(kTable, g, ch);
         if(e == nullptr) continue;
+#if SHELL_PERSIST_ON
+        // The boot take collects (spec 2026-10-28 section 4.4 step 3): the
+        // first reading per row with a valid span is kept, not filtered and
+        // not owned; it is written below once every row has one. Before the
+        // span is valid the row goes through pot_row_step() as always, which
+        // writes nothing then.
+        if(!g_take.done && g_span.valid)
+        {
+            boot_take_collect(g_take, static_cast<int>(e - kTable.entries), raw);
+            continue;
+        }
+#endif
         // Target (MOD-aware, ATTACK -> STAGES on the BBD), ownership (spec
         // 2026-10-18-rev-a-p6b2 section 2), the jump to the pot's current
         // position on the move that takes it, the filter, and the write by
@@ -246,6 +332,20 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
         if(pot_row_step(*e, g_owner[idx], g_filter[idx], raw, g_span, g_knobs, &v))
             g_value[idx] = v;               // every row is reported
     }
+
+#if SHELL_PERSIST_ON
+    // The boot take writes (spec 2026-10-28 section 4.4 steps 3-5), once,
+    // before this block's control tick sees the vector: ENGINE rows first, so
+    // an ATTACK row lands on ATTACK or STAGES by the engine the panel shows;
+    // then finish_take(). A take that cannot apply (no valid span) stays open.
+    if(!g_take.done && boot_take_ready(g_take, kTable))
+    {
+        bool was_bbd[2];
+        engines_on_bbd(g_knobs, was_bbd);
+        boot_take_apply(g_take, kTable, g_span, g_knobs);
+        if(g_take.done) finish_take(was_bbd);
+    }
+#endif
 
     // The block period and size come from the board (AudioBlockSize /
     // AudioSampleRate), read on the first tick.
@@ -335,6 +435,38 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
 #endif
         if(sp.valid) g_span = sp;
         g_sweeps = g_sweeps + 1u;
+#if SHELL_PERSIST_ON
+        // The partial-take fallback (see kTakeSweeps): this sweep ended with
+        // a valid span and the take is still open. The first such sweep is
+        // the one whose end made the span valid and collected nothing, so
+        // the fallback fires after kTakeSweeps sweeps that did collect.
+        if(!g_take.done && g_span.valid && ++g_take_sweeps > kTakeSweeps)
+        {
+            int seen = 0;
+            for(int r = 0; r < kTable.count && r < kMaxRows; ++r) seen += g_take.seen[r] ? 1 : 0;
+            bool was_bbd[2];
+            engines_on_bbd(g_knobs, was_bbd);
+            boot_take_apply(g_take, kTable, g_span, g_knobs);   // writes the seen rows only
+            if(g_take.done)
+            {
+                finish_take(was_bbd);
+                g_take_partial = seen > 0 ? seen : -1;   // -1: none seen, still reported
+            }
+        }
+        // The save snapshot (spec 2026-10-28 section 5.1), once per sweep and
+        // only after the boot take: the foreground seeds its comparison with
+        // the first one, so the take itself never counts as a change. The
+        // fences keep the compiler from moving the copy across the counter.
+        if(g_take.done)
+        {
+            g_pub_seq = g_pub_seq + 1u;   // odd: writing
+            std::atomic_signal_fence(std::memory_order_seq_cst);
+            for(int i = 0; i < ffctl::NUM_PARAMS; ++i) g_pub_knobs[i] = g_knobs[i];
+            control_get_excite(g_pub_excite);
+            std::atomic_signal_fence(std::memory_order_seq_cst);
+            g_pub_seq = g_pub_seq + 1u;   // even: done
+        }
+#endif
 #if SHELL_RAW_SPREAD
         if(++g_raw_win_sweeps >= kRawWindowSweeps)
         {
@@ -352,11 +484,40 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
     }
 }
 
+void panel_scan_gate(float* l, float* r, size_t n)
+{
+#if SHELL_PERSIST_ON
+    // The boot mute: silent until the take has written, then the fade-in
+    // (boot_gate_apply(), host tested). Same context as panel_scan_tick().
+    static BootGate gate;
+    boot_gate_apply(gate, g_take.done, l, r, n);
+#else
+    (void)l; (void)r; (void)n;   // without a take the init patch boots unmuted
+#endif
+}
+
 void panel_scan_block_end(uint32_t c0)
 {
     const uint32_t dc = cycles_now() - c0;
     g_cb_cycles_last  = dc;
     if(g_law_blocks >= kLawWarmupBlocks && dc > g_cb_cycles_max) g_cb_cycles_max = dc;
+#if SHELL_PERSIST_STRESS_ON
+    // The probe image's per-save window (plan Task 6 probe 1): the worst
+    // callback and the worst interval between two callback entries since the
+    // foreground's last save line. A callback held off by the QSPI shows in
+    // the interval even when its own cycles do not. The foreground asks for
+    // the reset; the callback does it, so the counters have one writer.
+    if(g_win_reset)
+    {
+        g_win_gap_max = 0;
+        g_win_cb_max  = 0;
+        g_win_reset   = false;
+    }
+    if(g_win_prev_entry != 0 && c0 - g_win_prev_entry > g_win_gap_max)
+        g_win_gap_max = c0 - g_win_prev_entry;
+    g_win_prev_entry = c0;
+    if(dc > g_win_cb_max) g_win_cb_max = dc;
+#endif
     if(g_inst != nullptr)
         cb_profile_block_end(dc, g_law_cycles_last, g_led_cycles_last,
                              g_law_blocks >= kLawWarmupBlocks, *g_inst);
@@ -365,6 +526,43 @@ void panel_scan_block_end(uint32_t c0)
 void run_panel_scan_report(bench::Board& hw)
 {
     hw.StartLog(false);
+#if SHELL_PERSIST_ON
+    // Where boot's hidden state came from (spec 2026-10-28 section 8): the
+    // newest valid record and its seq, or the init patch (seq=0). As the log
+    // opens and again every kPersistSrcEvery passes (5 s): StartLog(false)
+    // does not wait for the host, so a terminal attached later would never
+    // see a line printed only once.
+    constexpr uint32_t kPersistSrcEvery = 10;
+    uint32_t           persist_pass     = 0;
+    bool               persist_partial_printed = false;
+    // The save (spec section 5): two vectors, this pass's snapshot and the
+    // previous pass's, so `changed` is "differs from half a second ago"
+    // (persist_differs() ignores REC_A, REC_B and MODBTN, which are never
+    // restored). Seeded from the first snapshot, which the callback publishes
+    // only after the boot take, so the take never counts as a change.
+    // Static, not on this never-returning frame: 1 KB.
+    static float persist_cur[ffctl::NUM_PARAMS];
+    static float persist_prev[ffctl::NUM_PARAMS];
+    bool         persist_cur_excite[2] = {false, false};
+    bool         persist_seeded        = false;
+    SavePolicy   persist_policy;
+    // Passes whose snapshot differed from the previous pass's, since boot:
+    // printed as `chg=` beside the src line. It is the save trigger's raw
+    // input, which the rate-limited save lines hide (plan Task 6 probe 3,
+    // the dead-band question of spec 5.3).
+    uint32_t persist_chg = 0;
+    // The excite / engine line, latched about a second after the first pass
+    // (plan Task 6 probe 5): by then a restored BBD deck has landed. Printed
+    // then and again beside every src line -- once only, it went out before
+    // the host had the port open (probe 4, 2026-10-28).
+    const uint32_t persist_t_first = daisy::System::GetNow();
+    bool           persist_boot_printed = false;
+    int            persist_boot_v[5]    = {0, 0, -1, -1, 0};   // ex0 ex1 eng0 eng1 take
+#if SHELL_PERSIST_STRESS_ON
+    constexpr uint32_t kStressEveryMs     = 2000;   // quiet 2 s, floor 0: every 2 s
+    uint32_t           persist_stress_last = persist_t_first;
+#endif
+#endif
     while(1)
     {
         // The span is copied field by field from the ISR's variable; a torn
@@ -434,6 +632,19 @@ void run_panel_scan_report(bench::Board& hw)
                 }
                 hw.PrintLine("%s", line);
             }
+            // The two calibration channels in the same window (fault R3): low
+            // source impedance on SENSE_0's own mux, so their spread tells the
+            // pin's floor from the pots' share of it.
+            const int zi = mux_channel(kActiveChain,
+                                       step_of(kActiveChain, kRevaCalZero.group, kRevaCalZero.ch),
+                                       kActiveChain.sense_of_group[kRevaCalZero.group]);
+            const int ri = mux_channel(kActiveChain,
+                                       step_of(kActiveChain, kRevaCalRail.group, kRevaCalRail.ch),
+                                       kActiveChain.sense_of_group[kRevaCalRail.group]);
+            hw.PrintLine("SHELL_PLAY_RC w=%u zero=%u:%u rail=%u:%u",
+                         static_cast<unsigned>(w),
+                         static_cast<unsigned>(raw_lo[zi]), static_cast<unsigned>(raw_hi[zi]),
+                         static_cast<unsigned>(raw_lo[ri]), static_cast<unsigned>(raw_hi[ri]));
             raw_printed = w;
         }
 #endif
@@ -503,6 +714,121 @@ void run_panel_scan_report(bench::Board& hw)
                      static_cast<int>(t.n_sinc), static_cast<int>(t.n_rinc));
 #endif
         cb_profile_report(hw);
+#if SHELL_PERSIST_ON
+        if(persist_pass++ % kPersistSrcEvery == 0)
+        {
+            const SlotPick& b = persist_boot_pick();
+            hw.PrintLine("SHELL_PERSIST src=%s seq=%u", b.sector >= 0 ? "flash" : "init",
+                         static_cast<unsigned>(b.sector >= 0 ? b.seq : 0u));
+            hw.PrintLine("SHELL_PERSIST chg=%u", static_cast<unsigned>(persist_chg));
+            if(persist_boot_printed)
+                hw.PrintLine("SHELL_PERSIST boot ex=%d,%d eng=%d,%d take=%d", persist_boot_v[0],
+                             persist_boot_v[1], persist_boot_v[2], persist_boot_v[3],
+                             persist_boot_v[4]);
+        }
+        // Once, about a second after the first pass: each deck's excite bit
+        // and running engine, and whether the boot take is done. Read without
+        // a handshake from the callback's state: bools and an engine id, a
+        // torn read is impossible and a stale one costs nothing here.
+        if(!persist_boot_printed && daisy::System::GetNow() - persist_t_first >= 1000u)
+        {
+            bool ex[2];
+            control_get_excite(ex);
+            persist_boot_v[0] = ex[0] ? 1 : 0;
+            persist_boot_v[1] = ex[1] ? 1 : 0;
+            persist_boot_v[2] = g_inst ? static_cast<int>(g_inst->engine_id(0)) : -1;
+            persist_boot_v[3] = g_inst ? static_cast<int>(g_inst->engine_id(1)) : -1;
+            persist_boot_v[4] = g_take.done ? 1 : 0;
+            hw.PrintLine("SHELL_PERSIST boot ex=%d,%d eng=%d,%d take=%d", persist_boot_v[0],
+                         persist_boot_v[1], persist_boot_v[2], persist_boot_v[3],
+                         persist_boot_v[4]);
+            persist_boot_printed = true;
+        }
+        // A take the fallback applied with rows missing (kTakeSweeps): once.
+        // A complete take prints nothing.
+        const int partial = g_take_partial;
+        if(partial != 0 && !persist_partial_printed)
+        {
+            hw.PrintLine("SHELL_PERSIST take=partial seen=%d/%d", partial < 0 ? 0 : partial,
+                         kTable.count);
+            persist_partial_printed = true;
+        }
+        // The snapshot, between two equal, even sequence counts; a copy the
+        // callback cut into is retried (the callback always finishes its own
+        // write before this loop runs again, so the retry ends).
+        uint32_t pub;
+        do
+        {
+            pub = g_pub_seq;
+            std::atomic_signal_fence(std::memory_order_seq_cst);
+            for(int i = 0; i < ffctl::NUM_PARAMS; ++i) persist_cur[i] = g_pub_knobs[i];
+            persist_cur_excite[0] = g_pub_excite[0];
+            persist_cur_excite[1] = g_pub_excite[1];
+            std::atomic_signal_fence(std::memory_order_seq_cst);
+        } while((pub & 1u) != 0 || pub != g_pub_seq);
+        if(pub != 0 && !persist_seeded)
+        {
+            for(int i = 0; i < ffctl::NUM_PARAMS; ++i) persist_prev[i] = persist_cur[i];
+            persist_seeded = true;
+        }
+        else if(pub != 0)
+        {
+            const bool changed = persist_differs(persist_cur, persist_prev);
+            for(int i = 0; i < ffctl::NUM_PARAMS; ++i) persist_prev[i] = persist_cur[i];
+            if(changed) ++persist_chg;
+            const uint32_t now = daisy::System::GetNow();
+#if SHELL_PERSIST_STRESS_ON
+            // The probe image: a save every 2 s, changed or not.
+            const bool due = now - persist_stress_last >= kStressEveryMs;
+            if(due) persist_stress_last = now;
+#else
+            // 15 s unchanged and at most one save per 5 min (save_due()).
+            const bool due = save_due(persist_policy, changed, now);
+#endif
+            if(due)
+            {
+                // Here and only here, in the foreground: the QSPI erase and
+                // program never run in the audio interrupt (spec 5.2).
+                static PersistRecord rec;
+                std::memset(&rec, 0, sizeof rec);
+                rec.layout = current_layout();
+                rec.seq    = persist_latest().seq + 1u;   // 1 for the first record
+                for(int i = 0; i < ffctl::NUM_PARAMS; ++i) rec.knobs[i] = persist_cur[i];
+                rec.excite[0] = persist_cur_excite[0] ? 1 : 0;
+                rec.excite[1] = persist_cur_excite[1] ? 1 : 0;
+                record_seal(rec);
+                // DWT cycles, not System::GetUs(): GetUs() wraps every ~21 s
+                // and printed nonsense for a save across the wrap (probes 1
+                // and 3). CYCCNT wraps at ~8.9 s, far above a ~70 ms save.
+                const uint32_t c0 = cycles_now();
+                const bool     ok = persist_write(hw.qspi, rec);
+                const uint32_t us = (cycles_now() - c0) / kCoreMhz;
+                // A failed save keeps the vector dirty: the same state is
+                // tried again once the 5-min floor is up, without burning a
+                // slot every half second meanwhile (save_failed()).
+                if(ok) save_done(persist_policy, daisy::System::GetNow());
+                else   save_failed(persist_policy, daisy::System::GetNow());
+#if SHELL_PERSIST_STRESS_ON
+                // Plus the callback since the previous save line: cb_max as
+                // SHELL_PLAY_LAW's (since the first second), win = the worst
+                // callback in this window, gap = the worst entry-to-entry
+                // interval in it (2 ms block = 960 000 cycles). Worst case
+                // about 110 B, inside the 128-byte log buffer.
+                const uint32_t win = g_win_cb_max;
+                const uint32_t gap = g_win_gap_max;
+                g_win_reset        = true;
+                hw.PrintLine("SHELL_PERSIST save seq=%u us=%u ok=%d cb_max=%u win=%u gap=%u",
+                             static_cast<unsigned>(rec.seq), static_cast<unsigned>(us),
+                             ok ? 1 : 0, static_cast<unsigned>(g_cb_cycles_max),
+                             static_cast<unsigned>(win), static_cast<unsigned>(gap));
+#else
+                hw.PrintLine("SHELL_PERSIST save seq=%u us=%u ok=%d",
+                             static_cast<unsigned>(rec.seq), static_cast<unsigned>(us),
+                             ok ? 1 : 0);
+#endif
+            }
+        }
+#endif
         hw.Delay(500);
     }
 }

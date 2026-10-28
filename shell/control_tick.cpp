@@ -6,6 +6,7 @@
 
 #include "control_tick.h"
 #include "boot_patch.h"
+#include "persist_flash.h"
 #include "panel_step.h"
 #include "control/led_law.hpp"
 #include "generated_boot_patch_noon.h"
@@ -20,11 +21,29 @@ control::ControlLaw g_law;
 // the first tick the deck is off BBD (the panel has no checkbox to clear it).
 control::Options    g_opt;
 spkyled::Panel      g_panel;
+#if SHELL_PERSIST_ON
+// A restored excite_other_deck, held until its deck's BBD engine has landed
+// (apply_excite_hold(), panel_step.h): the boot runs another engine first,
+// and bbd_part follows the running one.
+bool                g_excite_hold[2] = {false, false};
+#endif
 } // namespace
 
 void control_boot(float* knobs)
 {
+#if SHELL_PERSIST_ON
+    // Panel-state persistence (spec 2026-10-28 section 4.4 step 1): the init
+    // patch with the newest valid record laid over it, read memory-mapped --
+    // this runs from panel_scan_init(), before StartAudio(), after
+    // board_init() has mapped the QSPI. The boot take (panel_scan.cpp) puts
+    // the pot positions over that once the span is valid. SHELL_BOOT_PATCH is
+    // never set here: persist_flash.h turns persistence off under it.
+    bool excite[2];
+    persist_boot(knobs, excite);
+    control_set_excite(excite);
+#else
     for(int i = 0; i < ffctl::NUM_PARAMS; ++i) knobs[i] = ffctl::kInitParamDefaults[i];
+#endif
     // The CPU headroom round's stress patches (spec 2026-10-18-cpu-headroom-
     // design.md section 4.6), built with C_USER_FLAGS=-DSHELL_BOOT_PATCH=N on a
     // clean build: the init patch with one deck's engine changed. ENGINE knob
@@ -52,6 +71,24 @@ void control_boot(float* knobs)
     (void)spkyled::gamma_table(spkyled::kLedSteps);
 }
 
+#if SHELL_PERSIST_ON
+void control_set_excite(const bool excite[2])
+{
+    for(int p = 0; p < 2; ++p)
+    {
+        g_opt.deck[p].excite_other_deck = excite[p];
+        g_excite_hold[p]                = excite[p];
+    }
+}
+
+void control_get_excite(bool excite_out[2])
+{
+    for(int p = 0; p < 2; ++p) excite_out[p] = g_opt.deck[p].excite_other_deck;
+}
+
+void control_rearm_after_take() { g_law.on_restore(); }
+#endif
+
 control::Events control_tick(const float* knobs, spky::Instrument& inst, float measured_bpm)
 {
     // The law takes it in 20..400 BPM and otherwise uses the TEMPO knob
@@ -59,6 +96,9 @@ control::Events control_tick(const float* knobs, spky::Instrument& inst, float m
     g_opt.measured_bpm = measured_bpm;
     const control::Events ev = g_law.tick(knobs, g_opt, inst);
     apply_excite_events(ev, g_opt);
+#if SHELL_PERSIST_ON
+    apply_excite_hold(ev, knobs, g_excite_hold, g_opt);
+#endif
     return ev;
 }
 

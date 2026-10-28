@@ -28,6 +28,9 @@ inline constexpr int kPotTouch = 144;
 // its parameter. Whatever the coupon session measures, it must stay above.
 static_assert(kPotTouch > kPotHysteresis,
               "kPotTouch must sit above kPotHysteresis (spec section 2)");
+static_assert(kPotTouch > pot_hysteresis(0) && kPotTouch > pot_hysteresis(1)
+                  && kPotTouch > pot_hysteresis(2) && kPotTouch > pot_hysteresis(3),
+              "kPotTouch must sit above every Rev A pin's band (fault R3)");
 
 struct PotOwner
 {

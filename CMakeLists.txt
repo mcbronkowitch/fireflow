@@ -119,6 +119,8 @@ add_executable(spky_tests
     tests/test_pot_owner.cpp
     shell/panel_step.cpp
     tests/test_panel_step.cpp
+    shell/boot_take.cpp
+    tests/test_boot_take.cpp
     shell/keys.cpp
     tests/test_keys.cpp
     shell/led_out.cpp
@@ -210,6 +212,10 @@ add_executable(spky_tests
     tests/test_smooth_law.cpp
     tests/test_skip_unchanged.cpp
     shell/boot_patch.cpp
+    shell/persist_record.cpp
+    tests/test_persist_record.cpp
+    shell/persist_policy.cpp
+    tests/test_persist_policy.cpp
     tests/test_boot_patch.cpp
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)
@@ -672,7 +678,8 @@ add_test(NAME shell_itcm_placement_guard
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_itcm_placement.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
 
-# The shell images actually build: default, Rev A play and coupon play, each a
+# The shell images actually build: default, Rev A play (with and without
+# SHELL_PERSIST) and coupon play, each a
 # clean ARM build in its own directory under the build tree (shell/build is not
 # touched), with SRAM_EXEC use in the output. Nothing else in ctest compiles
 # shell/, which is how the Rev A play image stayed broken behind a green suite

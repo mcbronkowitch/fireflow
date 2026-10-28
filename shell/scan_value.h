@@ -20,6 +20,22 @@ namespace shell {
 // the two differ.
 inline constexpr int kPotHysteresis = 16;
 
+// Rev A's band, per sense pin (fault R3, docs/hardware/reva-bring-up.md rows
+// 5.3/5.5): the coupon's 16 is too narrow on the real panel. The same rule
+// as above, the worst untouched one-second raw spread rounded up to a
+// multiple of 16: SENSE_0 57 counts at mid travel (2026-10-24) -> 64,
+// SENSE_1-3 23 (2026-10-28) -> 32. SENSE_0's excess grows with the wiper's
+// source impedance; a C_SENSE0 fitted later would let its band come down.
+inline constexpr int kRevaHysteresis[4] = {64, 32, 32, 32};
+
+// The band for a row on sense pin `sense` (ControlEntry::sense):
+// kRevaHysteresis on Rev A's four pins, kPotHysteresis for a row that records
+// no pin (-1, the coupon's tables).
+constexpr int pot_hysteresis(int sense)
+{
+    return sense >= 0 && sense < 4 ? kRevaHysteresis[sense] : kPotHysteresis;
+}
+
 // The span Rev A measures for itself once per sweep from its two calibration
 // channels, CAL_GND and CAL_3V3 (spec 2026-10-02 section 3.5): coupon_span()'s
 // rail floor and zero ceiling. There is no tie spread to check -- one channel

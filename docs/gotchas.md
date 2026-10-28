@@ -477,6 +477,15 @@ invisible from reading the scripts, and each cost real time.
 
 ## Daisy Patch Submodule (the board itself, not the generators)
 
+- **`System::GetNow()` runs about 25 % slow while audio plays.** It is HAL's
+  SysTick count; why it loses time is not measured (ticks swallowed while the
+  audio callback holds the core is the likely reading, not a proven one).
+  Measured 2026-10-28 on Rev A (`docs/hardware/persist-measured.md`): the
+  persistence policy's 300 000 ms floor elapsed in 404 s of wall time, its
+  15 000 ms quiet in about 18 s. Time anything that must match the wall clock
+  with DWT cycles (`shell/cycles.h`, wraps at ~8.9 s) or with audio blocks.
+  `System::GetUs()` is a different trap: it wraps every ~21.5 s.
+
 - **`memset` on the board is a byte loop, ~3 cycles per byte into SDRAM.**
   The shell links newlib-nano's size-optimised `memset` (one `strb` per byte).
   Measured 2026-10-24 on Rev A (fault R2): 64 KB of BBD line cost 198 k

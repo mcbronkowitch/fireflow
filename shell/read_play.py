@@ -29,6 +29,9 @@ up to six `lo:hi` pairs, the min and max of each row's raw 16-bit word in
 that window. --raw judges them: per row the worst one-second spread, per
 sense pin the worst and median of those, and row 5.7's touch rule over the
 worst spread against kPotTouch. Window 1 opens at boot and is skipped.
+Each window also prints `SHELL_PLAY_RC w=<window> zero=lo:hi rail=lo:hi`,
+the same min and max for SENSE_0's two calibration channels (CAL_GND,
+CAL_3V3); --raw reports their worst spread beside the pots', unjudged.
 
 Verdicts (exit code): no complete frame, or a span that is never valid, is
 1. --rest makes any row that changed during the capture a failure (hands
@@ -61,12 +64,16 @@ SWEEP_MS_EXPECTED = 48.0
 # scan_value.h kPotHysteresis, pot_owner.h kPotTouch, panel_scan.cpp
 # kRawWindowSweeps (the guard checks all three against the source).
 POT_HYSTERESIS = 16
+# scan_value.h kRevaHysteresis: Rev A's band per sense pin (fault R3), what a
+# row's spread is judged against in the raw report.
+REVA_HYSTERESIS = (64, 32, 32, 32)
 POT_TOUCH = 144
 RAW_WINDOW_SWEEPS = 20
 SENSES = 4
 
 _V_LINE = re.compile(r"^SHELL_PLAY_V r=(\d+)((?: -?\d+)+)\s*$")
 _R_LINE = re.compile(r"^SHELL_PLAY_R w=(\d+) r=(\d+)((?: \d+:\d+)+)\s*$")
+_RC_LINE = re.compile(r"^SHELL_PLAY_RC w=(\d+) zero=(\d+):(\d+) rail=(\d+):(\d+)\s*$")
 _ROW_ENTRY = re.compile(r"\{\s*\d+,\s*\d+,\s*[\w:]+,\s*(\d+)[^}]*\},\s*//\s*row\s+(\d+)\s")
 _PLAY_LINE = re.compile(r"^SHELL_PLAY (\S.*)$")
 _LAW_LINE = re.compile(r"^SHELL_PLAY_LAW (\S.*)$")
@@ -261,6 +268,41 @@ def raw_spreads(windows):
     return out
 
 
+def parse_cal_windows(lines):
+    """Every SHELL_PLAY_RC window, in order, each once: {"w", "zero", "rail"},
+    the last two (lo, hi) pairs."""
+    windows, seen = [], set()
+    for raw in lines:
+        m = _RC_LINE.match(raw.strip())
+        if not m:
+            continue
+        w = int(m.group(1))
+        if w in seen:
+            continue
+        seen.add(w)
+        v = [int(m.group(i)) for i in range(2, 6)]
+        windows.append({"w": w, "zero": (v[0], v[1]), "rail": (v[2], v[3])})
+    return windows
+
+
+def cal_spreads(windows):
+    """"zero" / "rail" -> {"worst", "w", "lo", "hi", "windows"} over the
+    windows after the boot window, as raw_spreads() judges the pots; {}
+    without one."""
+    judged = [w for w in windows if w["w"] > 1]
+    out = {}
+    for key in ("zero", "rail"):
+        best = None
+        for w in judged:
+            lo, hi = w[key]
+            if best is None or hi - lo > best["worst"]:
+                best = {"worst": hi - lo, "w": w["w"], "lo": lo, "hi": hi}
+        if best is not None:
+            best["windows"] = len(judged)
+            out[key] = best
+    return out
+
+
 def touch_rule(worst):
     """Row 5.7's rule (pot_owner.h): max(2 x worst spread, 3 x H), rounded
     up to a multiple of 16."""
@@ -270,7 +312,7 @@ def touch_rule(worst):
 
 def sense_summary(spreads, senses):
     """Sense pin -> {"rows", "worst", "median", "over_h"} of the rows' worst
-    spreads; over_h counts rows whose worst spread exceeds H."""
+    spreads; over_h counts rows whose worst spread exceeds their pin's band."""
     from statistics import median
     out = {}
     for p in range(SENSES):
@@ -278,14 +320,18 @@ def sense_summary(spreads, senses):
         out[p] = {"rows": len(vals),
                   "worst": max(vals) if vals else None,
                   "median": median(vals) if vals else None,
-                  "over_h": sum(1 for v in vals if v > POT_HYSTERESIS)}
+                  "over_h": sum(1 for v in vals if v > REVA_HYSTERESIS[p])}
     return out
 
 
-def report_raw(windows, out=None):
+def report_raw(windows, out=None, cal=None):
     """Judges row 5.7 from the raw windows: exit 1 without a judged window or
-    when the touch rule over the worst spread lands above kPotTouch."""
+    when the touch rule over the worst spread lands above kPotTouch. `cal`,
+    the parse_cal_windows() list, is reported and never judged."""
     out = out or sys.stdout
+    for key, s in cal_spreads(cal or []).items():
+        print("  CAL %-4s (SENSE_0) worst %d  lo %d  hi %d  w=%d  (%d windows)"
+              % (key, s["worst"], s["lo"], s["hi"], s["w"], s["windows"]), file=out)
     sp = raw_spreads(windows)
     if not sp:
         print("no judged raw window (SHELL_PLAY_R; window 1 is boot and "
@@ -299,10 +345,10 @@ def report_raw(windows, out=None):
         s = sp[r]
         print("  %3d %-13s SENSE_%d %5d  %5d  %5d  w=%d%s"
               % (r, names[r], senses[r], s["worst"], s["lo"], s["hi"], s["w"],
-                 "  > H" if s["worst"] > POT_HYSTERESIS else ""), file=out)
+                 "  > H" if s["worst"] > REVA_HYSTERESIS[senses[r]] else ""), file=out)
     for p, s in sense_summary(sp, senses).items():
         print("  SENSE_%d: %2d rows  worst %s  median %s  %d over H = %d"
-              % (p, s["rows"], s["worst"], s["median"], s["over_h"], POT_HYSTERESIS),
+              % (p, s["rows"], s["worst"], s["median"], s["over_h"], REVA_HYSTERESIS[p]),
               file=out)
     worst = max(s["worst"] for s in sp.values())
     rule = touch_rule(worst)
@@ -442,7 +488,8 @@ def main(argv):
     code = report(parse_frames(lines), rest=rest, stops=stops_flag,
                   seconds=seconds)
     if raw:
-        code = max(code, report_raw(parse_raw_windows(lines)))
+        code = max(code, report_raw(parse_raw_windows(lines),
+                                    cal=parse_cal_windows(lines)))
     return code
 
 

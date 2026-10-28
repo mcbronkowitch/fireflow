@@ -12,7 +12,9 @@ The rules, all on the linked image:
 (a) The section: __itcm_hot_start__ >= 0x100 (the first 256 bytes stay
     empty: a function at address 0 made the bench silent, 2026-07-30),
     __itcm_hot_end__ above the start and <= 0x10000, and its load address
-    __itcm_hot_load__ inside QSPI_COLD, i.e. inside shell-qspi.bin.
+    __itcm_hot_load__ inside QSPI_COLD, i.e. inside shell-qspi.bin, with the
+    whole load image ending at or below QSPI_COLD's end, in front of the
+    panel-state sectors.
 (b) Nothing that can run before the copy reaches ITCM by direct calls:
     Reset_Handler (whose call into main is judged by rule c instead), the
     static constructors, and every exception and interrupt handler. Calls
@@ -32,7 +34,10 @@ usage: itcm_placement.py <nm -S output, not demangled> <objdump -d output> <itcm
 import bisect, collections, fnmatch, re, sys
 
 ITCM_RESERVED, ITCM_END = 0x100, 0x10000
-QSPI_COLD_LO, QSPI_COLD_HI = 0x90110000, 0x90800000
+# QSPI_COLD ends in front of the two panel-state sectors at 0x907FE000 (spec
+# 2026-10-28-panel-state-persistence-design.md section 5.2, qspi_cold.ld):
+# the load image, start to end, has to stay below them.
+QSPI_COLD_LO, QSPI_COLD_HI = 0x90110000, 0x907FE000
 LOADER = "_ZN5shell9itcm_loadEv"
 ROOT_PATTERNS = ["Reset_Handler", "_GLOBAL__sub_I_*", "*_Handler", "*IRQHandler*"]
 
@@ -83,6 +88,9 @@ def refusals(nm_text, dis_text, ld_text):
         out.append("the section ends at 0x%x, past the 64 KB ITCM" % end)
     if not QSPI_COLD_LO <= load < QSPI_COLD_HI:
         out.append("the section loads from 0x%08x, not from QSPI_COLD" % load)
+    elif end > start and load + (end - start) > QSPI_COLD_HI:
+        out.append("the section's load image ends at 0x%08x, past QSPI_COLD's end 0x%08x "
+                   "(the panel-state sectors)" % (load + (end - start), QSPI_COLD_HI))
 
     def in_itcm(a):
         return start <= a < end

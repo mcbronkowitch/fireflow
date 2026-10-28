@@ -20,7 +20,28 @@ namespace shell {
 // a patch restore, so the init patch's SONG rung and DRIFT position are a
 // baseline, not a turn. It also builds the LED law's gamma table, so that
 // one-time build does not happen inside the audio interrupt.
+// With panel-state persistence on (SHELL_PERSIST_ON, persist_flash.h) the
+// init patch is only the base: persist_boot() lays the newest saved record
+// over it (spec 2026-10-28-panel-state-persistence-design.md section 4.4 step
+// 1) and its excite_other_deck bits go into the law's options before the law
+// is re-armed. The name and signature stay as they are: qspi_cold.ld lists
+// control_boot by its mangled name.
 void control_boot(float* knobs);
+
+// Panel-state persistence only (SHELL_PERSIST_ON). Called from the audio
+// interrupt, where control_tick() runs too -- except control_set_excite()'s
+// first call, from control_boot() before StartAudio():
+// - control_set_excite(): deck p's excite_other_deck, at boot from the record
+//   and again after the boot take (spec 4.3: only where the deck's ENGINE is
+//   BBD, excite_after_take()). A bit set here is held across the engine switch
+//   until the BBD engine runs (apply_excite_hold(), panel_step.h).
+// - control_get_excite(): the current bits, for the published snapshot.
+// - control_rearm_after_take(): the boot take is a restore, not a player move
+//   (spec 4.4 step 4): on_restore() again, so an ENGINE it wrote fires no
+//   bbd_edge and its SONG rung / DRIFT position are a baseline.
+void control_set_excite(const bool excite[2]);
+void control_get_excite(bool excite_out[2]);
+void control_rearm_after_take();
 
 // Once per block, the whole vector (spec 2026-10-09 section 4.2). Returns the
 // law's events for the caller to apply to the knob vector (P6b-2 spec section

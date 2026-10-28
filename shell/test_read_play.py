@@ -217,6 +217,8 @@ def test_constants_match_the_firmware():
     po = (HERE / "pot_owner.h").read_text(encoding="utf-8")
     check("kPotHysteresis = %d;" % r.POT_HYSTERESIS in sv,
           "POT_HYSTERESIS %d is not scan_value.h's kPotHysteresis" % r.POT_HYSTERESIS)
+    check("kRevaHysteresis[4] = {%s};" % ", ".join(str(h) for h in r.REVA_HYSTERESIS) in sv,
+          "REVA_HYSTERESIS %r is not scan_value.h's kRevaHysteresis" % (r.REVA_HYSTERESIS,))
     check("kPotTouch = %d;" % r.POT_TOUCH in po,
           "POT_TOUCH %d is not pot_owner.h's kPotTouch" % r.POT_TOUCH)
     check(r.RAW_WINDOW_SWEEPS == 20, "the raw window is not 20 sweeps")
@@ -224,8 +226,37 @@ def test_constants_match_the_firmware():
     check("kRawWindowSweeps = %d;" % r.RAW_WINDOW_SWEEPS in pc,
           "RAW_WINDOW_SWEEPS is not panel_scan.cpp's kRawWindowSweeps")
     # raw_lines() transcribes these three; a change on either side shows here.
-    for piece in ('"SHELL_PLAY_R w=%u r=%d"', '" %u:%u"', "r0 += 6"):
+    for piece in ('"SHELL_PLAY_R w=%u r=%d"', '" %u:%u"', "r0 += 6",
+                  '"SHELL_PLAY_RC w=%u zero=%u:%u rail=%u:%u"'):
         check(piece in pc, "panel_scan.cpp no longer prints %s" % piece)
+
+
+def cal_line(w, zero=(0, 9), rail=(63470, 63490)):
+    """One SHELL_PLAY_RC line as run_panel_scan_report() prints it."""
+    return "SHELL_PLAY_RC w=%d zero=%d:%d rail=%d:%d" % ((w,) + zero + rail)
+
+
+def test_cal_windows_parse_and_skip_the_boot_window():
+    lines = [cal_line(1, rail=(60000, 63490)), cal_line(2), cal_line(2, rail=(0, 65535)),
+             cal_line(3, zero=(0, 4), rail=(63400, 63490))]
+    ws = r.parse_cal_windows(lines)
+    check([w["w"] for w in ws] == [1, 2, 3], "expected windows 1, 2, 3, got %r"
+          % ([w["w"] for w in ws],))
+    sp = r.cal_spreads(ws)
+    check(sp.get("rail", {}).get("worst") == 90 and sp["rail"]["w"] == 3,
+          "rail worst should be 90 in window 3 (boot window and repeat skipped), got %r"
+          % (sp.get("rail"),))
+    check(sp.get("zero", {}).get("worst") == 9, "zero worst should be 9, got %r"
+          % (sp.get("zero"),))
+    check(r.cal_spreads([]) == {}, "no CAL window should give no spreads")
+
+
+def test_raw_report_prints_the_cal_spread():
+    out = io.StringIO()
+    r.report_raw(r.parse_raw_windows(raw_lines(2)), out=out,
+                 cal=r.parse_cal_windows([cal_line(2, rail=(63450, 63491))]))
+    check("CAL rail" in out.getvalue() and "worst 41" in out.getvalue(),
+          "the raw report does not print the CAL rail spread 41")
 
 
 def test_row_senses_come_from_the_generated_header():
@@ -298,14 +329,19 @@ def test_sense_summary_splits_by_pin():
     hi = [32770] * ROWS
     for row, sense in enumerate(s):
         if sense == 0:
-            hi[row] = 32800          # spread 40 on every SENSE_0 row
+            hi[row] = 32830          # spread 70 on every SENSE_0 row, over its band 64
+        elif sense == 1:
+            hi[row] = 32800          # spread 40 on SENSE_1, over its 32
+        elif sense == 2:
+            hi[row] = 32790          # spread 30 on SENSE_2, inside its 32
     sp = r.raw_spreads(r.parse_raw_windows(raw_lines(2, hi=hi)))
     summ = r.sense_summary(sp, s)
-    check(summ[0]["worst"] == 40 and summ[0]["over_h"] == 20,
+    check(summ[0]["worst"] == 70 and summ[0]["over_h"] == 20,
           "SENSE_0 summary %r" % (summ[0],))
-    check(all(summ[p]["worst"] == 10 and summ[p]["over_h"] == 0 for p in (1, 2, 3)),
-          "SENSE_1-3 summary %r" % ([summ[p] for p in (1, 2, 3)],))
-    check(summ[0]["median"] == 40 and summ[1]["median"] == 10,
+    check(summ[1]["over_h"] == 24 and summ[2]["over_h"] == 0 and summ[3]["over_h"] == 0,
+          "SENSE_1-3 over-band counts %r" % ([summ[p]["over_h"] for p in (1, 2, 3)],))
+    check(summ[3]["worst"] == 10, "SENSE_3 summary %r" % (summ[3],))
+    check(summ[0]["median"] == 70 and summ[1]["median"] == 40,
           "median wrong: %r / %r" % (summ[0]["median"], summ[1]["median"]))
 
 

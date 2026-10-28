@@ -88,6 +88,20 @@ TEST_CASE("scan value: the hysteresis band obeys the spec's rule") {
     CHECK(shell::kPotHysteresis % 16 == 0);
 }
 
+TEST_CASE("scan value: Rev A's band is per sense pin (fault R3)") {
+    CHECK(shell::pot_hysteresis(0) == 64);
+    CHECK(shell::pot_hysteresis(1) == 32);
+    CHECK(shell::pot_hysteresis(2) == 32);
+    CHECK(shell::pot_hysteresis(3) == 32);
+    // A row with no recorded pin (the coupon's tables) keeps the coupon's band.
+    CHECK(shell::pot_hysteresis(-1) == shell::kPotHysteresis);
+    CHECK(shell::pot_hysteresis(4) == shell::kPotHysteresis);
+    for (int p = 0; p < 4; ++p) {
+        CHECK(shell::pot_hysteresis(p) % 16 == 0);
+        CHECK(shell::pot_hysteresis(p) >= shell::kPotHysteresis);
+    }
+}
+
 TEST_CASE("scan value: the panel span is the two calibration channels") {
     const shell::Span s = shell::panel_span(31, 63484);
     CHECK(s.valid);
