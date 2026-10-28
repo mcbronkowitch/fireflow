@@ -538,10 +538,13 @@ void run_panel_scan_report(bench::Board& hw)
     // input, which the rate-limited save lines hide (plan Task 6 probe 3,
     // the dead-band question of spec 5.3).
     uint32_t persist_chg = 0;
-    // The one-shot excite / engine line about a second after the first pass
-    // (plan Task 6 probe 5): by then a restored BBD deck has landed.
+    // The excite / engine line, latched about a second after the first pass
+    // (plan Task 6 probe 5): by then a restored BBD deck has landed. Printed
+    // then and again beside every src line -- once only, it went out before
+    // the host had the port open (probe 4, 2026-10-28).
     const uint32_t persist_t_first = daisy::System::GetNow();
     bool           persist_boot_printed = false;
+    int            persist_boot_v[5]    = {0, 0, -1, -1, 0};   // ex0 ex1 eng0 eng1 take
 #if SHELL_PERSIST_STRESS_ON
     constexpr uint32_t kStressEveryMs     = 2000;   // quiet 2 s, floor 0: every 2 s
     uint32_t           persist_stress_last = persist_t_first;
@@ -705,6 +708,10 @@ void run_panel_scan_report(bench::Board& hw)
             hw.PrintLine("SHELL_PERSIST src=%s seq=%u", b.sector >= 0 ? "flash" : "init",
                          static_cast<unsigned>(b.sector >= 0 ? b.seq : 0u));
             hw.PrintLine("SHELL_PERSIST chg=%u", static_cast<unsigned>(persist_chg));
+            if(persist_boot_printed)
+                hw.PrintLine("SHELL_PERSIST boot ex=%d,%d eng=%d,%d take=%d", persist_boot_v[0],
+                             persist_boot_v[1], persist_boot_v[2], persist_boot_v[3],
+                             persist_boot_v[4]);
         }
         // Once, about a second after the first pass: each deck's excite bit
         // and running engine, and whether the boot take is done. Read without
@@ -714,10 +721,14 @@ void run_panel_scan_report(bench::Board& hw)
         {
             bool ex[2];
             control_get_excite(ex);
-            const int e0 = g_inst ? static_cast<int>(g_inst->engine_id(0)) : -1;
-            const int e1 = g_inst ? static_cast<int>(g_inst->engine_id(1)) : -1;
-            hw.PrintLine("SHELL_PERSIST boot ex=%d,%d eng=%d,%d take=%d", ex[0] ? 1 : 0,
-                         ex[1] ? 1 : 0, e0, e1, g_take.done ? 1 : 0);
+            persist_boot_v[0] = ex[0] ? 1 : 0;
+            persist_boot_v[1] = ex[1] ? 1 : 0;
+            persist_boot_v[2] = g_inst ? static_cast<int>(g_inst->engine_id(0)) : -1;
+            persist_boot_v[3] = g_inst ? static_cast<int>(g_inst->engine_id(1)) : -1;
+            persist_boot_v[4] = g_take.done ? 1 : 0;
+            hw.PrintLine("SHELL_PERSIST boot ex=%d,%d eng=%d,%d take=%d", persist_boot_v[0],
+                         persist_boot_v[1], persist_boot_v[2], persist_boot_v[3],
+                         persist_boot_v[4]);
             persist_boot_printed = true;
         }
         // A take the fallback applied with rows missing (kTakeSweeps): once.
@@ -773,9 +784,12 @@ void run_panel_scan_report(bench::Board& hw)
                 rec.excite[0] = persist_cur_excite[0] ? 1 : 0;
                 rec.excite[1] = persist_cur_excite[1] ? 1 : 0;
                 record_seal(rec);
-                const uint32_t t0 = daisy::System::GetUs();
+                // DWT cycles, not System::GetUs(): GetUs() wraps every ~21 s
+                // and printed nonsense for a save across the wrap (probes 1
+                // and 3). CYCCNT wraps at ~8.9 s, far above a ~70 ms save.
+                const uint32_t c0 = cycles_now();
                 const bool     ok = persist_write(hw.qspi, rec);
-                const uint32_t us = daisy::System::GetUs() - t0;
+                const uint32_t us = (cycles_now() - c0) / kCoreMhz;
                 // A failed save keeps the vector dirty: the same state is
                 // tried again once the 5-min floor is up, without burning a
                 // slot every half second meanwhile (save_failed()).
