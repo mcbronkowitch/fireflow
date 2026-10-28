@@ -178,8 +178,10 @@ struct SubQuantity : ParamQuantity {
     bool bbd_deck() {
         if (!module) return false;
         const int engineId = paramId == SUB_B ? ENGINE_B : ENGINE_A;
-        return (int)std::lround(module->params[engineId].getValue())
-               == spky::ENGINE_BBD;
+        // The ENG slot, not the EngineId: slot 4 is the BBD (control_law.h).
+        // This compared against spky::ENGINE_BBD (5) until 2026-10-28, which
+        // is a different slot, so the "Input" label landed on the wrong deck.
+        return (int)std::lround(module->params[engineId].getValue()) == 4;
     }
     std::string getLabel() override {
         return bbd_deck() ? "Input" : ParamQuantity::getLabel();
@@ -200,7 +202,7 @@ struct MelodyQuantity : ParamQuantity {
         if (!module) return "Variation";
         const int engineId = paramId == MELODY_B ? ENGINE_B : ENGINE_A;
         const int eng = (int)std::lround(module->params[engineId].getValue());
-        return eng == 1 ? "Scan" : "Variation";
+        return eng == 5 ? "Scan" : "Variation";
     }
 };
 
@@ -245,18 +247,18 @@ struct ParamMenuSlider : ui::Slider {
     }
 };
 
-// ENG is a five-position switch (Synth/Sampler/Wave/Body/BBD). FfPadLatch
+// ENG is a six-position switch (Synth/Wave/Body/Feed/BBD/Sampler). FfPadLatch
 // retains Rack's native switch handling; this overlay only makes the
 // non-Synth positions readable at a glance without changing its footprint.
 // Indexed defensively: an out-of-range state (there isn't one today) reuses
 // the last shade rather than reading past the array.
 static const NVGcolor kEngineShades[] = {
     nvgRGBA(0, 0, 0, 0),          // Synth: no ring
-    nvgRGBA(255, 174, 92, 105),   // Sampler: amber
     nvgRGBA(120, 210, 255, 145),  // Wave: blue
     nvgRGBA(160, 255, 150, 140),  // Body: green
-    nvgRGBA(230, 140, 255, 140),  // BBD: violet
     nvgRGBA(230, 140, 110, 140),  // Feed: warm ember
+    nvgRGBA(230, 140, 255, 140),  // BBD: violet
+    nvgRGBA(255, 174, 92, 105),   // Sampler: amber
 };
 struct EngineCycleLatch : FfPadLatch {
     void drawLayer(const DrawArgs& args, int layer) override {
@@ -438,7 +440,7 @@ struct Fireflow : Module {
                             c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init,
                             c.id == SOURCE_A ? "SOURCE A" : "SOURCE B");
                         source->description =
-                            "Controls Synth TIMB, Sampler ORG, Wave FRAME, Body MATL, BBD DRIVE or Feed BOND according to the selected engine.";
+                            "Controls Synth TIMB, Wave FRAME, Body MATL, Feed BOND, BBD DRIVE or Sampler ORG according to the selected engine.";
                     }
                     else if (c.id == DETUNE_A || c.id == DETUNE_B)
                         // DETUNE is a real panel control now (kParamCtls),
@@ -537,8 +539,8 @@ struct Fireflow : Module {
                                      {"Stopped", "Recording"});
                     else if (c.id == ENGINE_A || c.id == ENGINE_B) {
                         configSwitch(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, "Engine",
-                                     {"Synth", "Sampler", "Wave", "Body", "BBD",
-                                      "Feed"});
+                                     {"Synth", "Wave", "Body", "Feed", "BBD",
+                                      "Sampler"});
                         getParamQuantity(c.id)->snapEnabled = true;
                     }
                     else {
@@ -723,7 +725,7 @@ struct Fireflow : Module {
             // SampleBuffer::clear()'s _size==0 fast path (sample_buffer.cpp)
             // that memset is skipped here: what actually runs is the guard
             // check above plus a ~3.4 MB memcpy of the factory sample.
-            if (eng == 1 && !m->smp[p].testTone && inst.sampler_empty(p)
+            if (eng == 5 && !m->smp[p].testTone && inst.sampler_empty(p)
                      && !m->factoryTried[p]) {
                 m->factoryTried[p] = true;
                 if (!m->factoryL.empty()) {
@@ -1314,7 +1316,7 @@ static bool isBbdSelected(Fireflow* module, int engineId) {
 // file's guards match on source text, so a second copy of an expression can
 // also silently redirect a mutation test elsewhere.
 static bool samplerDeck(Fireflow* m, int engineId) {
-    return roundedEngineState(m, engineId) == 1;
+    return roundedEngineState(m, engineId) == 5;
 }
 
 // A control is visible only where it does something. Two share the upper-left

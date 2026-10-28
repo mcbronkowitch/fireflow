@@ -597,19 +597,19 @@ private:
             // have to take this route.
             inst.set_pan(p, mv(p ? PAN_B : PAN_A));
 
-            // Saved ENG meanings remain 0 = Synth and 1 = Sampler; 2 adds
-            // Wave, 3 Body, 4 the BBD, 5 FEED. Each new engine needs its own
-            // explicit arm here -- anything that isn't 0/2/3/4/5 still falls
-            // through to Sampler (or the dev test tone), which is also why old
-            // patches keep their exact meaning. The test tone stays a
-            // Sampler-only override.
+            // ENG order (2026-10-28): the note engines first -- 0 Synth,
+            // 1 Wave, 2 Body, 3 Feed -- then 4 the BBD and 5 the Sampler last.
+            // Patches saved before the reorder load a different engine
+            // (dev alpha, no patch compatibility). Anything that isn't 0..4
+            // falls through to Sampler (or the dev test tone); the test tone
+            // stays a Sampler-only override.
             const int eng = static_cast<int>(std::round(pp(ENGINE_A, p)));
             const spky::EngineId id =
                 eng == 0 ? spky::ENGINE_SYNTH :
-                eng == 2 ? spky::ENGINE_WAVE :
-                eng == 3 ? spky::ENGINE_BODY :
+                eng == 1 ? spky::ENGINE_WAVE :
+                eng == 2 ? spky::ENGINE_BODY :
+                eng == 3 ? spky::ENGINE_FEED :
                 eng == 4 ? spky::ENGINE_BBD :
-                eng == 5 ? spky::ENGINE_FEED :
                 opt.deck[p].test_tone ? spky::ENGINE_TEST_TONE : spky::ENGINE_SAMPLER;
             inst.set_engine(p, id);
 

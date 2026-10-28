@@ -96,7 +96,7 @@ TEST_CASE("Seed audition shares the complete generated VCV parameter snapshot")
                   "NUM_PARAMS is " << spkyvcv::NUM_PARAMS << ", want 128 -- "
                   "if the panel inventory genuinely changed, update this "
                   "literal to match");
-    // The factory patch pairs FEED (5) on deck A with WAVE (2) on deck B --
+    // The factory patch pairs FEED (3) on deck A with WAVE (1) on deck B --
     // set by FM-INIT.vcvm (2026-08-21) and kept by NewInit.vcvm (2026-08-29),
     // where the FF_hw_Init.vcvm lineage before them paired WAVE with SYNTH.
     // Both ENG pins must track the snapshot exactly, because
@@ -104,9 +104,9 @@ TEST_CASE("Seed audition shares the complete generated VCV parameter snapshot")
     // number here that the dispatcher has no arm for boots as SAMPLER in
     // silence (see "boots the same engines the VCV host does" below).
     CHECK(spkyvcv::initParamDefault(spkyvcv::ENGINE_A)
-          == doctest::Approx(5.f));
+          == doctest::Approx(3.f));
     CHECK(spkyvcv::initParamDefault(spkyvcv::ENGINE_B)
-          == doctest::Approx(2.f));
+          == doctest::Approx(1.f));
     // Off the bottom of the tempo range for the first time: bpm == 40 +
     // 0.197333470 * 200 == 79.4667. Everything clocked moves with it, which
     // is why the flux delay pin in the golden test below changed too.
@@ -188,7 +188,7 @@ TEST_CASE("Seed audition dispatcher routes generated STAGES by generated engine"
     std::copy(std::begin(spkyvcv::kInitParamDefaults),
               std::end(spkyvcv::kInitParamDefaults), snapshot.begin());
     snapshot[spkyvcv::ENGINE_A] = 4.f;  // BBD
-    snapshot[spkyvcv::ENGINE_B] = 1.f;  // SAMPLER (non-BBD, unquantized pitch)
+    snapshot[spkyvcv::ENGINE_B] = 5.f;  // SAMPLER (non-BBD, unquantized pitch)
     snapshot[spkyvcv::STAGES_A] = 0.8125f;
     snapshot[spkyvcv::STAGES_B] = 0.9375f;
     snapshot[spkyvcv::TUNE_A] = 0.5f;

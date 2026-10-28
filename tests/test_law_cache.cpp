@@ -110,8 +110,8 @@ void knobs_at(int scen, float t, float* k, control::Options& opt) {
         // Deck A: FEED -> SYNTH -> SAMPLER (test tone for a second) -> BBD ->
         // WAVE -> BODY. Deck B: WAVE -> BBD -> SAMPLER (REC for a second) ->
         // FEED -> SYNTH -> SAMPLER. The engine-conditional faces move too.
-        const float a[] = {5, 0, 1, 4, 2, 3};
-        const float b[] = {2, 4, 1, 5, 0, 1};
+        const float a[] = {3, 0, 5, 4, 1, 2};
+        const float b[] = {1, 4, 5, 3, 0, 5};
         k[ENGINE_A] = a[std::min(5, static_cast<int>(t / 3.3f))];
         k[ENGINE_B] = b[std::min(5, static_cast<int>((t + 1.6f) / 3.3f))];
         opt.deck[0].test_tone = t >= 7.5f && t < 8.5f;
@@ -127,7 +127,7 @@ void knobs_at(int scen, float t, float* k, control::Options& opt) {
     case S_SONG:
         k[SONG_A] = static_cast<float>(static_cast<int>(t / 1.5f) % kSongLadderCount);
         k[SONG_B] = static_cast<float>(static_cast<int>(t / 2.3f) % kSongLadderCount);
-        k[ENGINE_B] = t >= 10.f ? 1.f : 2.f;       // rung changes on a sampler deck punch
+        k[ENGINE_B] = t >= 10.f ? 5.f : 1.f;       // rung changes on a sampler deck punch
         k[STEPS_A] = 8.f;
         break;
     case S_DRIFT:
@@ -151,7 +151,7 @@ void knobs_at(int scen, float t, float* k, control::Options& opt) {
         break;
     case S_REINIT:
         k[SHAPE_A] = t >= 5.f ? 0.7f : 0.2f;      // a jump across the restore
-        k[ENGINE_A] = t >= 5.f ? 4.f : 5.f;
+        k[ENGINE_A] = t >= 5.f ? 4.f : 3.f;
         k[DRIFT] = t >= 15.f ? 0.01f : 0.5f;      // a settle across the reset
         k[SONG_B] = t >= 15.f ? 6.f : 0.f;
         break;

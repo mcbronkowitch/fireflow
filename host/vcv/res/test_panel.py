@@ -1876,12 +1876,12 @@ def engine_cycle_wiring_issues(cpp, makefile, led_law):
     # wrong ring colour for an entire engine and no guard would notice.
     got_shades = [compact_cpp(s) for s in re.findall(r"nvgRGBA\([^)]*\)", shades)]
     want_shades = [
-        "nvgRGBA(0,0,0,0)",
-        "nvgRGBA(255,174,92,105)",
-        "nvgRGBA(120,210,255,145)",
-        "nvgRGBA(160,255,150,140)",
-        "nvgRGBA(230,140,255,140)",
-        "nvgRGBA(230,140,110,140)",
+        "nvgRGBA(0,0,0,0)",            # Synth
+        "nvgRGBA(120,210,255,145)",    # Wave
+        "nvgRGBA(160,255,150,140)",    # Body
+        "nvgRGBA(230,140,110,140)",    # Feed
+        "nvgRGBA(230,140,255,140)",    # BBD
+        "nvgRGBA(255,174,92,105)",     # Sampler
     ]
     if got_shades != want_shades:
         issues.append(
@@ -1913,12 +1913,12 @@ struct EngineCycleLatch : FfPadLatch {
     engine_config = """
 else if (c.id == ENGINE_A || c.id == ENGINE_B) {
     configSwitch(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, "Engine",
-                 {"Synth", "Sampler", "Wave", "Body", "BBD",
-                  "Feed"});
+                 {"Synth", "Wave", "Body", "Feed", "BBD",
+                  "Sampler"});
     getParamQuantity(c.id)->snapEnabled = true;
 }"""
     if compact_cpp(config).count(compact_cpp(engine_config)) != 1:
-        issues.append("ENG config must be one snapped Synth/Sampler/Wave/Body/BBD/Feed 0..5 branch")
+        issues.append("ENG config must be one snapped Synth/Wave/Body/Feed/BBD/Sampler 0..5 branch")
 
     engine_widget = """
 case WK_LATCH:
@@ -1953,18 +1953,18 @@ case WK_LATCH:
 const int eng = static_cast<int>(std::round(pp(ENGINE_A, p)));
 const spky::EngineId id =
     eng == 0 ? spky::ENGINE_SYNTH :
-    eng == 2 ? spky::ENGINE_WAVE :
-    eng == 3 ? spky::ENGINE_BODY :
+    eng == 1 ? spky::ENGINE_WAVE :
+    eng == 2 ? spky::ENGINE_BODY :
+    eng == 3 ? spky::ENGINE_FEED :
     eng == 4 ? spky::ENGINE_BBD :
-    eng == 5 ? spky::ENGINE_FEED :
     opt.deck[p].test_tone ? spky::ENGINE_TEST_TONE : spky::ENGINE_SAMPLER;
 inst.set_engine(p, id);"""
     if push_n.count(compact_cpp(dispatch)) != 1:
-        issues.append("ENG dispatch must exactly preserve Synth/Sampler/Wave/Body/BBD/Feed/test-tone states")
+        issues.append("ENG dispatch must exactly preserve Synth/Wave/Body/Feed/BBD/Sampler/test-tone states")
     hooks_n = compact_cpp(hooks)
-    factory = "if(eng==1&&!m->smp[p].testTone&&inst.sampler_empty(p)&&!m->factoryTried[p]){"
+    factory = "if(eng==5&&!m->smp[p].testTone&&inst.sampler_empty(p)&&!m->factoryTried[p]){"
     if hooks_n.count(factory) != 1:
-        issues.append("factory autoload must be restricted to ENG state 1")
+        issues.append("factory autoload must be restricted to ENG state 5")
     if push_n.count("hooks.after_engine(p,eng,inst);") != 1:
         issues.append("the control law must hand ENG to the host's factory hook exactly once")
 
@@ -1996,7 +1996,8 @@ if (_songRung[p].tick(songNorm, spky::kSongLadderCount)) {
     if "triggerTrig" in push or "trigger_manual" in push:
         issues.append("removed TRIG behavior remains in pushParams")
     if any(bad in push_n + hooks_n
-           for bad in ("eng>0", "eng!=0", "eng>=1", "eng==1||eng==2")):
+           for bad in ("eng>0", "eng!=0", "eng>=1", "eng>=5", "eng>4",
+                       "eng==1||eng==2")):
         issues.append("pushParams has a boolean ENG alternative that can route Wave as Sampler")
 
     rec_fill_n = compact_cpp(rec_fill)
@@ -2065,7 +2066,7 @@ def test_engine_cycle_guard_rejects_representative_regressions():
          "state >= 0 && state <= kShadeCount", "latch"),
         ("nvgRGBA(230, 140, 255, 140),  // BBD: violet",
          "nvgRGBA(230, 140, 255, 141),  // BBD: violet", "shade values"),
-        ("if (eng == 1 && !m->smp[p].testTone",
+        ("if (eng == 5 && !m->smp[p].testTone",
          "if (eng > 0 && !m->smp[p].testTone", "factory"),
         ("const bool samplerPart = inst.engine_id(p) == spky::ENGINE_SAMPLER;",
          "const bool samplerPart = eng > 0;", "sampler"),
@@ -2172,8 +2173,8 @@ def source_detune_wiring_issues(cpp):
         (compact_cpp(
             'auto* source = configParam(c.id, rangeOf(c.id).lo, rangeOf(c.id).hi, init, '
             'c.id == SOURCE_A ? "SOURCE A" : "SOURCE B");'
-            'source->description = "Controls Synth TIMB, Sampler ORG, Wave '
-            'FRAME, Body MATL, BBD DRIVE or Feed BOND according to the '
+            'source->description = "Controls Synth TIMB, Wave FRAME, Body '
+            'MATL, Feed BOND, BBD DRIVE or Sampler ORG according to the '
             'selected engine.";'),
          "SOURCE A/B need stable names and a "
          "TIMB/FRAME/ORG/MATL/DRIVE/BOND description"),
@@ -2235,7 +2236,7 @@ def test_source_detune_guard_rejects_representative_regressions():
          "inst.set_voice_detune(p, mvp(DETUNE_A, p));", "linear detune taper"),
         ("c.id == DETUNE_A || c.id == DETUNE_B",
          "c.id == DETUNE_A", "Detune B configControls branch"),
-        ("Synth TIMB, Sampler ORG, Wave FRAME, Body MATL, BBD DRIVE or Feed BOND",
+        ("Synth TIMB, Wave FRAME, Body MATL, Feed BOND, BBD DRIVE or Sampler ORG",
          "Synth COLOR, Sampler POSITION, Wave START, or Body SHAPE",
          "SOURCE description"),
         ("string::f(\"%.1f ct\",\n            v * v * spky::SynthEngine::kDetuneCeilCt);",
@@ -3045,13 +3046,13 @@ def test_sampler_deck_predicate_is_single_source_of_truth():
     cpp = host_source()
     check(cpp.count("static bool samplerDeck(Fireflow* m, int engineId)") == 1,
           "samplerDeck must have exactly one definition")
-    matches = re.findall(r"roundedEngineState\([^)]*\)\s*==\s*1", cpp)
+    matches = re.findall(r"roundedEngineState\([^)]*\)\s*==\s*5", cpp)
     check(len(matches) == 1,
-          f"'roundedEngineState(...) == 1' must appear exactly once, found {len(matches)}")
+          f"'roundedEngineState(...) == 5' must appear exactly once, found {len(matches)}")
     scope = cpp_scope(cpp, "static bool samplerDeck(Fireflow* m, int engineId)")
     if matches and scope is not None:
         check(matches[0] in scope,
-              "the lone '== 1' Sampler comparison must live inside samplerDeck")
+              "the lone '== 5' Sampler comparison must live inside samplerDeck")
 
 
 def test_shuffle_host_wiring():
@@ -3122,9 +3123,9 @@ def test_sampler_preset_init_snapshot():
         # kCompShape taper.
         "COMP_A": 0.889155984,
         "STEPS_A": 0.0,
-        # 5 == Feed. Deck B is Wave (2). No BODY and no SAMPLER deck boots in
-        # this patch.
-        "ENGINE_A": 5.0,
+        # 3 == Feed. Deck B is Wave (1). No BODY and no SAMPLER deck boots in
+        # this patch. (5 and 2 before the 2026-10-28 ENG reorder.)
+        "ENGINE_A": 3.0,
         # 0 on deck A, and on a FEED deck DETUNE is also the LANE_SIZE base
         # (SPREAD), so that base boots at 0 too.
         "DETUNE_A": 0.0,
@@ -3149,7 +3150,7 @@ def test_sampler_preset_init_snapshot():
         # 8 == step mode with eight steps: the first factory patch that boots a
         # deck stepped on purpose (deck A stays in FLOW).
         "STEPS_B": 8.0,
-        "ENGINE_B": 2.0,
+        "ENGINE_B": 1.0,
         "DETUNE_B": 0.455999434,
         "SONG_B": 0.0,
         # Centre to within a float32 hair: both decks equally in the mix,

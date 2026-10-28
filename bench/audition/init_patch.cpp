@@ -44,10 +44,10 @@ void apply_init_patch(spky::Instrument& inst, const float* values)
             = static_cast<int>(std::lround(part(ENGINE_A, deck)));
         const spky::EngineId engine
             = engine_value == 0 ? spky::ENGINE_SYNTH
-              : engine_value == 2 ? spky::ENGINE_WAVE
-              : engine_value == 3 ? spky::ENGINE_BODY
+              : engine_value == 1 ? spky::ENGINE_WAVE
+              : engine_value == 2 ? spky::ENGINE_BODY
+              : engine_value == 3 ? spky::ENGINE_FEED
               : engine_value == 4 ? spky::ENGINE_BBD
-              : engine_value == 5 ? spky::ENGINE_FEED
                                   : spky::ENGINE_SAMPLER;
         inst.set_engine(deck, engine);
         const bool sampler = engine == spky::ENGINE_SAMPLER;

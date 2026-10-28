@@ -231,8 +231,8 @@ ROW_V1, ROW_V2 = 77.3, 89.4
 # per deck (the _A target reads ENGINE_A), while a self-driving row reads its
 # own value.
 #
-# Engine order is the frozen ENG order: 0 Synth, 1 Sampler, 2 Wave, 3 Body,
-# 4 BBD, 5 Feed. Word[0] is also the control's resting label on the static
+# Engine order is the ENG order (control_law.h, reordered 2026-10-28): 0 Synth,
+# 1 Wave, 2 Body, 3 Feed, 4 BBD, 5 Sampler. Word[0] is also the control's resting label on the static
 # plate -- test_static_label_is_the_tables_first_word holds the two together.
 #
 # Sources, so a later reader can check each word against the engine rather
@@ -283,15 +283,15 @@ ROW_V1, ROW_V2 = 77.3, 89.4
 # removed 2026-08-20 (plan edge-knob-removal) along with the DAMP_A/DAMP_B
 # knobs themselves -- measured and rejected, it did not earn its panel space.
 DYNAMIC_CAPTIONS = [
-    ("MELODY",   "ENGINE",   ("VARY", "SCAN", "VARY", "VARY", "VARY", "VARY")),
-    ("ATTACK",   "ENGINE",   ("ATK",  "ATK",  "ATK",   "HIT",   "ATK",   "RISE")),
-    ("DECAY",    "ENGINE",   ("DEC",  "DEC",  "DEC",   "DAMP",  "TAIL",  "FALL")),
-    ("RES",      "ENGINE",   ("RES",  "RES",  "RES",   "CHAR",  "TILT",  "RATIO")),
-    ("SUB",      "ENGINE",   ("SUB",  "LEN",  "SUB",   "EXCIT", "INPUT", "SUB")),
-    ("FILT",     "ENGINE",   ("FILT", "FILT", "FILT",  "BRITE", "LOSS",  "FILT")),
-    ("SOURCE",   "ENGINE",   ("TIMB", "ORG",  "FRAME", "MATL",  "DRIVE", "BOND")),
-    ("DETUNE",   "ENGINE",   ("DTUN", "DTUN", "DTUN",  "DTUN",  "DTUN",  "SPRD")),
-    ("DEPTH",    "ENGINE",   ("DPTH", "SCAT", "DPTH",  "SWAY",  "RPTS", "DPTH")),
+    ("MELODY",   "ENGINE",   ("VARY", "VARY",  "VARY",  "VARY",  "VARY",  "SCAN")),
+    ("ATTACK",   "ENGINE",   ("ATK",  "ATK",   "HIT",   "RISE",  "ATK",   "ATK")),
+    ("DECAY",    "ENGINE",   ("DEC",  "DEC",   "DAMP",  "FALL",  "TAIL",  "DEC")),
+    ("RES",      "ENGINE",   ("RES",  "RES",   "CHAR",  "RATIO", "TILT",  "RES")),
+    ("SUB",      "ENGINE",   ("SUB",  "SUB",   "EXCIT", "SUB",   "INPUT", "LEN")),
+    ("FILT",     "ENGINE",   ("FILT", "FILT",  "BRITE", "FILT",  "LOSS",  "FILT")),
+    ("SOURCE",   "ENGINE",   ("TIMB", "FRAME", "MATL",  "BOND",  "DRIVE", "ORG")),
+    ("DETUNE",   "ENGINE",   ("DTUN", "DTUN",  "DTUN",  "SPRD",  "DTUN",  "DTUN")),
+    ("DEPTH",    "ENGINE",   ("DPTH", "DPTH",  "SWAY",  "DPTH",  "RPTS",  "SCAT")),
 ]
 
 
@@ -378,7 +378,7 @@ def part_controls(mir=False):
     # Fireflow.cpp pushParams' kLvlCompSplit/kCompTop).
     out.append(Ctl("COMP", SMKNOB, fx(FX_BOT[3]), ROW_V2, "LVL", "Level / Comp"))
     out.append(Ctl("STEPS", KNOBI, fx(STEPS_X), PLAY_Y, "STPS"))
-    # ENGINE cycles Synth/Sampler/Wave/Body/BBD (states 0..4); the C++ side
+    # ENGINE cycles Synth/Wave/Body/Feed/BBD/Sampler (states 0..5); the C++ side
     # (Fireflow.cpp configSwitch/EngineCycleLatch) is the source of truth for
     # the labels, this comment just keeps the panel legend discoverable here.
     # The GRITMODE pad is gone (spec 2026-08-09 hw-control-reduction task 4):
@@ -845,11 +845,11 @@ INIT_DEFAULTS = {
     # into this knob, spec 2026-08-09 hw-control-reduction task 3). Deck A
     # free-running; deck B is the one that boots stepped, see STEPS_B.
     "STEPS_A": 0.000000000,
-    # 5 == Feed, the coupled feedback-FM drone. bench/audition/init_patch.cpp
-    # has an arm for 5; anything the dispatcher does NOT name boots as SAMPLER
-    # in silence, which is why both ENG values are pinned in
-    # tests/test_seed_audition_init.cpp.
-    "ENGINE_A": 5.000000000,
+    # 3 == Feed, the coupled feedback-FM drone (5 before the 2026-10-28 ENG
+    # reorder). bench/audition/init_patch.cpp has an arm for 3; anything the
+    # dispatcher does NOT name boots as SAMPLER in silence, which is why both
+    # ENG values are pinned in tests/test_seed_audition_init.cpp.
+    "ENGINE_A": 3.000000000,
     # DETUNE is pushed SQUARED (Fireflow.cpp: set_voice_detune(knob*knob)) at a
     # 105 ct ceiling, so deck B is 0.456^2 * 105 == 21.83 ct. Deck A is at 0,
     # and on a FEED deck this knob does a second job: Fireflow.cpp re-points
@@ -882,8 +882,8 @@ INIT_DEFAULTS = {
     # the FLOW-melody path, and part.cpp's _pitch_q rule quantizes a stepped
     # deck's pitch to the scale grid.
     "STEPS_B": 8.000000000,
-    # 2 == Wave.
-    "ENGINE_B": 2.000000000,
+    # 1 == Wave (2 before the 2026-10-28 ENG reorder).
+    "ENGINE_B": 1.000000000,
     "DETUNE_B": 0.455999434,
     "SONG_B": 0.000000000,
     # Centre, to within a float32 hair: the two decks boot equally in the

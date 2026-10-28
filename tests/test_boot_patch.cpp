@@ -64,8 +64,9 @@ TEST_CASE("boot patch: the all-noon frame is the Rev A patch the record describe
     CHECK(shell::apply_boot_patch_rows(shell::kRevaTable, shell::kBootPatchNoonRows,
                                        shell::kBootPatchNoonRowCount, knobs)
           == shell::kRevaTable.count);
-    // Hand-derived from the frame: row 0 ENGINE_A 531 -> 2.655 -> 3; row 22
-    // ENGINE_B 410 -> 2.05 -> 2 (WAVE). Neither is the BBD slot, so both
+    // Hand-derived from the frame: row 0 ENGINE_A 531 -> 2.655 -> 3 (FEED);
+    // row 22 ENGINE_B 410 -> 2.05 -> 2 (BODY) -- since the 2026-10-28 ENG
+    // reorder; the recorded board played BODY/WAVE. Neither is the BBD slot, so both
     // ATTACK rows (10 and 34) write ATTACK, and STAGES keeps the init value.
     CHECK(knobs[ffctl::ENGINE_A] == 3.f);
     CHECK(knobs[ffctl::ENGINE_B] == 2.f);

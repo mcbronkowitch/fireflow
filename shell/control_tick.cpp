@@ -28,12 +28,12 @@ void control_boot(float* knobs)
     // The CPU headroom round's stress patches (spec 2026-10-18-cpu-headroom-
     // design.md section 4.6), built with C_USER_FLAGS=-DSHELL_BOOT_PATCH=N on a
     // clean build: the init patch with one deck's engine changed. ENGINE knob
-    // values as control_law.h maps them: 2 = WAVE, 5 = FEED; the init patch is
+    // values as control_law.h maps them: 1 = WAVE, 3 = FEED; the init patch is
     // A = FEED, B = WAVE. The coupon's pots stay unowned, so the variant holds.
 #if defined(SHELL_BOOT_PATCH) && SHELL_BOOT_PATCH == 1
-    knobs[ffctl::ENGINE_A] = 2.0f;   // W2: both decks WAVE
+    knobs[ffctl::ENGINE_A] = 1.0f;   // W2: both decks WAVE
 #elif defined(SHELL_BOOT_PATCH) && SHELL_BOOT_PATCH == 2
-    knobs[ffctl::ENGINE_B] = 5.0f;   // F2: both decks FEED
+    knobs[ffctl::ENGINE_B] = 3.0f;   // F2: both decks FEED
 #elif defined(SHELL_BOOT_PATCH) && SHELL_BOOT_PATCH == 3
     // Fault R4's all-noon patch (docs/hardware/reva-bring-up.md 10.1): the Rev
     // A pot frame the board played when its callback mean reached the

@@ -57,22 +57,22 @@ TEST_CASE("law: GRIT dead zone, sign picks the mode; FLUX on above 1e-4") {
 
 TEST_CASE("law: ENGINE remap, test tone only on the sampler slot") {
     Rig r;
-    const float want[6] = {float(spky::ENGINE_SYNTH), float(spky::ENGINE_SAMPLER),
-                           float(spky::ENGINE_WAVE), float(spky::ENGINE_BODY),
-                           float(spky::ENGINE_BBD), float(spky::ENGINE_FEED)};
+    const float want[6] = {float(spky::ENGINE_SYNTH), float(spky::ENGINE_WAVE),
+                           float(spky::ENGINE_BODY), float(spky::ENGINE_FEED),
+                           float(spky::ENGINE_BBD), float(spky::ENGINE_SAMPLER)};
     for (int e = 0; e < 6; ++e) {
         r.k[ENGINE_A] = float(e); r.tick();
         CHECK(r.inst.last("set_engine", 0) == want[e]);
     }
     r.opt.deck[0].test_tone = true;
-    r.k[ENGINE_A] = 1.f; r.tick();
+    r.k[ENGINE_A] = 5.f; r.tick();
     CHECK(r.inst.last("set_engine", 0) == float(spky::ENGINE_TEST_TONE));
     r.k[ENGINE_A] = 0.f; r.tick();
     CHECK(r.inst.last("set_engine", 0) == float(spky::ENGINE_SYNTH));
 }
 
 TEST_CASE("law: DETUNE squared, skipped on FEED; SPREAD raw on FEED") {
-    // The init patch boots deck A on FEED (ENGINE_A = 5) and deck B on WAVE;
+    // The init patch boots deck A on FEED (ENGINE_A = 3) and deck B on WAVE;
     // Rec itself starts both on SYNTH. DETUNE's branch reads engine_id()
     // BEFORE this tick's set_engine, so each tick sees the engine the
     // previous tick set.
@@ -83,7 +83,7 @@ TEST_CASE("law: DETUNE squared, skipped on FEED; SPREAD raw on FEED") {
     // SPREAD check below cannot tell the FEED branch from the else branch.
     r.k[DETUNE_A] = 0.6f; r.tick();
     CHECK(r.inst.last("set_voice_detune", 0) == doctest::Approx(0.36f));
-    r.k[ENGINE_A] = 5.f; r.tick();                        // A becomes FEED
+    r.k[ENGINE_A] = 3.f; r.tick();                        // A becomes FEED
     // Both DETUNE knobs move on the tick A reads FEED: the law's sent-value
     // cache does not repeat an unchanged value, so only a changed one shows
     // which deck the FEED gate lets through. 0.7 keeps raw, squared and the
@@ -268,7 +268,7 @@ TEST_CASE("law: REC starts only on a sampler deck and reports it once") {
     Rig r;
     r.k[REC_A] = 1.f; r.tick();
     CHECK(r.inst.count("sampler_record") == 0);       // synth deck: inert
-    r.inst.eng[0] = spky::ENGINE_SAMPLER; r.k[ENGINE_A] = 1.f;
+    r.inst.eng[0] = spky::ENGINE_SAMPLER; r.k[ENGINE_A] = 5.f;
     CHECK(r.tick().rec_started[0]);
     CHECK_FALSE(r.tick().rec_started[0]);
 }
@@ -282,7 +282,7 @@ TEST_CASE("law: autoload hook sits between excitation and sampler options") {
     // Deck A on SAMPLER with REC up, so sampler_record logs and the whole
     // chain set_engine -> excitation -> hook -> sampler options -> REC is
     // visible in one tick.
-    k[ENGINE_A] = 1.f; k[REC_A] = 1.f;
+    k[ENGINE_A] = 5.f; k[REC_A] = 1.f;
     law.on_restore();
     H h{-1, -1, &inst}; control::Options opt;
     law.tick(k, opt, inst, h);
@@ -293,7 +293,7 @@ TEST_CASE("law: autoload hook sits between excitation and sampler options") {
     CHECK(inst.index("sampler_feedback", 0) >= 0);
     CHECK(inst.index("sampler_feedback", 0) < inst.index("sampler_record", 0));
     // the hook gets the ENGINE knob's slot (1 = Sampler), not the EngineId
-    CHECK(h.eng == 1);
+    CHECK(h.eng == 5);
     CHECK(int(spky::ENGINE_SAMPLER) != 1);
 }
 
@@ -329,7 +329,7 @@ TEST_CASE("law: deck B's FLUXFB, STAGES and REC land on part 1, not part 0") {
     }
     {   // REC: both decks SAMPLER, only deck B's latch up
         Rig r;
-        r.k[ENGINE_A] = 1.f; r.k[ENGINE_B] = 1.f; r.k[REC_A] = 0.f; r.k[REC_B] = 1.f;
+        r.k[ENGINE_A] = 5.f; r.k[ENGINE_B] = 5.f; r.k[REC_A] = 0.f; r.k[REC_B] = 1.f;
         const control::Events ev = r.tick();
         CHECK(r.inst.last("sampler_record", 1) == 1.f);
         CHECK(r.inst.index("sampler_record", 0) == -1);
@@ -423,7 +423,7 @@ TEST_CASE("law cache: a cold cache sends exactly the uncached push") {
     auto knobs = [&](int id, float v) { a.k[id] = v; b.k[id] = v; };
     both();
     CHECK(a.inst.calls == b.inst.calls);
-    knobs(ENGINE_A, 1.f); knobs(ENGINE_B, 4.f); knobs(REC_A, 1.f);
+    knobs(ENGINE_A, 5.f); knobs(ENGINE_B, 4.f); knobs(REC_A, 1.f);
     knobs(COMP_B, 0.95f); knobs(GRIT_A, -0.4f); knobs(MORPH, 0.3f);
     both(); both();
     CHECK(a.inst.calls.size() < b.inst.calls.size());     // warm: it skips
@@ -476,7 +476,7 @@ TEST_CASE("law cache: an engine change sends that deck again, also when the swit
     both();
     CHECK(idle(0)); CHECK(idle(1));
     // The test tone is part of what the deck asks for.
-    a.k[ENGINE_A] = b.k[ENGINE_A] = 1.f; both(); both();
+    a.k[ENGINE_A] = b.k[ENGINE_A] = 5.f; both(); both();
     a.opt.deck[0].test_tone = b.opt.deck[0].test_tone = true;
     both();
     CHECK(full(0)); CHECK(idle(1));

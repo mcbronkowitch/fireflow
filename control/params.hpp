@@ -245,7 +245,7 @@ inline constexpr float kInitParamDefaults[] = {
     0.0f, // GRIT_A
     0.889155984f, // COMP_A
     0.0f, // STEPS_A
-    5.0f, // ENGINE_A
+    3.0f, // ENGINE_A
     0.0f, // DETUNE_A
     0.0f, // SONG_A
     0.163855359f, // RATE_B
@@ -265,7 +265,7 @@ inline constexpr float kInitParamDefaults[] = {
     0.0f, // GRIT_B
     1.0f, // COMP_B
     8.0f, // STEPS_B
-    2.0f, // ENGINE_B
+    1.0f, // ENGINE_B
     0.455999434f, // DETUNE_B
     0.0f, // SONG_B
     0.499999762f, // MORPH
