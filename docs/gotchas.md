@@ -478,7 +478,8 @@ invisible from reading the scripts, and each cost real time.
 ## Daisy Patch Submodule (the board itself, not the generators)
 
 - **`System::GetNow()` runs about 25 % slow while audio plays.** It is HAL's
-  SysTick count, and ticks are lost while the audio callback holds the core.
+  SysTick count; why it loses time is not measured (ticks swallowed while the
+  audio callback holds the core is the likely reading, not a proven one).
   Measured 2026-10-28 on Rev A (`docs/hardware/persist-measured.md`): the
   persistence policy's 300 000 ms floor elapsed in 404 s of wall time, its
   15 000 ms quiet in about 18 s. Time anything that must match the wall clock
