@@ -217,6 +217,8 @@ def test_constants_match_the_firmware():
     po = (HERE / "pot_owner.h").read_text(encoding="utf-8")
     check("kPotHysteresis = %d;" % r.POT_HYSTERESIS in sv,
           "POT_HYSTERESIS %d is not scan_value.h's kPotHysteresis" % r.POT_HYSTERESIS)
+    check("kRevaHysteresis[4] = {%s};" % ", ".join(str(h) for h in r.REVA_HYSTERESIS) in sv,
+          "REVA_HYSTERESIS %r is not scan_value.h's kRevaHysteresis" % (r.REVA_HYSTERESIS,))
     check("kPotTouch = %d;" % r.POT_TOUCH in po,
           "POT_TOUCH %d is not pot_owner.h's kPotTouch" % r.POT_TOUCH)
     check(r.RAW_WINDOW_SWEEPS == 20, "the raw window is not 20 sweeps")
@@ -327,14 +329,19 @@ def test_sense_summary_splits_by_pin():
     hi = [32770] * ROWS
     for row, sense in enumerate(s):
         if sense == 0:
-            hi[row] = 32800          # spread 40 on every SENSE_0 row
+            hi[row] = 32830          # spread 70 on every SENSE_0 row, over its band 64
+        elif sense == 1:
+            hi[row] = 32800          # spread 40 on SENSE_1, over its 32
+        elif sense == 2:
+            hi[row] = 32790          # spread 30 on SENSE_2, inside its 32
     sp = r.raw_spreads(r.parse_raw_windows(raw_lines(2, hi=hi)))
     summ = r.sense_summary(sp, s)
-    check(summ[0]["worst"] == 40 and summ[0]["over_h"] == 20,
+    check(summ[0]["worst"] == 70 and summ[0]["over_h"] == 20,
           "SENSE_0 summary %r" % (summ[0],))
-    check(all(summ[p]["worst"] == 10 and summ[p]["over_h"] == 0 for p in (1, 2, 3)),
-          "SENSE_1-3 summary %r" % ([summ[p] for p in (1, 2, 3)],))
-    check(summ[0]["median"] == 40 and summ[1]["median"] == 10,
+    check(summ[1]["over_h"] == 24 and summ[2]["over_h"] == 0 and summ[3]["over_h"] == 0,
+          "SENSE_1-3 over-band counts %r" % ([summ[p]["over_h"] for p in (1, 2, 3)],))
+    check(summ[3]["worst"] == 10, "SENSE_3 summary %r" % (summ[3],))
+    check(summ[0]["median"] == 70 and summ[1]["median"] == 40,
           "median wrong: %r / %r" % (summ[0]["median"], summ[1]["median"]))
 
 

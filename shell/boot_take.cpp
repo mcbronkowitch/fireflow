@@ -30,7 +30,8 @@ void write_row(const BootTake& b, const ControlTable& t, int r, const Span& span
     if(e.param < 0 || !b.seen[r]) return;
     PotFilter fresh{};
     float v = 0.0f;
-    if(!pot_filter(fresh, b.raw[r], span, kPotHysteresis, &v)) return;   // invalid span
+    // The row's own band, as pot_row_step() uses it: the snap regions match.
+    if(!pot_filter(fresh, b.raw[r], span, pot_hysteresis(e.sense), &v)) return;   // invalid span
     // knob_target(), not pot_target(): MODBTN counts as 0 at boot.
     const int target = knob_target(e, knobs);
     if(target >= 0) knobs[target] = knob_from_pot(target, v);

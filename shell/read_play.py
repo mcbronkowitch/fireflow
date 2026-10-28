@@ -64,6 +64,9 @@ SWEEP_MS_EXPECTED = 48.0
 # scan_value.h kPotHysteresis, pot_owner.h kPotTouch, panel_scan.cpp
 # kRawWindowSweeps (the guard checks all three against the source).
 POT_HYSTERESIS = 16
+# scan_value.h kRevaHysteresis: Rev A's band per sense pin (fault R3), what a
+# row's spread is judged against in the raw report.
+REVA_HYSTERESIS = (64, 32, 32, 32)
 POT_TOUCH = 144
 RAW_WINDOW_SWEEPS = 20
 SENSES = 4
@@ -309,7 +312,7 @@ def touch_rule(worst):
 
 def sense_summary(spreads, senses):
     """Sense pin -> {"rows", "worst", "median", "over_h"} of the rows' worst
-    spreads; over_h counts rows whose worst spread exceeds H."""
+    spreads; over_h counts rows whose worst spread exceeds their pin's band."""
     from statistics import median
     out = {}
     for p in range(SENSES):
@@ -317,7 +320,7 @@ def sense_summary(spreads, senses):
         out[p] = {"rows": len(vals),
                   "worst": max(vals) if vals else None,
                   "median": median(vals) if vals else None,
-                  "over_h": sum(1 for v in vals if v > POT_HYSTERESIS)}
+                  "over_h": sum(1 for v in vals if v > REVA_HYSTERESIS[p])}
     return out
 
 
@@ -342,10 +345,10 @@ def report_raw(windows, out=None, cal=None):
         s = sp[r]
         print("  %3d %-13s SENSE_%d %5d  %5d  %5d  w=%d%s"
               % (r, names[r], senses[r], s["worst"], s["lo"], s["hi"], s["w"],
-                 "  > H" if s["worst"] > POT_HYSTERESIS else ""), file=out)
+                 "  > H" if s["worst"] > REVA_HYSTERESIS[senses[r]] else ""), file=out)
     for p, s in sense_summary(sp, senses).items():
         print("  SENSE_%d: %2d rows  worst %s  median %s  %d over H = %d"
-              % (p, s["rows"], s["worst"], s["median"], s["over_h"], POT_HYSTERESIS),
+              % (p, s["rows"], s["worst"], s["median"], s["over_h"], REVA_HYSTERESIS[p]),
               file=out)
     worst = max(s["worst"] for s in sp.values())
     rule = touch_rule(worst)

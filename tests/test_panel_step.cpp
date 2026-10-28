@@ -73,6 +73,31 @@ TEST_CASE("panel step: the move that takes a pot writes its current position") {
     CHECK(k.v[ffctl::FILT_A] == doctest::Approx(knob_at(ffctl::FILT_A, 31000)));
 }
 
+TEST_CASE("panel step: an owned Rev A pot holds against its pin's measured wander (fault R3)") {
+    // SENSE_0's worst untouched one-second spread was 57 counts, SENSE_1-3's 23
+    // (docs/hardware/reva-bring-up.md, R3). An owned pot must not re-emit
+    // inside those, and must still follow a move past its pin's band.
+    struct Case { int param; int sense; int quiet; int moved; };
+    for (const Case c : {Case{ffctl::SHAPE_A, 0, 57, 65}, Case{ffctl::TUNE_B, 1, 23, 33}}) {
+        const shell::ControlEntry& e = reva_row(c.param);
+        REQUIRE(e.sense == c.sense);
+        Knobs k;
+        shell::PotOwner o{};
+        shell::PotFilter f{};
+        float v = -1.f;
+        constexpr int kTake = 30000 + kT + 1;
+        shell::pot_row_step(e, o, f, 30000, kSpan, k.v, &v);
+        REQUIRE(shell::pot_row_step(e, o, f, kTake, kSpan, k.v, &v));
+        REQUIRE(o.owned);
+        const float held = k.v[c.param];
+        CHECK_FALSE(shell::pot_row_step(e, o, f, static_cast<uint16_t>(kTake + c.quiet), kSpan, k.v, &v));
+        CHECK_FALSE(shell::pot_row_step(e, o, f, static_cast<uint16_t>(kTake - c.quiet), kSpan, k.v, &v));
+        CHECK(k.v[c.param] == held);
+        CHECK(shell::pot_row_step(e, o, f, static_cast<uint16_t>(kTake + c.moved), kSpan, k.v, &v));
+        CHECK(k.v[c.param] == doctest::Approx(knob_at(c.param, kTake + c.moved)));
+    }
+}
+
 TEST_CASE("panel step: MOD toggled mid-turn writes the depth only after a new move") {
     Knobs k;
     shell::PotOwner o{};

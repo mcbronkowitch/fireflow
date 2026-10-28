@@ -16,7 +16,7 @@ bool pot_row_step(const ControlEntry& e, PotOwner& owner, PotFilter& filter,
     // The jump: on the move that takes the target, the filter emits this
     // reading, the pot's current position, whatever it emitted before.
     if(own == Own::Took) filter.emitted = false;
-    if(!pot_filter(filter, raw, span, kPotHysteresis, v_out)) return false;
+    if(!pot_filter(filter, raw, span, pot_hysteresis(e.sense), v_out)) return false;
     if(own != Own::Idle && target >= 0) knobs[target] = knob_from_pot(target, *v_out);
     return true;
 }

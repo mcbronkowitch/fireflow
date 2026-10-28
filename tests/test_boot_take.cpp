@@ -134,6 +134,26 @@ TEST_CASE("boot take: value matches the filter path") {
     }
 }
 
+TEST_CASE("boot take: a SENSE_0 row snaps with its pin's band, as the live path does") {
+    // 40 counts above zero: inside SENSE_0's band (64), outside the coupon's (16).
+    const shell::ControlEntry row{0, 2, ffctl::FLUX_A, 0};
+    const shell::ControlTable t{&row, 1};
+    const uint16_t raw = 1040;
+    Knobs a, c;
+    shell::BootTake b{};
+    shell::boot_take_collect(b, 0, raw);
+    shell::boot_take_apply(b, t, kSpan, a.v);
+    CHECK(a.v[ffctl::FLUX_A] == shell::knob_from_pot(ffctl::FLUX_A, 0.0f));
+
+    shell::PotOwner o{};
+    shell::PotFilter pf{};
+    float v = -1.f;
+    shell::pot_row_step(row, o, pf, static_cast<uint16_t>(raw + 4000), kSpan, c.v, &v);
+    shell::pot_row_step(row, o, pf, raw, kSpan, c.v, &v);
+    REQUIRE(o.owned);
+    CHECK(a.v[ffctl::FLUX_A] == c.v[ffctl::FLUX_A]);
+}
+
 TEST_CASE("boot take: collect after done is ignored") {
     Fixture f(false);
     Knobs k;
