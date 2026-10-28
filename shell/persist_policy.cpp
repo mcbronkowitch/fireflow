@@ -48,12 +48,15 @@ void boot_overlay(const PersistRecord* rec, float* knobs, bool excite_out[2])
     excite_out[1] = rec && rec->excite[1];
 }
 
-void excite_after_take(const bool rec_excite[2], const float* knobs, bool excite_out[2])
+void excite_after_take(const bool rec_excite[2], const bool was_bbd[2], const float* knobs,
+                       bool excite_out[2])
 {
     const int eng[2] = {ffctl::ENGINE_A, ffctl::ENGINE_B};
     for(int p = 0; p < 2; ++p)
-        excite_out[p] = rec_excite[p] &&
-            static_cast<int>(std::round(knobs[eng[p]])) == kEngineSlotBbd;
+    {
+        const bool on_bbd = static_cast<int>(std::round(knobs[eng[p]])) == kEngineSlotBbd;
+        excite_out[p] = on_bbd && (was_bbd[p] ? rec_excite[p] : true);
+    }
 }
 
 } // namespace shell

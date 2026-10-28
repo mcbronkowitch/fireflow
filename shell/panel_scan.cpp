@@ -25,6 +25,7 @@
 #include "util/probe_law.h"
 #include "persist_flash.h"
 #if SHELL_PERSIST_ON
+#include <cmath>
 #include <cstring>
 #include "boot_take.h"
 #include "persist_policy.h"
@@ -192,12 +193,20 @@ volatile int       g_take_partial  = 0;
 // control_set_excite() therefore holds it across the switch
 // (apply_excite_hold(), panel_step.h), both at boot and here, where the take
 // may have finished before the engine landed.
-void finish_take()
+// Which decks' ENGINE knob is on BBD, read before the take writes: a deck
+// the take turns onto BBD gets excite as a live turn would (excite_after_take()).
+void engines_on_bbd(const float* knobs, bool out[2])
+{
+    out[0] = static_cast<int>(std::round(knobs[ffctl::ENGINE_A])) == kEngineSlotBbd;
+    out[1] = static_cast<int>(std::round(knobs[ffctl::ENGINE_B])) == kEngineSlotBbd;
+}
+
+void finish_take(const bool was_bbd[2])
 {
     for(PotOwner& o : g_owner) pot_release(o);
     control_rearm_after_take();
     bool excite[2];
-    excite_after_take(persist_boot_excite(), g_knobs, excite);
+    excite_after_take(persist_boot_excite(), was_bbd, g_knobs, excite);
     control_set_excite(excite);
 }
 // The snapshot the foreground saves from (section 5.1), published once per
@@ -331,8 +340,10 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
     // then finish_take(). A take that cannot apply (no valid span) stays open.
     if(!g_take.done && boot_take_ready(g_take, kTable))
     {
+        bool was_bbd[2];
+        engines_on_bbd(g_knobs, was_bbd);
         boot_take_apply(g_take, kTable, g_span, g_knobs);
-        if(g_take.done) finish_take();
+        if(g_take.done) finish_take(was_bbd);
     }
 #endif
 
@@ -433,10 +444,12 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
         {
             int seen = 0;
             for(int r = 0; r < kTable.count && r < kMaxRows; ++r) seen += g_take.seen[r] ? 1 : 0;
+            bool was_bbd[2];
+            engines_on_bbd(g_knobs, was_bbd);
             boot_take_apply(g_take, kTable, g_span, g_knobs);   // writes the seen rows only
             if(g_take.done)
             {
-                finish_take();
+                finish_take(was_bbd);
                 g_take_partial = seen > 0 ? seen : -1;   // -1: none seen, still reported
             }
         }

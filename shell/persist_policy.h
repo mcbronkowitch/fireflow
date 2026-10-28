@@ -38,7 +38,13 @@ void save_failed(SavePolicy& s, uint32_t now_ms);
 // spec 4.3 overrides. excite_out gets the record's excite bits (false without one).
 void boot_overlay(const PersistRecord* rec, float* knobs, bool excite_out[2]);
 
-// After the boot take: excite only where the deck's ENGINE is BBD.
-void excite_after_take(const bool rec_excite[2], const float* knobs, bool excite_out[2]);
+// After the boot take: excite only where the deck's ENGINE is BBD. A deck
+// that was on BBD before the take (the record's engine) keeps the recorded
+// bit; a deck the take turned onto BBD (the pot moved while off) is excited,
+// as a live turn onto BBD would excite it -- FLUX still stays at its pot,
+// since the take fires no bbd_edge. was_bbd[p]: deck p's ENGINE knob was on
+// BBD before the take wrote.
+void excite_after_take(const bool rec_excite[2], const bool was_bbd[2], const float* knobs,
+                       bool excite_out[2]);
 
 } // namespace shell

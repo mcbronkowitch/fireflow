@@ -134,7 +134,11 @@ switch must be resolved at parse time (memory
   twins instead and wipe the saved depths with pot positions.
 - `excite_other_deck[p]`: restored from the record, but only if deck p's
   restored ENGINE is BBD. Off BBD, `apply_excite_events()` clears it on the
-  first tick anyway.
+  first tick anyway. **Amended 2026-10-28 (Bastian, after probe 5):** a deck
+  the boot take turns onto BBD (record or init not on BBD, pot on BBD) gets
+  excite on, as a live turn onto BBD would; with the recorded bit (off) its
+  BBD heard nothing. A deck that was on BBD before the take keeps the
+  recorded bit. FLUX stays at its pot either way (no `bbd_edge`, §4.4 step 4).
 
 ### 4.4 Boot sequence
 
@@ -153,9 +157,10 @@ switch must be resolved at parse time (memory
 4. The boot take is a restore, not a player move (my call). If it changes a
    deck's ENGINE (the pot was moved while the board was off, or there was no
    record), the BBD edge detector is re-armed after the boot take, as
-   `on_restore()` does. So no `bbd_edge` fires, FLUX stays at its pot, and
-   `excite_other_deck` stays as the record had it. §4.3's "restored ENGINE"
-   means the value after the boot take.
+   `on_restore()` does. So no `bbd_edge` fires and FLUX stays at its pot;
+   `excite_other_deck` follows §4.3 (as recorded, or on for a deck the take
+   turned onto BBD). §4.3's "restored ENGINE" means the value after the boot
+   take.
 5. The boot take writes once, then releases every pot (my call). From then on
    ownership works exactly as today: a pot writes again only once moved past
    `kPotTouch`. Untouched pots therefore stay silent after boot, as they do

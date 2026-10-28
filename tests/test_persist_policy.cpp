@@ -111,8 +111,35 @@ TEST_CASE("overlay: excite only on BBD") {
     k[ffctl::ENGINE_A] = static_cast<float>(kEngineSlotBbd);
     k[ffctl::ENGINE_B] = static_cast<float>(kEngineSlotBbd - 1);
     const bool rec[2] = {true, true};
+    const bool was_bbd[2] = {true, true};
     bool ex[2];
-    excite_after_take(rec, k, ex);
+    excite_after_take(rec, was_bbd, k, ex);
     CHECK(ex[0]);
     CHECK_FALSE(ex[1]);
+}
+
+TEST_CASE("overlay: a deck already on BBD keeps the recorded excite") {
+    float k[ffctl::NUM_PARAMS] = {};
+    k[ffctl::ENGINE_A] = static_cast<float>(kEngineSlotBbd);
+    k[ffctl::ENGINE_B] = static_cast<float>(kEngineSlotBbd);
+    const bool rec[2] = {false, true};
+    const bool was_bbd[2] = {true, true};
+    bool ex[2];
+    excite_after_take(rec, was_bbd, k, ex);
+    CHECK_FALSE(ex[0]);
+    CHECK(ex[1]);
+}
+
+TEST_CASE("overlay: a deck the take turns onto BBD is excited, as a live turn would") {
+    // Probe 5, 2026-10-28: saved on Sampler, ENGINE A turned onto BBD while
+    // off -- with the recorded excite (off) the BBD heard nothing.
+    float k[ffctl::NUM_PARAMS] = {};
+    k[ffctl::ENGINE_A] = static_cast<float>(kEngineSlotBbd);
+    k[ffctl::ENGINE_B] = static_cast<float>(kEngineSlotBbd + 1);
+    const bool rec[2] = {false, true};
+    const bool was_bbd[2] = {false, false};
+    bool ex[2];
+    excite_after_take(rec, was_bbd, k, ex);
+    CHECK(ex[0]);
+    CHECK_FALSE(ex[1]);   // off BBD after the take: never, whatever the record says
 }
