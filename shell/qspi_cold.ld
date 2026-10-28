@@ -31,6 +31,14 @@
    qspi_programmer images (which all assume it) keep working. The bank is
    65 024 B; if it ever outgrows 0x90110000 the link fails with an overlap.
 
+   WHERE IT ENDS. Not at the end of the chip: the top two 4 KiB sectors,
+   0x907FE000 and 0x907FF000, hold the panel-state records (spec
+   2026-10-28-panel-state-persistence-design.md section 5.2) and are erased
+   and written at runtime. The region stops in front of them, so neither this
+   section nor the ITCM load image behind it (itcm_hot.ld, AT > QSPI_COLD) can
+   ever be linked there; qspi_placement.py and itcm_placement.py refuse it
+   again on the linked image.
+
    HOW IT IS LINKED. shell/Makefile passes this file as -Wl,-T,qspi_cold.ld.
    gcc hands -Wl options to ld ahead of the -T../alt_sram.lds that libDaisy's
    core Makefile adds, so this script is read first and its exact names win
@@ -39,7 +47,7 @@
 
 MEMORY
 {
-  QSPI_COLD (RX) : ORIGIN = 0x90110000, LENGTH = 0x90800000 - 0x90110000
+  QSPI_COLD (RX) : ORIGIN = 0x90110000, LENGTH = 0x907FE000 - 0x90110000
 }
 
 SECTIONS

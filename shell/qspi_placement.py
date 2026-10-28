@@ -35,7 +35,14 @@ function, and QSPI data outside any function (the wavetable bank's samples).
 """
 import bisect, collections, fnmatch, re, struct, sys
 
-QSPI_LO, QSPI_HI = 0x90100000, 0x90800000
+# QSPI_HI is the end of what the linker may fill, not the end of the chip: the
+# top two 4 KiB sectors hold the panel-state records and are erased and
+# written at runtime (spec 2026-10-28-panel-state-persistence-design.md
+# section 5.2, qspi_cold.ld). Anything the image places in them is refused on
+# its own (persist_intrusions), so lowering QSPI_HI cannot let a symbol there
+# slip past both checks.
+QSPI_LO, QSPI_HI = 0x90100000, 0x907FE000
+PERSIST_LO, PERSIST_HI = 0x907FE000, 0x90800000
 HOT_PATTERNS = [
     "spky::*::process*", "spky::*::tick*", "spky::*::follow*", "spky::*::_control_tick*",
     "spky::*Engine::*",          # every part engine: switched at runtime
@@ -57,6 +64,10 @@ HOT_PATTERNS = [
     "shell::mux_channel*", "shell::scan_steps*", "shell::sense_live*",
     "shell::step_of*", "shell::step_pattern*", "shell::coupon_span*",
     "shell::panel_span*", "shell::run_*",
+    # The panel-state save (spec 2026-10-28 section 5.2): persist_write() is on
+    # the stack across the QSPI erase and program, while the QSPI is out of
+    # memory-mapped mode, so it and its siblings stay in SRAM.
+    "shell::persist_*",
 ]
 
 # Boot code that is not cold either: it runs before the board's own QSPI init
@@ -120,6 +131,26 @@ def _code_symbols(nm_text):
 def violations(nm_text):
     return [name for addr, _, name in _code_symbols(nm_text)
             if QSPI_LO <= addr < QSPI_HI and _reason(name)]
+
+def persist_intrusions(nm_text):
+    """Every symbol, code or data, that overlaps the panel-state sectors
+    [PERSIST_LO, PERSIST_HI). A size-less symbol counts by its address."""
+    out = []
+    for line in nm_text.splitlines():
+        parts = line.split(None, 3)
+        if len(parts) >= 3 and len(parts[1]) == 1:        # no size field
+            addr, size, name = parts[0], "0", line.split(None, 2)[2]
+        elif len(parts) == 4:
+            addr, size, name = parts[0], parts[1], parts[3]
+        else:
+            continue
+        try:
+            a, n = int(addr, 16), int(size, 16)
+        except ValueError:
+            continue
+        if a < PERSIST_HI and a + max(n, 1) > PERSIST_LO:
+            out.append(name)
+    return out
 
 _INSN = re.compile(r"^\s*([0-9a-f]+):\s+([a-z][a-z0-9.]*)\s+(.*)$")
 _TARGET = re.compile(r"(?:^|[\s,])([0-9a-f]+) <")
@@ -323,6 +354,10 @@ if __name__ == "__main__":
     bad = violations(nm_text)
     for b in bad:
         print("QSPI placement: " + _reason(b) + ": " + b)
+    intrusions = persist_intrusions(nm_text)
+    for b in intrusions:
+        print("QSPI placement: placed in the panel-state sectors: " + b)
+    bad = bad + intrusions
     reached, problems = _analyse(nm_text, dis_text, words)
     for p in problems:
         print("QSPI placement: cannot trust the call graph: " + p)

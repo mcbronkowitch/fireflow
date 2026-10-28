@@ -56,6 +56,28 @@ for name in ["SysTick_Handler", "HardFault_Handler", "Default_Handler",
 check("an nm line without a size is read",
       q.violations("90110900 T spky::ModLane::follow(long, float, float)\n")
       == ["spky::ModLane::follow(long, float, float)"])
+# The panel-state save (spec 2026-10-28 section 5.2) is on the stack while the
+# QSPI is out of memory-mapped mode.
+check("refused in QSPI: shell::persist_write",
+      q.violations("90110a00 00000100 T shell::persist_write(daisy::QSPIHandle&, "
+                   "shell::PersistRecord const&)\n") != [])
+
+# The top two sectors hold the panel-state records: nothing may be placed in
+# them, code or data, hot or cold, sized or not -- and a symbol that only runs
+# into them from below counts as well.
+check("persist sectors: a cold symbol below them passes",
+      q.persist_intrusions("907fdf00 00000100 T spky::AmbientReverb::init(float)\n") == [])
+check("persist sectors: a cold symbol in them is refused",
+      q.persist_intrusions("907fe000 00000010 T spky::AmbientReverb::init(float)\n")
+      == ["spky::AmbientReverb::init(float)"])
+check("persist sectors: data in them is refused",
+      q.persist_intrusions("907ff800 00000040 R kSomeTable\n") == ["kSomeTable"])
+check("persist sectors: a symbol running into them is refused",
+      q.persist_intrusions("907fdff0 00000020 T spky::AmbientReverb::init(float)\n") != [])
+check("persist sectors: a size-less symbol in them is refused",
+      q.persist_intrusions("907fe100 T helper()\n") == ["helper()"])
+check("persist sectors: the chip's end and beyond are not theirs",
+      q.persist_intrusions("90800000 00000010 T helper()\n") == [])
 
 # The call graph: names alone do not say who CALLS the cold code. A canned
 # image: a hot callback, main, the system init, one linker veneer into QSPI,
