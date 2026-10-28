@@ -30,10 +30,14 @@ SKIP = 77
 
 # The images a broken build must never get past: the default image, the
 # Rev A play image as it is flashed (memory: Rev A play image flags), and the
-# coupon play image.
+# coupon play image. reva_play persists the panel state (SHELL_PERSIST
+# defaults to 1); reva_play_nopersist is the same image with today's init-patch
+# boot, the one the desktop-render comparisons use (spec
+# 2026-10-28-panel-state-persistence-design.md section 4.2).
 IMAGES = [
     ("default", []),
     ("reva_play", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1"]),
+    ("reva_play_nopersist", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_PERSIST=0"]),
     ("coupon_play", ["SHELL_PANEL_SCAN=1", "SHELL_COUPON_PROBE=1"]),
 ]
 

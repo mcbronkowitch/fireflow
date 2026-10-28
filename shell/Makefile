@@ -388,6 +388,21 @@ only the Rev A play image prints SHELL_PLAY_V rows)
 endif
 endif
 
+# Panel-state persistence (spec 2026-10-28-panel-state-persistence-design.md):
+# the Rev A play image boots the pot positions plus the hidden state of its
+# last save, and saves rarely to the top two QSPI sectors. Default ON, and
+# deliberately NOT an error in any other image: there it is inert. The switch
+# that counts is persist_flash.h's SHELL_PERSIST_ON = SHELL_PERSIST and
+# SHELL_PANEL_SCAN and not SHELL_COUPON_PROBE and not a SHELL_BOOT_PATCH != 0
+# (which arrives through C_USER_FLAGS, so only the preprocessor sees it). 0
+# gives today's boot exactly -- init patch, no boot take, no save -- for the
+# desktop-render comparisons and every measurement that needs the init patch.
+SHELL_PERSIST ?= 1
+
+ifneq ($(filter $(SHELL_PERSIST),0 1),$(SHELL_PERSIST))
+$(error SHELL_PERSIST must be 0 or 1)
+endif
+
 # The per-sample audio path in ITCM (spec 2026-10-18-cpu-headroom-design.md
 # section 4.2): itcm_hot.ld places it, itcm_load.cpp copies it out of QSPI at
 # the top of main(), itcm_placement.py refuses a link that could run it first.
@@ -430,6 +445,10 @@ CPP_SOURCES = \
 	led_out.cpp \
 	panel_scan.cpp \
 	mux_scan.cpp \
+	persist_record.cpp \
+	persist_policy.cpp \
+	boot_take.cpp \
+	persist_flash.cpp \
 	../engine/body/mode_bank.cpp \
 	../engine/body/ks_string.cpp \
 	../engine/body/body_voice.cpp \
@@ -524,7 +543,7 @@ OBJDUMP := $(CP:objcopy=objdump)
 # Fehler zurueck, und er sieht wie eine Messung aus.
 C_INCLUDES += -I$(BUILD_DIR)
 
-SWITCH_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/itcm_load.o $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/probe_adc.o $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/scan_check.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o
+SWITCH_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/itcm_load.o $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/probe_adc.o $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/scan_check.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o $(BUILD_DIR)/persist_flash.o
 
 # ZUR PARSE-ZEIT, nicht als Regel, und das ist der Kern der Reparatur vom
 # 2026-08-23. Als Regel mit FORCE hat es ZWEIMAL nicht gehalten:
@@ -556,6 +575,7 @@ SWITCH_HEADERS := \
   $(shell python write_shell_panel_scan.py $(BUILD_DIR)/shell_panel_scan.h $(SHELL_PANEL_SCAN) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_keys_nc.py $(BUILD_DIR)/shell_keys_nc.h $(SHELL_KEYS_NC) $(BUILD_DIR)/panel_scan.o) \
   $(shell python write_shell_raw_spread.py $(BUILD_DIR)/shell_raw_spread.h $(SHELL_RAW_SPREAD) $(BUILD_DIR)/panel_scan.o) \
+  $(shell python write_shell_persist.py $(BUILD_DIR)/shell_persist.h $(SHELL_PERSIST) $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o $(BUILD_DIR)/persist_flash.o) \
   $(shell python write_shell_itcm.py $(BUILD_DIR)/shell_itcm.h $(SHELL_ITCM) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_link_stamp.py $(BUILD_DIR)/shell_link_stamp.h $(BUILD_DIR)/itcm_load.o) \
   $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/pot_report.o $(BUILD_DIR)/scan_check.o)
@@ -574,8 +594,11 @@ $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o: $(BUILD_DIR)/shell_coupon_pr
 $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/wait_probe.o: $(BUILD_DIR)/shell_pot_round.h
 $(BUILD_DIR)/pot_report.o: $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/scan_check.o: $(BUILD_DIR)/shell_scan_check.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_git_hash.h
-$(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_keys_nc.h $(BUILD_DIR)/shell_raw_spread.h
-$(BUILD_DIR)/control_tick.o: $(BUILD_DIR)/shell_panel_scan.h
+$(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_keys_nc.h $(BUILD_DIR)/shell_raw_spread.h $(BUILD_DIR)/shell_persist.h
+$(BUILD_DIR)/control_tick.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_persist.h
+# persist_flash.h folds all three into SHELL_PERSIST_ON; every object that
+# includes it reads them.
+$(BUILD_DIR)/persist_flash.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_persist.h
 
 .PHONY: FORCE
 FORCE:

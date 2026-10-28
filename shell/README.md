@@ -86,8 +86,9 @@ lesen und den Posten benennen, der überläuft. Die Bench kennt dasselbe
 Problem und hat es dokumentiert.
 
 The ctest entry `shell_images_build_guard` (`check_images_build.py`) builds
-three images from scratch — default, the Rev A play image
-(`SHELL_PANEL_SCAN=1 SHELL_KEYS_NC=1`) and the coupon play image
+four images from scratch — default, the Rev A play image
+(`SHELL_PANEL_SCAN=1 SHELL_KEYS_NC=1`, persisting), the same with
+`SHELL_PERSIST=0` (the init-patch boot) and the coupon play image
 (`SHELL_PANEL_SCAN=1 SHELL_COUPON_PROBE=1`) — each into its own emptied
 directory under `build/shell_images/`, with the env.sh variables scrubbed, and
 prints each image's SRAM_EXEC use. It never touches `shell/build`, and it is
@@ -121,6 +122,20 @@ into whatever lies at those addresses during boot: it hard-faults or hangs
 before USB comes up, so the board stays dark and no serial port appears. The
 cure is flashing the matching `shell-qspi.bin` (DFU buttons again), then the
 SRAM image.
+
+The QSPI map, top to bottom of what the shell uses: the SRAM image's DFU copy
+at `0x90040000`, the bank at `0x90100000`, `.qspi_cold` and the ITCM load image
+from `0x90110000` up to at most `0x907FE000` (`QSPI_COLD` in `qspi_cold.ld`),
+and the **two panel-state sectors** at `0x907FE000` and `0x907FF000`, 4 KiB
+each, the chip's last 8 KiB (spec
+`docs/superpowers/specs/2026-10-28-panel-state-persistence-design.md` section
+5.2). Those two are not part of any image: the Rev A play image appends a
+record of its knob vector there at runtime (seven 576-byte slots per sector,
+the other sector erased only when the active one is full), and boots from the
+newest valid one. `qspi_placement.py` and `itcm_placement.py` refuse a link
+that places anything there. Whether a DFU flash of `shell-qspi.bin` leaves
+them alone is a board question (it writes from `0x90100000` for the image's
+length); a parameter-list change invalidates the records anyway (layout hash).
 
 The QSPI command has no `:leave`, so the bootloader stays in DFU mode and the
 SRAM command follows directly; only if dfu-util then reports no DFU device,
@@ -546,6 +561,7 @@ written up under `docs/hardware/`:
 | `SHELL_PANEL_SCAN=1` (± `SHELL_COUPON_PROBE=1`) | the playing image: the scan drives the engine through the board's control table | Rev A: `read_play.py` (coupon: the `SHELL_PLAY` line by eye) | `reva-bring-up.md` §5, §6, §10 |
 | `+ SHELL_KEYS_NC=1` (Rev A only) | the panel keys read closed at rest: Rev A #1 as assembled, a workaround until Rev B | `read_play.py` (`keys=`, `presses=`) | `reva-bring-up.md` 6.1, fault R1 |
 | `+ SHELL_RAW_SPREAD=1` (Rev A only) | adds `SHELL_PLAY_R` lines once per 20-sweep (one-second) window: per row the min and max of the raw 16-bit word in that window | `read_play.py --raw` (worst spread per row and per sense pin, 5.7's touch rule) | `reva-bring-up.md` 5.3, 5.5, 5.7, fault R3 |
+| `SHELL_PERSIST=1` (default; effective on Rev A only) | panel-state persistence: boot plays the init patch plus the newest saved record, then the boot take writes every pot's position once (ENGINE rows first) and releases them; a save goes to the top two QSPI sectors after 15 s unchanged, at most once per 5 min. Inert on the coupon, in the non-playing images and under `SHELL_BOOT_PATCH` ≠ 0; `SHELL_PERSIST=0` is today's init-patch boot exactly. Prints `SHELL_PERSIST src=flash\|init seq=N` once and `SHELL_PERSIST save seq=N us=T ok=0\|1` per save | the `SHELL_PERSIST` lines by eye | spec `2026-10-28-panel-state-persistence-design.md` |
 | `+ C_USER_FLAGS=-DSPKY_PROBE_MARKS=1` (clean build) | the callback profile: per-deck and mix cycles per block, the worst blocks with their lane events, a histogram of the whole callback, and since fault R4 each deck split into modulation + control / engine / FX (`CBP_WIN2` per 2 s window, `CBP_SUM3` since boot) and the FX chain into smoothers / GRIT / FLUX / tap + mix + COMP / send (`CBP_WIN3`, `CBP_SUM4`), and the mix into observers + taps / blend + duck / reverb / return + sleep / limiter (`CBP_WIN4`, `CBP_SUM5`), and each deck's modulation + control half into before-the-deck / lanes / fade + swap + fire bookkeeping / control tick / trigger (`CBP_WIN5`, `CBP_SUM6`), the lanes into pitch lane / step clock + onset ring / texture tick (`CBP_WIN6`, `CBP_SUM7`), each block's worst sample broken down per segment (`CBP_WORST`), each hot ring block's own deck split (`CBP_REC3`: modulation / engine / FX per deck; `CBP_REC4`: lanes, control tick, FLUX; `CBP_REC5` per WAVE deck: strewn tones / control tick / voices and its strikes), a WAVE deck's engine split per window (`CBP_WIN9`), its voice calls timed and counted by voice state -- decay / decay + mip crossfade / attack / attack + crossfade / idle -- per ring block (`CBP_REC6`, cycles and calls) and per window (`CBP_WIN10`, cycles per call and calls), plus every reverb clear's cost (`CBP_RVCLR`); `read_cbp.py` tabulates, and prints the hot blocks' excess over the window means (`cb_profile.cpp`, `engine/util/probe_mark.h`; the stamp order is held on the desktop by `spky_probe_tests`) | `CBP_*` lines | `cpu-headroom-measured.md`, `reva-bring-up.md` 10.1 |
 | `+ C_USER_FLAGS=-DSPKY_PROBE_LAW=1` (clean build; with `SHELL_PANEL_SCAN=1`) | the TIDE split of the control block that set `cyc_max`: `set_tide`, `_apply_steps`, the live re-slots, the slew rebuilds behind them, `_apply_rate` and its rate pushes, in cycles (`SHELL_PLAY_TIDE`, `n` = how often the maximum moved) and in calls (`SHELL_PLAY_TIDEN`); its stamps cost ≈ 575 cycles of the block (`engine/util/probe_law.h`; the call counts and the nesting are held on the desktop by `spky_probe_tests`) | `SHELL_PLAY_TIDE*` lines | `reva-bring-up.md` 10.3 |
 | `+ C_USER_FLAGS=-DSHELL_BOOT_PATCH=N` (clean build) | boots a stress patch instead of the init patch: 1 = W2 (both decks WAVE), 2 = F2 (both decks FEED), 3 = fault R4's all-noon pot frame (`generated_boot_patch_noon.h`, from the R4 capture via `gen_boot_patch_noon.py`; Rev A only, the pots at noon hold it); combinable with the probe flag | `CBP_BOOT` line | `cpu-headroom-measured.md`, `reva-bring-up.md` 10.1 |
