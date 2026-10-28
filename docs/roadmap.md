@@ -37,7 +37,9 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-10-13 (**the 2 mm correction cut arrived and passed
+- **Last updated:** 2026-10-28 (**Rev A boots as it was switched off** —
+  panel-state persistence built, measured and merged, see the M6 entry and
+  `docs/hardware/persist-measured.md`. Earlier, 2026-10-13: **the 2 mm correction cut arrived and passed
   the grip test; the panel is frozen and the Rev A boards are ordered at
   JLCPCB, 128.22 € paid** — see the M6 Rev A entry and
   `docs/hardware/grip-test.md`. Earlier, 2026-10-09: **the 9 mm panel pass re-placed every control
@@ -712,7 +714,7 @@ is actually built today, and what is still design-only.
 | **PAN** | A per-deck bipolar balance knob, `PAN_A`/`PAN_B`, placing each deck's dry signal in the stereo field — `gL = min(1, 1 − p)`, `gR = min(1, 1 + p)`, unity at centre — while the reverb send deliberately stays centred (folding PAN into `ga`/`gb` would have been the tidy-looking way to do it, and is exactly what the send-stays-still gate exists to catch). PAN fills two slots that were already being held open rather than claiming new ones: `FX_BOT[1]` on the big panel, free since MULT was retired, and `LEVEL_SLOTS[0]` on the hardware plate, kept empty by a guard written specifically for this knob. **No control moved and no row was re-pitched** | ✅ **done** (engine + both VCV panels; spec `docs/superpowers/specs/2026-08-30-pan-design.md`, plan `docs/superpowers/plans/2026-08-30-pan.md`; branch `feat/pan`; released in 2.22.0. **Amended the same day it shipped** (`3b9afd8`): `PAN_B`'s mod ring reads deck **A**'s `LANE_SIZE` through deck A's master, negated, because both decks reading their own lane measured r = +1.0000 at equal RATE — one drift, twice, walking the whole mix to one side instead of opening a stereo image. The price is that `MOD_B` no longer reaches `PAN_B`; deck B's pan is switched off at its own depth ring. The arithmetic is gated in `tests/test_mod_layer.cpp`; the wiring is not, and cannot be — Rack does not link into `spky_tests`. **PAN has had no listening pass at all** — the balance law itself (against equal-power and against mid/side rotation), the 30 ms smoothing time copied from LVL, and `LANE_SIZE` as the mod ring's lane are all first-try values, see `docs/by-ear-decisions.md`. **In Rack, only the drawing was checked**: both panels were rendered headlessly from the built plugin (`Rack.exe -u <throwaway> -t 2`), confirming PAN's placement — `LINK PAN GRIT LVL` on the big panel's FX row, `FB PAN GRIT SEND TONE` across the plate's bottom line — and that both knobs boot at centre. **Nobody has dragged the knob, exercised its MOD ring under the latch, or saved and reloaded a patch**, the three things a screenshot cannot show) |
 | **Lane crossover** | A deck's lane output (LEVEL/MOTION/…) becomes a selectable modulation source for a target on the *other* deck — the first direct mod-to-mod bridge between the decks (today only audio and the rhythm view cross over) | ⬜ **planned** (from the 2026-08-22 dual-deck brainstorm, `docs/superpowers/specs/2026-08-22-dual-deck-brainstorm.md`; no spec; not yet ordered into the milestone sequence; spec together with "Mirror lanes" — same mod-glue) |
 | **Mirror lanes** | A deck follows a chosen lane of the sibling inverted or phase-shifted — direct per-lane counter-motion, deterministic call-and-response, complementing DRIFT's stochastic anti-correlation | ⬜ **planned** (from the 2026-08-22 dual-deck brainstorm, same doc as above; no spec; not yet ordered into the milestone sequence) |
-| **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel layout redone 2026-10-08 after the failed grip test** — regrouping, redistribution and plate round 2a shipped in 2.21.1/2.21.2/2.21.3, then the 9 mm panel pass moved every control onto a raster (73 knob positions, 15 lamps) and the Rev A board and firmware table follow it; the correction cut was ordered 2026-10-09 and the freeze tag waits for the repeated grip test on it; **bring-up is under way on a test coupon** — built 2026-09-17, five measurement rounds through 2026-09-28 (settle, crosstalk, codec tone, wait, pots), each with its own spec, plan and write-up under `docs/hardware/`; Phase-0 step 5b is closed on real pots; the panel scan's part 1 is built and measured on the coupon — `scan-measured.md` — and P6a is built — the Rev A scan, the generated table (70 rows then, 73 since the 9 mm pass), 35 pots sending, four keys — and its coupon session passed 3 of 4 checks on 2026-10-03 (D8/D9 deferred to P7 by decision); P6b-1 (the shared control law: VCV and the firmware run one `control::ControlLaw`) is done as of 2026-10-09, board session done (QSPI execute-in-place confirmed, law cost measured, clean by ear at 11 800 cycles), Rack check done (one pre-existing VCV bug open, see the P6b-1 entry); P6b-2 (knob ownership, MOD, the four keys, the LED law) is done as of 2026-10-18, coupon session passed (the clicks it surfaced predate it and trigger P6b-1's Plan B); the CPU headroom round removed the clicks on the coupon on 2026-10-18 (wavetable bank in D2 SRAM, audio path in ITCM; worst block 958 k → 873 k on the shipping image, Plan B not needed; merged 2026-10-18); the CLOCK and RESET jacks are built in VCV and the firmware as of 2026-10-19 (one shared clock law; Rack check and Rev A check open, see the entry in the M6 section); next: bring-up (P7); **form factor decided 2026-08-21: one brain, one 60 HP module, desktop as a shell decision** — see below) |
+| **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel layout redone 2026-10-08 after the failed grip test** — regrouping, redistribution and plate round 2a shipped in 2.21.1/2.21.2/2.21.3, then the 9 mm panel pass moved every control onto a raster (73 knob positions, 15 lamps) and the Rev A board and firmware table follow it; the correction cut was ordered 2026-10-09 and the freeze tag waits for the repeated grip test on it; **bring-up is under way on a test coupon** — built 2026-09-17, five measurement rounds through 2026-09-28 (settle, crosstalk, codec tone, wait, pots), each with its own spec, plan and write-up under `docs/hardware/`; Phase-0 step 5b is closed on real pots; the panel scan's part 1 is built and measured on the coupon — `scan-measured.md` — and P6a is built — the Rev A scan, the generated table (70 rows then, 73 since the 9 mm pass), 35 pots sending, four keys — and its coupon session passed 3 of 4 checks on 2026-10-03 (D8/D9 deferred to P7 by decision); P6b-1 (the shared control law: VCV and the firmware run one `control::ControlLaw`) is done as of 2026-10-09, board session done (QSPI execute-in-place confirmed, law cost measured, clean by ear at 11 800 cycles), Rack check done (one pre-existing VCV bug open, see the P6b-1 entry); P6b-2 (knob ownership, MOD, the four keys, the LED law) is done as of 2026-10-18, coupon session passed (the clicks it surfaced predate it and trigger P6b-1's Plan B); the CPU headroom round removed the clicks on the coupon on 2026-10-18 (wavetable bank in D2 SRAM, audio path in ITCM; worst block 958 k → 873 k on the shipping image, Plan B not needed; merged 2026-10-18); the CLOCK and RESET jacks are built in VCV and the firmware as of 2026-10-19 (one shared clock law; Rack check and Rev A check open, see the entry in the M6 section); panel-state persistence (the board boots as it was switched off, MOD depths included) is built and measured on Rev A as of 2026-10-28; next: bring-up (P7); **form factor decided 2026-08-21: one brain, one 60 HP module, desktop as a shell decision** — see below) |
 
 Milestone order follows the design spec's build order (audible first, hardware
 last). The scale layer was inserted after M1 because it only touches the PITCH
@@ -4189,6 +4191,37 @@ the coupon has nothing else open.
 **Next:** part 2 — the 70-pot table, the four keys on the 165 and the 19
 LEDs on the 595 — waits for the control PCB's pin map, which should give one
 spare channel to AGND and one to the rail (spec §8).
+
+**2026-10-28 — panel-state persistence: Rev A wakes up as it was switched off ✅ built, measured on Rev A #1, merged.**
+Spec `docs/superpowers/specs/2026-10-28-panel-state-persistence-design.md`,
+plan `docs/superpowers/plans/2026-10-28-panel-state-persistence.md`; code on
+branch `feat/panel-persist` (`b631fb16`..`050476df`), merged into main
+2026-10-28 (`ee9506cf`). Board results in `docs/hardware/persist-measured.md`.
+- **What was built.**
+  - **Record and slots**: every persisted parameter (MOD depths included,
+    REC and MODBTN not) plus the two excite bits, CRC-32 and a generated
+    layout hash, written A/B into the top two QSPI sectors (`0x907FE000`,
+    `0x907FF000`), which the link and DFU never touch.
+  - **Save policy**: a save after 15 s with no change, at most one per
+    5 min; a failed save retries once the floor is up.
+  - **Boot**: init patch plus the newest valid record, then the boot take
+    reads every pot once (ENGINE rows first) and the pots win. The output
+    is muted until the take is done and fades in over 20 ms (probe 4: the
+    record's sound played for ~30 ms before the take without it).
+  - **Excite after the take, "as live"** (Bastian, 2026-10-28): a deck that
+    was on BBD keeps the recorded bit, a deck the take turns onto BBD is
+    excited as a live turn would, a deck off BBD is never excited.
+  - **Per-sense-pin pot band** (`b3350925`, fault R3): 64 counts on
+    SENSE_0, 32 on SENSE_1-3; the coupon tables keep 16. Without it the
+    board never went 15 s quiet and never saved.
+- **Measured on the board.** 136 forced erase+write cycles with no audio
+  overrun (64-80 ms each; a normal save 14-18 ms); three power cuts, each
+  booted from the last good seq; a reflash keeps the record; BBD boots
+  right in both cases. `System::GetNow()` runs about 25 % slow on the board,
+  so the real times are ~18 s quiet and ~6.7 min floor (`docs/gotchas.md`).
+- **Still owed.** WRSR endurance (datasheet), a torn write on the board
+  (the torn-slot path is host tested only), and C_SENSE0, which would let
+  SENSE_0's band come down from 64.
 
 **2026-10-19 — CLOCK and RESET jacks: one clock law for VCV and the firmware ✅ built; Rack check (spec §8.7) and Rev A bring-up (§8.8) open.**
 Spec `docs/superpowers/specs/2026-10-19-clock-and-reset-jacks-design.md`,
