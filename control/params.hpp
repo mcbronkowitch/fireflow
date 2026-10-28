@@ -494,4 +494,9 @@ inline constexpr ParamRange kParamRange[] = {
 static_assert(sizeof(kParamRange) / sizeof(kParamRange[0]) == NUM_PARAMS,
               "range table must cover every ParamId");
 
+// FNV-1a 32 over every param's name, range and snap flag, in ParamId
+// order (gen_panel.py layout_hash). A saved snapshot is ignored when
+// this changes.
+inline constexpr uint32_t kParamLayoutHash = 0xF31D4D5Bu;
+
 } // namespace ffctl

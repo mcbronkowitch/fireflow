@@ -84,8 +84,7 @@ SlotNext next_slot(const uint8_t* sec0, const uint8_t* sec1, const SlotPick& lat
 
 PersistLayout current_layout()
 {
-    constexpr uint32_t kParamLayoutHashPlaceholder = 0; // Task 3 replaces
-    return PersistLayout{ffctl::NUM_PARAMS, kParamLayoutHashPlaceholder, kSnapshotVersion};
+    return PersistLayout{ffctl::NUM_PARAMS, ffctl::kParamLayoutHash, kSnapshotVersion};
 }
 
 } // namespace shell

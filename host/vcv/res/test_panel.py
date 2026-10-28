@@ -4028,6 +4028,53 @@ def test_committed_files_match_the_generator():
               "or the generator was changed without re-running it" % path)
 
 
+def _fnv1a32(data):
+    h = 0x811C9DC5
+    for b in data:
+        h = ((h ^ b) * 0x01000193) & 0xFFFFFFFF
+    return h
+
+
+def test_param_layout_hash_is_emitted_and_sensitive():
+    """kParamLayoutHash gates the firmware's saved snapshot: it must exist in
+    the committed params.hpp, equal an independent recomputation from the
+    kParamRange rows that same file carries, and move when a name, a bound or
+    a snap flag moves."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(here, "..", "..", "..", "control", "params.hpp")
+    with open(path) as f:
+        src = f.read()
+    m = re.search(r"kParamLayoutHash\s*=\s*0x([0-9A-Fa-f]{8})u;", src)
+    check(m is not None, "control/params.hpp has no kParamLayoutHash")
+    if m is None:
+        return
+    rows = re.findall(r"\{([^,{}]+),\s*([^,{}]+),\s*(true|false)\}, // (\w+)", src)
+    check(len(rows) == len(g.PARAMS),
+          "parsed %d kParamRange rows, expected %d" % (len(rows), len(g.PARAMS)))
+
+    def digest(entries):
+        buf = b""
+        for name, lo, hi, snap in entries:
+            for field in (name, repr(lo), repr(hi), "1" if snap else "0"):
+                buf += field.encode("utf-8") + b"\0"
+        return _fnv1a32(buf)
+
+    entries = [(n, lo.strip(), hi.strip(), s == "true") for lo, hi, s, n in rows]
+    check(digest(entries) == int(m.group(1), 16),
+          "kParamLayoutHash 0x%s != recomputation 0x%08X from the kParamRange rows"
+          % (m.group(1), digest(entries)))
+    check(g.layout_hash(g.param_layout_entries()) == int(m.group(1), 16),
+          "generator's layout_hash() disagrees with the emitted constant")
+    base = digest(entries)
+    renamed = [("X" + entries[0][0],) + entries[0][1:]] + entries[1:]
+    check(digest(renamed) != base, "renaming a param did not change the hash")
+    n, lo, hi, s = entries[0]
+    check(digest([(n, lo, hi, not s)] + entries[1:]) != base,
+          "flipping a snap flag did not change the hash")
+    check(digest([(n, lo, "9.f", s)] + entries[1:]) != base,
+          "changing a bound did not change the hash")
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
