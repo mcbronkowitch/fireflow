@@ -185,6 +185,13 @@ volatile int       g_take_partial  = 0;
 // a restore, so an ENGINE the take changed fires no bbd_edge (FLUX stays at
 // its pot). The record's excite_other_deck survives only on a deck that is on
 // BBD after the take (spec 4.3).
+// Excite during the boot: the law's bbd_part follows the RUNNING engine, and
+// a restored BBD deck runs another engine until the fade-and-swap lands
+// (roughly the first 100 ms, from reading the code, not measured). Without a
+// hold, apply_excite_events() clears the restored bit on the first tick;
+// control_set_excite() therefore holds it across the switch
+// (apply_excite_hold(), panel_step.h), both at boot and here, where the take
+// may have finished before the engine landed.
 void finish_take()
 {
     for(PotOwner& o : g_owner) pot_release(o);
@@ -202,6 +209,13 @@ void finish_take()
 float             g_pub_knobs[ffctl::NUM_PARAMS];
 bool              g_pub_excite[2] = {false, false};
 volatile uint32_t g_pub_seq       = 0;
+#if SHELL_PERSIST_STRESS_ON
+// panel_scan_block_end()'s per-save window, probe image only.
+volatile uint32_t g_win_gap_max    = 0;
+volatile uint32_t g_win_cb_max     = 0;
+volatile bool     g_win_reset      = false;
+uint32_t          g_win_prev_entry = 0;
+#endif
 #endif
 
 } // namespace
@@ -462,6 +476,23 @@ void panel_scan_block_end(uint32_t c0)
     const uint32_t dc = cycles_now() - c0;
     g_cb_cycles_last  = dc;
     if(g_law_blocks >= kLawWarmupBlocks && dc > g_cb_cycles_max) g_cb_cycles_max = dc;
+#if SHELL_PERSIST_STRESS_ON
+    // The probe image's per-save window (plan Task 6 probe 1): the worst
+    // callback and the worst interval between two callback entries since the
+    // foreground's last save line. A callback held off by the QSPI shows in
+    // the interval even when its own cycles do not. The foreground asks for
+    // the reset; the callback does it, so the counters have one writer.
+    if(g_win_reset)
+    {
+        g_win_gap_max = 0;
+        g_win_cb_max  = 0;
+        g_win_reset   = false;
+    }
+    if(g_win_prev_entry != 0 && c0 - g_win_prev_entry > g_win_gap_max)
+        g_win_gap_max = c0 - g_win_prev_entry;
+    g_win_prev_entry = c0;
+    if(dc > g_win_cb_max) g_win_cb_max = dc;
+#endif
     if(g_inst != nullptr)
         cb_profile_block_end(dc, g_law_cycles_last, g_led_cycles_last,
                              g_law_blocks >= kLawWarmupBlocks, *g_inst);
@@ -490,6 +521,19 @@ void run_panel_scan_report(bench::Board& hw)
     bool         persist_cur_excite[2] = {false, false};
     bool         persist_seeded        = false;
     SavePolicy   persist_policy;
+    // Passes whose snapshot differed from the previous pass's, since boot:
+    // printed as `chg=` beside the src line. It is the save trigger's raw
+    // input, which the rate-limited save lines hide (plan Task 6 probe 3,
+    // the dead-band question of spec 5.3).
+    uint32_t persist_chg = 0;
+    // The one-shot excite / engine line about a second after the first pass
+    // (plan Task 6 probe 5): by then a restored BBD deck has landed.
+    const uint32_t persist_t_first = daisy::System::GetNow();
+    bool           persist_boot_printed = false;
+#if SHELL_PERSIST_STRESS_ON
+    constexpr uint32_t kStressEveryMs     = 2000;   // quiet 2 s, floor 0: every 2 s
+    uint32_t           persist_stress_last = persist_t_first;
+#endif
 #endif
     while(1)
     {
@@ -635,6 +679,21 @@ void run_panel_scan_report(bench::Board& hw)
             const SlotPick& b = persist_boot_pick();
             hw.PrintLine("SHELL_PERSIST src=%s seq=%u", b.sector >= 0 ? "flash" : "init",
                          static_cast<unsigned>(b.sector >= 0 ? b.seq : 0u));
+            hw.PrintLine("SHELL_PERSIST chg=%u", static_cast<unsigned>(persist_chg));
+        }
+        // Once, about a second after the first pass: each deck's excite bit
+        // and running engine, and whether the boot take is done. Read without
+        // a handshake from the callback's state: bools and an engine id, a
+        // torn read is impossible and a stale one costs nothing here.
+        if(!persist_boot_printed && daisy::System::GetNow() - persist_t_first >= 1000u)
+        {
+            bool ex[2];
+            control_get_excite(ex);
+            const int e0 = g_inst ? static_cast<int>(g_inst->engine_id(0)) : -1;
+            const int e1 = g_inst ? static_cast<int>(g_inst->engine_id(1)) : -1;
+            hw.PrintLine("SHELL_PERSIST boot ex=%d,%d eng=%d,%d take=%d", ex[0] ? 1 : 0,
+                         ex[1] ? 1 : 0, e0, e1, g_take.done ? 1 : 0);
+            persist_boot_printed = true;
         }
         // A take the fallback applied with rows missing (kTakeSweeps): once.
         // A complete take prints nothing.
@@ -667,8 +726,17 @@ void run_panel_scan_report(bench::Board& hw)
         {
             const bool changed = persist_differs(persist_cur, persist_prev);
             for(int i = 0; i < ffctl::NUM_PARAMS; ++i) persist_prev[i] = persist_cur[i];
+            if(changed) ++persist_chg;
+            const uint32_t now = daisy::System::GetNow();
+#if SHELL_PERSIST_STRESS_ON
+            // The probe image: a save every 2 s, changed or not.
+            const bool due = now - persist_stress_last >= kStressEveryMs;
+            if(due) persist_stress_last = now;
+#else
             // 15 s unchanged and at most one save per 5 min (save_due()).
-            if(save_due(persist_policy, changed, daisy::System::GetNow()))
+            const bool due = save_due(persist_policy, changed, now);
+#endif
+            if(due)
             {
                 // Here and only here, in the foreground: the QSPI erase and
                 // program never run in the audio interrupt (spec 5.2).
@@ -688,9 +756,24 @@ void run_panel_scan_report(bench::Board& hw)
                 // slot every half second meanwhile (save_failed()).
                 if(ok) save_done(persist_policy, daisy::System::GetNow());
                 else   save_failed(persist_policy, daisy::System::GetNow());
+#if SHELL_PERSIST_STRESS_ON
+                // Plus the callback since the previous save line: cb_max as
+                // SHELL_PLAY_LAW's (since the first second), win = the worst
+                // callback in this window, gap = the worst entry-to-entry
+                // interval in it (2 ms block = 960 000 cycles). Worst case
+                // about 110 B, inside the 128-byte log buffer.
+                const uint32_t win = g_win_cb_max;
+                const uint32_t gap = g_win_gap_max;
+                g_win_reset        = true;
+                hw.PrintLine("SHELL_PERSIST save seq=%u us=%u ok=%d cb_max=%u win=%u gap=%u",
+                             static_cast<unsigned>(rec.seq), static_cast<unsigned>(us),
+                             ok ? 1 : 0, static_cast<unsigned>(g_cb_cycles_max),
+                             static_cast<unsigned>(win), static_cast<unsigned>(gap));
+#else
                 hw.PrintLine("SHELL_PERSIST save seq=%u us=%u ok=%d",
                              static_cast<unsigned>(rec.seq), static_cast<unsigned>(us),
                              ok ? 1 : 0);
+#endif
             }
         }
 #endif

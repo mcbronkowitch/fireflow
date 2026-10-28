@@ -37,6 +37,15 @@
 #define SHELL_PERSIST_ON 0
 #endif
 
+// The probe image (SHELL_PERSIST_STRESS=1, plan Task 6): a save every 2 s, an
+// erase on every save. Nothing where persistence is not effective.
+#include "shell_persist_stress.h"
+#if SHELL_PERSIST_ON && SHELL_PERSIST_STRESS
+#define SHELL_PERSIST_STRESS_ON 1
+#else
+#define SHELL_PERSIST_STRESS_ON 0
+#endif
+
 namespace shell {
 
 inline constexpr bool kPersistOn = SHELL_PERSIST_ON;
@@ -74,6 +83,9 @@ const bool*     persist_boot_excite();   // two entries
 // (next_slot()), the other sector erased first when the active one is full,
 // the record programmed, then read back memory-mapped and compared. True only
 // when the slot now holds exactly r and r is valid. r must be sealed.
+// SHELL_PERSIST_STRESS_ON: every save erases the sector that does not hold
+// the newest record and writes its slot 0 -- one erase+write cycle per save,
+// a roll every time, and the newest record always in the other sector.
 bool persist_write(daisy::QSPIHandle& q, const PersistRecord& r);
 
 } // namespace shell

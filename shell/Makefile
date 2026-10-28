@@ -403,6 +403,18 @@ ifneq ($(filter $(SHELL_PERSIST),0 1),$(SHELL_PERSIST))
 $(error SHELL_PERSIST must be 0 or 1)
 endif
 
+# The persistence probe image (plan 2026-10-28-panel-state-persistence.md,
+# Task 6): a save forced every 2 s with an erase on every save, so 100 saves
+# are 100 erase+write cycles, and each save line carries the callback's
+# worst cycles and its worst entry-to-entry interval since the previous one.
+# A measuring aid that wears the two sectors on purpose; the shipping image
+# keeps 0. Acts only where SHELL_PERSIST is effective (persist_flash.h).
+SHELL_PERSIST_STRESS ?= 0
+
+ifneq ($(filter $(SHELL_PERSIST_STRESS),0 1),$(SHELL_PERSIST_STRESS))
+$(error SHELL_PERSIST_STRESS must be 0 or 1)
+endif
+
 # The per-sample audio path in ITCM (spec 2026-10-18-cpu-headroom-design.md
 # section 4.2): itcm_hot.ld places it, itcm_load.cpp copies it out of QSPI at
 # the top of main(), itcm_placement.py refuses a link that could run it first.
@@ -576,6 +588,7 @@ SWITCH_HEADERS := \
   $(shell python write_shell_keys_nc.py $(BUILD_DIR)/shell_keys_nc.h $(SHELL_KEYS_NC) $(BUILD_DIR)/panel_scan.o) \
   $(shell python write_shell_raw_spread.py $(BUILD_DIR)/shell_raw_spread.h $(SHELL_RAW_SPREAD) $(BUILD_DIR)/panel_scan.o) \
   $(shell python write_shell_persist.py $(BUILD_DIR)/shell_persist.h $(SHELL_PERSIST) $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o $(BUILD_DIR)/persist_flash.o) \
+  $(shell python write_shell_persist_stress.py $(BUILD_DIR)/shell_persist_stress.h $(SHELL_PERSIST_STRESS) $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o $(BUILD_DIR)/persist_flash.o) \
   $(shell python write_shell_itcm.py $(BUILD_DIR)/shell_itcm.h $(SHELL_ITCM) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_link_stamp.py $(BUILD_DIR)/shell_link_stamp.h $(BUILD_DIR)/itcm_load.o) \
   $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/pot_report.o $(BUILD_DIR)/scan_check.o)
@@ -594,11 +607,11 @@ $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o: $(BUILD_DIR)/shell_coupon_pr
 $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/wait_probe.o: $(BUILD_DIR)/shell_pot_round.h
 $(BUILD_DIR)/pot_report.o: $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/scan_check.o: $(BUILD_DIR)/shell_scan_check.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_git_hash.h
-$(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_keys_nc.h $(BUILD_DIR)/shell_raw_spread.h $(BUILD_DIR)/shell_persist.h
-$(BUILD_DIR)/control_tick.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_persist.h
-# persist_flash.h folds all three into SHELL_PERSIST_ON; every object that
-# includes it reads them.
-$(BUILD_DIR)/persist_flash.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_persist.h
+$(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_keys_nc.h $(BUILD_DIR)/shell_raw_spread.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h
+$(BUILD_DIR)/control_tick.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h
+# persist_flash.h folds all four into SHELL_PERSIST_ON and
+# SHELL_PERSIST_STRESS_ON; every object that includes it reads them.
+$(BUILD_DIR)/persist_flash.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h
 
 .PHONY: FORCE
 FORCE:

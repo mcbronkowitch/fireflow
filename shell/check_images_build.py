@@ -33,11 +33,14 @@ SKIP = 77
 # coupon play image. reva_play persists the panel state (SHELL_PERSIST
 # defaults to 1); reva_play_nopersist is the same image with today's init-patch
 # boot, the one the desktop-render comparisons use (spec
-# 2026-10-28-panel-state-persistence-design.md section 4.2).
+# 2026-10-28-panel-state-persistence-design.md section 4.2); reva_play_stress
+# is the board probes' image.
 IMAGES = [
     ("default", []),
     ("reva_play", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1"]),
     ("reva_play_nopersist", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_PERSIST=0"]),
+    # The persistence probe image (plan 2026-10-28, Task 6): forced saves.
+    ("reva_play_stress", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_PERSIST_STRESS=1"]),
     ("coupon_play", ["SHELL_PANEL_SCAN=1", "SHELL_COUPON_PROBE=1"]),
 ]
 

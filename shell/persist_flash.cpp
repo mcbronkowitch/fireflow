@@ -96,7 +96,13 @@ bool persist_write(daisy::QSPIHandle& q, const PersistRecord& r)
     // failed save is then simply skipped (next_slot() takes blank slots only).
     if(!mapped(q)) return false;
     const SlotPick latest = persist_latest();
+#if SHELL_PERSIST_STRESS_ON
+    // The probe image: a forced roll with an erase on every save (the sector
+    // erased never holds the newest record, so a power cut still leaves one).
+    const SlotNext next{latest.sector < 0 ? 0 : 1 - latest.sector, 0, true};
+#else
     const SlotNext next   = next_slot(sector_ptr(0), sector_ptr(1), latest);
+#endif
     const uint32_t sec    = sector_addr(next.sector);
     const uint32_t addr   = sec + static_cast<uint32_t>(next.slot) * kPersistStride;
 
