@@ -249,16 +249,24 @@ void control_rearm_after_take();                                // control_tick.
 
 This task needs the board and Bastian's hands. The controller does not mark it done from a subagent report.
 
+**Already built (Task 5 fix waves, on the branch):**
+- `SHELL_PERSIST_STRESS ?= 0` (parse-time header, `write_shell_persist_stress.py`; acts only where persistence is effective; image `reva_play_stress` in `check_images_build.py`). With 1: a save forced every 2 s (quiet 2 s, floor 0) with an erase on every save, alternating sectors, so 100 saves are 100 erase+write cycles and every save is a roll. Each save line is `SHELL_PERSIST save seq=N us=T ok=0|1 cb_max=C win=W gap=G`: `cb_max` since the first second, `win` the worst callback in cycles since the previous save line, `gap` the worst DWT interval between two callback entries in that window (a 2 ms block is 960 000 cycles).
+- In every persisting image: `SHELL_PERSIST src=flash|init seq=N` and `SHELL_PERSIST chg=N` (passes with a changed vector since boot) on the first pass and every 10th (~5 s); `SHELL_PERSIST boot ex=a,b eng=a,b take=0|1` once, ~1 s after the first pass (each deck's excite bit and running `engine_id`); `take=partial seen=N/M` only if the boot take fell back.
+
 **Files:**
-- Modify: `shell/Makefile` + `persist` code: `SHELL_PERSIST_STRESS ?= 0`. With 1, the quiet time is 2 s and the floor 0, a save is forced every 2 s, and the board prints `cb_max` with every save line. This is a measuring aid; the shipping image keeps 0.
 - Create: `docs/hardware/persist-measured.md`
 
-- [ ] **Step 1: Probe 1 + 2.** Flash the stress image as the play image (memory `fireflow-reva-play-image-flags`: clean build, `SHELL_PANEL_SCAN=1 SHELL_KEYS_NC=1 SHELL_PERSIST_STRESS=1`, QSPI first). Let it run at least 100 saves with audio playing.
-  - Record the `us=` spread (erase + write), the `cb_max` before and during saves, and any fault or reset.
-  - Pass: no fault and no reset, and `cb_max` during saves does not exceed the pre-save maximum by more than measurement noise.
+**Wear bound (spec §5.3).** Every save also writes the flash's status register (~2.3 WRSR per save, libDaisy's `QuadEnable()` in every `SetMode()`), and the stress image does four per save. Until the datasheet check is done (same-value WRSR, status-register endurance), keep every stress run **≤ 30 min** (≤ 900 saves).
+
+- [ ] **Step 1: Probe 1 + 2 (QSPI write safety and duration).** Flash the stress image as the play image (memory `fireflow-reva-play-image-flags`: clean build, `SHELL_PANEL_SCAN=1 SHELL_KEYS_NC=1 SHELL_PERSIST_STRESS=1`, QSPI first). Run at least 100 forced erase+write cycles with audio playing, at most 30 min.
+  - Record per save: the `us=` spread (erase + program), `cb_max`, `win`, `gap`, and any fault, hang or reset (a reset shows as a new `src=` line with a fresh `chg=0`).
+  - The first `ok=1` also confirms that libDaisy's `CheckProgramMemory()` lets the write through on this image (VTOR in SRAM).
+  - Pass: no fault and no reset; `win` during saves within noise of the pre-save `cb_max`; `gap` never above one block period plus noise (a callback held off by the QSPI shows there even when its cycles do not).
   - If it fails: stop, report, and go back to the spec (§3 assumption broken).
-- [ ] **Step 2: Probe 3.** Flash the normal image and leave it untouched for 10 min. Count `SHELL_PERSIST save` lines after the first save. Pass: zero.
-- [ ] **Step 3: Probe 4.** Power-cycle with one pot moved while off and record the output with the audio rig (memory `fireflow-audio-measurement-rig`). Measure the time from power-on to the level change and judge whether the jump is audible.
+- [ ] **Step 2: Power-cut probe.** With the stress image saving, pull power about 10 times at random points mid-save, rolls included (every stress save is a roll). After each power-up: `src=flash` with a `seq` at most 1 below the last `save seq=` printed before the cut, and no fault. Record each pair (last printed seq, booted seq).
+- [ ] **Step 3: Probe 3 (change rate).** Flash the normal image. Turn every pot past `kPotTouch` so it stays owned, and park each stepped pot near a step boundary. Leave the board alone for 10 min and read `chg=` at the start and the end. Record the difference and the save lines. That number decides the dead-band question in spec §5.3: zero means no dead-band; anything else means a dead-band in `persist_differs()` or a libDaisy read-before-write, chosen with Bastian.
+- [ ] **Step 4: Probe 4 (boot window).** Power-cycle with one pot moved while off and record the output with the audio rig (memory `fireflow-audio-measurement-rig`). Measure the time from power-on to the level change and judge whether the jump is audible.
   - If it is audible and Bastian wants it gone, add a mute until `g_take.done` as a follow-up commit.
-- [ ] **Step 4: Probe 5.** Set deck A to BBD with MOD depths set, wait for the save line, and power-cycle. Compare rig recordings before and after. Then repeat with ENGINE A moved onto BBD while off. Check `SHELL_PERSIST src=flash`, FLUX at its pot, no FLUX drop.
-- [ ] **Step 5:** Write `docs/hardware/persist-measured.md` with the printed numbers, and move any lasting fact into `shell/README.md`. Commit `docs(hardware): persist probes on Rev A`.
+- [ ] **Step 5: Probe 5 (BBD boot).** Set deck A to BBD with MOD depths set, wait for the save line, and power-cycle. Read the `boot ex=… eng=… take=1` line: deck A must show excite 1 and the BBD engine id (`spky::ENGINE_BBD`). Compare rig recordings before and after. Then repeat with ENGINE A moved onto BBD while off: same line check, `src=flash`, FLUX at its pot, no FLUX drop. (The restored excite bit is held across the engine switch by `apply_excite_hold()`; this line is its board check.)
+- [ ] **Step 6: Reflash check.** After any reflash of `shell-qspi.bin`, read the first `src=` line: `flash` with the old seq means the top sectors survive a DFU flash, `init` means they do not. Record which.
+- [ ] **Step 7:** Write `docs/hardware/persist-measured.md` with the printed numbers, and move any lasting fact into `shell/README.md` and `docs/engine-map.md`. Commit `docs(hardware): persist probes on Rev A`.

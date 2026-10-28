@@ -217,6 +217,27 @@ records per sector before an erase, two sectors see under 500 erases each
 per year. At 100 000 cycles that is centuries. Wear is not the limiting
 factor; the 5-min floor is about keeping saves rare and out of the way.
 
+**The status register is written too, and the paragraph above did not count
+it** (found in the 2026-10-28 branch review, read from libDaisy, not
+measured). Every `QSPIHandle::SetMode()` runs a full `Init()`
+(`lib/libDaisy/src/per/qspi.cpp`, `SetMode` and `QuadEnable`), and `Init()`
+calls `QuadEnable()`, an unconditional WRSR with the QE bit set, i.e. a write
+of the flash's non-volatile status register. A save switches modes twice (into
+indirect mode and back for the program), a save that rolls four times (erase,
+then program). At 7 saves per roll that is about 2.3 status-register writes
+per save:
+
+- at the worst case above (5 600 saves a year): about 13 000 writes a year;
+- at the policy's ceiling (a save every 5 min, a board left on with an owned
+  pot whose jitter keeps counting as a change): about 240 000 writes a year.
+
+Owed, not known: whether the IS25LP064A spends an endurance cycle on a WRSR
+that writes the value already there, and what its status-register endurance
+is (datasheet check). libDaisy is not patched for this round. Whether the fix
+is a dead-band in `persist_differs()` (so jitter stops counting as a change)
+or a read-before-write in `QuadEnable()` is decided after probe 3's measured
+change rate (`SHELL_PERSIST chg=N`, §6 and plan Task 6).
+
 ## 6. Probes owed before the plan is final (probe rule)
 
 None of these may enter the plan as a fact until a probe has printed it:
@@ -227,8 +248,11 @@ None of these may enter the plan as a fact until a probe has printed it:
    interrupt) touches memory-mapped QSPI.
 2. **Duration:** measure the time one `EraseSector` and one ~600 B `Write`
    take on this board, in DWT cycles or ms.
-3. **Idle stability:** on an untouched board, how often the published
-   vector differs from the last one, over 10 min.
+3. **Idle stability:** on a board left alone after a session -- every pot
+   turned past `kPotTouch`, so it stays owned and only `kPotHysteresis`
+   stands between its jitter and a change -- how often the published vector
+   differs from the last one, over 10 min. An untouched board cannot show it:
+   after the boot take every pot is released and writes nothing.
 4. **Boot window:** how long it takes from `StartAudio()` to the first valid
    span, and whether a pot moved while the board was off produces an
    audible jump.
