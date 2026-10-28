@@ -142,3 +142,58 @@ TEST_CASE("boot take: collect after done is ignored") {
     shell::boot_take_collect(b, 2, 5000);
     CHECK(b.raw[2] == before);
 }
+
+TEST_CASE("boot take: apply writes only seen rows") {
+    Fixture f(false);   // rows: ENGINE_A, ATTACK_A, FLUX_A, param -1
+    Knobs k;
+    Knobs before;
+    shell::BootTake b{};
+    shell::boot_take_collect(b, 2, 45000);   // FLUX_A only
+    shell::boot_take_apply(b, f.t, kSpan, k.v);
+    CHECK(k.v[ffctl::FLUX_A] == doctest::Approx(knob_at(ffctl::FLUX_A, 45000)));
+    CHECK(k.v[ffctl::ENGINE_A] == before.v[ffctl::ENGINE_A]);
+    CHECK(k.v[ffctl::ATTACK_A] == before.v[ffctl::ATTACK_A]);
+    CHECK(k.v[ffctl::STAGES_A] == before.v[ffctl::STAGES_A]);
+}
+
+TEST_CASE("boot take: param -1 row writes nothing") {
+    const shell::ControlEntry row{0, 3, -1};
+    const shell::ControlTable t{&row, 1};
+    Knobs k;
+    Knobs before;
+    shell::BootTake b{};
+    shell::boot_take_collect(b, 0, 45000);
+    shell::boot_take_apply(b, t, kSpan, k.v);
+    CHECK(b.done);
+    for (int i = 0; i < ffctl::NUM_PARAMS; ++i) CHECK(k.v[i] == before.v[i]);
+}
+
+TEST_CASE("boot take: invalid span writes nothing and stays not done") {
+    Fixture f(false);
+    Knobs k;
+    Knobs before;
+    shell::BootTake b{};
+    f.see_all(b, engine_raw(1), 45000);
+    shell::boot_take_apply(b, f.t, shell::Span{1000, 61000, false}, k.v);
+    CHECK_FALSE(b.done);
+    for (int i = 0; i < ffctl::NUM_PARAMS; ++i) CHECK(k.v[i] == before.v[i]);
+    // A later apply with a valid span still works.
+    shell::boot_take_apply(b, f.t, kSpan, k.v);
+    CHECK(b.done);
+    CHECK(k.v[ffctl::FLUX_A] == doctest::Approx(knob_at(ffctl::FLUX_A, 30000)));
+}
+
+TEST_CASE("boot take: table larger than kMaxRows is not ready and apply writes nothing") {
+    static shell::ControlEntry rows[shell::kMaxRows + 1];
+    for (auto& r : rows) r = {0, 0, ffctl::FLUX_A};
+    const shell::ControlTable t{rows, shell::kMaxRows + 1};
+    Knobs k;
+    Knobs before;
+    shell::BootTake b{};
+    for (int r = 0; r < shell::kMaxRows; ++r) shell::boot_take_collect(b, r, 45000);
+    shell::boot_take_collect(b, shell::kMaxRows, 45000);   // out of range: ignored
+    CHECK_FALSE(shell::boot_take_ready(b, t));
+    shell::boot_take_apply(b, t, kSpan, k.v);
+    CHECK_FALSE(b.done);
+    for (int i = 0; i < ffctl::NUM_PARAMS; ++i) CHECK(k.v[i] == before.v[i]);
+}

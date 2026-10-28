@@ -27,7 +27,7 @@ namespace {
 void write_row(const BootTake& b, const ControlTable& t, int r, const Span& span, float* knobs)
 {
     const ControlEntry& e = t.entries[r];
-    if(e.param < 0) return;
+    if(e.param < 0 || !b.seen[r]) return;
     PotFilter fresh{};
     float v = 0.0f;
     if(!pot_filter(fresh, b.raw[r], span, kPotHysteresis, &v)) return;   // invalid span
@@ -42,7 +42,7 @@ bool is_engine(int param) { return param == ffctl::ENGINE_A || param == ffctl::E
 
 void boot_take_apply(BootTake& b, const ControlTable& t, const Span& span, float* knobs)
 {
-    if(b.done) return;
+    if(b.done || !span.valid || t.count > kMaxRows) return;
     for(int r = 0; r < t.count; ++r)
         if(is_engine(t.entries[r].param)) write_row(b, t, r, span, knobs);
     for(int r = 0; r < t.count; ++r)

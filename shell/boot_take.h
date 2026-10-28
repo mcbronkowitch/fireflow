@@ -21,8 +21,8 @@ inline constexpr int kMaxRows = 80;
 
 struct BootTake
 {
-    uint16_t raw[kMaxRows];
-    bool     seen[kMaxRows];
+    uint16_t raw[kMaxRows]  = {};
+    bool     seen[kMaxRows] = {};
     bool     done = false;
 };
 
@@ -37,8 +37,10 @@ bool boot_take_ready(const BootTake& b, const ControlTable& t);
 // then the rest through knob_target() (so ATTACK vs STAGES follows the freshly
 // written ENGINE). MODBTN is treated as 0: a twin-bearing pot writes its sound
 // parameter, never its depth. The value is what a fresh PotFilter emits for
-// the raw word (span and snap regions, no hysteresis history). Rows with
-// param -1 are skipped. Sets done.
+// the raw word (span and snap regions, no hysteresis history). Only rows seen
+// by boot_take_collect() are written; rows with param -1 are skipped. Sets
+// done -- except with an invalid span or a table larger than kMaxRows, which
+// write nothing and leave done false.
 void boot_take_apply(BootTake& b, const ControlTable& t, const Span& span, float* knobs);
 
 } // namespace shell
