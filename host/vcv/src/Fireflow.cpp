@@ -392,6 +392,7 @@ struct Fireflow : Module {
     dsp::ClockDivider ledDiv;               // throttle the LED law; 750 Hz at 48 kHz, scales with sample rate
     int ledDuty[NUM_LIGHTS] = {0};
     std::atomic<bool> resyncReq { false };  // menu "Resync to bar" -> audio thread
+    std::atomic<bool> modClearedReq { false };  // menu "Clear MOD layer" -> the lamp's receipt
     bool pendingRestore = false;    // dataFromJson ran before onAdd; content reload deferred
 
     Fireflow() {
@@ -823,6 +824,7 @@ struct Fireflow : Module {
             in.mod_latched = params[MODBTN].getValue() > 0.5f;
             in.clock_pulse = clockSeen;
             in.reset_pulse = resetSeen;
+            in.mod_cleared = modClearedReq.exchange(false);
             clockSeen = resetSeen = false;
             spkyled::fill(inst, ledPanel, dt, spkyled::kLedSteps, in, ledDuty);
             for (int i = 0; i < NUM_LIGHTS; ++i)
@@ -1523,6 +1525,7 @@ static void appendFireflowMenu(Menu* menu, Fireflow* m) {
     menu->addChild(createMenuItem("Clear MOD layer", "", [m]() {
         for (const ffctl::ModTarget& t : ffctl::kModLayer)
             m->params[t.depthId].setValue(ffctl::mod_clear_value(t));
+        m->modClearedReq = true;
     }));
 
     // DRIVE_A/B retired (spec 2026-08-09 hw-control-reduction task 9): the

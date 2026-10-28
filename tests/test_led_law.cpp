@@ -391,6 +391,54 @@ TEST_CASE("led: TEMPO_L is a metronome pulse on the transport beat") {
     CHECK(duty[ffctl::TEMPO_L] == steps - 1);     // next downbeat
 }
 
+TEST_CASE("led law: SHIFT + MOD's receipt is five even blinks, then the lamp's own job") {
+    Instrument inst;
+    inst.init(48000.f);
+    const float dt = 1.f / 750.f;           // the control rate used in Rack
+    const int steps = 16;
+    const int burst = static_cast<int>(spkyled::kModClearBlinks * spkyled::kModClearPeriod / dt);
+    const int half  = static_cast<int>(0.5f * spkyled::kModClearPeriod / dt);
+
+    for (const bool latch : {false, true}) {
+        CAPTURE(latch);
+        spkyled::Panel p;
+        int duty[ffctl::NUM_LIGHTS] = {0};
+        spkyled::LedInputs in;
+        in.mod_latched = latch;
+        // Settle away from the blink phase's start, so the burst cannot be
+        // mistaken for the latch's own pulse lining up with it.
+        for (int i = 0; i < 300; ++i) spkyled::fill(inst, p, dt, steps, in, duty);
+
+        std::vector<int> onRun;
+        bool prev = false;
+        int  run  = 0;
+        for (int i = 0; i < burst; ++i) {
+            spkyled::LedInputs e = in;
+            e.mod_cleared = (i == 0);       // an edge: one fill() only
+            spkyled::fill(inst, p, dt, steps, e, duty);
+            const int d = duty[ffctl::MODBTN_L];
+            REQUIRE((d == 0 || d == steps - 1));
+            const bool on = d != 0;
+            if (i == 0) REQUIRE(on);        // the receipt starts lit, at once
+            if (on) ++run;
+            else if (prev) { onRun.push_back(run); run = 0; }
+            prev = on;
+        }
+        if (prev) onRun.push_back(run);
+        REQUIRE(onRun.size() == static_cast<size_t>(spkyled::kModClearBlinks));
+        for (int r : onRun) CHECK(std::abs(r - half) <= 1);
+
+        // Afterwards: unlatched, the idle limiter reads dark; latched, the
+        // double pulse is back (it lights again within one of its periods).
+        bool sawOn = false;
+        for (int i = 0; i < 2 * half * 4; ++i) {
+            spkyled::fill(inst, p, dt, steps, in, duty);
+            sawOn = sawOn || duty[ffctl::MODBTN_L] != 0;
+        }
+        CHECK(sawOn == latch);
+    }
+}
+
 TEST_CASE("led law: MODBTN lamp double-pulses while the latch holds") {
     Instrument inst;
     inst.init(48000.f);

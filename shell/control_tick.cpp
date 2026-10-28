@@ -63,10 +63,11 @@ control::Events control_tick(const float* knobs, spky::Instrument& inst, float m
 }
 
 void led_tick(const spky::Instrument& inst, bool mod_latched, float dt, int* duty_out,
-              bool clock_lamp, bool reset_lamp)
+              bool clock_lamp, bool reset_lamp, bool mod_cleared)
 {
     spkyled::LedInputs in;
     in.mod_latched = mod_latched;
+    in.mod_cleared = mod_cleared;
     in.clock_pulse = clock_lamp;
     in.reset_pulse = reset_lamp;
     spkyled::fill(inst, g_panel, dt, spkyled::kLedSteps, in, duty_out);

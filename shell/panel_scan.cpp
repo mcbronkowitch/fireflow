@@ -63,6 +63,7 @@ KeyState  g_keys;
 PotOwner g_owner[kChannels];
 // The debounced key mask of the previous block: a key acts on its press edge.
 uint8_t  g_last_pressed = 0;
+bool     g_mod_cleared  = false;   // SHIFT + MOD since the last led_tick()
 // The mux channel of the FLUX_A / FLUX_B row, -1 when the board has none (the
 // coupon): a bbd_edge event releases that pot (spec section 5).
 int      g_flux_idx[2] = {-1, -1};
@@ -211,7 +212,10 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
     const uint8_t edges = static_cast<uint8_t>(g_keys.pressed & ~g_last_pressed);
     g_last_pressed      = g_keys.pressed;
     if(apply_key_edges(edges, g_keys.pressed, kKeyMap, g_knobs).mod_cleared)
+    {
         for(PotOwner& o : g_owner) pot_release(o);
+        g_mod_cleared = true;   // held for led_tick(): a step < 0 returns first
+    }
     if(step < 0) return;
 
     for(int s = 0; s < kActiveChain.sense_pins; ++s)
@@ -313,7 +317,9 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
     // with the NEXT step's latch, never on its own (P2 section 4), and this
     // is the one place it changes, once per block.
     const uint32_t c1 = cycles_now();
-    led_tick(inst, g_knobs[ffctl::MODBTN] > 0.5f, g_block_dt, g_duty, clock_lamp, reset_lamp);
+    led_tick(inst, g_knobs[ffctl::MODBTN] > 0.5f, g_block_dt, g_duty, clock_lamp, reset_lamp,
+             g_mod_cleared);
+    g_mod_cleared = false;
     g_scan.set_leds(led_word(g_duty, spkyled::kLedSteps, g_led_frame, kLedBit));
     const uint32_t dl = cycles_now() - c1;
     g_led_frame       = g_led_frame + 1u;

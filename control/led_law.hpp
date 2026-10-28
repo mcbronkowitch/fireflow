@@ -174,6 +174,14 @@ constexpr float kModPulsePeriod = 0.5f;   // s, one flash-flash-gap cycle
 constexpr float kModPulseOn     = 0.08f;  // s, each of the two flashes
 constexpr float kModPulseGap    = 0.08f;  // s, the dark between the pair
 
+// SHIFT + MOD's receipt (control/mod_clear.hpp): five even blinks on the MOD
+// lamp, then back to whatever it showed. Even, unlike the latch's pair, so the
+// two never read alike; a one-off burst does not read as a loose contact the
+// way a standing even blink would. Bastian asked for five, 2026-10-28; the
+// period is a by-eye candidate.
+constexpr int   kModClearBlinks = 5;
+constexpr float kModClearPeriod = 0.2f;   // s, one on + off, on for half of it
+
 inline bool mod_pulse_on(float blink) {
     const float t = std::fmod(blink, kModPulsePeriod);
     return t < kModPulseOn
@@ -218,6 +226,7 @@ struct LedInputs {
     bool shift_latched = false;   // always false this round (SHFT reserved)
     bool clock_pulse   = false;   // a CLOCK edge since the last fill()
     bool reset_pulse   = false;   // a RESET edge since the last fill()
+    bool mod_cleared   = false;   // SHIFT + MOD cleared the layer since the last fill()
 };
 
 struct Panel {
@@ -244,6 +253,7 @@ struct Panel {
 
     float clk_remain = 0.f;
     float rst_remain = 0.f;
+    float mod_clear_remain = 0.f;   // the clear receipt still to blink
 };
 
 // A single-shot flash: lit while `remain` > 0, then it counts down by dt.
@@ -287,6 +297,15 @@ inline void fill(const spky::Instrument& inst, Panel& p, float dt,
     // limiter that the separate ceiling lamp used to show (spec 2026-10-07 §5).
     duty_out[MODBTN_L] = in.mod_latched ? (mod_pulse_on(p.blink) ? steps - 1 : 0)
                                         : duty(inst.limiter_squash(), steps);
+    // A third job, briefly: the clear receipt overrides both. A second clear
+    // inside the burst restarts it.
+    if (in.mod_cleared) p.mod_clear_remain = kModClearBlinks * kModClearPeriod;
+    if (p.mod_clear_remain > 0.f) {
+        const float t = kModClearBlinks * kModClearPeriod - p.mod_clear_remain;
+        duty_out[MODBTN_L] =
+            std::fmod(t, kModClearPeriod) < 0.5f * kModClearPeriod ? steps - 1 : 0;
+        p.mod_clear_remain -= dt;
+    }
 
     // LVL: this deck delivers signal at all (spec 2026-10-07 §5). Hard on/off
     // against the floor, straight off the deck's level with no hold -- on a

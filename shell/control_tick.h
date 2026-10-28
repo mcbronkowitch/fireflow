@@ -36,8 +36,9 @@ control::Events control_tick(const float* knobs, spky::Instrument& inst, float m
 // Once per block, after control_tick(): the LED law, NUM_LIGHTS duties of
 // 0..spkyled::kLedSteps-1 into duty_out. SHIFT is never latched. clock_lamp /
 // reset_lamp are the clock law's lamp flags for this block (a CLOCK / RESET
-// edge at the jack); the coupon passes false.
+// edge at the jack); the coupon passes false. mod_cleared: SHIFT + MOD cleared
+// the layer since the last call, which starts the MOD lamp's receipt blink.
 void led_tick(const spky::Instrument& inst, bool mod_latched, float dt, int* duty_out,
-              bool clock_lamp, bool reset_lamp);
+              bool clock_lamp, bool reset_lamp, bool mod_cleared);
 
 } // namespace shell
