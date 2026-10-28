@@ -136,6 +136,18 @@ TEST_CASE("next_slot: full sector rolls with erase") {
     CHECK(n.erase_first);
 }
 
+TEST_CASE("layout: count constants are part of the hash") {
+    const uint32_t base = ffctl::kParamLayoutHash;
+    const uint32_t sc = static_cast<uint32_t>(spky::SCALE_LIST_COUNT);
+    const uint32_t so = static_cast<uint32_t>(spky::kSongLadderCount);
+    const uint32_t fl = static_cast<uint32_t>(spky::kFluxRateCount);
+    const uint32_t ref = shell::layout_hash_mix(base, sc, so, fl);
+    CHECK(shell::layout_hash_mix(base, sc + 1, so, fl) != ref);
+    CHECK(shell::layout_hash_mix(base, sc, so + 1, fl) != ref);
+    CHECK(shell::layout_hash_mix(base, sc, so, fl + 1) != ref);
+    CHECK(shell::current_layout().hash == ref);
+}
+
 TEST_CASE("next_slot: no record at all writes sector 0 slot 0") {
     Flash f;
     SlotNext n = next_slot(f.sec[0], f.sec[1], SlotPick{-1, 0, 0});

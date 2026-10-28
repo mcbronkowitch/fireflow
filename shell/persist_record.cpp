@@ -84,7 +84,12 @@ SlotNext next_slot(const uint8_t* sec0, const uint8_t* sec1, const SlotPick& lat
 
 PersistLayout current_layout()
 {
-    return PersistLayout{ffctl::NUM_PARAMS, ffctl::kParamLayoutHash, kSnapshotVersion};
+    return PersistLayout{ffctl::NUM_PARAMS,
+                         layout_hash_mix(ffctl::kParamLayoutHash,
+                                         static_cast<uint32_t>(spky::SCALE_LIST_COUNT),
+                                         static_cast<uint32_t>(spky::kSongLadderCount),
+                                         static_cast<uint32_t>(spky::kFluxRateCount)),
+                         kSnapshotVersion};
 }
 
 } // namespace shell

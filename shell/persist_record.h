@@ -56,7 +56,23 @@ SlotPick pick_latest(const uint8_t* sec0, const uint8_t* sec1, const PersistLayo
 struct SlotNext { int sector; int slot; bool erase_first; };
 SlotNext next_slot(const uint8_t* sec0, const uint8_t* sec1, const SlotPick& latest);
 
-// {NUM_PARAMS, kParamLayoutHash, kSnapshotVersion}
+// FNV-1a style fold of the three count constants onto the generated hash.
+// kParamLayoutHash hashes their symbolic upper bounds (e.g.
+// "float(spky::SCALE_LIST_COUNT - 1)"), not their values; this adds the values.
+constexpr uint32_t layout_hash_mix(uint32_t base, uint32_t scale_count,
+                                   uint32_t song_count, uint32_t fluxrate_count)
+{
+    uint32_t h = base;
+    const uint32_t v[3] = {scale_count, song_count, fluxrate_count};
+    for (uint32_t x : v)
+        for (int i = 0; i < 4; ++i) {
+            h ^= (x >> (8 * i)) & 0xFFu;
+            h *= 0x01000193u;
+        }
+    return h;
+}
+
+// {NUM_PARAMS, layout_hash_mix(kParamLayoutHash, counts), kSnapshotVersion}
 PersistLayout current_layout();
 
 } // namespace shell
