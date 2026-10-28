@@ -20,6 +20,7 @@
 #include "control/drift_settle_state.hpp"  // DRIFT left-stop edge detector (dependency-free, unit-tested)
 #include "control/led_law.hpp"   // the panel's LED display law (Rack-free, unit-tested, shared with the firmware)
 #include "control/mod_layer.hpp"         // the MOD latch layer's host-computed math (Rack-free, unit-tested)
+#include "control/mod_clear.hpp"         // SHIFT + MOD's clear, shared with the firmware
 #include "control/control_law.h"       // the control law pushParams() runs (Rack-free, shared with the firmware)
 #include "control/clock_law.hpp"       // CLOCK/RESET tempo, pulse and restart (Rack-free, shared with the firmware)
 
@@ -1517,6 +1518,12 @@ static void appendFireflowMenu(Menu* menu, Fireflow* m) {
     // loops at the bar start (a live STEPS turn leaves them free-running).
     menu->addChild(createMenuItem("Resync loops to bar", "",
                                   [m]() { m->resyncReq = true; }));
+    // The hardware's SHIFT + MOD (control/mod_clear.hpp). Rack has no SHIFT
+    // key, so the gesture lives here.
+    menu->addChild(createMenuItem("Clear MOD layer", "", [m]() {
+        for (const ffctl::ModTarget& t : ffctl::kModLayer)
+            m->params[t.depthId].setValue(ffctl::mod_clear_value(t));
+    }));
 
     // DRIVE_A/B retired (spec 2026-08-09 hw-control-reduction task 9): the
     // menu-only slider never reached the engine (its BBD drive target is a

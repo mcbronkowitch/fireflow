@@ -2,6 +2,8 @@
 
 #include <cmath>
 
+#include "control/mod_clear.hpp"
+
 namespace shell {
 
 namespace {
@@ -69,9 +71,13 @@ int pot_target(const ControlEntry& e, const float* knobs)
     return target == e.param ? depth : -1;
 }
 
-bool apply_key_edges(uint8_t edges, const KeyMap& map, float* knobs)
+KeyResult apply_key_edges(uint8_t edges, uint8_t held, const KeyMap& map, float* knobs)
 {
-    bool mod_changed = false;
+    bool shift = false;
+    for(int i = 0; i < map.count && i < kMaxKeys; ++i)
+        if(map.fn[i] == KeyFn::Shift && (held & (1u << i))) shift = true;
+
+    KeyResult r;
     for(int i = 0; i < map.count && i < kMaxKeys; ++i)
     {
         if(!(edges & (1u << i))) continue;
@@ -80,12 +86,19 @@ bool apply_key_edges(uint8_t edges, const KeyMap& map, float* knobs)
         {
             case KeyFn::RecA: id = ffctl::REC_A; break;
             case KeyFn::RecB: id = ffctl::REC_B; break;
-            case KeyFn::Mod:  id = ffctl::MODBTN; mod_changed = true; break;
-            default: continue;   // Shift: reserved, no function
+            case KeyFn::Mod:
+                if(shift)
+                {
+                    ffctl::clear_mod_layer(knobs);
+                    r.mod_cleared = true;
+                    continue;
+                }
+                id = ffctl::MODBTN; r.mod_changed = true; break;
+            default: continue;   // Shift: a modifier only
         }
         knobs[id] = knobs[id] < 0.5f ? 1.0f : 0.0f;
     }
-    return mod_changed;
+    return r;
 }
 
 } // namespace shell

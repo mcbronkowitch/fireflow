@@ -425,8 +425,13 @@ them (`tests/test_panel_step.cpp`); `panel_scan.cpp` only calls them.
 
 **Keys** (`apply_key_edges()`), on the debounced press: MOD toggles
 `MODBTN`, and while it is latched a pot with a `kModLayer` row edits that
-row's depth; REC A / REC B toggle their latches; SHFT is counted and does
-nothing. The coupon's one key is MOD.
+row's depth; REC A / REC B toggle their latches; SHFT alone does nothing.
+MOD pressed while SHFT is held does not toggle the latch: it clears the MOD
+layer (`control/mod_clear.hpp`) -- every depth twin to 0, except TIMB/DPTH/FILT,
+which return to their init positions so the super modulators keep running --
+and releases every pot, so the cleared values stand until a pot is moved. VCV
+has the same clear as the context-menu item "Clear MOD layer". The coupon's
+one key is MOD.
 
 **Lamps.** After `control_tick()` the firmware runs the shared LED law
 (`control/led_law.hpp`, through `led_tick()`) and turns its duties into the

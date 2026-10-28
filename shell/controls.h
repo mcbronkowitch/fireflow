@@ -105,10 +105,18 @@ int mod_depth_of(int param);
 int pot_target(const ControlEntry& e, const float* knobs);
 
 // Debounced press edges, one bit per key in KeyMap order (bit i = key i, the
-// order of KeyState.pressed); the caller passes `pressed & ~last_pressed`. A set
-// bit toggles REC_A / REC_B / MODBTN between 0 and 1; Shift and bits past
-// map.count do nothing. Returns true if MODBTN changed.
-bool apply_key_edges(uint8_t edges, const KeyMap& map, float* knobs);
+// order of KeyState.pressed); the caller passes `pressed & ~last_pressed`, and
+// `held` = pressed. A set bit toggles REC_A / REC_B / MODBTN between 0 and 1;
+// Shift alone and bits past map.count do nothing. MOD pressed while Shift is
+// held does NOT toggle the latch: it runs ffctl::clear_mod_layer() (every depth
+// twin to 0, TIMB/DPTH/FILT to their init positions), and the caller then
+// releases every pot so the cleared values stand until a pot is moved.
+struct KeyResult
+{
+    bool mod_changed = false;   // MODBTN toggled
+    bool mod_cleared = false;   // SHIFT + MOD cleared the depth twins
+};
+KeyResult apply_key_edges(uint8_t edges, uint8_t held, const KeyMap& map, float* knobs);
 
 // LightId -> bit in MuxScan's LED field, -1 when the lamp is not on the plate.
 // Rev A: kRevaLedBit in generated_panel_map.h (panel-map.json "leds" order).

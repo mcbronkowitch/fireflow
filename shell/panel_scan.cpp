@@ -114,7 +114,8 @@ uint32_t           g_raw_win_sweeps = 0;
 // The knob vector the shared control law reads (spec 2026-10-09-rev-a-p6b1
 // section 4.2): every parameter in VCV's units, booted from the init patch,
 // depths included. A pot writes it only while it owns its target (pot_owner.h);
-// a key toggles its latch (apply_key_edges()). The law itself lives in
+// a key toggles its latch, SHIFT + MOD clears the depth twins
+// (apply_key_edges()). The law itself lives in
 // control_tick.cpp.
 float             g_knobs[ffctl::NUM_PARAMS];
 volatile uint32_t g_law_cycles_max = 0;
@@ -204,10 +205,13 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
     // A key acts on its debounced press, never on release or hold (spec
     // 2026-10-18-rev-a-p6b2 section 3). MOD needs no release call here: every
     // pot whose target changes with the latch is released by pot_own() on its
-    // next reading, because pot_target() hands it a different id.
+    // next reading, because pot_target() hands it a different id. SHIFT + MOD
+    // does: an owned depth pot would write its position straight back over the
+    // cleared value, so every pot lets go until it is moved again.
     const uint8_t edges = static_cast<uint8_t>(g_keys.pressed & ~g_last_pressed);
     g_last_pressed      = g_keys.pressed;
-    (void)apply_key_edges(edges, kKeyMap, g_knobs);
+    if(apply_key_edges(edges, g_keys.pressed, kKeyMap, g_knobs).mod_cleared)
+        for(PotOwner& o : g_owner) pot_release(o);
     if(step < 0) return;
 
     for(int s = 0; s < kActiveChain.sense_pins; ++s)

@@ -394,7 +394,7 @@ TEST_CASE("controls: MOD re-points exactly the Rev A pots with a kModLayer row")
     }
 }
 
-TEST_CASE("controls: a press toggles, a release does nothing, SHFT does nothing") {
+TEST_CASE("controls: a press toggles, a release does nothing, SHFT alone does nothing") {
     const shell::KeyMap& m = shell::kRevaKeyMap;
     REQUIRE(m.count == 4);
     CHECK(m.fn[0] == shell::KeyFn::RecA);
@@ -405,31 +405,37 @@ TEST_CASE("controls: a press toggles, a release does nothing, SHFT does nothing"
     init_knobs(k);
     k[ffctl::MODBTN] = 0.f; k[ffctl::REC_A] = 0.f; k[ffctl::REC_B] = 0.f;
     float before[ffctl::NUM_PARAMS];
+    // The edge doubles as the held mask: a key is held on its press edge.
+    auto press = [&](uint8_t e, const shell::KeyMap& map) {
+        return shell::apply_key_edges(e, e, map, k);
+    };
 
     // MOD (key 2): 0 -> 1 -> 0, and the return value says MODBTN changed.
-    CHECK(shell::apply_key_edges(1u << 2, m, k) == true);
+    CHECK(press(1u << 2, m).mod_changed);
     CHECK(k[ffctl::MODBTN] == 1.f);
-    CHECK(shell::apply_key_edges(1u << 2, m, k) == true);
+    CHECK(press(1u << 2, m).mod_changed);
     CHECK(k[ffctl::MODBTN] == 0.f);
 
     // REC A / REC B toggle their own latch, and do not report a MOD change.
-    CHECK(shell::apply_key_edges(1u << 0, m, k) == false);
+    CHECK_FALSE(press(1u << 0, m).mod_changed);
     CHECK(k[ffctl::REC_A] == 1.f);
     CHECK(k[ffctl::REC_B] == 0.f);
     CHECK(k[ffctl::MODBTN] == 0.f);
-    CHECK(shell::apply_key_edges(1u << 1, m, k) == false);
+    CHECK_FALSE(press(1u << 1, m).mod_changed);
     CHECK(k[ffctl::REC_B] == 1.f);
-    CHECK(shell::apply_key_edges(1u << 0, m, k) == false);
+    CHECK_FALSE(press(1u << 0, m).mod_changed);
     CHECK(k[ffctl::REC_A] == 0.f);
 
-    // SHFT changes no knob at all, and neither does an empty edge mask.
+    // SHFT alone changes no knob at all, and neither does an empty edge mask.
     for(int i = 0; i < ffctl::NUM_PARAMS; ++i) before[i] = k[i];
-    CHECK(shell::apply_key_edges(1u << 3, m, k) == false);
-    CHECK(shell::apply_key_edges(0, m, k) == false);
+    const shell::KeyResult s = press(1u << 3, m);
+    CHECK_FALSE(s.mod_changed);
+    CHECK_FALSE(s.mod_cleared);
+    CHECK_FALSE(press(0, m).mod_changed);
     for(int i = 0; i < ffctl::NUM_PARAMS; ++i) CHECK(k[i] == before[i]);
 
     // Two keys in one pass, and a bit past the map is ignored.
-    CHECK(shell::apply_key_edges((1u << 0) | (1u << 2) | (1u << 6), m, k) == true);
+    CHECK(press((1u << 0) | (1u << 2) | (1u << 6), m).mod_changed);
     CHECK(k[ffctl::REC_A] == 1.f);
     CHECK(k[ffctl::MODBTN] == 1.f);
 
@@ -437,8 +443,58 @@ TEST_CASE("controls: a press toggles, a release does nothing, SHFT does nothing"
     CHECK(shell::kCouponKeyMap.count == 1);
     CHECK(shell::kCouponKeyMap.fn[0] == shell::KeyFn::Mod);
     k[ffctl::MODBTN] = 0.f;
-    CHECK(shell::apply_key_edges(1u, shell::kCouponKeyMap, k) == true);
+    CHECK(press(1u, shell::kCouponKeyMap).mod_changed);
     CHECK(k[ffctl::MODBTN] == 1.f);
+}
+
+TEST_CASE("controls: SHFT + MOD clears every depth twin but the super modulators' own") {
+    const shell::KeyMap& m = shell::kRevaKeyMap;
+    float k[ffctl::NUM_PARAMS];
+    init_knobs(k);
+    // Every depth twin dialled away from both of its possible clear values.
+    for(const ffctl::ModTarget& t : ffctl::kModLayer) k[t.depthId] = -0.37f;
+    float before[ffctl::NUM_PARAMS];
+    for(const float latch : {0.f, 1.f})
+    {
+        CAPTURE(latch);
+        k[ffctl::MODBTN] = latch;
+        for(int i = 0; i < ffctl::NUM_PARAMS; ++i) before[i] = k[i];
+
+        // SHFT held, MOD's edge arrives (SHFT pressed earlier: not in edges).
+        const shell::KeyResult r =
+            shell::apply_key_edges(1u << 2, (1u << 2) | (1u << 3), m, k);
+        CHECK(r.mod_cleared);
+        CHECK_FALSE(r.mod_changed);
+        CHECK(k[ffctl::MODBTN] == latch);   // the latch does not toggle
+
+        int tdepth = 0;
+        for(const ffctl::ModTarget& t : ffctl::kModLayer)
+        {
+            CAPTURE(t.depthId);
+            if(t.kind == ffctl::MODK_TDEPTH)
+            {
+                ++tdepth;
+                CHECK(k[t.depthId] == ffctl::kInitParamDefaults[t.depthId]);
+            }
+            else
+                CHECK(k[t.depthId] == 0.f);
+            before[t.depthId] = k[t.depthId];
+        }
+        // TIMB/DPTH/FILT on both decks, and nothing else is spared.
+        CHECK(tdepth == 6);
+        CHECK(k[ffctl::MODD_FILT_A] != 0.f);
+        CHECK(k[ffctl::MODD_SUB_B] == 0.f);   // a factory extra goes too
+        // No sound knob moves.
+        for(int i = 0; i < ffctl::NUM_PARAMS; ++i) CHECK(k[i] == before[i]);
+        for(const ffctl::ModTarget& t : ffctl::kModLayer) k[t.depthId] = -0.37f;
+    }
+
+    // MOD with SHFT not held still toggles, and clears nothing.
+    k[ffctl::MODBTN] = 0.f;
+    const shell::KeyResult r = shell::apply_key_edges(1u << 2, 1u << 2, m, k);
+    CHECK(r.mod_changed);
+    CHECK_FALSE(r.mod_cleared);
+    CHECK(k[ffctl::MODD_SUB_B] == -0.37f);
 }
 
 TEST_CASE("controls: the key maps are as long as their pads") {
