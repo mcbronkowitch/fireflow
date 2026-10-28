@@ -119,6 +119,8 @@ add_executable(spky_tests
     tests/test_pot_owner.cpp
     shell/panel_step.cpp
     tests/test_panel_step.cpp
+    shell/boot_take.cpp
+    tests/test_boot_take.cpp
     shell/keys.cpp
     tests/test_keys.cpp
     shell/led_out.cpp
