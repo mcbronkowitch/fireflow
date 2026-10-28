@@ -85,6 +85,15 @@ Läuft eine Region über, **nicht** an Puffergrößen drehen: `build/shell.map`
 lesen und den Posten benennen, der überläuft. Die Bench kennt dasselbe
 Problem und hat es dokumentiert.
 
+The ctest entry `shell_images_build_guard` (`check_images_build.py`) builds
+three images from scratch — default, the Rev A play image
+(`SHELL_PANEL_SCAN=1 SHELL_KEYS_NC=1`) and the coupon play image
+(`SHELL_PANEL_SCAN=1 SHELL_COUPON_PROBE=1`) — each into its own emptied
+directory under `build/shell_images/`, with the env.sh variables scrubbed, and
+prints each image's SRAM_EXEC use. It never touches `shell/build`, and it is
+skipped (exit 77) without the DaisyToolchain or the built libraries. A new
+image that gets flashed belongs in its `IMAGES` list.
+
 ## Flashen
 
 Das Submodule hat **keine SWD-Pins**. Alles geht über DFU (USB), es gibt

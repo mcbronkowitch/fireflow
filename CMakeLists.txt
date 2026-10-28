@@ -672,6 +672,20 @@ add_test(NAME shell_itcm_placement_guard
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_itcm_placement.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
 
+# The shell images actually build: default, Rev A play and coupon play, each a
+# clean ARM build in its own directory under the build tree (shell/build is not
+# touched), with SRAM_EXEC use in the output. Nothing else in ctest compiles
+# shell/, which is how the Rev A play image stayed broken behind a green suite
+# on 2026-10-09 (450eed36). Skipped, not failed, without the DaisyToolchain or
+# the built libDaisy/DaisySP. About 20 s.
+add_test(NAME shell_images_build_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/check_images_build.py
+                 ${CMAKE_BINARY_DIR}/shell_images
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
+set_tests_properties(shell_images_build_guard PROPERTIES
+                     SKIP_RETURN_CODE 77 TIMEOUT 900)
+
 # The two budget calculations under tools/. scan_budget imports settle_budget,
 # so a constant revised there reaches both guards; scan_budget also reads the
 # pot count from host/vcv/res/gen_hw_panel.py and goes red when the panel moves.
