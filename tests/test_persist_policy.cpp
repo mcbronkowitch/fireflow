@@ -39,6 +39,21 @@ TEST_CASE("policy: 5 min floor") {
     CHECK(at(s, false, 320000));
 }
 
+// A save that did not verify (persist_write() false) is not dropped: the same
+// state is tried again once the floor is up, with no new change in between,
+// and not before (no slot burnt every foreground pass).
+TEST_CASE("policy: failed save retries after the floor") {
+    SavePolicy s;
+    at(s, true, 0);
+    REQUIRE(at(s, false, 15000));
+    save_failed(s, 15000);
+    for(uint32_t t = 15500; t < 15000 + kSaveFloorMs; t += 500)
+        CHECK_FALSE(at(s, false, t));
+    CHECK(at(s, false, 15000 + kSaveFloorMs));
+    save_done(s, 15000 + kSaveFloorMs);
+    CHECK_FALSE(at(s, false, 15000 + 3 * kSaveFloorMs));
+}
+
 TEST_CASE("policy: repeated quiet periods save once") {
     SavePolicy s;
     at(s, true, 0);

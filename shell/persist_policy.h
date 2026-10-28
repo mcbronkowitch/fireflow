@@ -29,6 +29,10 @@ struct SavePolicy {
 // (persist_differs) from the previous pass's vector. True = write now.
 bool save_due(SavePolicy& s, bool changed, uint32_t now_ms);
 void save_done(SavePolicy& s, uint32_t now_ms);
+// A save that did not verify: the 5-min floor applies from now as after a
+// good one (no slot burnt every pass), but the vector stays dirty, so the
+// same state is tried again once the floor is up -- without a new change.
+void save_failed(SavePolicy& s, uint32_t now_ms);
 
 // Fills knobs from the init patch, overlays rec (if non-null) and applies the
 // spec 4.3 overrides. excite_out gets the record's excite bits (false without one).

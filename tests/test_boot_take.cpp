@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <initializer_list>
 #include "../shell/boot_take.h"
+#include "../shell/generated_panel_map.h"
+#include "../shell/mux_plan.h"
 #include "../shell/controls.h"
 #include "../shell/panel_step.h"
 #include "../shell/pot_owner.h"
@@ -196,4 +198,34 @@ TEST_CASE("boot take: table larger than kMaxRows is not ready and apply writes n
     shell::boot_take_apply(b, t, kSpan, k.v);
     CHECK_FALSE(b.done);
     for (int i = 0; i < ffctl::NUM_PARAMS; ++i) CHECK(k.v[i] == before.v[i]);
+}
+
+// The firmware's liveness rests on this (spec 2026-10-28 section 4.4): the
+// complete take needs every row seen, and panel_scan_tick() only ever sees a
+// row through its walk -- every step, every sense pin, group_at() /
+// channel_at() / find_control(). One sweep of Rev A's chain has to reach every
+// kRevaTable row, param -1 rows included, or boot_take_ready() never turns
+// true (the firmware then falls back to a partial take after three sweeps).
+TEST_CASE("boot take: one sweep of kRevaChain reaches every kRevaTable row") {
+    const shell::ChainProfile& c = shell::kRevaChain;
+    const shell::ControlTable& t = shell::kRevaTable;
+    shell::BootTake b{};
+    int hits[shell::kMaxRows] = {};
+    for (int step = 0; step < shell::scan_steps(c); ++step)
+        for (int s = 0; s < c.sense_pins; ++s) {
+            const int g = shell::group_at(c, step, s);
+            if (g < 0) continue;
+            const shell::ControlEntry* e = shell::find_control(t, g, shell::channel_at(c, step, s));
+            if (e == nullptr) continue;
+            const int row = static_cast<int>(e - t.entries);
+            REQUIRE(row >= 0);
+            REQUIRE(row < shell::kMaxRows);
+            ++hits[row];
+            shell::boot_take_collect(b, row, 30000);
+        }
+    for (int r = 0; r < t.count; ++r) {
+        CAPTURE(r);
+        CHECK(hits[r] == 1);
+    }
+    CHECK(shell::boot_take_ready(b, t));
 }

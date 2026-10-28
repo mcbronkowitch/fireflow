@@ -34,6 +34,12 @@ void save_done(SavePolicy& s, uint32_t now_ms)
     s.dirty        = false;
 }
 
+void save_failed(SavePolicy& s, uint32_t now_ms)
+{
+    save_done(s, now_ms);
+    s.dirty = true;
+}
+
 void boot_overlay(const PersistRecord* rec, float* knobs, bool excite_out[2])
 {
     for(int i = 0; i < ffctl::NUM_PARAMS; ++i)

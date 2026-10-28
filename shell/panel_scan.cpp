@@ -169,6 +169,30 @@ uint32_t g_block_samples = 0;
 // every row has one, they are written ENGINE rows first (boot_take_apply()),
 // every pot is released, and the law is re-armed as for a restore.
 BootTake g_take = {};
+// The fallback: the walk reaches every row once per sweep (host test "one
+// sweep of kRevaChain reaches every kRevaTable row"), so a complete take is
+// done at the end of the first sweep with a valid span. Should a row ever go
+// unread, the take is applied anyway after kTakeSweeps sweeps that ended with
+// a valid span, with the rows seen so far -- a panel whose pots never write
+// again would be the alternative. g_take_partial is the seen-row count of
+// such a take for the foreground's one line, 0 when the take was complete.
+constexpr uint32_t kTakeSweeps     = 3;
+uint32_t           g_take_sweeps   = 0;
+volatile int       g_take_partial  = 0;
+
+// After the take has written: every pot lets go -- from here on a pot writes
+// only once moved past kPotTouch, as before -- and the law is re-armed as for
+// a restore, so an ENGINE the take changed fires no bbd_edge (FLUX stays at
+// its pot). The record's excite_other_deck survives only on a deck that is on
+// BBD after the take (spec 4.3).
+void finish_take()
+{
+    for(PotOwner& o : g_owner) pot_release(o);
+    control_rearm_after_take();
+    bool excite[2];
+    excite_after_take(persist_boot_excite(), g_knobs, excite);
+    control_set_excite(excite);
+}
 // The snapshot the foreground saves from (section 5.1), published once per
 // sweep after the boot take, in the g_raw_win / g_law_split_n manner but as a
 // sequence lock: g_pub_seq is odd while the callback writes, and the
@@ -289,23 +313,12 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
 #if SHELL_PERSIST_ON
     // The boot take writes (spec 2026-10-28 section 4.4 steps 3-5), once,
     // before this block's control tick sees the vector: ENGINE rows first, so
-    // an ATTACK row lands on ATTACK or STAGES by the engine the panel shows.
-    // Then every pot lets go -- from here on a pot writes only once moved past
-    // kPotTouch, as before -- and the law is re-armed as for a restore, so an
-    // ENGINE the take changed fires no bbd_edge (FLUX stays at its pot). The
-    // record's excite_other_deck survives only on a deck that is on BBD after
-    // the take (spec 4.3). A take that cannot apply (no valid span) stays open.
+    // an ATTACK row lands on ATTACK or STAGES by the engine the panel shows;
+    // then finish_take(). A take that cannot apply (no valid span) stays open.
     if(!g_take.done && boot_take_ready(g_take, kTable))
     {
         boot_take_apply(g_take, kTable, g_span, g_knobs);
-        if(g_take.done)
-        {
-            for(PotOwner& o : g_owner) pot_release(o);
-            control_rearm_after_take();
-            bool excite[2];
-            excite_after_take(persist_boot_excite(), g_knobs, excite);
-            control_set_excite(excite);
-        }
+        if(g_take.done) finish_take();
     }
 #endif
 
@@ -398,6 +411,21 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
         if(sp.valid) g_span = sp;
         g_sweeps = g_sweeps + 1u;
 #if SHELL_PERSIST_ON
+        // The partial-take fallback (see kTakeSweeps): this sweep ended with
+        // a valid span and the take is still open. The first such sweep is
+        // the one whose end made the span valid and collected nothing, so
+        // the fallback fires after kTakeSweeps sweeps that did collect.
+        if(!g_take.done && g_span.valid && ++g_take_sweeps > kTakeSweeps)
+        {
+            int seen = 0;
+            for(int r = 0; r < kTable.count && r < kMaxRows; ++r) seen += g_take.seen[r] ? 1 : 0;
+            boot_take_apply(g_take, kTable, g_span, g_knobs);   // writes the seen rows only
+            if(g_take.done)
+            {
+                finish_take();
+                g_take_partial = seen > 0 ? seen : -1;   // -1: none seen, still reported
+            }
+        }
         // The save snapshot (spec 2026-10-28 section 5.1), once per sweep and
         // only after the boot take: the foreground seeds its comparison with
         // the first one, so the take itself never counts as a change. The
@@ -444,13 +472,13 @@ void run_panel_scan_report(bench::Board& hw)
     hw.StartLog(false);
 #if SHELL_PERSIST_ON
     // Where boot's hidden state came from (spec 2026-10-28 section 8): the
-    // newest valid record and its seq, or the init patch (seq=0). Once, as
-    // the log opens; the save lines below follow it.
-    {
-        const SlotPick& b = persist_boot_pick();
-        hw.PrintLine("SHELL_PERSIST src=%s seq=%u", b.sector >= 0 ? "flash" : "init",
-                     static_cast<unsigned>(b.sector >= 0 ? b.seq : 0u));
-    }
+    // newest valid record and its seq, or the init patch (seq=0). As the log
+    // opens and again every kPersistSrcEvery passes (5 s): StartLog(false)
+    // does not wait for the host, so a terminal attached later would never
+    // see a line printed only once.
+    constexpr uint32_t kPersistSrcEvery = 10;
+    uint32_t           persist_pass     = 0;
+    bool               persist_partial_printed = false;
     // The save (spec section 5): two vectors, this pass's snapshot and the
     // previous pass's, so `changed` is "differs from half a second ago"
     // (persist_differs() ignores REC_A, REC_B and MODBTN, which are never
@@ -602,6 +630,21 @@ void run_panel_scan_report(bench::Board& hw)
 #endif
         cb_profile_report(hw);
 #if SHELL_PERSIST_ON
+        if(persist_pass++ % kPersistSrcEvery == 0)
+        {
+            const SlotPick& b = persist_boot_pick();
+            hw.PrintLine("SHELL_PERSIST src=%s seq=%u", b.sector >= 0 ? "flash" : "init",
+                         static_cast<unsigned>(b.sector >= 0 ? b.seq : 0u));
+        }
+        // A take the fallback applied with rows missing (kTakeSweeps): once.
+        // A complete take prints nothing.
+        const int partial = g_take_partial;
+        if(partial != 0 && !persist_partial_printed)
+        {
+            hw.PrintLine("SHELL_PERSIST take=partial seen=%d/%d", partial < 0 ? 0 : partial,
+                         kTable.count);
+            persist_partial_printed = true;
+        }
         // The snapshot, between two equal, even sequence counts; a copy the
         // callback cut into is retried (the callback always finishes its own
         // write before this loop runs again, so the retry ends).
@@ -640,9 +683,11 @@ void run_panel_scan_report(bench::Board& hw)
                 const uint32_t t0 = daisy::System::GetUs();
                 const bool     ok = persist_write(hw.qspi, rec);
                 const uint32_t us = daisy::System::GetUs() - t0;
-                // Done even when it failed: the next try waits for the 5-min
-                // floor instead of burning a slot every half second.
-                save_done(persist_policy, daisy::System::GetNow());
+                // A failed save keeps the vector dirty: the same state is
+                // tried again once the 5-min floor is up, without burning a
+                // slot every half second meanwhile (save_failed()).
+                if(ok) save_done(persist_policy, daisy::System::GetNow());
+                else   save_failed(persist_policy, daisy::System::GetNow());
                 hw.PrintLine("SHELL_PERSIST save seq=%u us=%u ok=%d",
                              static_cast<unsigned>(rec.seq), static_cast<unsigned>(us),
                              ok ? 1 : 0);
