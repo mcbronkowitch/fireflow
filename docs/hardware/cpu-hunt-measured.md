@@ -39,6 +39,15 @@ mostly silent, and runs of workload `bastian` will come back `tripped=1`.
 Quiet frames run at `cb_last` ~873 000 - 912 000, `busy_p50` ~890 000.
 Captures: `…-bastian-patch.txt`, `…-bastian-retrip.txt`.
 
+**After the cb limit went to 965 000 (`7dc7023`)** the patch still trips, now
+`by=period`, and again at block 8789 after boot: the same block on three
+boots. The frame before the trip has the worst block at `cb` 971 066, part A
+(WAVE) at 404 752 against its usual ~362 000, and `gap` 986 574: the callbacks
+ran back to back. On quiet frames the patch runs at `busy_p50` ~939 000 and
+`busy_max` ~955 000, so about 5 000 cycles from the period. The trip at block
+8789 is a real overrun at a fixed time after boot, not a guard set too
+tight. Capture: `…-bastian-965.txt`.
+
 ### Pot takes during remote runs
 
 `void=1` showed up in runs nobody was meant to touch: rows 35 `COMP_B` and 72
