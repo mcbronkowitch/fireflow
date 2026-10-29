@@ -418,12 +418,29 @@ measured facts the next session needs into `docs/engine-map.md`, status into
    and is tested during the setup visit. Buy one, or rely on the
    self-recovery of §5.3? (If the 12 V comes from a case supply that powers
    other gear, the plug cycles that too.)
+   *Bastian, 2026-10-29:* "Nein, ohne" — no plug. The round relies on the
+   §5.3 self-recovery and the overrun guard; plan Task 7 Step 7 is skipped. A
+   board that wedges without a fault needs BOOT + RESET by hand.
 2. **Cabling at the setup visit.** Both board outputs to Twin inputs 1 and 2
    (the clicks were mostly on one channel; stereo A/B pairs need both), and,
    if the board's audio input should carry material for Sampler/BBD
    workloads, a Twin output to the board's input. The Twin must stay at
    48 kHz with input monitoring off for the round's duration — does that
    collide with his other projects?
+   *Bastian, 2026-10-29:* both board outputs are on Twin inputs 1 and 2; no
+   Twin output goes to the board, because the input material for a deck comes
+   from the other deck. "Check the rate once": the device's shared-mode format
+   is 48 000 Hz and both channels carry signal (a 4 s capture: −11 dBFS peak on
+   each). A DirectShow capture without input options arrives at 44 100 Hz and
+   ffmpeg resamples it, so the capture now passes
+   `-sample_rate 48000 -sample_size 16 -channels 2` before `-i` (commit
+   11275876). Input monitoring was not answered; it does not matter here,
+   since no Twin output reaches the board. Note that `workloads.json` still
+   records `input: noise`, which is what the desktop sweep fed; on the board
+   the audio input jack is unconnected.
 3. **Permission prompts.** `dfu-util`, `ffmpeg` and the serial runner would
    each prompt him unless they are allowed for this project (memory
    `subagent-shell-auto-approval`). Allow them for the round?
+   *Bastian, 2026-10-29:* "you may use dfu-util, ffmpeg and the measurement
+   script" — allowed in the project-local, untracked
+   `.claude/settings.local.json`, nothing broader.
