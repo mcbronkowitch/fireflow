@@ -256,10 +256,14 @@ LOADED = ("SHELL_REMOTE load id=%d gen=%d gest=%d name=BBD_BBD_top3 input=noise 
           "settle=500 excite=1,1 rec=0,0")
 GESTED = "SHELL_REMOTE gest id=%d gen=%d name=pot_sweep base=144 steps=5 blocks=4000"
 
-def run(rid, counting, void, gest, gen=7, tripped=0, tog="00000000"):
+def run(rid, counting, void, gest, gen=7, tripped=0, tog="00000000", trips=None):
     """A board run line (shell/panel_scan.cpp); gen 7 is the fixtures' run.
-    Every SHELL_REMOTE image prints tog=; tog=None leaves it out."""
+    Every SHELL_REMOTE image prints tog=; tog=None leaves it out. The guard
+    re-arming images print trips=N right after tripped=; trips=None is the older
+    line without it."""
     line = RUN % (rid, gen, counting, void, tripped, gest)
+    if trips is not None:
+        line = line.replace(" gest=", " trips=%d gest=" % trips)
     return line if tog is None else line + " tog=" + tog
 WIN = "SHELL_PLAY_WIN win=%d gap=%d over=%d n=250"
 
@@ -405,14 +409,15 @@ check("trip: a clean run is not tripped", sm["tripped"] is False)
 trip_txt = settle_txt + ["SHELL_REMOTE guard tripped blk=4242",
                          run(3, 1, 0, -1), LAW % (1000, 950000), WIN % (1000, 960000, 0)]
 sm = rs.summarize_run(trip_txt, load_id=3)
-check("trip: a guard tripped line marks the run and no frame after it counts",
-      sm["tripped"] is True and sm["frames"] == 2 and sm["cb_last"]["max"] == 905000
-      and sm["frame_max"]["n"] == 2)
+check("trip: a guard tripped line marks the run; the frames after it still count",
+      sm["tripped"] is True and sm["frames"] == 3 and sm["cb_last"]["max"] == 905000
+      and sm["frame_max"]["n"] == 3)
 trip_run_txt = settle_txt + [run(3, 0, 0, -1, tripped=1), LAW % (1000, 950000),
                              run(3, 1, 0, -1), LAW % (1000, 950000)]
 sm = rs.summarize_run(trip_run_txt, load_id=3)
-check("trip: a tripped=1 run line marks the run; nothing counts from it on",
-      sm["tripped"] is True and sm["frames"] == 2 and sm["cb_last"]["max"] == 905000)
+check("trip: a tripped=1 run line marks the run; a counting=1 frame after it counts",
+      sm["tripped"] is True and sm["frames"] == 3 and sm["skipped"] == 2
+      and sm["cb_last"]["max"] == 905000)
 before_ack = ["SHELL_REMOTE guard tripped blk=12"] + settle_txt
 check("trip: a guard tripped line before the ack (the boot trip) is not this run's",
       rs.summarize_run(before_ack, load_id=3)["tripped"] is False
@@ -432,11 +437,84 @@ check("run: summary.json records void", s["void"] is True)
 p = FakeRunPort(trip_txt)
 rc, s, d = run_cmd(p, None, record=False, load=3)
 check("run: summary.json records tripped and the gen", s["tripped"] is True
-      and s["gen"] == 7 and s["frames"] == 2)
+      and s["gen"] == 7 and s["frames"] == 3)
 p = FakeRunPort(gest_txt)
 rc, s, d = run_cmd(p, None, record=False, load=None, gest=2)
 check("run: --gest sends GEST alone (it loads its own base) and filters by it",
       p.sent == ["GEST 2"] and s["frames"] == 1)
+
+# ---- runs count across trips (Bastian, 2026-10-29) ---------------------------
+# The guard re-arms itself (after 1 s of silence, and at a run's settle end), so
+# a run on a patch that overruns for real goes on counting. A run line says
+# tripped=1 for a frame the guard was tripped in, trips=N for the trips since
+# the ack; the summary keeps every counted frame, counts the tripped ones, and
+# repeats the statistics over the untripped ones alone.
+rearm_txt = [
+    LOADED % (3, 7, -1),
+    run(3, 0, 0, -1, tripped=1, trips=1), LAW % (700, 700), WIN % (990000, 990000, 9),
+    run(3, 1, 0, -1, tripped=1, trips=1), LAW % (1500, 960000), WIN % (1000000, 1001608, 8),
+    "SHELL_REMOTE guard rearm blk=700 by=settle",
+    run(3, 1, 0, -1, tripped=0, trips=1), LAW % (900000, 910000), WIN % (912000, 960100, 2),
+    "SHELL_REMOTE guard tripped blk=9000 by=cb",
+    run(3, 1, 0, -1, tripped=1, trips=2), LAW % (5000, 960000), WIN % (990000, 990500, 6),
+    "SHELL_REMOTE guard rearm blk=9500 by=silence",
+    run(3, 1, 0, -1, tripped=0, trips=2), LAW % (905000, 920000), WIN % (920000, 960150, 1),
+]
+sm = rs.summarize_run(rearm_txt, load_id=3)
+check("rearm: every settled frame counts, tripped or not; the settle frame is skipped",
+      sm["frames"] == 4 and sm["skipped"] == 1 and sm["gen"] == 7 and sm["tripped"] is True
+      and sm["frame_max"]["n"] == 4 and sm["frame_max"]["max"] == 1000000)
+check("rearm: trips is the last trips= of a counted frame, tripped_frames counts tripped=1",
+      sm["trips"] == 2 and sm["tripped_frames"] == 2)
+check("rearm: an untripped section covers the counted frames with tripped=0 only",
+      sm["untripped"]["frames"] == 2 and sm["untripped"]["cb_last"]["n"] == 2
+      and sm["untripped"]["cb_last"]["max"] == 905000
+      and sm["untripped"]["frame_max"]["n"] == 2 and sm["untripped"]["frame_max"]["max"] == 920000
+      and sm["untripped"]["cb_max_final"] == 920000 and sm["untripped"]["gap_max"] == 960150
+      and sm["untripped"]["over_total"] == 3)
+check("rearm: the top-level statistics still cover all counted frames",
+      sm["cb_last"]["n"] == 4 and sm["cb_max_final"] == 920000 and sm["over_total"] == 17
+      and sm["gap_max"] == 1001608)
+old_fmt = settle_txt + [run(3, 1, 0, -1), LAW % (1000, 950000), WIN % (1000, 960000, 0)]
+sm = rs.summarize_run(old_fmt, load_id=3)
+check("rearm: a run line without trips= reads as 0 trips and parses as before",
+      sm["frames"] == 3 and sm["trips"] == 0 and sm["tripped_frames"] == 0
+      and sm["tripped"] is False and sm["untripped"]["frames"] == 3)
+old_trip = settle_txt + [run(3, 1, 0, -1, tripped=1), LAW % (1000, 950000), WIN % (1000, 960000, 0)]
+sm = rs.summarize_run(old_trip, load_id=3)
+check("rearm: an older tripped=1 line without trips= is a tripped frame, trips stay 0",
+      sm["frames"] == 3 and sm["tripped_frames"] == 1 and sm["trips"] == 0
+      and sm["untripped"]["frames"] == 2 and sm["tripped"] is True)
+check("rearm: a clean run has trips 0, no tripped frames, untripped == the whole run",
+      rs.summarize_run(settle_txt, load_id=3)["untripped"]["frames"] == 2
+      and rs.summarize_run(settle_txt, load_id=3)["untripped"]["cb_last"]
+      == rs.summarize_run(settle_txt, load_id=3)["cb_last"]
+      and rs.summarize_run(settle_txt, load_id=3)["trips"] == 0)
+all_tripped = [LOADED % (3, 7, -1), run(3, 1, 0, -1, tripped=1, trips=1), LAW % (1000, 950000),
+               WIN % (1000, 960000, 0)]
+sm = rs.summarize_run(all_tripped, load_id=3)
+check("rearm: with every counted frame tripped the untripped section is empty, not an error",
+      sm["frames"] == 1 and sm["untripped"] == {"frames": 0, "cb_last": None, "frame_max": None,
+                                                "cb_max_final": None, "gap_max": None,
+                                                "over_total": None})
+other_gen = rearm_txt + [run(3, 1, 0, -1, gen=8, tripped=0, trips=9), LAW % (1, 1)]
+check("rearm: a trips= line of another gen does not count",
+      rs.summarize_run(other_gen, load_id=3)["trips"] == 2)
+gest_rearm = [GESTED % (2, 7), LOADED % (144, 7, 2),
+              run(144, 1, 0, 2, trips=1, tripped=1), LAW % (950000, 950000), WIN % (1, 2, 3),
+              run(144, 1, 0, 2, trips=1), LAW % (930000, 940000), WIN % (4, 5, 6),
+              "SHELL_REMOTE gest done id=2",
+              run(144, 1, 0, 2, trips=3, tripped=1), LAW % (1, 1), WIN % (1, 1, 1)]
+sm = rs.summarize_run(gest_rearm, gest_id=2)
+check("rearm: a gesture run counts across trips too, up to its gest done",
+      sm["frames"] == 2 and sm["gest_done"] is True and sm["trips"] == 1
+      and sm["tripped_frames"] == 1 and sm["untripped"]["frames"] == 1
+      and sm["untripped"]["cb_last"]["max"] == 930000)
+p = FakeRunPort(rearm_txt)
+rc, s, d = run_cmd(p, None, record=False, load=3)
+check("rearm: summary.json carries trips, tripped_frames and untripped; the run is not an error",
+      rc == 0 and s["trips"] == 2 and s["tripped_frames"] == 2 and s["frames"] == 4
+      and s["untripped"]["frames"] == 2 and s["error"] is None)
 
 # ---- a run that measured nothing is a failure (Task 6, deferred from Task 5) --
 # No ack of the asked-for run (gen None: the board never loaded it, or another

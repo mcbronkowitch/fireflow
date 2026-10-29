@@ -16,8 +16,12 @@ a gesture loads its own base workload. summary.json counts only the frames the
 board reports settled for this run (`counting=1`, with the gen of the run's
 load / gest ack, or the gen a TOG re-settled it under), up to a gesture's
 `gest done`, and says `void` when a pot took a parameter over during it and
-`tripped` when the overrun guard silenced it (no frame from the trip on); it
-also names the image (`build`, `measure`) and the workload (`name`).
+`tripped` when the overrun guard tripped at some time in it. The guard re-arms
+itself (after 1 s of silence, and at a run's settle end), so the run counts
+across trips: `trips` is how often it tripped since the ack, `tripped_frames`
+the counted frames it was tripped in, and `untripped` repeats the statistics
+over the counted frames it was not tripped in. It also names the image
+(`build`, `measure`) and the workload (`name`).
 --seconds includes the settle (1 s, or 5 s with a SAMPLER deck).
 
 The toggle word: the board keeps it across runs (LOAD does not reset it), so
@@ -259,7 +263,8 @@ def cmd_run(args, port_factory=_port, capture_fn=rl.start_capture,
         with open(out / "serial.txt", encoding="utf-8") as fh:
             # Only the settled frames of this run (the board's `SHELL_REMOTE
             # run ... counting=1` lines with its ack's gen); `void` once a pot
-            # took over, `tripped` once the guard silenced it.
+            # took over, `tripped` / `trips` / `untripped` for the guard (the
+            # count goes on across trips).
             if args.gest is not None:
                 summary = rs.summarize_run(fh, gest_id=args.gest, expect_tog=want)
             else:

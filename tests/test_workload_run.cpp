@@ -39,6 +39,125 @@ TEST_CASE("overrun guard trips on the 8th consecutive block") {
     CHECK_FALSE(g.tripped());
 }
 
+// ---- the guard re-arms itself (Bastian, 2026-10-29) --------------------------
+TEST_CASE("overrun guard re-arms after 500 silent blocks, not 499") {
+    CHECK(shell::kGuardRearmBlocks == 500u);
+    OverrunGuard g(shell::kGuardLimitCycles, shell::kGuardBlocks, shell::kGuardPeriodCycles);
+    for(int i = 0; i < 7; ++i) CHECK_FALSE(g.block(966000));
+    CHECK(g.block(966000));           // the 8th: tripped; this block was not silent yet
+    CHECK(g.cause() == shell::GuardCause::Cycles);
+    // 499 silent blocks: still tripped, whatever their cycles.
+    for(int i = 0; i < 499; ++i) CHECK(g.block(1000));
+    CHECK(g.tripped());
+    CHECK(g.cause() == shell::GuardCause::Cycles);
+    // The 500th silent block re-arms: the next callback runs.
+    CHECK_FALSE(g.block(1000));
+    CHECK_FALSE(g.tripped());
+    CHECK(g.cause() == shell::GuardCause::None);
+    // Resumed: it counts again from 0 -- 7 over-budget blocks are no trip.
+    for(int i = 0; i < 7; ++i) CHECK_FALSE(g.block(966000));
+    CHECK_FALSE(g.tripped());
+}
+
+TEST_CASE("overrun guard: a silent block's cycles do not count, even over the limit") {
+    OverrunGuard g(1000, 3, 5000);
+    for(int i = 0; i < 2; ++i) CHECK_FALSE(g.block(2000, 6000));
+    CHECK(g.block(2000, 6000));       // trips (both criteria)
+    // Silent blocks that look saturated change nothing about the count: it
+    // re-arms 500 blocks after the trip, and re-arms with clean streaks.
+    for(int i = 0; i < 499; ++i) CHECK(g.block(2000, 6000));
+    CHECK_FALSE(g.block(2000, 6000));
+    CHECK_FALSE(g.tripped());
+    CHECK_FALSE(g.block(2000, 6000)); // streak 1 of 3, not a stale 3
+    CHECK_FALSE(g.block(2000, 6000));
+    CHECK(g.block(2000, 6000));       // a persistent overrun re-trips after n blocks
+    CHECK(g.tripped());
+    // ... and re-arms 500 silent blocks later, again.
+    for(int i = 0; i < 499; ++i) CHECK(g.block(10));
+    CHECK_FALSE(g.block(10));
+    CHECK_FALSE(g.tripped());
+}
+
+TEST_CASE("overrun guard: clear() re-arms at once, and restarts the silence count") {
+    OverrunGuard g(1000, 3);
+    for(int i = 0; i < 2; ++i) CHECK_FALSE(g.block(2000));
+    CHECK(g.block(2000));
+    for(int i = 0; i < 300; ++i) CHECK(g.block(10));
+    g.clear();                        // RST / LOAD / HOME / a run's settle end
+    CHECK_FALSE(g.tripped());
+    CHECK_FALSE(g.block(10));
+    // A second trip is silent for a full 500 blocks: the 300 before the clear
+    // do not count towards it.
+    for(int i = 0; i < 2; ++i) CHECK_FALSE(g.block(2000));
+    CHECK(g.block(2000));
+    for(int i = 0; i < 499; ++i) CHECK(g.block(10));
+    CHECK_FALSE(g.block(10));
+}
+
+TEST_CASE("overrun guard: reset_streak() restarts the silence count too") {
+    OverrunGuard g(1000, 3);
+    for(int i = 0; i < 2; ++i) CHECK_FALSE(g.block(2000));
+    CHECK(g.block(2000));
+    for(int i = 0; i < 300; ++i) CHECK(g.block(10));
+    g.reset_streak();                 // bit 31: the blocks in between were not silent
+    for(int i = 0; i < 499; ++i) CHECK(g.block(10));
+    CHECK_FALSE(g.block(10));         // 500 fed since the reset
+}
+
+TEST_CASE("overrun guard: the re-arm count is a parameter") {
+    OverrunGuard g(1000, 2, 0xFFFFFFFFu, 4);
+    CHECK_FALSE(g.block(2000));
+    CHECK(g.block(2000));
+    for(int i = 0; i < 3; ++i) CHECK(g.block(10));
+    CHECK_FALSE(g.block(10));
+}
+
+TEST_CASE("a trip in the load transient is cleared exactly when the settle ends") {
+    OverrunGuard g(1000, 3);
+    WorkloadRun  r;
+    r.start(145, 1000, 500);                   // counts from block 1500
+    // The LOAD's engine switch overruns for 3 blocks and trips the guard.
+    for(uint32_t b = 1001; b < 1004; ++b) (void)g.block(2000);
+    r.on_guard_trip();
+    CHECK(g.tripped());
+    // Silent through the settle: the run's blocks are not cleared early ...
+    bool early = false;
+    for(uint32_t b = 1004; b < 1500; ++b)
+    {
+        early = early || shell::rearm_at_settle_end(g, r, b);
+        (void)g.block(10);
+    }
+    // ... (the guard's own 500-block silence is 496 blocks away from done here)
+    CHECK_FALSE(early);
+    CHECK(g.tripped());
+    CHECK(shell::rearm_at_settle_end(g, r, 1500));   // the first counted block
+    CHECK_FALSE(g.tripped());
+    CHECK(g.cause() == shell::GuardCause::None);
+    // Once: the same block asked again, or any other, does nothing.
+    CHECK_FALSE(shell::rearm_at_settle_end(g, r, 1500));
+    CHECK_FALSE(shell::rearm_at_settle_end(g, r, 1501));
+    // A guard that is not tripped at the settle end: nothing to say.
+    OverrunGuard h(1000, 3);
+    r.start(145, 2000, 500);
+    CHECK_FALSE(shell::rearm_at_settle_end(h, r, 2500));
+    // A trip after the settle end stays (the 500-silence re-arms it).
+    for(int i = 0; i < 3; ++i) (void)h.block(2000);
+    CHECK(h.tripped());
+    CHECK_FALSE(shell::rearm_at_settle_end(h, r, 2501));
+    CHECK(h.tripped());
+    // No run: no settle end.
+    r.stop();
+    CHECK_FALSE(shell::rearm_at_settle_end(h, r, 2500));
+    CHECK(h.tripped());
+    // A TOG's re-settle ends a settle too.
+    r.start(145, 3000, 500);
+    r.resettle(3600, 200);
+    h.clear();
+    for(int i = 0; i < 3; ++i) (void)h.block(2000);
+    CHECK(shell::rearm_at_settle_end(h, r, 3800));
+    CHECK_FALSE(h.tripped());
+}
+
 TEST_CASE("workload run settles 500 blocks") {
     WorkloadRun r;
     CHECK_FALSE(r.active());
@@ -98,16 +217,35 @@ TEST_CASE("a guard trip marks the run until the next start") {
     WorkloadRun r;
     r.on_guard_trip();               // no run: nothing to mark
     CHECK_FALSE(r.tripped());
+    CHECK(r.trips() == 0u);
     r.start(4, 0, 500);
     CHECK_FALSE(r.tripped());
     r.on_guard_trip();               // in the settle or counted: the same
     CHECK(r.tripped());
+    CHECK(r.trips() == 1u);
     CHECK_FALSE(r.void_run());       // a separate flag from a pot take
     r.start(4, 900, 500);            // only a new start clears it
     CHECK_FALSE(r.tripped());
+    CHECK(r.trips() == 0u);
     r.on_guard_trip();
     r.stop();
     CHECK_FALSE(r.tripped());
+    CHECK(r.trips() == 0u);
+}
+
+TEST_CASE("every trip of a run is counted, the run counts on") {
+    WorkloadRun r;
+    r.start(145, 0, 500);
+    r.on_guard_trip();               // the LOAD's own transient
+    CHECK_FALSE(r.void_run());
+    CHECK(r.counting(500));          // a trip does not stop the run counting
+    CHECK(r.counted(510) == 10u);
+    r.on_guard_trip();               // the patch overruns again, later
+    r.on_guard_trip();
+    CHECK(r.trips() == 3u);
+    CHECK(r.counting(100000));
+    r.resettle(600, 200);            // a TOG keeps the count of trips
+    CHECK(r.trips() == 3u);
 }
 
 // ---- the measurement image (Task 6 fix round 1) ------------------------------

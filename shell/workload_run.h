@@ -6,12 +6,16 @@
 // panel_scan.cpp wires it under SHELL_REMOTE; nothing here touches hardware.
 //
 //   OverrunGuard        the self-limiter: N consecutive over-budget callbacks,
-//                       or N consecutive late entries (back to back), latch
+//                       or N consecutive late entries (back to back), trip
 //                       it, and the callback then writes silence instead
-//                       of calling process() until LOAD, HOME or RST clears it,
-//                       so a workload that saturates the callback cannot cut
-//                       the USB command channel for good (USB and the audio
-//                       DMA share NVIC priority 0, and the DMA wins).
+//                       of calling process(), so a workload that saturates
+//                       the callback cannot cut the USB command channel for
+//                       good (USB and the audio DMA share NVIC priority 0, and
+//                       the DMA wins). It re-arms itself after
+//                       kGuardRearmBlocks silent blocks; LOAD, HOME, RST and a
+//                       run's settle end clear it at once (Bastian,
+//                       2026-10-29: a patch that overruns for real must still
+//                       be counted, trips and all).
 //   WorkloadRun         one loaded workload: its settle (no block counts until
 //                       the engine swap has landed), and void once a pot took
 //                       its parameter over during the run (spec 5.2, "Pot
@@ -48,6 +52,13 @@ inline constexpr uint32_t kGuardBlocks      = 8;
 // (plan Task 7 Step 5b). A callback back to back by less than the margin per
 // block is not caught (spec section 8).
 inline constexpr uint32_t kGuardPeriodCycles = 965000;
+// A tripped guard re-arms itself once it has been silent for this many
+// consecutive blocks: 1 s at 96 samples / 48 kHz. Bastian's patch overruns for
+// real, the LOAD's engine switch trips the guard once and the patch again at a
+// fixed time later (docs/hardware/cpu-hunt-measured.md section 1); a guard
+// that latches until RST / LOAD / HOME makes a run on it silent and counts
+// nothing.
+inline constexpr uint32_t kGuardRearmBlocks = 500;
 
 // Which criterion tripped the guard; None while it is not tripped.
 enum class GuardCause : uint8_t { None = 0, Cycles = 1, Period = 2 };
@@ -57,28 +68,37 @@ class OverrunGuard
 public:
     // limit: a callback above it is over budget; period_limit: an entry-to-
     // entry period above it is late. Without a period_limit only cb counts.
-    OverrunGuard(uint32_t limit, uint32_t n, uint32_t period_limit = 0xFFFFFFFFu)
-        : limit_(limit), n_(n), period_limit_(period_limit) {}
+    // rearm_blocks: silent blocks until a tripped guard re-arms itself.
+    OverrunGuard(uint32_t limit, uint32_t n, uint32_t period_limit = 0xFFFFFFFFu,
+                 uint32_t rearm_blocks = kGuardRearmBlocks)
+        : limit_(limit), n_(n), period_limit_(period_limit), rearm_(rearm_blocks) {}
     // One callback: its cycles, and the cycles from the previous callback's
     // entry to this one's (0: unknown, no previous entry). Each criterion keeps
     // its own streak -- a block over it extends it, any other ends it -- and the
-    // first to reach n trips the guard (cause()), which then stays tripped (the
-    // silenced callback is cheap) until clear(). Returns tripped().
+    // first to reach n trips the guard (cause()). A tripped guard ignores cb
+    // and period (the silenced callback is cheap) and counts the blocks fed
+    // while it is tripped: the rearm_blocks-th of them clears it again, by
+    // itself, as clear() does (streaks restart from 0, cause() is None), and
+    // that call returns false -- the next callback runs. Returns tripped().
     bool block(uint32_t cb, uint32_t period = 0);
     bool tripped() const { return tripped_; }
     GuardCause cause() const { return cause_; }
     void clear();
-    // Both streaks start again from 0; a tripped guard stays tripped. For the
-    // measurement image's bit 31, which stops feeding block(): without this,
-    // the streaks would freeze while the bit is set and resume stale after it.
+    // Both streaks and the silence count start again from 0; a tripped guard
+    // stays tripped. For the measurement image's bit 31, which stops feeding
+    // block(): without this, the streaks would freeze while the bit is set and
+    // resume stale after it, and blocks that were not silent would count
+    // towards the re-arm.
     void reset_streak();
 
 private:
     uint32_t   limit_;
     uint32_t   n_;
     uint32_t   period_limit_;
+    uint32_t   rearm_;
     uint32_t   streak_  = 0;
     uint32_t   pstreak_ = 0;
+    uint32_t   silent_  = 0;
     bool       tripped_ = false;
     GuardCause cause_   = GuardCause::None;
 };
@@ -95,8 +115,11 @@ public:
     // A pot took its parameter over: the run is void. Without a run, nothing.
     void on_pot_take();
     // The overrun guard tripped during the run: from that block on its callbacks
-    // are silence, not the workload (spec 5.2: a worst case measured on silence
-    // does not count). Without a run, nothing. Cleared only by start() / stop().
+    // are silence, not the workload, until the guard re-arms (spec 5.2: a worst
+    // case measured on silence does not count; the host splits the frames by
+    // whether the guard was tripped in them). trips() counts the trips since
+    // start(), tripped() says there was one. Without a run, nothing. Cleared
+    // only by start() / stop().
     void on_guard_trip();
     // A TOG in block now_block (the measurement image): the run settles again,
     // so the toggle's switch-over is not counted -- nothing counts before
@@ -118,6 +141,7 @@ public:
     uint32_t counted(uint32_t now_block) const;
     bool     void_run() const { return void_; }
     bool     tripped() const { return tripped_; }
+    uint32_t trips() const { return trips_; }
     int      id() const { return active_ ? id_ : -1; }
     // Bumped by every start(): two readings with the same gen are one run.
     uint32_t gen() const { return gen_; }
@@ -126,12 +150,21 @@ private:
     bool     active_ = false;
     bool     void_   = false;
     bool     tripped_ = false;
+    uint32_t trips_  = 0;
     int      id_     = -1;
     uint32_t start_  = 0;
     uint32_t settle_ = 0;
     uint32_t gen_    = 0;
     uint32_t offset_ = 0;   // counted() before the last resettle()
 };
+
+// A run's settle ends in block now_block (WorkloadRun::settle_ends(), after a
+// TOG's re-settle too): a guard tripped by the load's own transient -- an
+// engine switch costs a block of 1 001 608 cycles on Bastian's patch -- must not
+// silence the counted blocks, so it is cleared there, exactly when counting
+// starts. True when it was tripped and is not any more (the caller says so);
+// false when nothing ended or nothing was tripped.
+bool rearm_at_settle_end(OverrunGuard& g, const WorkloadRun& r, uint32_t now_block);
 
 // The measurement image's TOG settle: the maxima reset kTogSettleBlocks after
 // the block the TOG landed in, by block number, so the answer does not depend

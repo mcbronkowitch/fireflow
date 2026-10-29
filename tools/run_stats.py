@@ -9,12 +9,18 @@ The board prints, once per 500 ms frame (shell/panel_scan.cpp):
 
 and SHELL_REMOTE images, right before the LAW line,
 
-    SHELL_REMOTE run id=.. gen=.. counting=.. void=.. tripped=.. gest=.. tog=<8 hex>
+    SHELL_REMOTE run id=.. gen=.. counting=.. void=.. tripped=.. trips=.. gest=.. tog=<8 hex>
+
+(`tripped`: the overrun guard was tripped at some block of that frame's window;
+`trips`: how often it has tripped since the run's ack. Older images print no
+`trips=`, read as 0.)
 
 plus, once per started run, `SHELL_REMOTE load id=.. gen=.. gest=..` (and for a
 gesture `SHELL_REMOTE gest id=.. gen=..` ahead of it), and
 `SHELL_REMOTE guard tripped blk=.. by=cb|period` on every frame while the
-overrun guard holds the callback silent, `SHELL_REMOTE gest done id=..` once a
+overrun guard holds the callback silent, `SHELL_REMOTE guard rearm blk=..
+by=silence|settle` when it resumes by itself (not read here),
+`SHELL_REMOTE gest done id=..` once a
 gesture's last step has played, and `SHELL_REMOTE on build=<stamp>` (with
 ` measure=1 tog=<8 hex>` on the measurement image) every 5 s. The measurement
 image adds, 200 blocks after a TOG, `SHELL_REMOTE tog settled word=<8 hex>
@@ -128,16 +134,20 @@ def parse_frames(lines: Iterable[str], load_id: Optional[int] = None,
 
     With load_id or gest_id (shell/panel_scan.cpp, SHELL_REMOTE): the board
     prints `SHELL_REMOTE run id=.. gen=.. counting=.. void=.. tripped=..
-    gest=..` right before each frame's LAW line, and counting=1 says the whole
-    frame window held settled blocks of that gen only. Everything before the
-    last ack of the asked-for run (its load / gest line) is ignored, and the
-    ack's `gen` then picks this run's run lines out of any earlier run of the
-    same id. A LAW / WIN line counts only while the latest run line is that
-    gen with counting=1 and tripped=0; the others are `skipped`. `void` is
-    true once a run line of that gen says void=1. `tripped` is true once one
-    says tripped=1 or a `guard tripped` line follows the ack: the callback
-    plays silence from the trip, so no frame from there on counts. No ack in
-    the capture: nothing counts, `gen` is None.
+    trips=.. gest=..` right before each frame's LAW line, and counting=1 says
+    the whole frame window held settled blocks of that gen only. Everything
+    before the last ack of the asked-for run (its load / gest line) is ignored,
+    and the ack's `gen` then picks this run's run lines out of any earlier run
+    of the same id. A LAW / WIN line counts while the latest run line is that
+    gen with counting=1, whether or not the guard was tripped in the frame
+    (the guard re-arms itself, Bastian 2026-10-29: a trip silences part of a
+    frame, it does not end the run); the others are `skipped`. `void` is true
+    once a run line of that gen says void=1. `tripped` is true once one says
+    tripped=1 or trips>0, or a `guard tripped` line follows the ack: the guard
+    tripped at some time in the run (informational). `trips`: the last trips=
+    of a counted frame (0 for a line without one); `tripped_frames`: the
+    counted frames with tripped=1; the `*_u` lists hold the counted frames
+    with tripped=0 only. No ack in the capture: nothing counts, `gen` is None.
 
     A `SHELL_REMOTE tog settled ... gen=N` line after the ack: a TOG
     re-settled the run under gen N (the measurement image), so from there gen
@@ -159,7 +169,9 @@ def parse_frames(lines: Iterable[str], load_id: Optional[int] = None,
     out = {"cb_last": [], "cb_max": [], "win": [], "gap": [], "over": [],
            "reconnects": 0, "skipped": 0, "void": False, "tripped": False,
            "gen": None, "tog": set(), "probe": False, "tog_missing": 0,
-           "gest_done": False, "build": None, "measure": None, "name": None}
+           "gest_done": False, "build": None, "measure": None, "name": None,
+           "trips": 0, "tripped_frames": 0, "cb_last_u": [], "cb_max_u": [],
+           "win_u": [], "gap_u": [], "over_u": []}
     lines = list(lines)
     for line in lines:
         m = _ON.search(line)
@@ -169,6 +181,8 @@ def parse_frames(lines: Iterable[str], load_id: Optional[int] = None,
     filtered = load_id is not None or gest_id is not None
     take = not filtered
     tog = None   # the latest run line's toggle word
+    frame_tripped = False   # the latest run line's tripped=1 (its own frame's)
+    frame_trips = 0         # ... and its trips= (0 when it has none)
     start = 0
     if filtered:
         ack_at, out["gen"] = _find_ack(lines, load_id, gest_id)
@@ -186,9 +200,10 @@ def parse_frames(lines: Iterable[str], load_id: Optional[int] = None,
             out["reconnects"] += 1
             if filtered:
                 take = False   # the next frame's run line decides
+            frame_tripped, frame_trips = False, 0
             continue
         if filtered and "SHELL_REMOTE guard tripped" in line:
-            out["tripped"] = True   # the next run line stops the count
+            out["tripped"] = True   # informational: the count goes on
             continue
         if gest_id is not None and "SHELL_REMOTE gest done" in line:
             m = _GEST_DONE.search(line)
@@ -199,8 +214,10 @@ def parse_frames(lines: Iterable[str], load_id: Optional[int] = None,
             kv = dict((k, int(v)) for k, v in _KV.findall(line))
             if "gen" in kv and kv["gen"] != out["gen"]:
                 out["skipped"] += len(out["cb_last"])
-                for key in ("cb_last", "cb_max", "win", "gap", "over"):
+                for key in ("cb_last", "cb_max", "win", "gap", "over", "cb_last_u",
+                            "cb_max_u", "win_u", "gap_u", "over_u"):
                     out[key] = []
+                out["tripped_frames"] = 0
                 out["tog"], out["probe"] = set(), False
                 out["gen"] = kv["gen"]
             take = False   # the next run line of that gen decides
@@ -213,11 +230,15 @@ def parse_frames(lines: Iterable[str], load_id: Optional[int] = None,
                     and _run_matches(kv, load_id, gest_id))
             if mine and kv.get("void") == 1:
                 out["void"] = True
-            if mine and kv.get("tripped") == 1:
+            if mine and (kv.get("tripped") == 1 or kv.get("trips", 0) > 0):
                 out["tripped"] = True
+            # This frame's own flag and the run's trips so far; a line of
+            # another run says nothing (unfiltered captures take every line).
+            ours = mine or not filtered
+            frame_tripped = ours and kv.get("tripped") == 1
+            frame_trips = kv.get("trips", 0) if ours else 0
             if filtered:
-                take = (mine and kv.get("counting") == 1 and not out["tripped"]
-                        and not out["gest_done"])
+                take = mine and kv.get("counting") == 1 and not out["gest_done"]
             continue
         if ("SHELL_PLAY_LAW" in line or "SHELL_PLAY_WIN" in line) and not take:
             if "SHELL_PLAY_LAW" in line:
@@ -231,18 +252,24 @@ def parse_frames(lines: Iterable[str], load_id: Optional[int] = None,
             elif filtered:
                 out["tog_missing"] += 1
             kv = dict((k, int(v)) for k, v in _KV.findall(line))
+            out["trips"] = frame_trips
+            if frame_tripped:
+                out["tripped_frames"] += 1
             if "cb_last" in kv:
                 out["cb_last"].append(kv["cb_last"])
+                if not frame_tripped:
+                    out["cb_last_u"].append(kv["cb_last"])
             if "cb_max" in kv:
                 out["cb_max"].append(kv["cb_max"])
+                if not frame_tripped:
+                    out["cb_max_u"].append(kv["cb_max"])
         elif "SHELL_PLAY_WIN" in line:
             kv = dict((k, int(v)) for k, v in _KV.findall(line))
-            if "win" in kv:
-                out["win"].append(kv["win"])
-            if "gap" in kv:
-                out["gap"].append(kv["gap"])
-            if "over" in kv:
-                out["over"].append(kv["over"])
+            for name in ("win", "gap", "over"):
+                if name in kv:
+                    out[name].append(kv[name])
+                    if not frame_tripped:
+                        out[name + "_u"].append(kv[name])
             if filtered:
                 take = False   # the frame ends here; the next run line decides
     return out
@@ -256,8 +283,14 @@ def summarize_run(lines: Iterable[str], load_id: Optional[int] = None,
     each as `summarize` output; plus the totals the clicks question needs.
     load_id / gest_id: count only the settled frames of that run, see
     parse_frames(); `skipped` frames did not count, `void` = a pot took over,
-    `tripped` = the overrun guard silenced the run (nothing counts from the
-    trip on), `gen` = the run's gen from its ack (None: no ack seen), or the
+    `tripped` = the overrun guard tripped at some time in the run (the count
+    goes on: the guard re-arms itself), `trips` = its trips since the ack (the
+    last trips= of a counted frame), `tripped_frames` = the counted frames
+    with tripped=1, `untripped` = the statistics above (frames, cb_last,
+    frame_max, cb_max_final, gap_max, over_total) over the counted frames with
+    tripped=0 only -- the frames the guard did not silence a block of; the
+    top-level ones cover every counted frame. `gen` = the run's gen from its
+    ack (None: no ack seen), or the
     gen a TOG re-settled it under; `tog` = the counted frames' toggle words.
     A counted frame with bit 30 or 31 set makes the run `void` with an
     `error` (ProbeBits): its frames say nothing about a candidate.
@@ -290,6 +323,19 @@ def summarize_run(lines: Iterable[str], load_id: Optional[int] = None,
     res["cb_max_final"] = f["cb_max"][-1] if f["cb_max"] else None
     res["gap_max"] = max(f["gap"]) if f["gap"] else None
     res["over_total"] = sum(f["over"]) if f["over"] else None
+    # The guard: trips so far, the counted frames it was tripped in, and the
+    # same statistics over the counted frames it was not tripped in.
+    res["trips"] = f["trips"]
+    res["tripped_frames"] = f["tripped_frames"]
+    last_u = [v for v in f["cb_last_u"] if v > 0]
+    res["untripped"] = {
+        "frames": len(f["cb_last_u"]),
+        "cb_last": summarize(last_u) if last_u else None,
+        "frame_max": summarize(f["win_u"]) if f["win_u"] else None,
+        "cb_max_final": f["cb_max_u"][-1] if f["cb_max_u"] else None,
+        "gap_max": max(f["gap_u"]) if f["gap_u"] else None,
+        "over_total": sum(f["over_u"]) if f["over_u"] else None,
+    }
     return res
 
 

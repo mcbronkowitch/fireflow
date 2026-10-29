@@ -28,9 +28,15 @@ bool streak_step(uint32_t& streak, bool over, uint32_t n)
 
 bool OverrunGuard::block(uint32_t cb, uint32_t period)
 {
+    if(tripped_)
+    {
+        // A silent block: its cycles say nothing. The rearm_-th one re-arms.
+        if(++silent_ >= rearm_) clear();
+        return tripped_;
+    }
     const bool by_cb     = streak_step(streak_, cb > limit_, n_);
     const bool by_period = streak_step(pstreak_, period != 0u && period > period_limit_, n_);
-    if(!tripped_ && (by_cb || by_period))
+    if(by_cb || by_period)
     {
         tripped_ = true;
         cause_   = by_cb ? GuardCause::Cycles : GuardCause::Period;
@@ -42,6 +48,7 @@ void OverrunGuard::clear()
 {
     streak_  = 0;
     pstreak_ = 0;
+    silent_  = 0;
     tripped_ = false;
     cause_   = GuardCause::None;
 }
@@ -50,6 +57,14 @@ void OverrunGuard::reset_streak()
 {
     streak_  = 0;
     pstreak_ = 0;
+    silent_  = 0;
+}
+
+bool rearm_at_settle_end(OverrunGuard& g, const WorkloadRun& r, uint32_t now_block)
+{
+    if(!r.settle_ends(now_block) || !g.tripped()) return false;
+    g.clear();
+    return true;
 }
 
 void TogSettle::arm(uint32_t now_block)
@@ -95,6 +110,7 @@ void WorkloadRun::start(int id, uint32_t now_block, uint32_t settle_blocks)
     active_  = true;
     void_    = false;
     tripped_ = false;
+    trips_   = 0;
     id_      = id;
     start_   = now_block;
     settle_  = settle_blocks;
@@ -107,6 +123,7 @@ void WorkloadRun::stop()
     active_  = false;
     void_    = false;
     tripped_ = false;
+    trips_   = 0;
     id_      = -1;
 }
 
@@ -117,7 +134,9 @@ void WorkloadRun::on_pot_take()
 
 void WorkloadRun::on_guard_trip()
 {
-    if(active_) tripped_ = true;
+    if(!active_) return;
+    tripped_ = true;
+    ++trips_;
 }
 
 // Unsigned differences, so a run across the block counter's wrap still counts.

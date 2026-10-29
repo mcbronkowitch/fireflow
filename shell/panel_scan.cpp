@@ -262,19 +262,32 @@ constexpr uint32_t kWinOverCycles  = 930000;
 static_assert(kWorkloadRowCount == kTable.count,
               "generated_workloads.h: one value per Rev A row (run gen_workloads.py)");
 
-// The self-limiter (spec 5.3): latched in panel_scan_block_end() by
+// The self-limiter (spec 5.3): tripped in panel_scan_block_end() by
 // kGuardBlocks consecutive callbacks over kGuardLimitCycles, or by as many
 // consecutive entry-to-entry periods over kGuardPeriodCycles (back to back
 // with cb under the limit; workload_run.h). main.cpp's callback then writes
 // silence instead of calling process(), and the measurement image's LATE
 // burn stops (panel_scan_late()), so the foreground and USB get the CPU back.
-// LOAD, HOME and RST clear it. g_guard_blk: the block it tripped in;
-// g_guard_by: which criterion (GuardCause); g_guard_flag mirrors tripped()
-// for the foreground.
+// It re-arms itself after kGuardRearmBlocks silent blocks, and a run's settle
+// end clears it (Bastian, 2026-10-29: a patch that overruns for real must be
+// counted, trips and all); LOAD, HOME and RST clear it at once.
+// g_guard_blk: the block it last tripped in; g_guard_by: which criterion
+// (GuardCause); g_guard_flag mirrors tripped() for the foreground.
+// The foreground prints from counters, so a trip or a re-arm between two passes
+// is never lost: g_guard_trips / g_guard_rearms count them (never reset),
+// g_guard_rearm_blk / g_guard_rearm_settle say the last re-arm's block and
+// whether the settle end did it (else the silence), and g_guard_silent counts
+// the blocks the guard was tripped in (the trip's own block and every silenced
+// one), from which each frame's tripped= is the difference between two reads.
 OverrunGuard      g_guard(kGuardLimitCycles, kGuardBlocks, kGuardPeriodCycles);
 volatile uint32_t g_guard_blk  = 0;
 volatile GuardCause g_guard_by = GuardCause::None;
 volatile bool     g_guard_flag = false;
+volatile uint32_t g_guard_trips        = 0;
+volatile uint32_t g_guard_rearms       = 0;
+volatile uint32_t g_guard_rearm_blk    = 0;
+volatile bool     g_guard_rearm_settle = false;
+volatile uint32_t g_guard_silent       = 0;
 
 // LOAD, HOME and RST: the flag too, before their ack is queued -- otherwise
 // the foreground can pop the ack ahead of this block's panel_scan_block_end()
@@ -288,6 +301,16 @@ void clear_guard()
 
 // The block clock the runs count on: every block that reaches the law.
 uint32_t    g_rblock = 0;
+
+// The guard re-armed by itself, in block g_rblock: by the settle end or by its
+// own silence. The block and the cause go in ahead of the count.
+void note_guard_rearm(bool by_settle)
+{
+    g_guard_rearm_blk    = g_rblock;
+    g_guard_rearm_settle = by_settle;
+    g_guard_rearms       = g_guard_rearms + 1u;
+}
+
 WorkloadRun g_run;
 int         g_run_gest = -1;       // the gesture id of this run, -1 for a LOAD
 bool        g_run_rec[2] = {false, false};   // REC latched by the material
@@ -316,7 +339,7 @@ volatile int      g_rs_gest     = -1;
 volatile uint32_t g_rs_gen      = 0;
 volatile bool     g_rs_counting = false;
 volatile bool     g_rs_void     = false;
-volatile bool     g_rs_tripped  = false;
+volatile uint32_t g_rs_trips    = 0;
 // The toggle word process() latches (util/probe_toggles.h; 0 outside the
 // measurement image), for the run line: the host voids a run whose counted
 // frames had bit 30 or 31 set (tools/run_stats.py).
@@ -331,7 +354,7 @@ void publish_run()
     g_rs_gen      = g_run.gen();
     g_rs_counting = g_run.counting(g_rblock);
     g_rs_void     = g_run.void_run();
-    g_rs_tripped  = g_run.tripped();
+    g_rs_trips    = g_run.trips();
     g_rs_tog      = spky::probe::toggles();
     std::atomic_signal_fence(std::memory_order_seq_cst);
     g_rs_seq = g_rs_seq + 1u;   // even: done
@@ -339,9 +362,9 @@ void publish_run()
 
 struct RunSnap
 {
-    uint32_t gen, tog;
+    uint32_t gen, tog, trips;
     int      id, gest;
-    bool     counting, void_run, tripped;
+    bool     counting, void_run;
 };
 
 // Foreground only.
@@ -359,7 +382,7 @@ RunSnap read_run()
         s.gest     = g_rs_gest;
         s.counting = g_rs_counting;
         s.void_run = g_rs_void;
-        s.tripped  = g_rs_tripped;
+        s.trips    = g_rs_trips;
         std::atomic_signal_fence(std::memory_order_seq_cst);
     } while((q & 1u) != 0 || q != g_rs_seq);
     return s;
@@ -745,6 +768,13 @@ void remote_block()
         if(g_run_rec[0]) g_knobs[ffctl::REC_A] = 0.0f;
         if(g_run_rec[1]) g_knobs[ffctl::REC_B] = 0.0f;
         reset_maxima();
+        // A guard tripped by the load's own transient (or a TOG's) does not
+        // silence the counted blocks: it is cleared exactly as counting starts.
+        if(rearm_at_settle_end(g_guard, g_run, now))
+        {
+            g_guard_flag = false;
+            note_guard_rearm(true);
+        }
     }
     if(g_gest_n > 0 && g_run.counting(now))
     {
@@ -1093,8 +1123,9 @@ void panel_scan_block_end(uint32_t c0)
 #if SHELL_REMOTE
     // The overrun guard (workload_run.h) on this callback's cycles: integer
     // compares only, nothing printed here (the foreground says it).
-    // A trip marks the running workload: from here its callbacks are silence
-    // (spec 5.2), so the host summarizes none of its frames from this one on.
+    // A trip is counted on the running workload (trips=) and marks the frames
+    // it silences (tripped=): until the guard re-arms its callbacks are silence
+    // (spec 5.2), and the host keeps those frames apart from the others.
 #if SHELL_REMOTE_MEASURE
     // Toggle bit 31 (util/probe_toggles.h): the guard is not consulted, so a
     // LATE repeated by bit 30 saturates the callback on purpose (plan Task 7).
@@ -1112,12 +1143,21 @@ void panel_scan_block_end(uint32_t c0)
     // g_win_prev_entry with this callback's entry. 0 before the first block.
     const uint32_t period = g_win_prev_entry != 0u ? c0 - g_win_prev_entry : 0u;
     const bool was_tripped = g_guard.tripped();
-    if(!off && g_guard.block(dc, period) && !was_tripped)
+    if(!off)
     {
-        g_guard_blk = g_rblock;
-        g_guard_by  = g_guard.cause();
-        g_run.on_guard_trip();
-        publish_run();
+        const bool now_tripped = g_guard.block(dc, period);
+        if(now_tripped && !was_tripped)
+        {
+            g_guard_blk = g_rblock;
+            g_guard_by  = g_guard.cause();
+            g_guard_trips = g_guard_trips + 1u;
+            g_run.on_guard_trip();
+            publish_run();
+        }
+        else if(was_tripped && !now_tripped)
+            note_guard_rearm(false);   // 500 silent blocks: it resumes by itself
+        // The trip's own block and every silenced one: the frame's tripped=.
+        if(now_tripped || was_tripped) g_guard_silent = g_guard_silent + 1u;
     }
     g_guard_flag = g_guard.tripped() && !off;
 #endif
@@ -1178,7 +1218,8 @@ bool panel_scan_guard_tripped()
 {
 #if SHELL_REMOTE_MEASURE
     // Bit 31: a guard tripped before the bit was set stays latched but is not
-    // obeyed; with the bit cleared again it silences until LOAD, HOME or RST.
+    // obeyed; with the bit cleared again it silences until it re-arms (500
+    // silent blocks, as block() counts them) or LOAD, HOME or RST clear it.
     if(guard_off()) return false;
 #endif
     return g_guard.tripped();
@@ -1217,7 +1258,14 @@ void run_panel_scan_report(bench::Board& hw)
     constexpr uint32_t kRemoteEvery = 10;
     uint32_t           remote_pass  = 0;
     // The previous frame's `before` run reading, for the counting=1 rule.
-    RunSnap remote_prev = {0, 0, -1, -1, false, false, false};
+    RunSnap remote_prev = {0, 0, 0, -1, -1, false, false};
+    // g_guard_silent at the previous frame: the difference is "the guard was
+    // tripped at some block of this frame's window" (the run line's tripped=).
+    uint32_t guard_silent_prev   = 0;
+    // The trips and re-arms already said (foreground): a counter that moved
+    // since is a line owed, so nothing is lost between two passes.
+    uint32_t guard_trips_said    = 0;
+    uint32_t guard_rearms_said   = 0;
 #endif
 #if SHELL_REMOTE_MEASURE
     // The last busy window's figures, printed with the next frame.
@@ -1391,15 +1439,21 @@ void run_panel_scan_report(bench::Board& hw)
         // `after` behind them. counting=1 only when the run was settled at the
         // previous frame's `before` -- ahead of that frame's WIN reset, so
         // ahead of this window's first block -- and is the same gen, still
-        // settled and not tripped at this frame's `after`, behind its last
-        // block: the window then holds counted blocks of that run only. A LOAD
-        // anywhere inside it changes gen, and so does a TOG during a run (it
-        // re-settles it); a guard trip inside it shows here. tog= is the
-        // toggle word at `after` (0 outside the measurement image); in a
-        // counted frame no TOG fell inside the window, so it held throughout.
-        // At most 83 bytes (a 3-digit id and gest, a 5-digit gen).
+        // settled at this frame's `after`, behind its last block: the window
+        // then holds counted blocks of that run only. A LOAD anywhere inside
+        // it changes gen, and so does a TOG during a run (it re-settles it).
+        // A guard trip does not stop the count (Bastian, 2026-10-29): tripped=
+        // says the guard was tripped at some block of this window (silence in
+        // part of it), trips= how often it has tripped since the run's ack.
+        // tog= is the toggle word at `after` (0 outside the measurement
+        // image); in a counted frame no TOG fell inside the window, so it held
+        // throughout. At most 95 bytes (a 3-digit id and gest, a 5-digit gen,
+        // a 5-digit trips).
         {
             const RunSnap  before = read_run();
+            // Read with the WIN window's numbers, so tripped= covers the same
+            // blocks as win= (the callback resets that window a block later).
+            const uint32_t guard_silent = g_guard_silent;
             const uint32_t law_last = g_law_cycles_last, law_max = g_law_cycles_max;
             const uint32_t led_last = g_led_cycles_last, led_max = g_led_cycles_max;
             const uint32_t cb_last = g_cb_cycles_last, cb_max = g_cb_cycles_max;
@@ -1413,13 +1467,19 @@ void run_panel_scan_report(bench::Board& hw)
 #endif
             const RunSnap after   = read_run();
             const bool    counted = remote_prev.counting && remote_prev.gen == after.gen
-                                    && after.counting && !after.tripped;
+                                    && after.counting;
             remote_prev = before;
-            hw.PrintLine("SHELL_REMOTE run id=%d gen=%u counting=%d void=%d tripped=%d gest=%d "
+            // The guard was tripped at some block of this window (the trip's
+            // own block, or one it silenced): the host keeps such a frame
+            // apart from the others, it no longer stops counting.
+            const bool     tripped      = guard_silent != guard_silent_prev;
+            guard_silent_prev = guard_silent;
+            hw.PrintLine("SHELL_REMOTE run id=%d gen=%u counting=%d void=%d tripped=%d trips=%u gest=%d "
                          "tog=%08x",
                          after.id, static_cast<unsigned>(after.gen & kGenPrintMask),
                          counted ? 1 : 0,
-                         after.void_run ? 1 : 0, after.tripped ? 1 : 0, after.gest,
+                         after.void_run ? 1 : 0, tripped ? 1 : 0,
+                         static_cast<unsigned>(after.trips), after.gest,
                          static_cast<unsigned>(after.tog));
             hw.PrintLine("SHELL_PLAY_LAW cyc_last=%d cyc_max=%d led_last=%d led_max=%d "
                          "cb_last=%d cb_max=%d",
@@ -1605,11 +1665,23 @@ void run_panel_scan_report(bench::Board& hw)
             }
         }
         // While the guard holds the callback silent: every pass, so a host
-        // that attaches late still sees why the board is quiet. by= is the
-        // criterion: cb (the callback's cycles) or period (back to back).
-        if(g_guard_flag)
+        // that attaches late still sees why the board is quiet; and once for
+        // every trip a pass has not said yet (a settle end can clear a guard
+        // within a pass). by= is the criterion: cb (the callback's cycles) or
+        // period (back to back).
+        const uint32_t guard_trips = g_guard_trips;
+        if(g_guard_flag || guard_trips != guard_trips_said)
             hw.PrintLine("SHELL_REMOTE guard tripped blk=%u by=%s", static_cast<unsigned>(g_guard_blk),
                          g_guard_by == GuardCause::Period ? "period" : "cb");
+        guard_trips_said = guard_trips;
+        // The guard resumed by itself: after 500 silent blocks (by=silence) or
+        // at its run's settle end (by=settle). Once per re-arm.
+        const uint32_t guard_rearms = g_guard_rearms;
+        if(guard_rearms != guard_rearms_said)
+            hw.PrintLine("SHELL_REMOTE guard rearm blk=%u by=%s",
+                         static_cast<unsigned>(g_guard_rearm_blk),
+                         g_guard_rearm_settle ? "settle" : "silence");
+        guard_rearms_said = guard_rearms;
 #endif
 #if SHELL_PERSIST_ON
         if(persist_pass++ % kPersistSrcEvery == 0)

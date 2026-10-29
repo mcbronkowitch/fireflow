@@ -712,7 +712,8 @@ def tog_and_gen_printed(scan):
     """The run line carries the snapshot's toggle word, published per block;
     the settled ack carries the run's gen and its line prints it."""
     code = flat(code_only(scan))
-    run_fmt = '"SHELL_REMOTErunid=%dgen=%ucounting=%dvoid=%dtripped=%dgest=%d""tog=%08x"'
+    run_fmt = ('"SHELL_REMOTErunid=%dgen=%ucounting=%dvoid=%dtripped=%dtrips=%ugest=%d"'
+               '"tog=%08x"')
     i = code.find(run_fmt)
     run_args = code[i:i + 400] if i >= 0 else ""
     pub = flat(code_only(function_body(scan, "void publish_run(")))
@@ -727,7 +728,92 @@ def tog_and_gen_printed(scan):
         and j >= 0 and "a.b-kAckTogSettledBase" in settled_args
 
 
-def run_checks(listen, main, scan, make, tick, inst, engine, writer):
+# --- the guard re-arms itself (Bastian, 2026-10-29) ----------------------------
+def guard_self_rearms(wl_h, wl_cpp):
+    """OverrunGuard counts the silent blocks it is fed while tripped and clears
+    itself on the 500th (kGuardRearmBlocks, the constructor's default); clear()
+    and reset_streak() restart that count."""
+    h = flat(code_only(wl_h))
+    body = flat(code_only(function_body(wl_cpp, "bool OverrunGuard::block(")))
+    clear = flat(code_only(function_body(wl_cpp, "void OverrunGuard::clear(")))
+    reset = flat(code_only(function_body(wl_cpp, "void OverrunGuard::reset_streak(")))
+    return "inlineconstexpruint32_tkGuardRearmBlocks=500;" in h \
+        and "uint32_trearm_blocks=kGuardRearmBlocks" in h \
+        and body.startswith("{if(tripped_){if(++silent_>=rearm_)clear();returntripped_;}") \
+        and "silent_=0;" in clear and "silent_=0;" in reset
+
+
+def guard_rearms_at_settle_end(scan):
+    """remote_block(): inside `if(g_run.settle_ends(now))`, ahead of the
+    gesture steps, rearm_at_settle_end() clears the guard exactly when counting
+    starts, drops the flag and says so (note_guard_rearm(true))."""
+    rb = flat(code_only(function_body(scan, "void remote_block(")))
+    opener = "if(g_run.settle_ends(now)){"
+    i = rb.find(opener)
+    seg = ""
+    if i >= 0:
+        # The braces of that if: the segment ends at the one that closes it.
+        depth = 0
+        for k in range(i + len(opener) - 1, len(rb)):
+            depth += (rb[k] == "{") - (rb[k] == "}")
+            if depth == 0:
+                seg = rb[i:k + 1]
+                break
+    return "if(rearm_at_settle_end(g_guard,g_run,now)){g_guard_flag=false;" \
+        "note_guard_rearm(true);}" in seg
+
+
+def guard_rearms_by_silence(scan):
+    """panel_scan_block_end(), under SHELL_REMOTE: a guard that was tripped and
+    is not any more after block() re-armed itself (note_guard_rearm(false)); a
+    trip counts g_guard_trips; the trip's block and every silenced one count in
+    g_guard_silent (the frames' tripped=)."""
+    end = function_body(scan, "void panel_scan_block_end(")
+    f = flat(code_only(end))
+    lines = [(i, flat(s)) for i, s in code_lines(end)]
+    remote = remote_lines(end)
+    at = next((i for i, s in lines if s == "constboolnow_tripped=g_guard.block(dc,period);"), None)
+    return at is not None and at in remote \
+        and "elseif(was_tripped&&!now_tripped)note_guard_rearm(false);" in f \
+        and "g_guard_trips=g_guard_trips+1u;" in f \
+        and "if(now_tripped||was_tripped)g_guard_silent=g_guard_silent+1u;" in f
+
+
+def guard_rearm_printed(scan):
+    """The foreground prints the re-arm from its counter (once per re-arm, with
+    the block and whether the settle end did it) and a trip from its counter
+    too, so a trip a pass did not see is still said."""
+    code = flat(code_only(scan))
+    i = code.find('"SHELL_REMOTEguardrearmblk=%uby=%s"')
+    args = code[i:i + 200] if i >= 0 else ""
+    return i >= 0 and "g_guard_rearm_blk" in args and '"settle"' in args and '"silence"' in args \
+        and "if(guard_rearms!=guard_rearms_said)" in code[max(0, i - 80):i] \
+        and "guard_rearms_said=guard_rearms;" in code[i:i + 300] \
+        and "if(g_guard_flag||guard_trips!=guard_trips_said)" in code \
+        and "guard_trips_said=guard_trips;" in code \
+        and "g_guard_rearms=g_guard_rearms+1u;" in code \
+        and "g_guard_rearm_settle=by_settle;" in code
+
+
+def run_line_counts_across_trips(scan):
+    """The run line: counting no longer waits for an untripped guard, tripped=
+    is the frame's (the difference of two g_guard_silent reads, taken beside
+    the WIN window's), trips= the run's cumulative count, published per block."""
+    code = flat(code_only(scan))
+    pub = flat(code_only(function_body(scan, "void publish_run(")))
+    rd = flat(code_only(function_body(scan, "RunSnap read_run(")))
+    i = code.find('"SHELL_REMOTErunid=')
+    args = code[i:i + 500] if i >= 0 else ""
+    return "constboolcounted=remote_prev.counting&&remote_prev.gen==after.gen&&after.counting;" \
+        in code \
+        and "constbooltripped=guard_silent!=guard_silent_prev;" in code \
+        and "constuint32_tguard_silent=g_guard_silent;" in code \
+        and "guard_silent_prev=guard_silent;" in code \
+        and "tripped?1:0" in args and "static_cast<unsigned>(after.trips)" in args \
+        and "g_rs_trips=g_run.trips();" in pub and "s.trips=g_rs_trips;" in rd
+
+
+def run_checks(listen, main, scan, make, tick, inst, engine, writer, wl_h, wl_cpp):
     r = {}
     r["on_rx() enters the bootloader on BOOT itself"] = on_rx_enters_bootloader(listen)
     r["on_rx() never delays, prints or spins"] = on_rx_never_delays(listen)
@@ -785,6 +871,17 @@ def run_checks(listen, main, scan, make, tick, inst, engine, writer):
         guard_fed_period(scan)
     r["remote_enter_bootloader() cleans the D-cache before the reset (M1)"] = \
         entry_cleans_dcache(listen)
+    # The guard re-arms itself.
+    r["the guard re-arms itself after kGuardRearmBlocks (500) silent blocks"] = \
+        guard_self_rearms(wl_h, wl_cpp)
+    r["a run's settle end clears a tripped guard (rearm_at_settle_end)"] = \
+        guard_rearms_at_settle_end(scan)
+    r["panel_scan_block_end() notes the self re-arm, the trips and the silent blocks"] = \
+        guard_rearms_by_silence(scan)
+    r["the foreground prints `guard rearm blk= by=silence|settle` and every trip"] = \
+        guard_rearm_printed(scan)
+    r["the run line counts across trips: per-frame tripped=, cumulative trips="] = \
+        run_line_counts_across_trips(scan)
     return r
 
 
@@ -806,11 +903,13 @@ SCAN = read("panel_scan.cpp")
 MAKE = read("Makefile")
 TICK = read("control_tick.cpp")
 WRITER = read("write_shell_remote_measure.py")
+WL_H = read("workload_run.h")
+WL_CPP = read("workload_run.cpp")
 ENGINE = read_engine()
 INST = ENGINE.get(os.path.join("engine", "instrument.cpp"), "")
 
 SOURCES = dict(listen=LISTEN, main=MAIN, scan=SCAN, make=MAKE, tick=TICK, inst=INST,
-               engine=ENGINE, writer=WRITER)
+               engine=ENGINE, writer=WRITER, wl_h=WL_H, wl_cpp=WL_CPP)
 BASE = run_checks(**SOURCES)
 for name, ok in BASE.items():
     check(name, ok)
@@ -1140,6 +1239,65 @@ sabotage("the saturated subtractions never counted (out_split)",
 sabotage("neg= dropped from SHELL_OUT (out_split)",
          "busy_window() splits each block's tail out, SHELL_OUT prints tail and ext",
          scan=SCAN.replace(" neg=%d\"", "\""))
+
+# The guard re-arms itself (Bastian, 2026-10-29).
+SELF = "the guard re-arms itself after kGuardRearmBlocks (500) silent blocks"
+SETTLE = "a run's settle end clears a tripped guard (rearm_at_settle_end)"
+BLOCKEND = "panel_scan_block_end() notes the self re-arm, the trips and the silent blocks"
+PRINTED = "the foreground prints `guard rearm blk= by=silence|settle` and every trip"
+TRIPLINE = "the run line counts across trips: per-frame tripped=, cumulative trips="
+sabotage("a guard that re-arms one block late",
+         SELF, wl_cpp=WL_CPP.replace("if(++silent_ >= rearm_) clear();",
+                                     "if(++silent_ > rearm_) clear();"))
+sabotage("a guard that latches again",
+         SELF, wl_cpp=WL_CPP.replace("if(++silent_ >= rearm_) clear();", "++silent_;"))
+sabotage("a re-arm after 1000 blocks",
+         SELF, wl_h=WL_H.replace("kGuardRearmBlocks = 500;", "kGuardRearmBlocks = 1000;"))
+sabotage("a constructor without the default",
+         SELF, wl_h=WL_H.replace("uint32_t rearm_blocks = kGuardRearmBlocks", "uint32_t rearm_blocks"))
+sabotage("clear() keeping the silence count",
+         SELF, wl_cpp=in_body(WL_CPP, "void OverrunGuard::clear(", "    silent_  = 0;\n", ""))
+sabotage("reset_streak() keeping the silence count",
+         SELF, wl_cpp=in_body(WL_CPP, "void OverrunGuard::reset_streak(", "    silent_  = 0;\n", ""))
+sabotage("the settle end never clears the guard",
+         SETTLE, scan=SCAN.replace("if(rearm_at_settle_end(g_guard, g_run, now))", "if(false)"))
+sabotage("the settle-end re-arm unsaid",
+         SETTLE, scan=SCAN.replace("note_guard_rearm(true);", "(void)0;"))
+sabotage("the settle-end re-arm leaving the flag up",
+         SETTLE, scan=SCAN.replace("            g_guard_flag = false;\n            note_guard_rearm(true);",
+                                   "            note_guard_rearm(true);"))
+sabotage("the settle-end re-arm after the gesture steps",
+         SETTLE, scan=SCAN.replace("if(g_gest_n > 0 && g_run.counting(now))",
+                                   "if(rearm_at_settle_end(g_guard, g_run, now)) { g_guard_flag = false; "
+                                   "note_guard_rearm(true); }\n    if(g_gest_n > 0 && g_run.counting(now))"
+                                   ).replace("        if(rearm_at_settle_end(g_guard, g_run, now))\n"
+                                             "        {\n            g_guard_flag = false;\n"
+                                             "            note_guard_rearm(true);\n        }\n", ""))
+sabotage("the self re-arm unsaid",
+         BLOCKEND, scan=SCAN.replace("note_guard_rearm(false);", "(void)0;"))
+sabotage("the silent blocks not counted",
+         BLOCKEND, scan=SCAN.replace("g_guard_silent = g_guard_silent + 1u;", "(void)0;"))
+sabotage("trips not counted",
+         BLOCKEND, scan=SCAN.replace("g_guard_trips = g_guard_trips + 1u;", "(void)0;"))
+sabotage("the rearm line dropped",
+         PRINTED, scan=SCAN.replace('"SHELL_REMOTE guard rearm blk=%u by=%s"', '"SHELL_REMOTE guard rearm"'))
+sabotage("the rearm line without its cause",
+         PRINTED, scan=SCAN.replace('g_guard_rearm_settle ? "settle" : "silence"', '"silence"'))
+sabotage("the rearm line printed every pass",
+         PRINTED, scan=SCAN.replace("if(guard_rearms != guard_rearms_said)", "if(true)"))
+sabotage("the trip line only while tripped",
+         PRINTED, scan=SCAN.replace("if(g_guard_flag || guard_trips != guard_trips_said)",
+                                    "if(g_guard_flag)"))
+sabotage("a tripped frame no longer counting",
+         TRIPLINE, scan=SCAN.replace("&& after.counting;", "&& after.counting && !tripped;"))
+sabotage("the run line without trips=",
+         TRIPLINE, scan=SCAN.replace("static_cast<unsigned>(after.trips), after.gest",
+                                     "0u, after.gest"))
+sabotage("trips never published",
+         TRIPLINE, scan=SCAN.replace("g_rs_trips    = g_run.trips();", "g_rs_trips    = 0;"))
+sabotage("tripped= never set",
+         TRIPLINE, scan=SCAN.replace("const uint32_t guard_silent = g_guard_silent;",
+                                     "const uint32_t guard_silent = 0;"))
 
 print("%d failed" % len(FAILS) if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

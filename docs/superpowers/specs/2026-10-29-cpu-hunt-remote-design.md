@@ -255,6 +255,9 @@ round:
   (`docs/hardware/cpu-hunt-measured.md` §1); saturation stays covered by
   the period criterion. Once tripped, nothing the
   image injects (the measurement image's late-block burn) keeps running.
+  Bastian, 2026-10-29: the guard re-arms itself after 1 s of silence and at a
+  run's settle end; runs count across trips and report them (`tripped=` per
+  frame, `trips=` cumulative, `guard rearm blk= by=silence|settle`).
 - **The bootloader entry runs in the USB receive callback**, not the
   foreground, so it works while the foreground is starved but the callback
   still leaves gaps between blocks. Under true saturation — the callback,
