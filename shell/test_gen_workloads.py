@@ -53,7 +53,7 @@ check("committed header exists and equals the generator's output",
       os.path.exists(g.OUT) and g.check_text(g.read_committed(), TEXT))
 check("a CRLF checkout is not stale", g.check_text(TEXT.replace("\n", "\r\n"), TEXT))
 check("every workload is in the header, in JSON order, id = index",
-      len(WL) == len(DOC["workloads"]) == 145 and [w[6] for w in WL] == list(range(len(WL))))
+      len(WL) == len(DOC["workloads"]) == 146 and [w[6] for w in WL] == list(range(len(WL))))
 check("round trip: names, rows, excite, rec, settle and input equal the JSON",
       all(w[0] == j["name"] and w[1] == j["rows_x1000"] and w[2] == j["excite"]
           and w[3] == j["rec"] and w[4] == j["settle_blocks"] and w[5] == j["input"]
@@ -65,7 +65,7 @@ def const(name):
 
 
 check("the header carries the counts",
-      const("kWorkloadCount") == 145 and const("kWorkloadRowCount") == 73
+      const("kWorkloadCount") == 146 and const("kWorkloadRowCount") == 73
       and const("kGestureCount") == len(DOC["gestures"])
       and const("kGestureStepTotal") == len(GS))
 

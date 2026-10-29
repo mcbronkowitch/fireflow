@@ -20,7 +20,7 @@
 
 namespace shell {
 
-inline constexpr int kWorkloadCount     = 145;
+inline constexpr int kWorkloadCount     = 146;
 inline constexpr int kWorkloadRowCount  = 73;
 inline constexpr int kWorkloadNameMax   = 31;
 inline constexpr int kGestureCount      = 9;
@@ -1097,6 +1097,13 @@ SHELL_WORKLOADS_SECTION const WorkloadDef kWorkloads[kWorkloadCount] = {
         398, 488, 395, 456, 531, 554, 392, 448, 547, 483, 500, 267, 487, 513, 444, 379,
         513, 441, 458, 485, 437, 555, 560, 554, 437
      }, {0, 0}, {0, 0}, 500, WorkloadInput::Noise},  // id 144
+    {"bastian", {
+        236, 1000, 854, 157, 595, 1000, 525, 1000, 475, 663, 1000, 452, 0, 0, 728, 573,
+        0, 0, 612, 733, 531, 943, 0, 0, 699, 514, 590, 701, 260, 400, 0, 315,
+        13, 677, 690, 835, 249, 551, 495, 531, 494, 515, 0, 0, 540, 444, 353, 1000,
+        295, 0, 290, 1000, 1000, 446, 1000, 466, 682, 648, 518, 344, 0, 502, 215, 684,
+        52, 805, 12, 760, 2, 583, 992, 23, 971
+     }, {0, 0}, {0, 0}, 500, WorkloadInput::Silence},  // id 145
 };
 
 SHELL_WORKLOADS_SECTION const GestureStep kGestureSteps[kGestureStepTotal] = {
