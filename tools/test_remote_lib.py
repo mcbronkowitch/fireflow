@@ -169,10 +169,17 @@ with tempfile.TemporaryDirectory() as d:
     p = rl.start_capture(wav, "Line (Universal Audio Twin USB)", 12.5,
                          popen=fake_popen, ffmpeg="ffmpeg", clock=lambda: 1234.5)
     cmd = got["cmd"]
-    check("capture: dshow device, 2 ch, 48 kHz, duration",
+    check("capture: dshow device, 2 ch, duration",
           "audio=Line (Universal Audio Twin USB)" in cmd and cmd[cmd.index("-ac") + 1] == "2"
-          and cmd[cmd.index("-ar") + 1] == "48000" and cmd[cmd.index("-t") + 1] == "12.5"
+          and cmd[cmd.index("-t") + 1] == "12.5"
           and cmd[-1] == str(wav) and p == "proc")
+    i_in = cmd.index("-i")
+    check("capture: dshow input opened natively at 48 kHz / 16 bit / 2 ch, before -i",
+          cmd[:i_in].count("-sample_rate") == 1 and cmd[cmd.index("-sample_rate") + 1] == "48000"
+          and cmd.index("-sample_rate") < i_in
+          and cmd[cmd.index("-sample_size") + 1] == "16" and cmd.index("-sample_size") < i_in
+          and cmd[cmd.index("-channels") + 1] == "2" and cmd.index("-channels") < i_in)
+    check("capture: no output-side resample (-ar)", "-ar" not in cmd[i_in:])
     check("capture: wall-clock start written beside the wav",
           float((Path(d) / "audio.wav.start").read_text()) == 1234.5)
 check("find_ffmpeg: PATH first", rl.find_ffmpeg(which=lambda n: "C:/x/ffmpeg.exe",

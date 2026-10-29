@@ -311,13 +311,17 @@ def start_capture(out_wav: Path, device: str = CAPTURE_DEVICE, seconds: float = 
                   popen=subprocess.Popen, ffmpeg: Optional[str] = None,
                   clock=time.time) -> subprocess.Popen:
     """Record both inputs of the interface: 2 ch, 48 kHz, for `seconds`. The
+    dshow input is opened at the device's shared-mode format (48 kHz / 16 bit /
+    2 ch) because without those options DirectShow hands over 44.1 kHz and
+    ffmpeg would resample, smearing the 1-2 sample clicks; hence no `-ar`. The
     wall-clock time just before ffmpeg starts goes into `<wav>.start` (seconds
     since the epoch) so clicks can be aligned to host-stamped serial lines;
     ffmpeg's own start-up latency is not in it."""
     out_wav = Path(out_wav)
     start_file = out_wav.with_name(out_wav.name + ".start")
     cmd = [ffmpeg or find_ffmpeg(), "-hide_banner", "-loglevel", "error",
-           "-f", "dshow", "-i", "audio=" + device,
-           "-t", "%g" % seconds, "-ac", "2", "-ar", "48000", "-y", str(out_wav)]
+           "-f", "dshow", "-sample_rate", "48000", "-sample_size", "16", "-channels", "2",
+           "-i", "audio=" + device,
+           "-t", "%g" % seconds, "-ac", "2", "-y", str(out_wav)]
     start_file.write_text("%.6f\n" % clock(), encoding="ascii")
     return popen(cmd, stdin=subprocess.DEVNULL)

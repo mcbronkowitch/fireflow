@@ -111,7 +111,7 @@ No code. Ask Bastian, record the answers in the spec's §9, commit the spec.
 - Produces (`tools/remote_lib.py`):
   - `class Port` with injectable opener: `Port(name, opener=serial.Serial)`; `send(line: str)`; `lines() -> Iterator[tuple[float, str]]` — host `time.time()` stamps; reopens after `SerialException` or a vanished port, polling every 0.5 s for up to 60 s, and logs a `#reconnect` line.
   - `def flash_pair(qspi: Path, sram: Path, run=subprocess.run, wait_s=30) -> None` — waits until `dfu-util -l` lists the Daisy DFU device, then flashes QSPI first and SRAM with `:leave`; raises on a non-zero exit.
-  - `def start_capture(out_wav: Path, device: str, seconds: float) -> subprocess.Popen` — ffmpeg dshow, 2 channels, 48 kHz, wall-clock start written beside it (`<wav>.start`). Device name and flags from memory `fireflow-audio-measurement-rig`.
+  - `def start_capture(out_wav: Path, device: str, seconds: float) -> subprocess.Popen` — ffmpeg dshow opened natively at 48 kHz (`-sample_rate 48000 -sample_size 16 -channels 2` before `-i`; without them DirectShow delivers 44.1 kHz and ffmpeg resamples), 2 channels, no output `-ar`, wall-clock start written beside it (`<wav>.start`). Device name and flags from memory `fireflow-audio-measurement-rig`.
 - Produces (`tools/run_stats.py`):
   - `def summarize(cb: Sequence[int]) -> dict` — keys `n, p50, p99, p999, max, over_930k`.
   - `def aa_floor(a: dict, b: dict) -> dict` — absolute differences per key.
