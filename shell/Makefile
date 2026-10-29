@@ -426,6 +426,25 @@ ifneq ($(filter $(SHELL_ITCM),0 1),$(SHELL_ITCM))
 $(error SHELL_ITCM must be 0 or 1)
 endif
 
+# The remote listener (spec 2026-10-29-cpu-hunt-remote-design.md section 5.3):
+# USB CDC commands, BOOT into the bootloader from the USB interrupt, and a
+# failed itcm_load() or a hard fault entering the bootloader instead of
+# blinking or locking up. Rev A has no SWD, so this is what lets an image be
+# left without a hand on BOOT and RESET. The listener starts in the play
+# image's report loop, so it needs SHELL_PANEL_SCAN=1. 0 builds none of it.
+SHELL_REMOTE ?= 0
+
+ifneq ($(filter $(SHELL_REMOTE),0 1),$(SHELL_REMOTE))
+$(error SHELL_REMOTE must be 0 or 1)
+endif
+
+ifeq ($(SHELL_REMOTE),1)
+ifneq ($(SHELL_PANEL_SCAN),1)
+$(error SHELL_REMOTE=1 needs SHELL_PANEL_SCAN=1: the listener starts in the \
+play image's report loop)
+endif
+endif
+
 CPP_SOURCES = \
 	main.cpp \
 	cb_profile.cpp \
@@ -492,6 +511,14 @@ CPP_SOURCES = \
 # needs no place in SWITCH_OBJECTS. shell/test_clock_wiring.py holds this.
 ifeq ($(SHELL_PANEL_SCAN)$(SHELL_COUPON_PROBE),10)
 CPP_SOURCES += gate_latch.cpp
+endif
+
+# The remote listener and its pure half, in SHELL_REMOTE images alone, so the
+# default image is the one it was. Their callers in main.cpp and
+# panel_scan.cpp sit under #if SHELL_REMOTE; shell/test_remote_wiring.py
+# holds this.
+ifeq ($(SHELL_REMOTE),1)
+CPP_SOURCES += remote_cmd.cpp remote_listen.cpp
 endif
 
 # -O3, und das ist nicht optional. libDaisys core/Makefile setzt `OPT ?= -O2`,
@@ -590,10 +617,11 @@ SWITCH_HEADERS := \
   $(shell python write_shell_persist.py $(BUILD_DIR)/shell_persist.h $(SHELL_PERSIST) $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o $(BUILD_DIR)/persist_flash.o) \
   $(shell python write_shell_persist_stress.py $(BUILD_DIR)/shell_persist_stress.h $(SHELL_PERSIST_STRESS) $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o $(BUILD_DIR)/persist_flash.o) \
   $(shell python write_shell_itcm.py $(BUILD_DIR)/shell_itcm.h $(SHELL_ITCM) $(SWITCH_OBJECTS)) \
+  $(shell python write_shell_remote.py $(BUILD_DIR)/shell_remote.h $(SHELL_REMOTE) $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o) \
   $(shell python write_shell_link_stamp.py $(BUILD_DIR)/shell_link_stamp.h $(BUILD_DIR)/itcm_load.o) \
-  $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/pot_report.o $(BUILD_DIR)/scan_check.o)
+  $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/pot_report.o $(BUILD_DIR)/scan_check.o $(BUILD_DIR)/remote_listen.o)
 
-# The git stamp deletes only xtalk_probe.o, tone_probe.o, wait_probe.o, pot_report.o and scan_check.o, because those are the only objects that read it. Listing the whole SWITCH_OBJECTS there would
+# The git stamp deletes only xtalk_probe.o, tone_probe.o, wait_probe.o, pot_report.o, scan_check.o and remote_listen.o, because those are the only objects that read it (remote_listen.cpp hands it to panel_scan.cpp's `SHELL_REMOTE on build=` line, so panel_scan.o is not rebuilt per commit). Listing the whole SWITCH_OBJECTS there would
 # force a full rebuild of seven objects on every commit for a string in one
 # format argument.
 
@@ -606,6 +634,8 @@ $(BUILD_DIR)/tone_probe.o: $(BUILD_DIR)/shell_tone_probe.h $(BUILD_DIR)/shell_gi
 $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o: $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_panel_scan.h
 $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/wait_probe.o: $(BUILD_DIR)/shell_pot_round.h
 $(BUILD_DIR)/pot_report.o: $(BUILD_DIR)/shell_git_hash.h
+$(BUILD_DIR)/remote_listen.o: $(BUILD_DIR)/shell_git_hash.h
+$(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_remote.h
 $(BUILD_DIR)/scan_check.o: $(BUILD_DIR)/shell_scan_check.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_keys_nc.h $(BUILD_DIR)/shell_raw_spread.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h
 $(BUILD_DIR)/control_tick.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h

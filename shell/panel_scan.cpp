@@ -4,6 +4,7 @@
 #include "shell_coupon_probe.h"
 #include "shell_keys_nc.h"
 #include "shell_raw_spread.h"
+#include "shell_remote.h"
 
 #if SHELL_PANEL_SCAN
 
@@ -29,6 +30,9 @@
 #include <cstring>
 #include "boot_take.h"
 #include "persist_policy.h"
+#endif
+#if SHELL_REMOTE
+#include "remote_listen.h"
 #endif
 #if !SHELL_COUPON_PROBE
 #include "control/clock_law.hpp"
@@ -540,6 +544,15 @@ void panel_scan_block_end(uint32_t c0)
 void run_panel_scan_report(bench::Board& hw)
 {
     hw.StartLog(false);
+#if SHELL_REMOTE
+    // Right after the log: StartLog() is what brings the CDC port up.
+    remote_listen_start();
+    // The `SHELL_REMOTE on` line as the log opens and every kRemoteEvery
+    // passes (5 s), for the same reason as SHELL_PERSIST src below: nothing
+    // waits for the host, and a line printed once is gone before it attaches.
+    constexpr uint32_t kRemoteEvery = 10;
+    uint32_t           remote_pass  = 0;
+#endif
 #if SHELL_PERSIST_ON
     // Where boot's hidden state came from (spec 2026-10-28 section 8): the
     // newest valid record and its seq, or the init patch (seq=0). As the log
@@ -742,6 +755,13 @@ void run_panel_scan_report(bench::Board& hw)
                      static_cast<int>(t.n_sinc), static_cast<int>(t.n_rinc));
 #endif
         cb_profile_report(hw);
+#if SHELL_REMOTE
+        if(remote_pass++ % kRemoteEvery == 0)
+            hw.PrintLine("SHELL_REMOTE on build=%s", remote_build());
+        // PING is answered here, at most one pass (500 ms) late: the USB
+        // interrupt only raises the flag, it never prints.
+        if(remote_take_ping()) hw.PrintLine("SHELL_REMOTE pong");
+#endif
 #if SHELL_PERSIST_ON
         if(persist_pass++ % kPersistSrcEvery == 0)
         {

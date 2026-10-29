@@ -579,6 +579,14 @@ add_test(NAME read_coupon_guard
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_read_coupon.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
 
+# The SHELL_REMOTE listener's wiring (plan 2026-10-29-cpu-hunt-remote.md Task
+# 2): BOOT from the USB interrupt without a delay, the fault vectors first in
+# main(), the ITCM failure into the bootloader, the listener after StartLog().
+add_test(NAME remote_wiring_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_remote_wiring.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
+
 add_test(NAME read_settle_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_read_settle.py

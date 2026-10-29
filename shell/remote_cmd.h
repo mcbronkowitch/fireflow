@@ -12,7 +12,7 @@
 // Syntax, one command per line, '\n' ends a line, '\r' is ignored, at most 31
 // characters per line:
 //   PING             liveness
-//   BOOT             go to the boot take
+//   BOOT             reset into the Daisy bootloader (waits for DFU)
 //   HOME             back to the booted patch
 //   LOAD <id>        load patch <id>            (id >= 0)
 //   GEST <id>        play gesture <id>          (id >= 0)

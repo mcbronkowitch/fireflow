@@ -17,6 +17,7 @@
 #include "shell_wait_probe.h"
 #include "shell_scan_check.h"
 #include "shell_panel_scan.h"
+#include "shell_remote.h"
 #include "hw/board.h"
 #include "sdram_mem.h"
 #include "itcm_load.h"
@@ -61,6 +62,10 @@ volatile uint32_t g_block_tick = 0;
 
 #if SHELL_SCAN_CHECK
 #include "scan_check.h"
+#endif
+
+#if SHELL_REMOTE
+#include "remote_listen.h"
 #endif
 
 #if SHELL_PANEL_SCAN
@@ -271,6 +276,13 @@ static void adc_use_measured_sampling_time(bench::Board& board)
 
 int main(void)
 {
+#if SHELL_REMOTE
+    // FIRST, before board_init(): from here on a hard fault (or MemManage,
+    // BusFault, UsageFault) enters the Daisy bootloader instead of libDaisy's
+    // HardFault_Handler, whose BKPT locks a board without a debugger up for
+    // good -- and Rev A has no SWD (remote_listen.h).
+    shell::remote_install_fault_vectors();
+#endif
     // Takt, Caches, SDRAM und das Audioformat, dazu der boot_info-Stempel,
     // ohne den der erste SDRAM-Zugriff HardFaultet. Alles davon und die
     // Begruendung fuer den Stempel steht in src/hw/board.h -- derselbe
@@ -286,8 +298,13 @@ int main(void)
     // QSPI image belongs to another build: running would jump into foreign
     // code, so the board blinks its LED at 5 Hz instead, for ever. The cure
     // is flashing this build's shell-qspi.bin, then its shell-sram.bin.
+    // With SHELL_REMOTE the board goes to the bootloader instead and waits
+    // there for that flash, so a mismatched pair needs no hand on BOOT.
     if(!shell::itcm_load())
     {
+#if SHELL_REMOTE
+        shell::remote_enter_bootloader();
+#endif
         while(1)
         {
             hw.SetLed(true);
