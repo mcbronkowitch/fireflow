@@ -43,9 +43,13 @@ Captures: `…-bastian-patch.txt`, `…-bastian-retrip.txt`.
 
 `void=1` showed up in runs nobody was meant to touch: rows 35 `COMP_B` and 72
 `REV_MIX_B` during a run, then rows 6, 26, 50 and 64 right after a `LOAD` while
-a 1 000 000-cycle burn was running. Whether a hand was on the panel is not
-recorded. A take voids the run, so if these come from the pots' own noise,
-remote runs will be lost to them.
+a 1 000 000-cycle burn was running. No hand was on the panel (Bastian). Both
+bursts came in the first blocks of a burn longer than the block period (bit 30
+repeating `LATE 1000`), right before the guard tripped. No take appeared in
+any other capture of the visit: Bastian's patch, `r4_noon` at ~910 000 cycles,
+and the near-saturated 5b runs at `LATE 30` and `LATE 36`, where callbacks
+still ended inside the period. So far takes have come only with callbacks
+running past the period; the mechanism is not measured.
 
 ### The 5c accident and the 5b order
 
