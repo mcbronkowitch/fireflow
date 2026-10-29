@@ -9,12 +9,14 @@ The board prints, once per 500 ms frame (shell/panel_scan.cpp):
 
 and SHELL_REMOTE images, right before the LAW line,
 
-    SHELL_REMOTE run id=.. gen=.. counting=.. void=.. tripped=.. gest=..
+    SHELL_REMOTE run id=.. gen=.. counting=.. void=.. tripped=.. gest=.. tog=<8 hex>
 
 plus, once per started run, `SHELL_REMOTE load id=.. gen=.. gest=..` (and for a
 gesture `SHELL_REMOTE gest id=.. gen=..` ahead of it), and
 `SHELL_REMOTE guard tripped blk=..` on every frame while the overrun guard
-holds the callback silent.
+holds the callback silent. The measurement image adds, 200 blocks after a
+TOG, `SHELL_REMOTE tog settled word=<8 hex> gen=.. rst`: a TOG during a run
+re-settles it under that new gen.
 
 `cb_last` is the last block's callback cycles in that frame, `win` the worst
 block since the previous frame. `parse_frames` reads both and ignores every
@@ -32,6 +34,13 @@ OVER_CYCLES = 930_000
 KEYS = ("n", "p50", "p99", "p999", "max", "over_930k")
 
 _KV = re.compile(r"(\w+)=(-?\d+)")
+# The toggle word is hex, which _KV would cut at its first letter.
+_TOG = re.compile(r"\btog=([0-9a-fA-F]{8})\b")
+
+# Toggle bits that make a saturated run look clean (engine/util/probe_toggles.h):
+# 30 burns the last LATE on every block, 31 stops consulting the overrun guard.
+PROBE_BITS = (30, 31)
+_PROBE_MASK = sum(1 << b for b in PROBE_BITS)
 
 
 def _rank(sorted_vals: Sequence[int], q: float) -> int:
@@ -122,13 +131,21 @@ def parse_frames(lines: Iterable[str], load_id: Optional[int] = None,
     says tripped=1 or a `guard tripped` line follows the ack: the callback
     plays silence from the trip, so no frame from there on counts. No ack in
     the capture: nothing counts, `gen` is None.
+
+    A `SHELL_REMOTE tog settled ... gen=N` line after the ack: a TOG
+    re-settled the run under gen N (the measurement image), so from there gen
+    N is followed, and the frames counted so far -- played with the old toggle
+    word -- move to `skipped`. `tog`: the run line's toggle word of every
+    counted frame (8 hex digits, distinct, sorted); `probe` is true when one of
+    them has a PROBE_BITS bit set. Run lines without `tog=` add nothing.
     Without either id, every frame counts (captures from before the filter)."""
     out = {"cb_last": [], "cb_max": [], "win": [], "gap": [], "over": [],
            "reconnects": 0, "skipped": 0, "void": False, "tripped": False,
-           "gen": None}
+           "gen": None, "tog": set(), "probe": False}
     lines = list(lines)
     filtered = load_id is not None or gest_id is not None
     take = not filtered
+    tog = None   # the latest run line's toggle word
     start = 0
     if filtered:
         ack_at, out["gen"] = _find_ack(lines, load_id, gest_id)
@@ -145,7 +162,19 @@ def parse_frames(lines: Iterable[str], load_id: Optional[int] = None,
         if filtered and "SHELL_REMOTE guard tripped" in line:
             out["tripped"] = True   # the next run line stops the count
             continue
+        if filtered and "SHELL_REMOTE tog settled" in line:
+            kv = dict((k, int(v)) for k, v in _KV.findall(line))
+            if "gen" in kv and kv["gen"] != out["gen"]:
+                out["skipped"] += len(out["cb_last"])
+                for key in ("cb_last", "cb_max", "win", "gap", "over"):
+                    out[key] = []
+                out["tog"], out["probe"] = set(), False
+                out["gen"] = kv["gen"]
+            take = False   # the next run line of that gen decides
+            continue
         if "SHELL_REMOTE run " in line:
+            m = _TOG.search(line)
+            tog = m.group(1).lower() if m else None
             kv = dict((k, int(v)) for k, v in _KV.findall(line))
             mine = (filtered and kv.get("gen") == out["gen"]
                     and _run_matches(kv, load_id, gest_id))
@@ -161,6 +190,10 @@ def parse_frames(lines: Iterable[str], load_id: Optional[int] = None,
                 out["skipped"] += 1
             continue
         if "SHELL_PLAY_LAW" in line:
+            if tog is not None:
+                out["tog"].add(tog)
+                if int(tog, 16) & _PROBE_MASK:
+                    out["probe"] = True
             kv = dict((k, int(v)) for k, v in _KV.findall(line))
             if "cb_last" in kv:
                 out["cb_last"].append(kv["cb_last"])
@@ -186,11 +219,20 @@ def summarize_run(lines: Iterable[str], load_id: Optional[int] = None,
     load_id / gest_id: count only the settled frames of that run, see
     parse_frames(); `skipped` frames did not count, `void` = a pot took over,
     `tripped` = the overrun guard silenced the run (nothing counts from the
-    trip on), `gen` = the run's gen from its ack (None: no ack seen)."""
+    trip on), `gen` = the run's gen from its ack (None: no ack seen), or the
+    gen a TOG re-settled it under; `tog` = the counted frames' toggle words.
+    A counted frame with bit 30 or 31 set makes the run `void` with an
+    `error` (ProbeBits): its frames say nothing about a candidate. `error` is
+    None otherwise."""
     f = parse_frames(lines, load_id, gest_id)
     last = [v for v in f["cb_last"] if v > 0]
     res = {"frames": len(f["cb_last"]), "skipped": f["skipped"], "void": f["void"],
-           "tripped": f["tripped"], "gen": f["gen"], "reconnects": f["reconnects"]}
+           "tripped": f["tripped"], "gen": f["gen"], "reconnects": f["reconnects"],
+           "tog": sorted(f["tog"]), "error": None}
+    if f["probe"]:
+        res["void"] = True
+        res["error"] = ("ProbeBits: bit 30 or 31 set in a counted frame (tog=%s)"
+                        % ",".join(res["tog"]))
     res["cb_last"] = summarize(last) if last else None
     res["frame_max"] = summarize(f["win"]) if f["win"] else None
     res["cb_max_final"] = f["cb_max"][-1] if f["cb_max"] else None

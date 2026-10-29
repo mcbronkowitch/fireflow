@@ -37,10 +37,11 @@
 #include "generated_workloads.h"
 #include "remote_listen.h"
 #include "workload_run.h"
+// The run line's tog= field: a constexpr 0 outside the measurement image.
+#include "util/probe_toggles.h"
 #endif
 #if SHELL_REMOTE_MEASURE
 #include <algorithm>
-#include "util/probe_toggles.h"
 #endif
 #if !SHELL_COUPON_PROBE
 #include "control/clock_law.hpp"
@@ -311,6 +312,10 @@ volatile uint32_t g_rs_gen      = 0;
 volatile bool     g_rs_counting = false;
 volatile bool     g_rs_void     = false;
 volatile bool     g_rs_tripped  = false;
+// The toggle word process() latches (util/probe_toggles.h; 0 outside the
+// measurement image), for the run line: the host voids a run whose counted
+// frames had bit 30 or 31 set (tools/run_stats.py).
+volatile uint32_t g_rs_tog      = 0;
 
 void publish_run()
 {
@@ -322,13 +327,14 @@ void publish_run()
     g_rs_counting = g_run.counting(g_rblock);
     g_rs_void     = g_run.void_run();
     g_rs_tripped  = g_run.tripped();
+    g_rs_tog      = spky::probe::toggles();
     std::atomic_signal_fence(std::memory_order_seq_cst);
     g_rs_seq = g_rs_seq + 1u;   // even: done
 }
 
 struct RunSnap
 {
-    uint32_t gen;
+    uint32_t gen, tog;
     int      id, gest;
     bool     counting, void_run, tripped;
 };
@@ -343,6 +349,7 @@ RunSnap read_run()
         q = g_rs_seq;
         std::atomic_signal_fence(std::memory_order_seq_cst);
         s.gen      = g_rs_gen;
+        s.tog      = g_rs_tog;
         s.id       = g_rs_id;
         s.gest     = g_rs_gest;
         s.counting = g_rs_counting;
@@ -363,11 +370,14 @@ RunSnap read_run()
 // loads in one capture would be needed for two runs to share one.
 // The measurement image's TOG ack carries the new toggle word in `a` and
 // kAckTogBase + (bit << 1 | value) in `b` (kAckTogBase + 0..63, above every
-// started code, kAckStarted + a 16-bit gen); kAckTogSettled is the maxima
-// reset kTogSettleBlocks later.
+// started code, kAckStarted + a 16-bit gen). Its settle, kTogSettleBlocks
+// later, carries the word and kAckTogSettledBase + the run's printed gen
+// then (a TOG re-settles a running workload under a new gen, which the host
+// follows from that line): 2^21 + 0..65535, above both.
 enum AckCode : int32_t { kAckOk = 0, kAckBadId = 1, kAckUnsupported = 2, kAckGestDone = 3,
-                         kAckTake = 4, kAckTogSettled = 5, kAckStarted = 16,
-                         kAckTogBase = 1 << 20 };
+                         kAckTake = 4, kAckStarted = 16,
+                         kAckTogBase = 1 << 20, kAckTogSettledBase = 1 << 21 };
+constexpr int32_t kAckTogCodes = 64;   // kAckTogBase + 0..63
 constexpr uint32_t kGenPrintMask = 0xFFFFu;
 CmdRing g_acks;
 
@@ -403,8 +413,11 @@ uint32_t          g_sec_worst_cb = 0;
 uint32_t          g_sec_worst[SEC_COUNT];
 uint32_t          g_sec_max[SEC_COUNT];
 volatile uint32_t g_sec_seq = 0;
-// Callbacks ended (panel_scan_block_end()), for the outside-window loop.
-volatile uint32_t g_blk_done = 0;
+// Callbacks ended (panel_scan_block_end()), for the outside-window loop, and
+// the last one's tail: its cycles after the measured window (dc), which
+// SHELL_PLAY_LAW's cb leaves out and SHELL_OUT's out takes in.
+volatile uint32_t g_blk_done  = 0;
+volatile uint32_t g_tail_last = 0;
 // LATE k: k * 1000 cycles burnt in panel_scan_late(), after the tick and
 // before process(), so they land inside the measured callback. g_late_last
 // is what bit 30 repeats on every block; g_late_blk the block the last LATE
@@ -412,10 +425,12 @@ volatile uint32_t g_blk_done = 0;
 uint32_t          g_late_next = 0;
 uint32_t          g_late_last = 0;
 volatile uint32_t g_late_blk  = 0;
-// TOG: the maxima reset kTogSettleBlocks after it, so a stateful candidate's
-// switch-over is not its measurement (spec 5.3). 0: nothing pending.
+// TOG: the maxima reset kTogSettleBlocks after the TOG's block -- the TOG's
+// block and the 199 after it are the switch-over -- so a stateful candidate's
+// switch-over is not its measurement (spec 5.3). A running workload settles
+// again for as long (WorkloadRun::resettle()), under a new gen.
 constexpr uint32_t kTogSettleBlocks = 200;
-uint32_t           g_tog_settle     = 0;
+TogSettle          g_tog_settle(kTogSettleBlocks);
 
 // Bit 31 of the toggle word (util/probe_toggles.h): the overrun guard is not
 // consulted. Read per block, outside every loop.
@@ -489,11 +504,15 @@ SecSnap read_sec()
 // reading DWT instead of in hw.Delay(500). Every jump of more than
 // kOutJumpCycles between two reads is an interrupt; a block's busy time is
 // the sum of the jumps from the one that held its callback up to the one
-// that holds the next, so busy minus that block's cb is what ran outside the
-// callback window in it (USB, SysTick, the audio interrupt's own entry and
-// exit around the measured window). A jump that held more than one callback
-// (back to back: the foreground starved) cannot be split, so it and the
-// block after it are not counted.
+// that holds the next. busy minus that block's cb is `out`: everything that
+// ran outside the measured window (dc) in it -- including this image's own
+// probe tail, the block end after dc's stamp (guard, WIN window, sections,
+// cb_profile's per-block accumulation; g_tail_last). out minus the tail is
+// `ext` (out_split(), workload_run.h): what ran outside the callback without
+// the probe -- USB, SysTick, the audio interrupt's entry and exit, and the
+// callback's own code ahead of cb0 in main.cpp. A jump that held more than
+// one callback (back to back: the foreground starved) cannot be split, so it
+// and the block after it are not counted.
 constexpr uint32_t kOutWindowCycles = 500u * 1000u * kCoreMhz;   // 500 ms, as Delay(500)
 static_assert(kOutWindowCycles == 240000000u, "500 ms at 480 MHz");
 constexpr uint32_t kOutJumpCycles   = 64;
@@ -501,20 +520,23 @@ constexpr int      kOutMaxBlocks    = 512;   // 250 blocks in 500 ms, with room
 
 struct OutStats
 {
-    uint32_t busy_max, busy_p50, out_max;
+    uint32_t busy_max, busy_p50, out_max, tail_max, tail_p50, ext_max;
     int      n;
 };
 
-uint32_t g_out_busy[kOutMaxBlocks];   // the foreground's alone
+// The foreground's alone: per counted block, its busy cycles and its tail.
+uint32_t g_out_busy[kOutMaxBlocks];
+uint32_t g_out_tail[kOutMaxBlocks];
 
 OutStats busy_window()
 {
-    OutStats       o       = {0, 0, 0, 0};
+    OutStats       o       = {0, 0, 0, 0, 0, 0, 0};
     const uint32_t t_start = cycles_now();
     uint32_t       prev    = t_start;
     uint32_t       blk     = g_blk_done;
     uint32_t       acc     = 0;       // the open block's busy cycles so far
     uint32_t       cb      = 0;       // the open block's own callback
+    uint32_t       tail    = 0;       // and its tail
     bool           open    = false;   // a countable block is open
     for(;;)
     {
@@ -526,17 +548,22 @@ OutStats busy_window()
         if(b != blk)
         {
             // The callback ran inside this jump: the open block ends here.
-            if(open)
+            if(open && o.n < kOutMaxBlocks)
             {
-                if(o.n < kOutMaxBlocks) g_out_busy[o.n++] = acc;
+                g_out_busy[o.n] = acc;
+                g_out_tail[o.n] = tail;
+                ++o.n;
+                const OutSplit s = out_split(acc, cb, tail);
                 if(acc > o.busy_max) o.busy_max = acc;
-                const uint32_t out = acc > cb ? acc - cb : 0u;
-                if(out > o.out_max) o.out_max = out;
+                if(s.out > o.out_max) o.out_max = s.out;
+                if(tail > o.tail_max) o.tail_max = tail;
+                if(s.ext > o.ext_max) o.ext_max = s.ext;
             }
             open = b - blk == 1u;
             blk  = b;
             acc  = d;
             cb   = g_cb_cycles_last;
+            tail = g_tail_last;
         }
         else if(d > kOutJumpCycles)
             acc += d;
@@ -545,6 +572,8 @@ OutStats busy_window()
     {
         std::nth_element(g_out_busy, g_out_busy + o.n / 2, g_out_busy + o.n);
         o.busy_p50 = g_out_busy[o.n / 2];
+        std::nth_element(g_out_tail, g_out_tail + o.n / 2, g_out_tail + o.n);
+        o.tail_p50 = g_out_tail[o.n / 2];
     }
     return o;
 }
@@ -647,10 +676,14 @@ void remote_command(const Command& c)
         {
             // The parser bounds the bit to 0..31 and the value to 0 / 1.
             const uint32_t bit  = 1u << static_cast<uint32_t>(c.a);
-            const uint32_t word = c.b != 0 ? (spky::probe::toggles() | bit)
-                                           : (spky::probe::toggles() & ~bit);
+            const uint32_t old  = spky::probe::toggles();
+            const uint32_t word = c.b != 0 ? (old | bit) : (old & ~bit);
             spky::probe::set_toggles(word);   // process() latches it this block
-            g_tog_settle = kTogSettleBlocks;
+            // Bit 31 flipped: the guard's streak starts again, so it neither
+            // resumes stale (bit cleared) nor carries blocks it never saw.
+            if(((old ^ word) >> spky::probe::kBitShellGuardOff) & 1u) g_guard.reset_streak();
+            g_tog_settle.arm(g_rblock);
+            g_run.resettle(g_rblock, kTogSettleBlocks);   // no run: nothing
             ack(c.kind, static_cast<int32_t>(word), kAckTogBase + (c.a << 1 | (c.b != 0 ? 1 : 0)));
             break;
         }
@@ -688,11 +721,13 @@ void remote_block()
     if(remote_poll(&c)) remote_command(c);
 #endif
 #if SHELL_REMOTE_MEASURE
-    // A TOG's switch-over has settled: the maxima start again from here.
-    if(g_tog_settle != 0 && --g_tog_settle == 0)
+    // A TOG's switch-over has settled: the maxima start again from here, and
+    // the line names the gen the run (if any) now counts under.
+    if(g_tog_settle.ends(now))
     {
         reset_maxima();
-        ack(CmdKind::Toggle, static_cast<int32_t>(spky::probe::toggles()), kAckTogSettled);
+        ack(CmdKind::Toggle, static_cast<int32_t>(spky::probe::toggles()),
+            kAckTogSettledBase + static_cast<int32_t>(g_run.gen() & kGenPrintMask));
     }
 #endif
     if(g_run.settle_ends(now))
@@ -1055,6 +1090,8 @@ void panel_scan_block_end(uint32_t c0)
 #if SHELL_REMOTE_MEASURE
     // Toggle bit 31 (util/probe_toggles.h): the guard is not consulted, so a
     // LATE repeated by bit 30 saturates the callback on purpose (plan Task 7).
+    // Its streak is not fed meanwhile; the TOG that flips the bit restarts it
+    // (OverrunGuard::reset_streak()), so it never resumes stale.
     // Whether process() ran this block: the callback asked the same question
     // before it, and nothing between changed the answer.
     const bool off       = guard_off();
@@ -1098,11 +1135,19 @@ void panel_scan_block_end(uint32_t c0)
 #endif
 #if SHELL_REMOTE_MEASURE
     sec_block(dc, processed);
-    g_blk_done = g_blk_done + 1u;
 #endif
     if(g_inst != nullptr)
         cb_profile_block_end(dc, g_law_cycles_last, g_led_cycles_last,
                              g_law_blocks >= kLawWarmupBlocks, *g_inst);
+#if SHELL_REMOTE_MEASURE
+    // The tail: everything this callback ran after dc's stamp -- the guard,
+    // the WIN window, the sections and cb_profile's per-block accumulation
+    // above -- published with the block count, as g_cb_cycles_last is, for
+    // busy_window(). The last statements of the callback: only these two
+    // stores and the interrupt's exit come after the stamp.
+    g_tail_last = cycles_now() - c0 - dc;
+    g_blk_done  = g_blk_done + 1u;
+#endif
 }
 
 #if SHELL_REMOTE
@@ -1153,11 +1198,11 @@ void run_panel_scan_report(bench::Board& hw)
     constexpr uint32_t kRemoteEvery = 10;
     uint32_t           remote_pass  = 0;
     // The previous frame's `before` run reading, for the counting=1 rule.
-    RunSnap remote_prev = {0, -1, -1, false, false, false};
+    RunSnap remote_prev = {0, 0, -1, -1, false, false, false};
 #endif
 #if SHELL_REMOTE_MEASURE
     // The last busy window's figures, printed with the next frame.
-    OutStats out_stats = {0, 0, 0, 0};
+    OutStats out_stats = {0, 0, 0, 0, 0, 0, 0};
 #endif
 #if SHELL_PERSIST_ON
     // Where boot's hidden state came from (spec 2026-10-28 section 8): the
@@ -1329,7 +1374,11 @@ void run_panel_scan_report(bench::Board& hw)
         // ahead of this window's first block -- and is the same gen, still
         // settled and not tripped at this frame's `after`, behind its last
         // block: the window then holds counted blocks of that run only. A LOAD
-        // anywhere inside it changes gen; a guard trip inside it shows here.
+        // anywhere inside it changes gen, and so does a TOG during a run (it
+        // re-settles it); a guard trip inside it shows here. tog= is the
+        // toggle word at `after` (0 outside the measurement image); in a
+        // counted frame no TOG fell inside the window, so it held throughout.
+        // At most 83 bytes (a 3-digit id and gest, a 5-digit gen).
         {
             const RunSnap  before = read_run();
             const uint32_t law_last = g_law_cycles_last, law_max = g_law_cycles_max;
@@ -1347,10 +1396,12 @@ void run_panel_scan_report(bench::Board& hw)
             const bool    counted = remote_prev.counting && remote_prev.gen == after.gen
                                     && after.counting && !after.tripped;
             remote_prev = before;
-            hw.PrintLine("SHELL_REMOTE run id=%d gen=%u counting=%d void=%d tripped=%d gest=%d",
+            hw.PrintLine("SHELL_REMOTE run id=%d gen=%u counting=%d void=%d tripped=%d gest=%d "
+                         "tog=%08x",
                          after.id, static_cast<unsigned>(after.gen & kGenPrintMask),
                          counted ? 1 : 0,
-                         after.void_run ? 1 : 0, after.tripped ? 1 : 0, after.gest);
+                         after.void_run ? 1 : 0, after.tripped ? 1 : 0, after.gest,
+                         static_cast<unsigned>(after.tog));
             hw.PrintLine("SHELL_PLAY_LAW cyc_last=%d cyc_max=%d led_last=%d led_max=%d "
                          "cb_last=%d cb_max=%d",
                          static_cast<int>(law_last), static_cast<int>(law_max),
@@ -1389,12 +1440,18 @@ void run_panel_scan_report(bench::Board& hw)
                              static_cast<unsigned>(sec.max[SEC_MIX]));
             }
             // The busy window ahead of this frame (busy_window()): its blocks
-            // lie inside this frame's WIN window. Cycles per block.
+            // lie inside this frame's WIN window. Cycles per block; out takes
+            // in the probe tail, ext leaves it out. With seven-digit figures
+            // at most 109 bytes.
             if(out_stats.n > 0)
-                hw.PrintLine("SHELL_OUT busy_max=%u busy_p50=%u out_max=%u",
+                hw.PrintLine("SHELL_OUT busy_max=%u busy_p50=%u out_max=%u tail_max=%u "
+                             "tail_p50=%u ext_max=%u",
                              static_cast<unsigned>(out_stats.busy_max),
                              static_cast<unsigned>(out_stats.busy_p50),
-                             static_cast<unsigned>(out_stats.out_max));
+                             static_cast<unsigned>(out_stats.out_max),
+                             static_cast<unsigned>(out_stats.tail_max),
+                             static_cast<unsigned>(out_stats.tail_p50),
+                             static_cast<unsigned>(out_stats.ext_max));
 #endif
 #endif
         }
@@ -1467,15 +1524,18 @@ void run_panel_scan_report(bench::Board& hw)
         {
 #if SHELL_REMOTE_MEASURE
             // TOG: the bit, its value and the word process() now latches;
-            // settled: the maxima reset kTogSettleBlocks later. LATE: k and
-            // the block it burnt in (the last LATE's, read here).
-            if(a.kind == CmdKind::Toggle && a.b >= kAckTogBase)
+            // settled: the maxima reset kTogSettleBlocks later, and the gen
+            // the run counts under from here (the host follows it). LATE: k
+            // and the block it burnt in (the last LATE's, read here).
+            if(a.kind == CmdKind::Toggle && a.b >= kAckTogBase && a.b < kAckTogBase + kAckTogCodes)
                 hw.PrintLine("SHELL_REMOTE tog bit=%d v=%d word=%08x",
                              static_cast<int>((a.b - kAckTogBase) >> 1),
                              static_cast<int>((a.b - kAckTogBase) & 1),
                              static_cast<unsigned>(a.a));
-            else if(a.kind == CmdKind::Toggle && a.b == kAckTogSettled)
-                hw.PrintLine("SHELL_REMOTE tog settled word=%08x rst", static_cast<unsigned>(a.a));
+            else if(a.kind == CmdKind::Toggle && a.b >= kAckTogSettledBase)
+                hw.PrintLine("SHELL_REMOTE tog settled word=%08x gen=%u rst",
+                             static_cast<unsigned>(a.a),
+                             static_cast<unsigned>(a.b - kAckTogSettledBase));
             else if(a.kind == CmdKind::Late && a.b == kAckOk)
                 hw.PrintLine("SHELL_REMOTE late k=%d blk=%u", static_cast<int>(a.a),
                              static_cast<unsigned>(g_late_blk));

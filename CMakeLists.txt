@@ -746,7 +746,8 @@ add_test(NAME shell_itcm_placement_guard
 # touched), with SRAM_EXEC use in the output. Nothing else in ctest compiles
 # shell/, which is how the Rev A play image stayed broken behind a green suite
 # on 2026-10-09 (450eed36). Skipped, not failed, without the DaisyToolchain or
-# the built libDaisy/DaisySP. About 20 s.
+# the built libDaisy/DaisySP. About a minute for the seven images (47 s in a
+# -j4 ctest run, 76 s in a serial one, 2026-10-29).
 add_test(NAME shell_images_build_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/check_images_build.py

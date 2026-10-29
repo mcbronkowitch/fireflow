@@ -41,6 +41,10 @@ public:
     bool block(uint32_t cb);
     bool tripped() const { return tripped_; }
     void clear();
+    // The streak starts again from 0; a tripped guard stays tripped. For the
+    // measurement image's bit 31, which stops feeding block(): without this,
+    // the streak would freeze while the bit is set and resume stale after it.
+    void reset_streak();
 
 private:
     uint32_t limit_;
@@ -64,13 +68,23 @@ public:
     // are silence, not the workload (spec 5.2: a worst case measured on silence
     // does not count). Without a run, nothing. Cleared only by start() / stop().
     void on_guard_trip();
+    // A TOG in block now_block (the measurement image): the run settles again,
+    // so the toggle's switch-over is not counted -- nothing counts before
+    // now_block + settle_blocks, or before the run's own settle end when that
+    // is later (a TOG right after the LOAD keeps the LOAD's settle) -- and gen
+    // is bumped, so no frame window holding blocks from before the TOG is the
+    // same gen as one after it. The gesture clock (counted()) pauses: it
+    // resumes from the value it had in now_block. void and tripped stay, they
+    // are about the run, not its counting. Without a run, nothing.
+    void resettle(uint32_t now_block, uint32_t settle_blocks);
 
     bool active() const { return active_; }
     // Settled: now_block is at least settle blocks past the start (wraps).
     bool counting(uint32_t now_block) const;
-    // now_block is the first counted block.
+    // now_block is the first counted block (again, after a resettle()).
     bool settle_ends(uint32_t now_block) const;
-    // Counted blocks before now_block (0 in the first counted one).
+    // Counted blocks before now_block (0 in the first counted one); across a
+    // resettle() the count goes on from where it paused.
     uint32_t counted(uint32_t now_block) const;
     bool     void_run() const { return void_; }
     bool     tripped() const { return tripped_; }
@@ -86,7 +100,40 @@ private:
     uint32_t start_  = 0;
     uint32_t settle_ = 0;
     uint32_t gen_    = 0;
+    uint32_t offset_ = 0;   // counted() before the last resettle()
 };
+
+// The measurement image's TOG settle: the maxima reset kTogSettleBlocks after
+// the block the TOG landed in, by block number, so the answer does not depend
+// on whether remote_block() asks before or after it handles the command.
+class TogSettle
+{
+public:
+    explicit TogSettle(uint32_t blocks) : blocks_(blocks) {}
+    // A TOG in block now_block; a second one before the first settled re-arms.
+    void arm(uint32_t now_block);
+    // True once, in block arm + blocks: the TOG's block and the blocks-1 after
+    // it are the switch-over (wraps).
+    bool ends(uint32_t now_block);
+
+private:
+    uint32_t blocks_;
+    uint32_t at_    = 0;
+    bool     armed_ = false;
+};
+
+// One block of the outside-window loop (panel_scan.cpp busy_window()): busy is
+// the cycles from the jump that held its callback to the one that holds the
+// next, cb the callback's measured window, tail the cycles the callback spends
+// after that window (the measurement image's own block-end bookkeeping: guard,
+// WIN, sections, cb_profile). out = busy - cb, with the tail in it; ext = out -
+// tail, the time outside the callback without it (USB, SysTick, the audio
+// interrupt's entry and exit). Both saturate at 0.
+struct OutSplit
+{
+    uint32_t out, ext;
+};
+OutSplit out_split(uint32_t busy, uint32_t cb, uint32_t tail);
 
 // knobs[0..ffctl::NUM_PARAMS) <- the init patch, the workload's rows through
 // apply_boot_patch_rows() (knob_target() / knob_from_pot(), in row order), and

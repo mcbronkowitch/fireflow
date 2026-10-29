@@ -575,6 +575,98 @@ def make_sources_only_remote(make):
     return hits >= 1 and "remote_listen.cpp" in make and "remote_cmd.cpp" in make
 
 
+# --- Task 6 fix round 1 -------------------------------------------------------
+def flat(s):
+    return re.sub(r"\s+", "", s)
+
+
+def measure_toggle_case(scan):
+    """The measurement branch's `case CmdKind::Toggle:` of remote_command(),
+    up to the LATE case, comments stripped; "" when it is not under the switch."""
+    body = function_body(scan, "void remote_command(")
+    lines = body.splitlines()
+    measure = remote_lines(body, under_measure)
+    start = next((n for n, l in enumerate(lines)
+                  if "case CmdKind::Toggle:" in strip_comment(l)), None)
+    if start is None or start not in measure:
+        return ""
+    end = next((n for n in range(start + 1, len(lines))
+                if "case CmdKind::Late:" in strip_comment(lines[n])), len(lines))
+    return code_only("\n".join(lines[start:end]))
+
+
+def tail_stamped_last(scan):
+    """panel_scan_block_end() ends with the tail stamp and the block count,
+    both under SHELL_REMOTE_MEASURE, after cb_profile_block_end(); the block
+    count is bumped nowhere else."""
+    body = function_body(scan, "void panel_scan_block_end(")
+    measure = remote_lines(body, under_measure)
+    stmts = [(i, flat(s)) for i, s in code_lines(body) if s not in ("{", "}")]
+    if len(stmts) < 3:
+        return False
+    (ti, tail), (bi, blk) = stmts[-2], stmts[-1]
+    prof = [i for i, s in stmts if "cb_profile_block_end(" in s]
+    return tail == "g_tail_last=cycles_now()-c0-dc;" and blk == "g_blk_done=g_blk_done+1u;" \
+        and ti in measure and bi in measure and len(prof) == 1 and prof[0] < ti \
+        and flat(code_only(scan)).count("g_blk_done=g_blk_done+1u;") == 1
+
+
+def busy_window_splits_tail(scan):
+    """busy_window() reads the tail beside the cb, splits each block with
+    out_split(), and SHELL_OUT prints tail_max, tail_p50 and ext_max."""
+    bw = [flat(s) for _, s in code_lines(function_body(scan, "OutStats busy_window("))]
+    k = next((n for n, s in enumerate(bw) if s == "cb=g_cb_cycles_last;"), None)
+    if k is None or k + 1 >= len(bw) or bw[k + 1] != "tail=g_tail_last;":
+        return False
+    if "constOutSplits=out_split(acc,cb,tail);" not in bw:
+        return False
+    code = flat(code_only(scan))
+    fmt = ('"SHELL_OUTbusy_max=%ubusy_p50=%uout_max=%utail_max=%u""tail_p50=%uext_max=%u"')
+    i = code.find(fmt)
+    args = code[i:i + 600] if i >= 0 else ""
+    return i >= 0 and all(("out_stats.%s)" % f) in args
+                          for f in ("busy_max", "busy_p50", "out_max", "tail_max",
+                                    "tail_p50", "ext_max"))
+
+
+def tog_bit31_restarts_streak(scan):
+    case = flat(measure_toggle_case(scan))
+    return "if(((old^word)>>spky::probe::kBitShellGuardOff)&1u)g_guard.reset_streak();" in case \
+        and "constuint32_told=spky::probe::toggles();" in case
+
+
+def tog_resettles_run(scan):
+    """A TOG arms the settle by block number and re-settles the run for as
+    long; remote_block() ends the settle by block number; 200 blocks."""
+    case = flat(measure_toggle_case(scan))
+    rb = flat(code_only(function_body(scan, "void remote_block(")))
+    code = flat(code_only(scan))
+    return "g_tog_settle.arm(g_rblock);" in case \
+        and "g_run.resettle(g_rblock,kTogSettleBlocks);" in case \
+        and "if(g_tog_settle.ends(now))" in rb \
+        and "constexpruint32_tkTogSettleBlocks=200;" in code \
+        and "TogSettleg_tog_settle(kTogSettleBlocks);" in code
+
+
+def tog_and_gen_printed(scan):
+    """The run line carries the snapshot's toggle word, published per block;
+    the settled ack carries the run's gen and its line prints it."""
+    code = flat(code_only(scan))
+    run_fmt = '"SHELL_REMOTErunid=%dgen=%ucounting=%dvoid=%dtripped=%dgest=%d""tog=%08x"'
+    i = code.find(run_fmt)
+    run_args = code[i:i + 400] if i >= 0 else ""
+    pub = flat(code_only(function_body(scan, "void publish_run(")))
+    rd = flat(code_only(function_body(scan, "RunSnap read_run(")))
+    rb = flat(code_only(function_body(scan, "void remote_block(")))
+    settled = '"SHELL_REMOTEtogsettledword=%08xgen=%urst"'
+    j = code.find(settled)
+    settled_args = code[j:j + 200] if j >= 0 else ""
+    return i >= 0 and "static_cast<unsigned>(after.tog));" in run_args \
+        and "g_rs_tog=spky::probe::toggles();" in pub and "s.tog=g_rs_tog;" in rd \
+        and "kAckTogSettledBase+static_cast<int32_t>(g_run.gen()&kGenPrintMask)" in rb \
+        and j >= 0 and "a.b-kAckTogSettledBase" in settled_args
+
+
 def run_checks(listen, main, scan, make, tick, inst, engine, writer):
     r = {}
     r["on_rx() enters the bootloader on BOOT itself"] = on_rx_enters_bootloader(listen)
@@ -619,6 +711,14 @@ def run_checks(listen, main, scan, make, tick, inst, engine, writer):
     r["main.cpp includes shell_remote_measure.h"] = includes_switch(main, "shell_remote_measure.h")
     r["panel_scan.cpp includes shell_remote_measure.h"] = \
         includes_switch(scan, "shell_remote_measure.h")
+    # Task 6 fix round 1.
+    r["the probe tail is stamped last in panel_scan_block_end(), under the switch"] = \
+        tail_stamped_last(scan)
+    r["busy_window() splits each block's tail out, SHELL_OUT prints tail and ext"] = \
+        busy_window_splits_tail(scan)
+    r["a TOG that flips bit 31 restarts the guard's streak"] = tog_bit31_restarts_streak(scan)
+    r["a TOG re-settles the run and ends its settle by block number"] = tog_resettles_run(scan)
+    r["the run line prints tog=, the settled line the run's gen"] = tog_and_gen_printed(scan)
     return r
 
 
@@ -877,6 +977,59 @@ sabotage("main.cpp without the measure header",
 sabotage("panel_scan.cpp without the measure header",
          "panel_scan.cpp includes shell_remote_measure.h",
          scan=SCAN.replace('#include "shell_remote_measure.h"', ""))
+
+# Task 6 fix round 1.
+TAIL_STMTS = ("    g_tail_last = cycles_now() - c0 - dc;\n"
+              "    g_blk_done  = g_blk_done + 1u;\n")
+sabotage("the tail stamped before cb_profile's accumulation",
+         "the probe tail is stamped last in panel_scan_block_end(), under the switch",
+         scan=SCAN.replace(TAIL_STMTS, "", 1).replace(
+             "    sec_block(dc, processed);\n",
+             "    sec_block(dc, processed);\n" + TAIL_STMTS, 1))
+sabotage("the tail in every image",
+         "the probe tail is stamped last in panel_scan_block_end(), under the switch",
+         scan=re.sub(r"#if SHELL_REMOTE_MEASURE(\s*\n(?:\s*//[^\n]*\n)*\s*g_tail_last = )",
+                     r"#if 1\1", SCAN, count=1))
+sabotage("the block counted twice",
+         "the probe tail is stamped last in panel_scan_block_end(), under the switch",
+         scan=SCAN.replace("    sec_block(dc, processed);\n",
+                           "    sec_block(dc, processed);\n    g_blk_done = g_blk_done + 1u;\n", 1))
+sabotage("the tail never read in busy_window()",
+         "busy_window() splits each block's tail out, SHELL_OUT prints tail and ext",
+         scan=SCAN.replace("tail = g_tail_last;", "tail = 0;"))
+sabotage("out_split() without the tail",
+         "busy_window() splits each block's tail out, SHELL_OUT prints tail and ext",
+         scan=SCAN.replace("out_split(acc, cb, tail)", "out_split(acc, cb, 0u)"))
+sabotage("ext_max dropped from SHELL_OUT",
+         "busy_window() splits each block's tail out, SHELL_OUT prints tail and ext",
+         scan=SCAN.replace(" ext_max=%u\"", "\"").replace(
+             ",\n                             static_cast<unsigned>(out_stats.ext_max)", ""))
+sabotage("the streak left frozen on a bit-31 flip",
+         "a TOG that flips bit 31 restarts the guard's streak",
+         scan=SCAN.replace("g_guard.reset_streak();", "(void)0;"))
+sabotage("the streak reset on a bit-30 flip instead",
+         "a TOG that flips bit 31 restarts the guard's streak",
+         scan=SCAN.replace(">> spky::probe::kBitShellGuardOff) & 1u) g_guard.reset_streak();",
+                           ">> spky::probe::kBitShellLateRepeat) & 1u) g_guard.reset_streak();"))
+sabotage("a TOG that leaves the run counting",
+         "a TOG re-settles the run and ends its settle by block number",
+         scan=SCAN.replace("g_run.resettle(g_rblock, kTogSettleBlocks);", "(void)0;"))
+sabotage("the settle a block short (the old countdown)",
+         "a TOG re-settles the run and ends its settle by block number",
+         scan=SCAN.replace("if(g_tog_settle.ends(now))", "if(g_tog_settle.ends(now + 1u))"))
+sabotage("a 100-block settle",
+         "a TOG re-settles the run and ends its settle by block number",
+         scan=SCAN.replace("kTogSettleBlocks = 200;", "kTogSettleBlocks = 100;"))
+sabotage("the run line without tog=",
+         "the run line prints tog=, the settled line the run's gen",
+         scan=SCAN.replace('gest=%d "\n                         "tog=%08x"', 'gest=%d"'))
+sabotage("the toggle word never published",
+         "the run line prints tog=, the settled line the run's gen",
+         scan=SCAN.replace("g_rs_tog      = spky::probe::toggles();", "g_rs_tog      = 0;"))
+sabotage("the settled ack without the gen",
+         "the run line prints tog=, the settled line the run's gen",
+         scan=SCAN.replace("kAckTogSettledBase + static_cast<int32_t>(g_run.gen() & kGenPrintMask)",
+                           "kAckTogSettledBase"))
 
 print("%d failed" % len(FAILS) if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

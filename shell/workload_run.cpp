@@ -29,6 +29,49 @@ void OverrunGuard::clear()
     tripped_ = false;
 }
 
+void OverrunGuard::reset_streak()
+{
+    streak_ = 0;
+}
+
+void TogSettle::arm(uint32_t now_block)
+{
+    at_    = now_block;
+    armed_ = true;
+}
+
+bool TogSettle::ends(uint32_t now_block)
+{
+    if(!armed_ || now_block - at_ < blocks_) return false;
+    armed_ = false;
+    return true;
+}
+
+OutSplit out_split(uint32_t busy, uint32_t cb, uint32_t tail)
+{
+    const uint32_t out = busy > cb ? busy - cb : 0u;
+    return {out, out > tail ? out - tail : 0u};
+}
+
+void WorkloadRun::resettle(uint32_t now_block, uint32_t settle_blocks)
+{
+    if(!active_) return;
+    if(counting(now_block))
+    {
+        // Counting: the clock pauses here and the settle starts again.
+        offset_ = counted(now_block);
+        start_  = now_block;
+        settle_ = settle_blocks;
+    }
+    else if(static_cast<int32_t>((now_block + settle_blocks) - (start_ + settle_)) > 0)
+    {
+        // Settling, and the TOG's settle ends later than the run's own.
+        start_  = now_block;
+        settle_ = settle_blocks;
+    }
+    gen_ = gen_ + 1u;
+}
+
 void WorkloadRun::start(int id, uint32_t now_block, uint32_t settle_blocks)
 {
     active_  = true;
@@ -37,6 +80,7 @@ void WorkloadRun::start(int id, uint32_t now_block, uint32_t settle_blocks)
     id_      = id;
     start_   = now_block;
     settle_  = settle_blocks;
+    offset_  = 0;
     gen_     = gen_ + 1u;
 }
 
@@ -71,7 +115,7 @@ bool WorkloadRun::settle_ends(uint32_t now_block) const
 
 uint32_t WorkloadRun::counted(uint32_t now_block) const
 {
-    return counting(now_block) ? now_block - start_ - settle_ : 0u;
+    return counting(now_block) ? offset_ + (now_block - start_ - settle_) : 0u;
 }
 
 bool workload_knobs(const WorkloadDef& w, const ControlTable& t, float* knobs)

@@ -105,6 +105,117 @@ TEST_CASE("a guard trip marks the run until the next start") {
     CHECK_FALSE(r.tripped());
 }
 
+// ---- the measurement image (Task 6 fix round 1) ------------------------------
+TEST_CASE("overrun guard: reset_streak() restarts the count and keeps the latch") {
+    OverrunGuard g(1000, 3);
+    CHECK_FALSE(g.block(2000));
+    CHECK_FALSE(g.block(2000));
+    g.reset_streak();                 // bit 31 flipped: the frozen streak goes
+    CHECK_FALSE(g.block(2000));
+    CHECK_FALSE(g.block(2000));       // two fresh blocks, not four stale ones
+    CHECK(g.block(2000));             // the third in a row
+    g.reset_streak();
+    CHECK(g.tripped());               // a latched guard stays latched
+    CHECK(g.block(10));
+}
+
+TEST_CASE("TOG settle ends 200 blocks after the TOG's block, once") {
+    shell::TogSettle s(200);
+    CHECK_FALSE(s.ends(5));           // nothing armed
+    s.arm(1000);                      // the TOG lands in block 1000
+    // remote_block() asks in the TOG's own block too, after the command.
+    CHECK_FALSE(s.ends(1000));
+    bool early = false;
+    for(uint32_t b = 1001; b < 1200; ++b) early = early || s.ends(b);
+    CHECK_FALSE(early);               // 1000..1199 are the switch-over
+    CHECK(s.ends(1200));
+    CHECK_FALSE(s.ends(1201));        // once
+    // A second TOG before the first settled re-arms it.
+    s.arm(2000);
+    CHECK_FALSE(s.ends(2000));
+    for(uint32_t b = 2001; b < 2100; ++b) (void)s.ends(b);
+    s.arm(2100);
+    CHECK_FALSE(s.ends(2100));
+    early = false;
+    for(uint32_t b = 2101; b < 2300; ++b) early = early || s.ends(b);
+    CHECK_FALSE(early);
+    CHECK(s.ends(2300));
+    // Across the block counter's wrap.
+    s.arm(0xFFFFFFF0u);
+    CHECK_FALSE(s.ends(0xFFFFFFF0u + 199u));
+    CHECK(s.ends(0xFFFFFFF0u + 200u));
+}
+
+TEST_CASE("a TOG in the counted blocks re-settles the run under a new gen") {
+    WorkloadRun r;
+    r.start(3, 0, 500);
+    const uint32_t g0 = r.gen();
+    CHECK(r.counted(600) == 100u);
+    r.resettle(600, 200);
+    CHECK(r.gen() == g0 + 1u);
+    CHECK(r.id() == 3);
+    CHECK(r.active());
+    CHECK_FALSE(r.counting(600));
+    CHECK_FALSE(r.counting(799));
+    CHECK(r.settle_ends(800));
+    CHECK(r.counting(800));
+    // The gesture clock resumes where it paused, not at 0.
+    CHECK(r.counted(800) == 100u);
+    CHECK(r.counted(803) == 103u);
+}
+
+TEST_CASE("a TOG inside a longer settle keeps it; a late one extends it") {
+    WorkloadRun r;
+    r.start(5, 100, 2500);            // a SAMPLER run: counts from 2600
+    const uint32_t g0 = r.gen();
+    r.resettle(101, 200);             // the TOG right behind the LOAD
+    CHECK(r.gen() == g0 + 1u);
+    CHECK_FALSE(r.counting(2599));
+    CHECK(r.settle_ends(2600));
+    CHECK(r.counted(2600) == 0u);
+    r.start(5, 100, 500);             // counts from 600
+    r.resettle(550, 200);             // late in the settle: from 750
+    CHECK_FALSE(r.counting(600));
+    CHECK_FALSE(r.settle_ends(600));
+    CHECK_FALSE(r.counting(749));
+    CHECK(r.settle_ends(750));
+    CHECK(r.counted(750) == 0u);
+    // Across the wrap: the LOAD's settle end (past 0) is later than the TOG's.
+    r.start(6, 0xFFFFFF00u, 500);     // counts from 0xF4
+    r.resettle(0xFFFFFF10u, 200);
+    CHECK_FALSE(r.counting(0xF3u));
+    CHECK(r.settle_ends(0xF4u));
+}
+
+TEST_CASE("a TOG keeps the run's void and trip, and needs a run") {
+    WorkloadRun r;
+    const uint32_t g0 = r.gen();
+    r.resettle(10, 200);              // no run: nothing changes
+    CHECK(r.gen() == g0);
+    CHECK_FALSE(r.active());
+    CHECK_FALSE(r.counting(1000));
+    r.start(2, 0, 500);
+    r.on_pot_take();
+    r.on_guard_trip();
+    r.resettle(700, 200);
+    CHECK(r.void_run());
+    CHECK(r.tripped());
+    r.start(2, 1000, 500);            // a new start clears the paused count too
+    CHECK(r.counted(1500) == 0u);
+    CHECK_FALSE(r.void_run());
+}
+
+TEST_CASE("outside-window split: out keeps the probe tail, ext leaves it out") {
+    const shell::OutSplit s = shell::out_split(1000000, 900000, 7000);
+    CHECK(s.out == 100000u);
+    CHECK(s.ext == 93000u);
+    // Saturating: busy under cb (or under cb + tail) is 0, never a wrapped figure.
+    CHECK(shell::out_split(800, 900, 50).out == 0u);
+    CHECK(shell::out_split(800, 900, 50).ext == 0u);
+    CHECK(shell::out_split(920, 900, 50).out == 20u);
+    CHECK(shell::out_split(920, 900, 50).ext == 0u);
+}
+
 TEST_CASE("workload knobs: init patch, the rows through the panel path, REC latched") {
     // r4_noon: the hand entry, identical to the all-noon boot patch.
     const shell::WorkloadDef* w = nullptr;

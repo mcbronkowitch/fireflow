@@ -435,5 +435,69 @@ rc, s, d = run_cmd(p, None, record=False, load=1)
 check("run: an earlier error is kept, not replaced by the empty-run one",
       rc != 0 and "PortGone" in s["error"])
 
+# ---- toggle words and TOG settles (Task 6 fix round 1) -------------------------
+# The run line carries the toggle word process() latched (`tog=%08x`); bits 30
+# (LATE every block) and 31 (guard not consulted) make a saturated run look
+# clean, so a counted frame with either voids the run with an error. A TOG
+# during a run re-settles it under a new gen, which the board prints on the
+# `tog settled` line; the host follows that gen, and what it had counted before
+# the TOG leaves the summary.
+RUNT = RUN + " tog=%s"
+def runt(rid, counting, tog, gen=7, void=0, gest=-1, tripped=0):
+    return RUNT % (rid, gen, counting, void, tripped, gest, tog)
+TOGACK = "SHELL_REMOTE tog bit=%d v=%d word=%s"
+SETTLED = "SHELL_REMOTE tog settled word=%s gen=%d rst"
+
+tog_txt = [LOADED % (3, 7, -1),
+           runt(3, 0, "00000000"), LAW % (955000, 955000),
+           runt(3, 1, "00000004"), LAW % (900000, 910000), WIN % (912000, 960100, 2),
+           runt(3, 1, "00000004"), LAW % (905000, 920000), WIN % (920000, 960150, 1)]
+sm = rs.summarize_run(tog_txt, load_id=3)
+check("tog: the counted frames' toggle word is recorded",
+      sm.get("tog") == ["00000004"] and sm["frames"] == 2 and sm["void"] is False
+      and sm.get("error") is None)
+check("tog: run lines without tog= record none",
+      rs.summarize_run(settle_txt, load_id=3).get("tog") == [])
+for bit, word in ((30, "40000000"), (31, "8000000c")):
+    sm = rs.summarize_run(tog_txt[:3] + [runt(3, 1, word), LAW % (900000, 910000)], load_id=3)
+    check("tog: bit %d in a counted frame voids the run with an error" % bit,
+          sm["void"] is True and bool(sm.get("error")) and "ProbeBits" in sm["error"]
+          and sm.get("tog") == [word])
+sm = rs.summarize_run([LOADED % (3, 7, -1), runt(3, 0, "80000000"), LAW % (955000, 955000),
+                       runt(3, 1, "00000000"), LAW % (900000, 910000)], load_id=3)
+check("tog: bit 31 in a frame that did not count leaves the run alone",
+      sm["void"] is False and sm.get("error") is None and sm["frames"] == 1)
+
+follow_txt = [LOADED % (3, 7, -1), TOGACK % (2, 1, "00000004"),
+              runt(3, 0, "00000004", gen=8), LAW % (955000, 955000),
+              SETTLED % ("00000004", 8),
+              runt(3, 1, "00000004", gen=8), LAW % (900000, 910000), WIN % (912000, 960100, 2)]
+sm = rs.summarize_run(follow_txt, load_id=3)
+check("settle: after `tog settled gen=` the frames of that gen count",
+      sm["gen"] == 8 and sm["frames"] == 1 and sm["cb_last"]["max"] == 900000
+      and sm.get("tog") == ["00000004"])
+pre_txt = [LOADED % (3, 7, -1), runt(3, 1, "00000000"), LAW % (800000, 800000),
+           WIN % (800500, 960000, 0)] + follow_txt[1:]
+sm = rs.summarize_run(pre_txt, load_id=3)
+check("settle: frames counted before the TOG leave the summary",
+      sm["frames"] == 1 and sm["cb_last"]["max"] == 900000 and sm["frame_max"]["n"] == 1
+      and sm.get("tog") == ["00000004"] and sm["skipped"] == 2)
+sm = rs.summarize_run([SETTLED % ("00000004", 5)] + tog_txt, load_id=3)
+check("settle: a `tog settled` line before the ack is not this run's",
+      sm["gen"] == 7 and sm["frames"] == 2)
+sm = rs.summarize_run(follow_txt[:4] + follow_txt[5:], load_id=3)
+check("settle: without the settled line the new gen's frames do not count",
+      sm["gen"] == 7 and sm["frames"] == 0)
+
+p = FakeRunPort(tog_txt[:3] + [runt(3, 1, "80000000"), LAW % (900000, 910000)])
+rc, s, d = run_cmd(p, None, record=False, load=3)
+check("run: probe bits in a counted frame exit non-zero with the error",
+      rc != 0 and bool(s["error"]) and "ProbeBits" in s["error"] and s["void"] is True
+      and s.get("tog") == ["80000000"])
+p = FakeRunPort(follow_txt)
+rc, s, d = run_cmd(p, None, record=False, load=3)
+check("run: a run across a TOG settle exits 0 with the followed gen",
+      rc == 0 and s["gen"] == 8 and s["frames"] == 1 and s["error"] is None)
+
 print("\n%d failed" % len(FAILS) if FAILS else "\nall ok")
 sys.exit(1 if FAILS else 0)

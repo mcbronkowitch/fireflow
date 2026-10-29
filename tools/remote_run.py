@@ -12,7 +12,7 @@ section 5.4). The board stays on USB; this drives it from the PC.
 VID/PID 0483:5740 unless --port is given. Ids index shell/generated_workloads.h;
 a gesture loads its own base workload. summary.json counts only the frames the
 board reports settled for this run (`counting=1`, with the gen of the run's
-load / gest ack) and says `void` when a pot took a parameter over during it
+load / gest ack, or the gen a TOG re-settled it under) and says `void` when a pot took a parameter over during it
 and `tripped` when the overrun guard silenced it (no frame from the trip on). --seconds includes the settle (1 s, or 5 s
 with a SAMPLER deck).
 """
@@ -90,8 +90,9 @@ def cmd_run(args, port_factory=_port, capture_fn=rl.start_capture,
     """Always leaves summary.json behind, built from whatever was read, with
     `error` (the exception that ended the run, or null) and `record` (the
     capture's outcome, or null without --record). Exit 1 on either failing,
-    and on a run that measured nothing (no ack, or no counted frame): its
-    `error` then starts with EmptyRun."""
+    on a run that measured nothing (no ack, or no counted frame): its
+    `error` then starts with EmptyRun, and on a run whose counted frames had
+    toggle bit 30 or 31 set (`error` from run_stats, ProbeBits)."""
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     wav = out / "audio.wav"
@@ -133,8 +134,12 @@ def cmd_run(args, port_factory=_port, capture_fn=rl.start_capture,
                 summary = rs.summarize_run(fh, load_id=args.load)
         # A run that measured nothing is a failed run, not an empty
         # measurement: no ack of it (gen None -- never loaded, or another
-        # image answered) or not one counted frame. An earlier error stays.
-        if error is None and summary.get("gen") is None:
+        # image answered) or not one counted frame. Nor is one whose counted
+        # frames ran with toggle bit 30 or 31 (run_stats' ProbeBits error).
+        # An earlier error stays.
+        if error is None and summary.get("error"):
+            error = summary["error"]
+        elif error is None and summary.get("gen") is None:
             error = "EmptyRun: no ack of the run (gen None)"
         elif error is None and summary.get("frames", 0) == 0:
             error = "EmptyRun: no counted frames (the run never settled in the capture)"
