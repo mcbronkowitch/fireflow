@@ -15,7 +15,20 @@ import time
 from pathlib import Path
 from typing import Callable, Iterator, Optional, Union
 
-import serial
+# pyserial is optional for everything except talking to a real port: the guard
+# test runs without it (repo convention, see bench/run.py list_ports). The
+# fallback class is an OSError, which Port catches anyway.
+try:
+    from serial import SerialException
+except ImportError:
+    class SerialException(OSError):
+        """Stand-in when pyserial is not installed."""
+
+
+def _open_serial(name, baud, timeout=None):
+    import serial  # late: only a real port needs it
+    return serial.Serial(name, baud, timeout=timeout)
+
 
 # libDaisy's application CDC (lib/libDaisy/src/usbd/usbd_desc.c: VID 1155,
 # PID 22336) and the ROM/Daisy bootloader's DFU device.
@@ -66,13 +79,14 @@ class Port:
                  baud: int = 115200, retry_s: float = 0.5, give_up_s: float = 60.0,
                  sleep=time.sleep, clock=time.time):
         self._name = name
-        self._opener = opener or serial.Serial
+        self._opener = opener or _open_serial
         self._baud = baud
         self._retry_s = retry_s
         self._max_tries = max(1, math.ceil(give_up_s / retry_s))
         self._sleep = sleep
         self._clock = clock
         self._ser = None
+        self._buf = bytearray()
         self._last = float("-inf")
 
     def _stamp(self) -> float:
@@ -86,11 +100,12 @@ class Port:
         """One attempt; leaves self._ser set on success, raises otherwise."""
         name = self._resolve()
         if not name:
-            raise serial.SerialException("port not present")
+            raise SerialException("port not present")
         self._ser = self._opener(name, self._baud, timeout=0.2)
 
     def _close(self) -> None:
         ser, self._ser = self._ser, None
+        self._buf.clear()   # the torn half of a dead handle's line is dropped
         if ser is not None:
             try:
                 ser.close()
@@ -105,7 +120,7 @@ class Port:
             try:
                 self._open()
                 return waited
-            except (serial.SerialException, OSError):
+            except (SerialException, OSError):
                 self._sleep(self._retry_s)
                 waited += self._retry_s
         raise PortGone("serial port did not come back in %.0f s"
@@ -120,7 +135,7 @@ class Port:
         self._ensure()
         try:
             self._ser.write(data)
-        except (serial.SerialException, OSError):
+        except (SerialException, OSError):
             self._reopen()
             self._ser.write(data)
 
@@ -131,13 +146,20 @@ class Port:
         while until is None or not until():
             try:
                 raw = self._ser.readline()
-            except (serial.SerialException, OSError):
+            except (SerialException, OSError):
                 waited = self._reopen()
                 yield self._stamp(), "#reconnect gap>=%.1fs" % waited
                 continue
             if not raw:
                 continue
-            yield self._stamp(), raw.decode("utf-8", "replace").rstrip("\r\n")
+            # A read timeout can return half a line; emit only complete ones,
+            # or a torn "cb_last=9..." becomes a fake tiny sample.
+            self._buf += raw
+            if not self._buf.endswith(b"\n"):
+                continue
+            text = bytes(self._buf).decode("utf-8", "replace").rstrip("\r\n")
+            self._buf.clear()
+            yield self._stamp(), text
 
     def close(self) -> None:
         self._close()

@@ -5,9 +5,9 @@ import os, sys, tempfile
 from pathlib import Path
 here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, here)
-import serial
 import remote_lib as rl
 import run_stats as rs
+import remote_run as rr
 
 FAILS = []
 def check(name, cond):
@@ -40,11 +40,11 @@ def make_opener(plan):
 
 ticks = iter([10.0, 11.0, 9.0, 12.0, 13.0, 14.0, 15.0, 16.0])   # one step backwards
 sleeps = []
-first = FakeSerial([b"a\r\n", b"b\r\n", serial.SerialException("handle lost")])
+first = FakeSerial([b"a\r\n", b"b\r\n", rl.SerialException("handle lost")])
 second = FakeSerial([b"c\r\n"])
 port = rl.Port("COM9",
                opener=make_opener([first,
-                                   serial.SerialException("still gone"),   # port absent once
+                                   rl.SerialException("still gone"),   # port absent once
                                    second]),
                sleep=sleeps.append, clock=lambda: next(ticks))
 seen = []
@@ -58,7 +58,7 @@ check("port: stamps are monotonic even when the clock steps back",
 check("port: polled every 0.5 s while the port was absent", sleeps == [0.5])
 check("port: dead handle closed before reopening", first.closed)
 
-def never_back(name, baud, timeout=None): raise serial.SerialException("gone")
+def never_back(name, baud, timeout=None): raise rl.SerialException("gone")
 port = rl.Port("COM9", opener=never_back, give_up_s=2.0, sleep=lambda s: None)
 try:
     list(port.lines(until=lambda: False)); gave_up = False
@@ -70,6 +70,36 @@ ser = FakeSerial([])
 port = rl.Port(lambda: "COM3", opener=make_opener([ser]))
 port.send("PING")
 check("port: send writes the line, newline-terminated", ser.written == [b"PING\n"])
+
+# The port comes back under another COM name: the name is looked up at every
+# open, not once in the constructor.
+names = iter(["COM5", "COM7", "COM7"])
+opened.clear()
+a = FakeSerial([b"x\n", rl.SerialException("gone")])
+b = FakeSerial([b"y\n"])
+port = rl.Port(lambda: next(names), opener=make_opener([a, b]), sleep=lambda s: None)
+seen = []
+for stamp, text in port.lines(until=lambda: "y" in [t for _, t in seen]):
+    seen.append((stamp, text))
+check("port: re-resolves the name on reopen (COM5 then COM7)", opened == ["COM5", "COM7"])
+check("port: ... and keeps reading from the new name", [t for _, t in seen][-1] == "y")
+
+# A readline() that times out mid-line must not emit the torn half as a line.
+ser = FakeSerial([b"SHELL_PLAY_LAW cb_la", b"", b"st=900000 cb_max=910000\r\n", b"next\n"])
+port = rl.Port("COM1", opener=make_opener([ser]))
+seen = []
+for stamp, text in port.lines(until=lambda: len(seen) >= 2):
+    seen.append(text)
+check("port: a line torn by a read timeout is emitted whole, once",
+      seen == ["SHELL_PLAY_LAW cb_last=900000 cb_max=910000", "next"])
+ser = FakeSerial([b"torn", rl.SerialException("gone")])
+ser2 = FakeSerial([b"whole\n"])
+port = rl.Port("COM1", opener=make_opener([ser, ser2]), sleep=lambda s: None)
+seen = []
+for stamp, text in port.lines(until=lambda: "whole" in seen):
+    seen.append(text)
+check("port: the torn half of a dead handle is dropped, not glued to the next line",
+      "whole" in seen and not any("tornwhole" in t for t in seen) and "torn" not in seen)
 
 class Info:  # list_ports entry
     def __init__(self, dev, vid, pid): self.device, self.vid, self.pid = dev, vid, pid
@@ -202,6 +232,82 @@ check("summarize_run: totals, reconnects, unknown lines ignored",
       and sm["gap_max"] == 960150 and sm["over_total"] == 7)
 check("summarize_run: a run without WIN lines still summarizes",
       rs.summarize_run(serial_txt[:4])["frame_max"] is None)
+
+# ---- remote_run.cmd_run: failure paths keep what was measured -------------
+import argparse, contextlib, io, json, subprocess
+
+LAW = "SHELL_PLAY_LAW cyc_last=1 cyc_max=2 led_last=3 led_max=4 cb_last=%d cb_max=%d"
+
+class FakeRunPort:
+    """lines() yields the script, then raises if an exception is last."""
+    def __init__(self, script): self.script, self.sent, self.closed = script, [], False
+    def send(self, line): self.sent.append(line)
+    def lines(self, until=None):
+        for i, item in enumerate(self.script):
+            if isinstance(item, Exception): raise item
+            yield 1000.0 + i, item
+    def close(self): self.closed = True
+
+class FakeCapture:
+    def __init__(self, wav=None, rc=0, hang=False):
+        self.wav, self.rc, self.hang = wav, rc, hang
+        self.terminated = self.killed = False
+    def terminate(self): self.terminated = True
+    def kill(self): self.killed = True
+    def wait(self, timeout=None):
+        if self.hang and not self.killed and not self.terminated:
+            raise subprocess.TimeoutExpired("ffmpeg", timeout)
+        if self.wav is not None and not (self.terminated or self.killed):
+            Path(self.wav).write_bytes(b"RIFF")
+        return self.rc
+
+def run_cmd(port, capture_factory, record):
+    d = tempfile.mkdtemp()
+    args = argparse.Namespace(load=1, gest=None, tog=None, seconds=5, out=d,
+                              record=record, port="COMx")
+    with contextlib.redirect_stdout(io.StringIO()):
+        rc = rr.cmd_run(args, port_factory=lambda a: port,
+                        capture_fn=capture_factory, sleep=lambda s: None)
+    s = json.loads((Path(d) / "summary.json").read_text())
+    return rc, s, Path(d)
+
+p = FakeRunPort([LAW % (900000, 910000), LAW % (905000, 920000), rl.PortGone("lost for 60 s")])
+cap = {}
+def mk(wav, device, seconds):
+    cap["c"] = FakeCapture(wav=wav); return cap["c"]
+rc, s, d = run_cmd(p, mk, record=True)
+check("run: PortGone still writes summary.json from what was read",
+      s["cb_last"] is not None and s["cb_last"]["n"] == 2 and s["frames"] == 2)
+check("run: ... records the error and exits non-zero",
+      rc != 0 and s["error"] and "PortGone" in s["error"])
+check("run: ... serial.txt kept, port closed, ffmpeg terminated",
+      "cb_last=900000" in (d / "serial.txt").read_text() and p.closed and cap["c"].terminated)
+
+p = FakeRunPort([LAW % (900000, 910000)])
+rc, s, d = run_cmd(p, lambda w, dev, sec: FakeCapture(wav=None), record=True)
+check("run: --record with no audio.wav is reported and non-zero",
+      rc != 0 and s["error"] is None and s["record"]["ok"] is False
+      and s["record"]["wav_exists"] is False)
+
+p = FakeRunPort([LAW % (900000, 910000)])
+rc, s, d = run_cmd(p, lambda w, dev, sec: FakeCapture(wav=w, rc=1), record=True)
+check("run: non-zero ffmpeg exit is reported and non-zero",
+      rc != 0 and s["record"]["ok"] is False and s["record"]["exit"] == 1)
+
+p = FakeRunPort([LAW % (900000, 910000)])
+cap = {}
+def mk_hang(wav, device, seconds):
+    cap["c"] = FakeCapture(hang=True); return cap["c"]
+rc, s, d = run_cmd(p, mk_hang, record=True)
+check("run: ffmpeg that never finishes is killed and reported",
+      cap["c"].killed and rc != 0 and s["record"]["ok"] is False)
+
+p = FakeRunPort([LAW % (900000, 910000)])
+rc, s, d = run_cmd(p, lambda w, dev, sec: FakeCapture(wav=w), record=True)
+check("run: clean recorded run is exit 0 with record ok",
+      rc == 0 and s["error"] is None and s["record"]["ok"] is True)
+rc, s, d = run_cmd(FakeRunPort([LAW % (900000, 910000)]), None, record=False)
+check("run: no --record means no record field and exit 0", rc == 0 and s["record"] is None)
 
 print("\n%d failed" % len(FAILS) if FAILS else "\nall ok")
 sys.exit(1 if FAILS else 0)

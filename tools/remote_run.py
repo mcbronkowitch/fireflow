@@ -13,6 +13,7 @@ VID/PID 0483:5740 unless --port is given. Workload ids are integers for now.
 """
 import argparse
 import json
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -57,33 +58,70 @@ def cmd_cmd(args) -> int:
     return 0
 
 
-def cmd_run(args) -> int:
+def _finish_capture(capture, wav: Path, abort: bool) -> dict:
+    """Make sure ffmpeg is gone and say how it went. On an aborted run it is
+    terminated first; a normal run waits for its -t to expire. Whatever
+    happens, it is killed rather than left running."""
+    exit_code, note = None, None
+    try:
+        if abort:
+            capture.terminate()
+        exit_code = capture.wait(timeout=5 if abort else 30)
+    except subprocess.TimeoutExpired:
+        note = "ffmpeg did not finish in time, killed"
+        capture.kill()
+        try:
+            capture.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+    exists = wav.exists() and wav.stat().st_size > 0
+    return {"requested": True, "exit": exit_code, "wav_exists": exists,
+            "note": note, "aborted": abort,
+            "ok": bool(exit_code == 0 and exists and note is None and not abort)}
+
+
+def cmd_run(args, port_factory=_port, capture_fn=rl.start_capture,
+            sleep=time.sleep) -> int:
+    """Always leaves summary.json behind, built from whatever was read, with
+    `error` (the exception that ended the run, or null) and `record` (the
+    capture's outcome, or null without --record). Exit 1 on either failing."""
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    port = _port(args)
-    capture = None
-    if args.record:
-        # A little margin: ffmpeg starts late and the serial loop ends on time.
-        capture = rl.start_capture(out / "audio.wav", rl.CAPTURE_DEVICE,
-                                   args.seconds + 2.0)
-        time.sleep(1.0)
-    with open(out / "serial.txt", "w", encoding="utf-8") as sink:
-        port.send("LOAD %d" % args.load)
-        if args.gest is not None:
-            port.send("GEST %d" % args.gest)
-        for tog in args.tog or []:
-            bit, val = tog.split("=")
-            port.send("TOG %d %d" % (int(bit), int(val)))
-        _drain(port, args.seconds, echo=False, sink=sink)
-    port.close()
-    if capture is not None:
-        capture.wait(timeout=30)
-    with open(out / "serial.txt", encoding="utf-8") as fh:
-        summary = rs.summarize_run(fh)
-    (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n",
-                                      encoding="utf-8")
+    wav = out / "audio.wav"
+    port, capture = None, None
+    error, record, completed = None, None, False
+    try:
+        with open(out / "serial.txt", "w", encoding="utf-8") as sink:
+            try:
+                port = port_factory(args)
+                if args.record:
+                    # A little margin: ffmpeg starts late, the serial loop ends on time.
+                    capture = capture_fn(wav, rl.CAPTURE_DEVICE, args.seconds + 2.0)
+                    sleep(1.0)
+                port.send("LOAD %d" % args.load)
+                if args.gest is not None:
+                    port.send("GEST %d" % args.gest)
+                for tog in args.tog or []:
+                    bit, val = tog.split("=")
+                    port.send("TOG %d %d" % (int(bit), int(val)))
+                _drain(port, args.seconds, echo=False, sink=sink)
+                completed = True
+            except Exception as e:  # e.g. PortGone: keep what was read
+                error = "%s: %s" % (type(e).__name__, e)
+    finally:
+        if port is not None:
+            port.close()
+        if capture is not None:
+            record = _finish_capture(capture, wav, abort=not completed)
+        with open(out / "serial.txt", encoding="utf-8") as fh:
+            summary = rs.summarize_run(fh)
+        summary["error"] = error
+        summary["record"] = record
+        (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n",
+                                          encoding="utf-8")
     print(json.dumps(summary, indent=2))
-    return 0
+    failed = error is not None or (record is not None and not record["ok"])
+    return 1 if failed else 0
 
 
 def main(argv=None) -> int:
