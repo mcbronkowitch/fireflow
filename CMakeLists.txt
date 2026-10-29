@@ -306,6 +306,44 @@ add_executable(render
 target_include_directories(render PRIVATE host engine third_party)
 target_link_libraries(render PRIVATE nlohmann_json daisysp_min)
 
+# --- the law-driven sweep (plan 2026-10-29-cpu-hunt-remote Task 4) ---
+# Rev A knob vectors through the firmware's own control path -- the panel
+# table, apply_boot_patch_rows(), control::ControlLaw and the panel_step glue
+# -- with process(..., 96) timed per block. A ranking tool, not a test.
+add_executable(sweep
+    host/sweep/main.cpp
+    shell/controls.cpp
+    shell/boot_patch.cpp
+    shell/panel_step.cpp
+    shell/pot_owner.cpp
+    shell/scan_value.cpp
+    shell/mux_plan.cpp
+    engine/mod/lane.cpp
+    engine/mod/super_modulator.cpp
+    engine/parts/part.cpp
+    engine/parts/bbd_engine.cpp
+    engine/feed/feed_engine.cpp
+    engine/instrument.cpp
+    engine/center/center.cpp
+    engine/fx/grit.cpp
+    engine/fx/flux.cpp
+    engine/fx/bbd.cpp
+    engine/fx/reverb.cpp
+    engine/fx/part_fx.cpp
+    engine/fx/comp.cpp
+    engine/synth/wt_bank.cpp
+    engine/synth/voice.cpp
+    engine/synth/synth_engine.cpp
+    engine/sampler/sample_buffer.cpp
+    engine/sampler/sampler_engine.cpp
+    engine/sampler/slice_map.cpp
+    engine/body/mode_bank.cpp
+    engine/body/ks_string.cpp
+    engine/body/body_voice.cpp
+)
+target_include_directories(sweep PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries(sweep PRIVATE spky_engine daisysp_min)
+
 # --- the callback profile's stamps, on the desktop ---
 # The one desktop target built with SPKY_PROBE_MARKS=1 (engine/util/
 # probe_mark.h): the engine compiled as the firmware's probe image compiles
@@ -730,4 +768,12 @@ add_test(NAME click_detect_guard
 add_test(NAME remote_lib_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_remote_lib.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tools)
+
+# The hot-path libm scan (plan 2026-10-29-cpu-hunt-remote.md Task 4): which
+# functions count as hot (.itcm_hot plus the direct-call closure from
+# AudioCallback, veneers and tail calls followed), on hand-written objdump text.
+add_test(NAME hotpath_libm_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_hotpath_libm.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tools)
