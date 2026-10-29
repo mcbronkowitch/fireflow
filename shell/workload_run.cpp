@@ -31,24 +31,31 @@ void OverrunGuard::clear()
 
 void WorkloadRun::start(int id, uint32_t now_block, uint32_t settle_blocks)
 {
-    active_ = true;
-    void_   = false;
-    id_     = id;
-    start_  = now_block;
-    settle_ = settle_blocks;
-    gen_    = gen_ + 1u;
+    active_  = true;
+    void_    = false;
+    tripped_ = false;
+    id_      = id;
+    start_   = now_block;
+    settle_  = settle_blocks;
+    gen_     = gen_ + 1u;
 }
 
 void WorkloadRun::stop()
 {
-    active_ = false;
-    void_   = false;
-    id_     = -1;
+    active_  = false;
+    void_    = false;
+    tripped_ = false;
+    id_      = -1;
 }
 
 void WorkloadRun::on_pot_take()
 {
     if(active_) void_ = true;
+}
+
+void WorkloadRun::on_guard_trip()
+{
+    if(active_) tripped_ = true;
 }
 
 // Unsigned differences, so a run across the block counter's wrap still counts.

@@ -60,6 +60,10 @@ public:
     void stop();
     // A pot took its parameter over: the run is void. Without a run, nothing.
     void on_pot_take();
+    // The overrun guard tripped during the run: from that block on its callbacks
+    // are silence, not the workload (spec 5.2: a worst case measured on silence
+    // does not count). Without a run, nothing. Cleared only by start() / stop().
+    void on_guard_trip();
 
     bool active() const { return active_; }
     // Settled: now_block is at least settle blocks past the start (wraps).
@@ -69,6 +73,7 @@ public:
     // Counted blocks before now_block (0 in the first counted one).
     uint32_t counted(uint32_t now_block) const;
     bool     void_run() const { return void_; }
+    bool     tripped() const { return tripped_; }
     int      id() const { return active_ ? id_ : -1; }
     // Bumped by every start(): two readings with the same gen are one run.
     uint32_t gen() const { return gen_; }
@@ -76,6 +81,7 @@ public:
 private:
     bool     active_ = false;
     bool     void_   = false;
+    bool     tripped_ = false;
     int      id_     = -1;
     uint32_t start_  = 0;
     uint32_t settle_ = 0;

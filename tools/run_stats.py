@@ -9,7 +9,12 @@ The board prints, once per 500 ms frame (shell/panel_scan.cpp):
 
 and SHELL_REMOTE images, right before the LAW line,
 
-    SHELL_REMOTE run id=.. counting=.. void=.. gest=..
+    SHELL_REMOTE run id=.. gen=.. counting=.. void=.. tripped=.. gest=..
+
+plus, once per started run, `SHELL_REMOTE load id=.. gen=.. gest=..` (and for a
+gesture `SHELL_REMOTE gest id=.. gen=..` ahead of it), and
+`SHELL_REMOTE guard tripped blk=..` on every frame while the overrun guard
+holds the callback silent.
 
 `cb_last` is the last block's callback cycles in that frame, `win` the worst
 block since the previous frame. `parse_frames` reads both and ignores every
@@ -79,33 +84,77 @@ def _run_matches(kv: dict, load_id: Optional[int], gest_id: Optional[int]) -> bo
     return kv.get("id") == load_id and gest == -1
 
 
+def _find_ack(lines: Sequence[str], load_id: Optional[int],
+              gest_id: Optional[int]):
+    """(index, gen) of the last ack of the asked-for run, or (None, None): the
+    gesture's `SHELL_REMOTE gest id=G gen=N` line, or a plain LOAD's
+    `SHELL_REMOTE load id=X gen=N gest=-1` line (a gesture's base load line
+    carries its gest id, so it is not a LOAD of that id)."""
+    found = (None, None)
+    for i, line in enumerate(lines):
+        if gest_id is not None:
+            if "SHELL_REMOTE gest id=" not in line:
+                continue
+            kv = dict((k, int(v)) for k, v in _KV.findall(line))
+            if kv.get("id") == gest_id and "gen" in kv:
+                found = (i, kv["gen"])
+        elif "SHELL_REMOTE load id=" in line:
+            kv = dict((k, int(v)) for k, v in _KV.findall(line))
+            if kv.get("id") == load_id and kv.get("gest") == -1 and "gen" in kv:
+                found = (i, kv["gen"])
+    return found
+
+
 def parse_frames(lines: Iterable[str], load_id: Optional[int] = None,
                  gest_id: Optional[int] = None) -> dict:
     """Pull the per-frame fields out of serial lines. Lines may carry a host
     stamp prefix; anything that is not a LAW, WIN or run line is skipped.
 
     With load_id or gest_id (shell/panel_scan.cpp, SHELL_REMOTE): the board
-    prints `SHELL_REMOTE run id=.. counting=.. void=.. gest=..` right before
-    each frame's LAW line, and counting=1 says the whole frame window lay
-    after the load's settle. A LAW / WIN line then counts only while the
-    latest run line is the asked-for run with counting=1; the others are
-    `skipped`. `void` is true once any run line of that run says void=1.
-    Without either, every frame counts (captures from before the filter)."""
+    prints `SHELL_REMOTE run id=.. gen=.. counting=.. void=.. tripped=..
+    gest=..` right before each frame's LAW line, and counting=1 says the whole
+    frame window held settled blocks of that gen only. Everything before the
+    last ack of the asked-for run (its load / gest line) is ignored, and the
+    ack's `gen` then picks this run's run lines out of any earlier run of the
+    same id. A LAW / WIN line counts only while the latest run line is that
+    gen with counting=1 and tripped=0; the others are `skipped`. `void` is
+    true once a run line of that gen says void=1. `tripped` is true once one
+    says tripped=1 or a `guard tripped` line follows the ack: the callback
+    plays silence from the trip, so no frame from there on counts. No ack in
+    the capture: nothing counts, `gen` is None.
+    Without either id, every frame counts (captures from before the filter)."""
     out = {"cb_last": [], "cb_max": [], "win": [], "gap": [], "over": [],
-           "reconnects": 0, "skipped": 0, "void": False}
+           "reconnects": 0, "skipped": 0, "void": False, "tripped": False,
+           "gen": None}
+    lines = list(lines)
     filtered = load_id is not None or gest_id is not None
     take = not filtered
-    for line in lines:
+    start = 0
+    if filtered:
+        ack_at, out["gen"] = _find_ack(lines, load_id, gest_id)
+        start = len(lines) if ack_at is None else ack_at + 1
+        for line in lines[:start]:
+            if "#reconnect" in line:
+                out["reconnects"] += 1
+            elif "SHELL_PLAY_LAW" in line:
+                out["skipped"] += 1
+    for line in lines[start:]:
         if "#reconnect" in line:
             out["reconnects"] += 1
             continue
+        if filtered and "SHELL_REMOTE guard tripped" in line:
+            out["tripped"] = True   # the next run line stops the count
+            continue
         if "SHELL_REMOTE run " in line:
             kv = dict((k, int(v)) for k, v in _KV.findall(line))
-            mine = filtered and _run_matches(kv, load_id, gest_id)
+            mine = (filtered and kv.get("gen") == out["gen"]
+                    and _run_matches(kv, load_id, gest_id))
             if mine and kv.get("void") == 1:
                 out["void"] = True
+            if mine and kv.get("tripped") == 1:
+                out["tripped"] = True
             if filtered:
-                take = mine and kv.get("counting") == 1
+                take = mine and kv.get("counting") == 1 and not out["tripped"]
             continue
         if ("SHELL_PLAY_LAW" in line or "SHELL_PLAY_WIN" in line) and not take:
             if "SHELL_PLAY_LAW" in line:
@@ -135,11 +184,13 @@ def summarize_run(lines: Iterable[str], load_id: Optional[int] = None,
     (the worst block of each frame, SHELL_CB_WINDOW and SHELL_REMOTE images),
     each as `summarize` output; plus the totals the clicks question needs.
     load_id / gest_id: count only the settled frames of that run, see
-    parse_frames(); `skipped` frames did not count, `void` = a pot took over."""
+    parse_frames(); `skipped` frames did not count, `void` = a pot took over,
+    `tripped` = the overrun guard silenced the run (nothing counts from the
+    trip on), `gen` = the run's gen from its ack (None: no ack seen)."""
     f = parse_frames(lines, load_id, gest_id)
     last = [v for v in f["cb_last"] if v > 0]
     res = {"frames": len(f["cb_last"]), "skipped": f["skipped"], "void": f["void"],
-           "reconnects": f["reconnects"]}
+           "tripped": f["tripped"], "gen": f["gen"], "reconnects": f["reconnects"]}
     res["cb_last"] = summarize(last) if last else None
     res["frame_max"] = summarize(f["win"]) if f["win"] else None
     res["cb_max_final"] = f["cb_max"][-1] if f["cb_max"] else None

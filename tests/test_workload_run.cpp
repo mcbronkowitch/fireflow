@@ -89,6 +89,22 @@ TEST_CASE("pot take voids the run") {
     CHECK(r.id() == -1);
 }
 
+TEST_CASE("a guard trip marks the run until the next start") {
+    WorkloadRun r;
+    r.on_guard_trip();               // no run: nothing to mark
+    CHECK_FALSE(r.tripped());
+    r.start(4, 0, 500);
+    CHECK_FALSE(r.tripped());
+    r.on_guard_trip();               // in the settle or counted: the same
+    CHECK(r.tripped());
+    CHECK_FALSE(r.void_run());       // a separate flag from a pot take
+    r.start(4, 900, 500);            // only a new start clears it
+    CHECK_FALSE(r.tripped());
+    r.on_guard_trip();
+    r.stop();
+    CHECK_FALSE(r.tripped());
+}
+
 TEST_CASE("workload knobs: init patch, the rows through the panel path, REC latched") {
     // r4_noon: the hand entry, identical to the all-noon boot patch.
     const shell::WorkloadDef* w = nullptr;

@@ -237,7 +237,14 @@ check("summarize_run: a run without WIN lines still summarizes",
 import argparse, contextlib, io, json, subprocess
 
 LAW = "SHELL_PLAY_LAW cyc_last=1 cyc_max=2 led_last=3 led_max=4 cb_last=%d cb_max=%d"
-RUN = "SHELL_REMOTE run id=%d counting=%d void=%d gest=%d"
+RUN = "SHELL_REMOTE run id=%d gen=%d counting=%d void=%d tripped=%d gest=%d"
+LOADED = ("SHELL_REMOTE load id=%d gen=%d gest=%d name=BBD_BBD_top3 input=noise "
+          "settle=500 excite=1,1 rec=0,0")
+GESTED = "SHELL_REMOTE gest id=%d gen=%d name=pot_sweep base=144 steps=5 blocks=4000"
+
+def run(rid, counting, void, gest, gen=7, tripped=0):
+    """A board run line (shell/panel_scan.cpp); gen 7 is the fixtures' run."""
+    return RUN % (rid, gen, counting, void, tripped, gest)
 WIN = "SHELL_PLAY_WIN win=%d gap=%d over=%d n=250"
 
 class FakeRunPort:
@@ -273,7 +280,7 @@ def run_cmd(port, capture_factory, record, load=1, gest=None):
     s = json.loads((Path(d) / "summary.json").read_text())
     return rc, s, Path(d)
 
-p = FakeRunPort([RUN % (1, 1, 0, -1), LAW % (900000, 910000), RUN % (1, 1, 0, -1),
+p = FakeRunPort([LOADED % (1, 7, -1), run(1, 1, 0, -1), LAW % (900000, 910000), run(1, 1, 0, -1),
                  LAW % (905000, 920000), rl.PortGone("lost for 60 s")])
 cap = {}
 def mk(wav, device, seconds):
@@ -286,18 +293,18 @@ check("run: ... records the error and exits non-zero",
 check("run: ... serial.txt kept, port closed, ffmpeg terminated",
       "cb_last=900000" in (d / "serial.txt").read_text() and p.closed and cap["c"].terminated)
 
-p = FakeRunPort([RUN % (1, 1, 0, -1), LAW % (900000, 910000)])
+p = FakeRunPort([LOADED % (1, 7, -1), run(1, 1, 0, -1), LAW % (900000, 910000)])
 rc, s, d = run_cmd(p, lambda w, dev, sec: FakeCapture(wav=None), record=True)
 check("run: --record with no audio.wav is reported and non-zero",
       rc != 0 and s["error"] is None and s["record"]["ok"] is False
       and s["record"]["wav_exists"] is False)
 
-p = FakeRunPort([RUN % (1, 1, 0, -1), LAW % (900000, 910000)])
+p = FakeRunPort([LOADED % (1, 7, -1), run(1, 1, 0, -1), LAW % (900000, 910000)])
 rc, s, d = run_cmd(p, lambda w, dev, sec: FakeCapture(wav=w, rc=1), record=True)
 check("run: non-zero ffmpeg exit is reported and non-zero",
       rc != 0 and s["record"]["ok"] is False and s["record"]["exit"] == 1)
 
-p = FakeRunPort([RUN % (1, 1, 0, -1), LAW % (900000, 910000)])
+p = FakeRunPort([LOADED % (1, 7, -1), run(1, 1, 0, -1), LAW % (900000, 910000)])
 cap = {}
 def mk_hang(wav, device, seconds):
     cap["c"] = FakeCapture(hang=True); return cap["c"]
@@ -305,22 +312,23 @@ rc, s, d = run_cmd(p, mk_hang, record=True)
 check("run: ffmpeg that never finishes is killed and reported",
       cap["c"].killed and rc != 0 and s["record"]["ok"] is False)
 
-p = FakeRunPort([RUN % (1, 1, 0, -1), LAW % (900000, 910000)])
+p = FakeRunPort([LOADED % (1, 7, -1), run(1, 1, 0, -1), LAW % (900000, 910000)])
 rc, s, d = run_cmd(p, lambda w, dev, sec: FakeCapture(wav=w), record=True)
 check("run: clean recorded run is exit 0 with record ok",
       rc == 0 and s["error"] is None and s["record"]["ok"] is True)
-rc, s, d = run_cmd(FakeRunPort([RUN % (1, 1, 0, -1), LAW % (900000, 910000)]), None, record=False)
+rc, s, d = run_cmd(FakeRunPort([LOADED % (1, 7, -1), run(1, 1, 0, -1), LAW % (900000, 910000)]), None, record=False)
 check("run: no --record means no record field and exit 0", rc == 0 and s["record"] is None)
 
 # ---- the settle and void filter (Task 5) -----------------------------------
-# The board prints `SHELL_REMOTE run id=.. counting=.. void=.. gest=..` right
+# The board acks the load (`SHELL_REMOTE load id=.. gen=..`), then prints
+# `SHELL_REMOTE run id=.. gen=.. counting=.. void=.. tripped=.. gest=..` right
 # before each frame's LAW line; counting=1 means the whole frame window lay
 # after the load's settle. Only those frames of the asked-for run count.
 settle_txt = [
-    "SHELL_REMOTE load id=3 name=BBD_BBD_top3 input=noise settle=500 excite=1,1 rec=0,0",
-    RUN % (3, 0, 0, -1), LAW % (955000, 955000), WIN % (990000, 990000, 9),
-    RUN % (3, 1, 0, -1), LAW % (900000, 910000), WIN % (912000, 960100, 2),
-    RUN % (3, 1, 0, -1), LAW % (905000, 920000), WIN % (920000, 960150, 1),
+    LOADED % (3, 7, -1),
+    run(3, 0, 0, -1), LAW % (955000, 955000), WIN % (990000, 990000, 9),
+    run(3, 1, 0, -1), LAW % (900000, 910000), WIN % (912000, 960100, 2),
+    run(3, 1, 0, -1), LAW % (905000, 920000), WIN % (920000, 960150, 1),
 ]
 sm = rs.summarize_run(settle_txt, load_id=3)
 check("filter: settle frames are excluded (cb_last, frame_max, totals)",
@@ -331,13 +339,14 @@ check("filter: a clean run is not void", sm["void"] is False)
 sm = rs.summarize_run(settle_txt, load_id=4)
 check("filter: frames of another id do not count",
       sm["frames"] == 0 and sm["cb_last"] is None and sm["frame_max"] is None)
-void_txt = settle_txt + [RUN % (3, 1, 1, -1), LAW % (901000, 920000), WIN % (915000, 960000, 0)]
+void_txt = settle_txt + [run(3, 1, 1, -1), LAW % (901000, 920000), WIN % (915000, 960000, 0)]
 check("filter: any void=1 run line makes the run void",
       rs.summarize_run(void_txt, load_id=3)["void"] is True)
 check("filter: a void line of another id does not void this run",
       rs.summarize_run(void_txt, load_id=4)["void"] is False)
-gest_txt = [RUN % (144, 0, 0, 2), LAW % (950000, 950000),
-            RUN % (144, 1, 0, 2), LAW % (930000, 940000)]
+gest_txt = [GESTED % (2, 7), LOADED % (144, 7, 2),
+            run(144, 0, 0, 2), LAW % (950000, 950000),
+            run(144, 1, 0, 2), LAW % (930000, 940000)]
 check("filter: a gesture run counts by its gest id",
       rs.summarize_run(gest_txt, gest_id=2)["frames"] == 1
       and rs.summarize_run(gest_txt, gest_id=1)["frames"] == 0)
@@ -345,6 +354,50 @@ check("filter: a gesture's base is not the plain LOAD of that id",
       rs.summarize_run(gest_txt, load_id=144)["frames"] == 0)
 check("no filter: every frame counts, as before",
       rs.summarize_run(settle_txt)["frames"] == 3)
+
+# ---- the run's gen and the overrun guard (Task 5 fix round 1) ----------------
+# Frames count only after the ack of the asked-for run, and only while its run
+# lines carry that ack's gen: a run of the same id from before (an earlier LOAD
+# of it, its counting=1 frames still in the capture) is not this run.
+stale_txt = [run(3, 1, 0, -1, gen=6), LAW % (700000, 700000),
+             WIN % (700500, 960000, 0)] + settle_txt
+sm = rs.summarize_run(stale_txt, load_id=3)
+check("gen: a stale same-id counting=1 frame before the load id=3 ack does not count",
+      sm["frames"] == 2 and sm["cb_last"]["n"] == 2 and sm["cb_last"]["p50"] == 900000
+      and sm["frame_max"]["n"] == 2 and sm["gen"] == 7)
+two_acks = [LOADED % (3, 6, -1), run(3, 1, 0, -1, gen=6), LAW % (700000, 700000),
+            WIN % (700500, 960000, 0)] + settle_txt
+sm = rs.summarize_run(two_acks, load_id=3)
+check("gen: the last ack wins (a capture with two LOADs of the id)",
+      sm["gen"] == 7 and sm["frames"] == 2 and sm["cb_last"]["p50"] == 900000)
+nostale = [LOADED % (3, 7, -1), run(3, 1, 0, -1, gen=6), LAW % (700000, 700000),
+           WIN % (700500, 960000, 0), run(3, 1, 0, -1), LAW % (900000, 910000)]
+sm = rs.summarize_run(nostale, load_id=3)
+check("gen: after the ack, a run line of another gen does not count",
+      sm["frames"] == 1 and sm["cb_last"]["max"] == 900000)
+check("gen: no ack for the asked-for run, nothing counts",
+      rs.summarize_run(settle_txt[1:], load_id=3)["frames"] == 0
+      and rs.summarize_run(settle_txt[1:], load_id=3)["gen"] is None)
+sm = rs.summarize_run(settle_txt, load_id=3)
+check("trip: a clean run is not tripped", sm["tripped"] is False)
+trip_txt = settle_txt + ["SHELL_REMOTE guard tripped blk=4242",
+                         run(3, 1, 0, -1), LAW % (1000, 950000), WIN % (1000, 960000, 0)]
+sm = rs.summarize_run(trip_txt, load_id=3)
+check("trip: a guard tripped line marks the run and no frame after it counts",
+      sm["tripped"] is True and sm["frames"] == 2 and sm["cb_last"]["max"] == 905000
+      and sm["frame_max"]["n"] == 2)
+trip_run_txt = settle_txt + [run(3, 0, 0, -1, tripped=1), LAW % (1000, 950000),
+                             run(3, 1, 0, -1), LAW % (1000, 950000)]
+sm = rs.summarize_run(trip_run_txt, load_id=3)
+check("trip: a tripped=1 run line marks the run; nothing counts from it on",
+      sm["tripped"] is True and sm["frames"] == 2 and sm["cb_last"]["max"] == 905000)
+before_ack = ["SHELL_REMOTE guard tripped blk=12"] + settle_txt
+check("trip: a guard tripped line before the ack (the boot trip) is not this run's",
+      rs.summarize_run(before_ack, load_id=3)["tripped"] is False
+      and rs.summarize_run(before_ack, load_id=3)["frames"] == 2)
+other = settle_txt + [run(3, 1, 0, -1, gen=8, tripped=1)]
+check("trip: a tripped run line of another gen does not mark this run",
+      rs.summarize_run(other, load_id=3)["tripped"] is False)
 
 p = FakeRunPort(settle_txt)
 rc, s, d = run_cmd(p, None, record=False, load=3)
@@ -354,6 +407,10 @@ check("run: sends LOAD and summarizes only the counting frames of that id",
 p = FakeRunPort(void_txt)
 rc, s, d = run_cmd(p, None, record=False, load=3)
 check("run: summary.json records void", s["void"] is True)
+p = FakeRunPort(trip_txt)
+rc, s, d = run_cmd(p, None, record=False, load=3)
+check("run: summary.json records tripped and the gen", s["tripped"] is True
+      and s["gen"] == 7 and s["frames"] == 2)
 p = FakeRunPort(gest_txt)
 rc, s, d = run_cmd(p, None, record=False, load=None, gest=2)
 check("run: --gest sends GEST alone (it loads its own base) and filters by it",

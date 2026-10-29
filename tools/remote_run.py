@@ -11,8 +11,9 @@ section 5.4). The board stays on USB; this drives it from the PC.
 --record, DIR/audio.wav plus DIR/audio.wav.start. The COM port is found by USB
 VID/PID 0483:5740 unless --port is given. Ids index shell/generated_workloads.h;
 a gesture loads its own base workload. summary.json counts only the frames the
-board reports settled for this run (`counting=1`) and says `void` when a pot
-took a parameter over during it. --seconds includes the settle (1 s, or 5 s
+board reports settled for this run (`counting=1`, with the gen of the run's
+load / gest ack) and says `void` when a pot took a parameter over during it
+and `tripped` when the overrun guard silenced it (no frame from the trip on). --seconds includes the settle (1 s, or 5 s
 with a SAMPLER deck).
 """
 import argparse
@@ -122,7 +123,8 @@ def cmd_run(args, port_factory=_port, capture_fn=rl.start_capture,
             record = _finish_capture(capture, wav, abort=not completed)
         with open(out / "serial.txt", encoding="utf-8") as fh:
             # Only the settled frames of this run (the board's `SHELL_REMOTE
-            # run ... counting=1` lines); `void` once a pot took over.
+            # run ... counting=1` lines with its ack's gen); `void` once a pot
+            # took over, `tripped` once the guard silenced it.
             if args.gest is not None:
                 summary = rs.summarize_run(fh, gest_id=args.gest)
             else:

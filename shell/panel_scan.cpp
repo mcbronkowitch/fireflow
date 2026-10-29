@@ -265,6 +265,16 @@ OverrunGuard      g_guard(kGuardLimitCycles, kGuardBlocks);
 volatile uint32_t g_guard_blk  = 0;
 volatile bool     g_guard_flag = false;
 
+// LOAD, HOME and RST: the flag too, before their ack is queued -- otherwise
+// the foreground can pop the ack ahead of this block's panel_scan_block_end()
+// and print a stale `guard tripped` behind the new run's load line, which the
+// host reads as that run tripping.
+void clear_guard()
+{
+    g_guard.clear();
+    g_guard_flag = false;
+}
+
 // The block clock the runs count on: every block that reaches the law.
 uint32_t    g_rblock = 0;
 WorkloadRun g_run;
@@ -284,27 +294,82 @@ float g_load_knobs[ffctl::NUM_PARAMS];
 float g_home_knobs[ffctl::NUM_PARAMS];
 bool  g_home_excite[2] = {false, false};
 bool  g_home_valid     = false;
-// The run as the foreground reads it, refreshed every block. A torn set is
-// harmless: a LOAD changes gen and clears counting for at least 500 blocks,
-// so the foreground's "counting at two passes in a row, same gen" rule
-// (run_panel_scan_report()) cannot straddle one.
+// The run as the foreground reads it (publish_run(), read_run()), refreshed
+// every block and when the guard trips. A sequence lock like g_pub_seq's:
+// g_rs_seq is odd while the callback writes, and the foreground copies the
+// set between two equal, even readings. The callback cannot be interrupted
+// by the foreground, so a copy it cut into is simply retried.
+volatile uint32_t g_rs_seq      = 0;
 volatile int      g_rs_id       = -1;
 volatile int      g_rs_gest     = -1;
 volatile uint32_t g_rs_gen      = 0;
 volatile bool     g_rs_counting = false;
 volatile bool     g_rs_void     = false;
+volatile bool     g_rs_tripped  = false;
+
+void publish_run()
+{
+    g_rs_seq = g_rs_seq + 1u;   // odd: writing
+    std::atomic_signal_fence(std::memory_order_seq_cst);
+    g_rs_id       = g_run.id();
+    g_rs_gest     = g_run.active() ? g_run_gest : -1;
+    g_rs_gen      = g_run.gen();
+    g_rs_counting = g_run.counting(g_rblock);
+    g_rs_void     = g_run.void_run();
+    g_rs_tripped  = g_run.tripped();
+    std::atomic_signal_fence(std::memory_order_seq_cst);
+    g_rs_seq = g_rs_seq + 1u;   // even: done
+}
+
+struct RunSnap
+{
+    uint32_t gen;
+    int      id, gest;
+    bool     counting, void_run, tripped;
+};
+
+// Foreground only.
+RunSnap read_run()
+{
+    RunSnap  s;
+    uint32_t q;
+    do
+    {
+        q = g_rs_seq;
+        std::atomic_signal_fence(std::memory_order_seq_cst);
+        s.gen      = g_rs_gen;
+        s.id       = g_rs_id;
+        s.gest     = g_rs_gest;
+        s.counting = g_rs_counting;
+        s.void_run = g_rs_void;
+        s.tripped  = g_rs_tripped;
+        std::atomic_signal_fence(std::memory_order_seq_cst);
+    } while((q & 1u) != 0 || q != g_rs_seq);
+    return s;
+}
 
 // What the callback did, for the foreground to print (the callback never
 // prints): CmdRing as a callback -> foreground queue, the command kind and its
 // id, `b` one of these. A full queue drops the line, never the command.
+// A started LOAD / GEST carries its run's gen instead: b = kAckStarted + gen,
+// so the host can tell this run's frames from an earlier run of the same id.
+// Printed gens are the low 16 bits (kGenPrintMask), on the load line and on
+// the run line alike, which keeps the load line inside the log buffer; 65 536
+// loads in one capture would be needed for two runs to share one.
 enum AckCode : int32_t { kAckOk = 0, kAckBadId = 1, kAckUnsupported = 2, kAckGestDone = 3,
-                         kAckTake = 4 };
+                         kAckTake = 4, kAckStarted = 16 };
+constexpr uint32_t kGenPrintMask = 0xFFFFu;
 CmdRing g_acks;
 
-void ack(CmdKind k, int32_t a, AckCode b)
+void ack(CmdKind k, int32_t a, int32_t b)
 {
     const Command c{k, a, b};
     (void)g_acks.push(c);
+}
+
+void ack_started(CmdKind k, int32_t a)
+{
+    ack(k, a, kAckStarted + static_cast<int32_t>(g_run.gen() & kGenPrintMask));
 }
 
 // The maxima the frame lines report, so each run's numbers are its own:
@@ -340,7 +405,7 @@ void start_workload(const WorkloadDef& w, int id, int gest)
     g_run_rec[1] = w.rec[1] != 0;
     g_run.start(id, g_rblock, w.settle_blocks);
     g_run_gest = gest;
-    g_guard.clear();
+    clear_guard();
     reset_maxima();
 }
 
@@ -355,7 +420,7 @@ void remote_command(const Command& c)
             if(w == nullptr) { ack(c.kind, c.a, kAckBadId); break; }
             g_gest_n = 0;
             start_workload(*w, c.a, -1);
-            ack(c.kind, c.a, kAckOk);
+            ack_started(c.kind, c.a);
             break;
         }
         case CmdKind::Gesture:
@@ -377,7 +442,7 @@ void remote_command(const Command& c)
             g_gest_blocks = d->blocks;
             g_gest_done   = false;
             start_workload(*workload_by_id(d->base), d->base, c.a);
-            ack(c.kind, c.a, kAckOk);
+            ack_started(c.kind, c.a);
             break;
         }
         case CmdKind::Home:
@@ -390,12 +455,12 @@ void remote_command(const Command& c)
             g_run.stop();
             g_run_gest = -1;
             g_gest_n   = 0;
-            g_guard.clear();
+            clear_guard();
             reset_maxima();
             ack(c.kind, g_home_valid ? 1 : 0, kAckOk);
             break;
         case CmdKind::ResetMax:
-            g_guard.clear();
+            clear_guard();
             reset_maxima();
             ack(c.kind, 0, kAckOk);
             break;
@@ -449,11 +514,7 @@ void remote_block()
             ack(CmdKind::Gesture, g_run_gest, kAckGestDone);
         }
     }
-    g_rs_id       = g_run.id();
-    g_rs_gest     = g_run.active() ? g_run_gest : -1;
-    g_rs_gen      = g_run.gen();
-    g_rs_counting = g_run.counting(now);
-    g_rs_void     = g_run.void_run();
+    publish_run();
 }
 #endif
 
@@ -752,8 +813,15 @@ void panel_scan_block_end(uint32_t c0)
 #if SHELL_REMOTE
     // The overrun guard (workload_run.h) on this callback's cycles: integer
     // compares only, nothing printed here (the foreground says it).
+    // A trip marks the running workload: from here its callbacks are silence
+    // (spec 5.2), so the host summarizes none of its frames from this one on.
     const bool was_tripped = g_guard.tripped();
-    if(g_guard.block(dc) && !was_tripped) g_guard_blk = g_rblock;
+    if(g_guard.block(dc) && !was_tripped)
+    {
+        g_guard_blk = g_rblock;
+        g_run.on_guard_trip();
+        publish_run();
+    }
     g_guard_flag = g_guard.tripped();
 #endif
 #if SHELL_WIN_ON
@@ -811,9 +879,8 @@ void run_panel_scan_report(bench::Board& hw)
     // waits for the host, and a line printed once is gone before it attaches.
     constexpr uint32_t kRemoteEvery = 10;
     uint32_t           remote_pass  = 0;
-    // The previous pass's run reading, for the counting=1 rule below.
-    bool     remote_prev_counting = false;
-    uint32_t remote_prev_gen      = 0;
+    // The previous frame's `before` run reading, for the counting=1 rule.
+    RunSnap remote_prev = {0, -1, -1, false, false, false};
 #endif
 #if SHELL_PERSIST_ON
     // Where boot's hidden state came from (spec 2026-10-28 section 8): the
@@ -975,23 +1042,47 @@ void run_panel_scan_report(bench::Board& hw)
         // digits (a 2 ms block is 960 000 cycles) keep the line at 111 bytes
         // or less, inside libDaisy's 128-byte log buffer.
 #if SHELL_REMOTE
-        // The run this frame belongs to, right before the frame's LAW / WIN
-        // lines (tools/run_stats.py reads it that way). counting=1 only when
-        // the run was settled at the previous pass too, with the same gen: the
-        // WIN window below began at that pass, so it then holds counted blocks
-        // only. A LOAD in between changes gen and settles for >= 500 blocks.
+        // The run this frame belongs to, printed right before the frame's LAW /
+        // WIN lines (tools/run_stats.py reads it that way), with its gen (the
+        // load line carries the same gen, so the host tells this run from an
+        // earlier run of the same id). The frame's numbers are copied between
+        // two run readings: `before` ahead of the copy and the WIN reset,
+        // `after` behind them. counting=1 only when the run was settled at the
+        // previous frame's `before` -- ahead of that frame's WIN reset, so
+        // ahead of this window's first block -- and is the same gen, still
+        // settled and not tripped at this frame's `after`, behind its last
+        // block: the window then holds counted blocks of that run only. A LOAD
+        // anywhere inside it changes gen; a guard trip inside it shows here.
         {
-            const bool     cnt = g_rs_counting;
-            const uint32_t gen = g_rs_gen;
-            const int      id = g_rs_id, gest = g_rs_gest;
-            const bool     vd = g_rs_void;
-            const bool     counted = cnt && remote_prev_counting && gen == remote_prev_gen;
-            remote_prev_counting = cnt;
-            remote_prev_gen      = gen;
-            hw.PrintLine("SHELL_REMOTE run id=%d counting=%d void=%d gest=%d", id,
-                         counted ? 1 : 0, vd ? 1 : 0, gest);
-        }
+            const RunSnap  before = read_run();
+            const uint32_t law_last = g_law_cycles_last, law_max = g_law_cycles_max;
+            const uint32_t led_last = g_led_cycles_last, led_max = g_led_cycles_max;
+            const uint32_t cb_last = g_cb_cycles_last, cb_max = g_cb_cycles_max;
+#if !SHELL_PERSIST_STRESS_ON
+            const uint32_t win = g_win_cb_max, gap = g_win_gap_max;
+            const uint32_t over = g_win_over, n = g_win_blocks;
+            g_win_reset = true;
 #endif
+            const RunSnap after   = read_run();
+            const bool    counted = remote_prev.counting && remote_prev.gen == after.gen
+                                    && after.counting && !after.tripped;
+            remote_prev = before;
+            hw.PrintLine("SHELL_REMOTE run id=%d gen=%u counting=%d void=%d tripped=%d gest=%d",
+                         after.id, static_cast<unsigned>(after.gen & kGenPrintMask),
+                         counted ? 1 : 0,
+                         after.void_run ? 1 : 0, after.tripped ? 1 : 0, after.gest);
+            hw.PrintLine("SHELL_PLAY_LAW cyc_last=%d cyc_max=%d led_last=%d led_max=%d "
+                         "cb_last=%d cb_max=%d",
+                         static_cast<int>(law_last), static_cast<int>(law_max),
+                         static_cast<int>(led_last), static_cast<int>(led_max),
+                         static_cast<int>(cb_last), static_cast<int>(cb_max));
+#if !SHELL_PERSIST_STRESS_ON
+            hw.PrintLine("SHELL_PLAY_WIN win=%u gap=%u over=%u n=%u",
+                         static_cast<unsigned>(win), static_cast<unsigned>(gap),
+                         static_cast<unsigned>(over), static_cast<unsigned>(n));
+#endif
+        }
+#else
         hw.PrintLine("SHELL_PLAY_LAW cyc_last=%d cyc_max=%d led_last=%d led_max=%d "
                      "cb_last=%d cb_max=%d",
                      static_cast<int>(g_law_cycles_last),
@@ -1000,7 +1091,7 @@ void run_panel_scan_report(bench::Board& hw)
                      static_cast<int>(g_led_cycles_max),
                      static_cast<int>(g_cb_cycles_last),
                      static_cast<int>(g_cb_cycles_max));
-#if (SHELL_CB_WINDOW || SHELL_REMOTE) && !SHELL_PERSIST_STRESS_ON
+#if SHELL_CB_WINDOW && !SHELL_PERSIST_STRESS_ON
         // Since the previous frame: the worst callback, the worst interval
         // between two callback entries (a late block shows here even when its
         // own cycles stay under the deadline), the blocks above
@@ -1014,6 +1105,7 @@ void run_panel_scan_report(bench::Board& hw)
                          static_cast<unsigned>(over), static_cast<unsigned>(n));
         }
 #endif
+#endif // SHELL_REMOTE
 #if defined(SPKY_PROBE_LAW)
         // The cyc_max block's TIDE split, in cycles and in calls (two lines,
         // each inside the 128-byte log buffer): the law around it is cyc_max.
@@ -1044,7 +1136,8 @@ void run_panel_scan_report(bench::Board& hw)
         // What the callback did since the last pass. The tables are read here
         // from QSPI (memory-mapped; the save that would unmap it is
         // suppressed below). Every line stays inside the 128-byte log buffer:
-        // the longest, a load line with a 31-character name, is ~110 bytes.
+        // the longest, a load line with a 31-character name and a 5-digit
+        // gen, is 122 bytes (today's longest name has 28).
         Command a;
         while(g_acks.pop(&a))
         {
@@ -1063,23 +1156,29 @@ void run_panel_scan_report(bench::Board& hw)
                 hw.PrintLine("SHELL_REMOTE home restored=%d", static_cast<int>(a.a));
             else if(a.kind == CmdKind::ResetMax)
                 hw.PrintLine("SHELL_REMOTE rst");
-            else if(a.kind == CmdKind::Load || a.kind == CmdKind::Gesture)
+            else if(a.b >= kAckStarted
+                    && (a.kind == CmdKind::Load || a.kind == CmdKind::Gesture))
             {
-                int id = a.a;
+                // gen= is the run's (tools/run_stats.py keys on it); gest= on
+                // the load line ties a gesture's base load to its gesture.
+                const unsigned gen  = static_cast<unsigned>(a.b - kAckStarted);
+                const int      gest = a.kind == CmdKind::Gesture ? static_cast<int>(a.a) : -1;
+                int            id   = a.a;
                 if(a.kind == CmdKind::Gesture)
                 {
                     const GestureDef* g = gesture_def(a.a);
-                    hw.PrintLine("SHELL_REMOTE gest id=%d name=%s base=%d steps=%d blocks=%u",
-                                 static_cast<int>(a.a), g->name, static_cast<int>(g->base),
+                    hw.PrintLine("SHELL_REMOTE gest id=%d gen=%u name=%s base=%d steps=%d blocks=%u",
+                                 static_cast<int>(a.a), gen, g->name, static_cast<int>(g->base),
                                  static_cast<int>(g->n), static_cast<unsigned>(g->blocks));
                     id = g->base;
                 }
                 // input= is what the sweep fed the audio input; the board
                 // feeds nothing and plays whatever is patched to its input.
                 const WorkloadDef* w = workload_by_id(id);
-                hw.PrintLine("SHELL_REMOTE load id=%d name=%s input=%s settle=%u excite=%d,%d "
-                             "rec=%d,%d",
-                             id, w->name, w->input == WorkloadInput::Noise ? "noise" : "silence",
+                hw.PrintLine("SHELL_REMOTE load id=%d gen=%u gest=%d name=%s input=%s settle=%u "
+                             "excite=%d,%d rec=%d,%d",
+                             id, gen, gest, w->name,
+                             w->input == WorkloadInput::Noise ? "noise" : "silence",
                              static_cast<unsigned>(w->settle_blocks), w->excite[0], w->excite[1],
                              w->rec[0], w->rec[1]);
             }
