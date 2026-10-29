@@ -13,7 +13,8 @@ material the sweep loaded it with (excite, rec, settle_blocks, input). Then the 
 entries: the R4 all-noon frame as a workload, and the gestures of spec 5.2 as
 row/value sequences at a fixed rate (GESTURES below). An existing --out file's
 workloads with "kind": "hand" that this script does not write itself (e.g.
-`bastian`, captured on the board in Task 7) are carried over.
+`bastian`, captured on the board in Task 7) are carried over, and so are the
+kind "rnd" vectors tools/add_random_workloads.py appended (Task 9), in order.
 
 Rows are the Rev A panel table's (shell/generated_panel_map.h), named from its
 `// row N NAME` comments; values are x1000 of the normalised pot value, as
@@ -245,7 +246,7 @@ def main(argv=None):
     if os.path.exists(a.out):
         old = json.load(open(a.out, encoding="utf-8"))
         for w in old.get("workloads", []):
-            if w.get("kind") == "hand" and w["name"] not in mine:
+            if w.get("kind") in ("hand", "rnd") and w["name"] not in mine:
                 hand.append(w)
 
     doc = {
