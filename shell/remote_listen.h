@@ -7,14 +7,23 @@
 // on BOOT and RESET; this file is that way, and it has to work in the states
 // a measurement image gets into:
 //
-//   - the audio callback runs back to back. The audio DMA and USB both sit at
-//     NVIC priority 0 and the DMA wins, so the foreground starves and never
-//     sees a command. BOOT is therefore acted on inside the USB receive
-//     interrupt itself (on_rx() in remote_listen.cpp).
+//   - the foreground starves: the callback leaves gaps between blocks, but
+//     too few for the report loop to get through. BOOT is therefore acted on
+//     inside the USB receive interrupt itself (on_rx() in remote_listen.cpp),
+//     which still runs in those gaps.
+//   - the callback runs back to back (it, and what runs around it, takes a
+//     block or longer). The audio DMA and USB both sit at NVIC priority 0 and
+//     the DMA has the lower exception number, so its interrupt is always the
+//     pending one picked next and the USB interrupt never runs: no command,
+//     BOOT included, arrives. Only the overrun guard (workload_run.h) gets
+//     out of that state, by silencing the callback; with the guard off
+//     (measurement image, bit 31) the board needs BOOT + RESET by hand.
 //   - the image does not boot: a failed itcm_load() (another build's QSPI
-//     image) or a hard fault. Both enter the bootloader, instead of blinking
-//     for ever or hitting libDaisy's HardFault_Handler, which executes BKPT
-//     and locks up without a debugger.
+//     image) or a fault (NMI, HardFault, MemManage, BusFault, UsageFault).
+//     All enter the bootloader, instead of blinking for ever or spinning in
+//     libDaisy's default handler. A mismatched pair runs the other build's
+//     cold QSPI code in board_init() BEFORE itcm_load() checks the stamp;
+//     that is recovered only if that code faults (spec section 8).
 //
 // The pure half (parsing, packet assembly, the ISR-to-callback ring) is
 // remote_cmd.h, host-tested; the wiring is held by test_remote_wiring.py.
@@ -44,8 +53,8 @@ const char* remote_build();
 // included: it never waits on SysTick and never reaches QSPI code.
 [[noreturn]] void remote_enter_bootloader();
 
-// Copies the vector table into RAM, points HardFault, MemManage, BusFault and
-// UsageFault at remote_enter_bootloader(), and moves SCB->VTOR there. The
+// Copies the vector table into RAM, points NMI, HardFault, MemManage, BusFault
+// and UsageFault at remote_enter_bootloader(), and moves SCB->VTOR there. The
 // first statement of main(), so a fault in board_init() is covered too.
 void remote_install_fault_vectors();
 

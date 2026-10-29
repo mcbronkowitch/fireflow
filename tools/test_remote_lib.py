@@ -9,6 +9,11 @@ import remote_lib as rl
 import run_stats as rs
 import remote_run as rr
 
+# The partial-flash mark (I4) lives in a scratch directory for the whole test,
+# never at the real one: a failing fake flash below must not leave a mark
+# that refuses the next real `boot`.
+rl.PARTIAL_MARK = Path(tempfile.mkdtemp()) / "partial-flash"
+
 FAILS = []
 def check(name, cond):
     print(("ok   " if cond else "FAIL ") + name)
@@ -28,11 +33,13 @@ class FakeSerial:
     def close(self): self.closed = True
 
 opened = []
+open_kw = []
 def make_opener(plan):
     """plan: one entry per open attempt -- a FakeSerial, or an exception."""
     plan = list(plan)
-    def opener(name, baud, timeout=None):
+    def opener(name, baud, timeout=None, **kw):
         opened.append(name)
+        open_kw.append(kw)
         item = plan.pop(0)
         if isinstance(item, Exception): raise item
         return item
@@ -58,7 +65,7 @@ check("port: stamps are monotonic even when the clock steps back",
 check("port: polled every 0.5 s while the port was absent", sleeps == [0.5])
 check("port: dead handle closed before reopening", first.closed)
 
-def never_back(name, baud, timeout=None): raise rl.SerialException("gone")
+def never_back(name, baud, timeout=None, **kw): raise rl.SerialException("gone")
 port = rl.Port("COM9", opener=never_back, give_up_s=2.0, sleep=lambda s: None)
 try:
     list(port.lines(until=lambda: False)); gave_up = False
@@ -242,19 +249,26 @@ LOADED = ("SHELL_REMOTE load id=%d gen=%d gest=%d name=BBD_BBD_top3 input=noise 
           "settle=500 excite=1,1 rec=0,0")
 GESTED = "SHELL_REMOTE gest id=%d gen=%d name=pot_sweep base=144 steps=5 blocks=4000"
 
-def run(rid, counting, void, gest, gen=7, tripped=0):
-    """A board run line (shell/panel_scan.cpp); gen 7 is the fixtures' run."""
-    return RUN % (rid, gen, counting, void, tripped, gest)
+def run(rid, counting, void, gest, gen=7, tripped=0, tog="00000000"):
+    """A board run line (shell/panel_scan.cpp); gen 7 is the fixtures' run.
+    Every SHELL_REMOTE image prints tog=; tog=None leaves it out."""
+    line = RUN % (rid, gen, counting, void, tripped, gest)
+    return line if tog is None else line + " tog=" + tog
 WIN = "SHELL_PLAY_WIN win=%d gap=%d over=%d n=250"
 
 class FakeRunPort:
-    """lines() yields the script, then raises if an exception is last."""
-    def __init__(self, script): self.script, self.sent, self.closed = script, [], False
+    """lines() yields the script, consuming it (a second lines() call goes on
+    where the first stopped, as a real port does), and raises an exception
+    item when it gets to it."""
+    def __init__(self, script):
+        self.script, self.sent, self.closed, self.n = list(script), [], False, 0
     def send(self, line): self.sent.append(line)
     def lines(self, until=None):
-        for i, item in enumerate(self.script):
+        while self.script:
+            item = self.script.pop(0)
             if isinstance(item, Exception): raise item
-            yield 1000.0 + i, item
+            self.n += 1
+            yield 1000.0 + self.n, item
     def close(self): self.closed = True
 
 class FakeCapture:
@@ -270,10 +284,11 @@ class FakeCapture:
             Path(self.wav).write_bytes(b"RIFF")
         return self.rc
 
-def run_cmd(port, capture_factory, record, load=1, gest=None):
+def run_cmd(port, capture_factory, record, load=1, gest=None, tog=None,
+            expect_tog="00000000"):
     d = tempfile.mkdtemp()
-    args = argparse.Namespace(load=load, gest=gest, tog=None, seconds=5, out=d,
-                              record=record, port="COMx")
+    args = argparse.Namespace(load=load, gest=gest, tog=tog, expect_tog=expect_tog, seconds=5,
+                              out=d, record=record, port="COMx")
     with contextlib.redirect_stdout(io.StringIO()):
         rc = rr.cmd_run(args, port_factory=lambda a: port,
                         capture_fn=capture_factory, sleep=lambda s: None)
@@ -456,8 +471,10 @@ sm = rs.summarize_run(tog_txt, load_id=3)
 check("tog: the counted frames' toggle word is recorded",
       sm.get("tog") == ["00000004"] and sm["frames"] == 2 and sm["void"] is False
       and sm.get("error") is None)
+notog_txt = [LOADED % (3, 7, -1), run(3, 1, 0, -1, tog=None), LAW % (900000, 910000)]
 check("tog: run lines without tog= record none",
-      rs.summarize_run(settle_txt, load_id=3).get("tog") == [])
+      rs.summarize_run(notog_txt, load_id=3).get("tog") == []
+      and rs.summarize_run(notog_txt, load_id=3)["frames"] == 1)
 for bit, word in ((30, "40000000"), (31, "8000000c")):
     sm = rs.summarize_run(tog_txt[:3] + [runt(3, 1, word), LAW % (900000, 910000)], load_id=3)
     check("tog: bit %d in a counted frame voids the run with an error" % bit,
@@ -495,9 +512,275 @@ check("run: probe bits in a counted frame exit non-zero with the error",
       rc != 0 and bool(s["error"]) and "ProbeBits" in s["error"] and s["void"] is True
       and s.get("tog") == ["80000000"])
 p = FakeRunPort(follow_txt)
-rc, s, d = run_cmd(p, None, record=False, load=3)
+rc, s, d = run_cmd(p, None, record=False, load=3, tog=["2=1"])
 check("run: a run across a TOG settle exits 0 with the followed gen",
       rc == 0 and s["gen"] == 8 and s["frames"] == 1 and s["error"] is None)
+
+# ---- the final review's fix wave ---------------------------------------------
+def guarded(name, fn):
+    """check(name, fn()), with an exception (an API the code does not have
+    yet, for one) counted as a failure instead of ending the script."""
+    try:
+        ok = bool(fn())
+    except Exception as e:
+        print("     (%s: %s)" % (type(e).__name__, e))
+        ok = False
+    check(name, ok)
+
+def quiet(fn, *a, **kw):
+    with contextlib.redirect_stdout(io.StringIO()):
+        return fn(*a, **kw)
+
+# M2: the decision a run line makes ends with its frame's WIN line, so a run
+# line lost across a #reconnect cannot let the next frame count under it.
+lost_txt = [LOADED % (3, 7, -1), run(3, 1, 0, -1), LAW % (900000, 910000),
+            WIN % (912000, 960100, 2), "#reconnect gap>=1.0s",
+            LAW % (700000, 990000), WIN % (990000, 990000, 9)]
+sm = rs.summarize_run(lost_txt, load_id=3)
+check("M2: after a #reconnect, a frame without its run line does not count",
+      sm["frames"] == 1 and sm["cb_last"]["max"] == 900000 and sm["frame_max"]["n"] == 1
+      and sm["reconnects"] == 1 and sm["skipped"] == 1)
+sm = rs.summarize_run(lost_txt[:4] + lost_txt[5:], load_id=3)
+check("M2: every frame needs its own run line (the decision ends at WIN)",
+      sm["frames"] == 1 and sm["frame_max"]["n"] == 1 and sm["frame_max"]["max"] == 912000)
+# The port went between a frame's LAW and its WIN: the decision ends at the
+# #reconnect itself, so the next frame's LAW / WIN do not count either.
+sm = rs.summarize_run(lost_txt[:3] + lost_txt[4:], load_id=3)
+check("M2: a #reconnect between LAW and WIN ends the decision too",
+      sm["frames"] == 1 and sm["cb_last"]["max"] == 900000 and sm["frame_max"] is None)
+
+# M3: a gesture run stops counting at the board's `gest done` line.
+GDONE = "SHELL_REMOTE gest done id=%d"
+sm = rs.summarize_run(gest_txt + [GDONE % 2, run(144, 1, 0, 2), LAW % (800000, 800000)],
+                      gest_id=2)
+check("M3: a gesture run stops counting at `gest done`",
+      sm["frames"] == 1 and sm["cb_last"]["max"] == 930000 and sm.get("gest_done") is True)
+sm = rs.summarize_run(gest_txt + [GDONE % 1, run(144, 1, 0, 2), LAW % (800000, 800000)],
+                      gest_id=2)
+check("M3: another gesture's `gest done` does not stop it",
+      sm["frames"] == 2 and sm.get("gest_done") is False)
+sm = rs.summarize_run([GDONE % 2] + gest_txt, gest_id=2)
+check("M3: a `gest done` before the ack is an earlier run's",
+      sm["frames"] == 1 and sm.get("gest_done") is False)
+
+# M4: summary.json says which image and which workload it measured.
+ONL = "SHELL_REMOTE on build=%s"
+sm = rs.summarize_run([ONL % "abc1234+ measure=1 tog=00000000"] + settle_txt, load_id=3)
+check("M4: summary records the build, the measurement image and the workload's name",
+      sm.get("build") == "abc1234+" and sm.get("measure") == 1 and sm.get("name") == "BBD_BBD_top3")
+sm = rs.summarize_run([ONL % "abc1234"] + settle_txt + [ONL % "def5678"], load_id=3)
+check("M4: the last on line wins; a listener image's says measure 0",
+      sm.get("build") == "def5678" and sm.get("measure") == 0)
+sm = rs.summarize_run(settle_txt, load_id=3)
+check("M4: without an on line build and measure are None",
+      "build" in sm and sm["build"] is None and sm.get("measure") is None
+      and sm.get("name") == "BBD_BBD_top3")
+check("M4: a gesture run is named by its gesture",
+      rs.summarize_run(gest_txt, gest_id=2).get("name") == "pot_sweep")
+
+# I3: the toggle word the run wanted is checked on every counted frame.
+guarded("I3: counted frames with the expected word: no error",
+        lambda: rs.summarize_run(tog_txt, load_id=3, expect_tog=0x4)["error"] is None
+        and rs.summarize_run(tog_txt, load_id=3, expect_tog=0x4).get("expect_tog") == "00000004")
+guarded("I3: a counted frame with another word is a ToggleMismatch",
+        lambda: (rs.summarize_run(tog_txt, load_id=3, expect_tog=0)["error"] or "")
+        .startswith("ToggleMismatch"))
+guarded("I3: a counted frame without tog= cannot confirm the word: ToggleMismatch",
+        lambda: (rs.summarize_run(notog_txt, load_id=3, expect_tog=0)["error"] or "")
+        .startswith("ToggleMismatch"))
+guarded("I3: a frame that did not count may carry another word",
+        lambda: rs.summarize_run([LOADED % (3, 7, -1), runt(3, 0, "00000004"), LAW % (950000, 950000),
+                                  runt(3, 1, "00000000"), LAW % (900000, 910000)],
+                                 load_id=3, expect_tog=0)["error"] is None)
+
+class FakeBoard:
+    """A board on the far end of the port: one frame's run line with its toggle
+    word to start with; TOG answered with its ack (the word after it, or
+    ack_word), or with `unsupported` on a listener image; `after_load` played
+    once LOAD / GEST arrives. `pending` counts TOGs sent and not yet answered:
+    the board's command ring holds 8 (shell/remote_cmd.h)."""
+    def __init__(self, word, after_load, measure=True, ack_word=None, first=None):
+        self.word, self.after_load, self.measure, self.ack_word = word, list(after_load), measure, ack_word
+        self.queue = list(first) if first is not None else [run(9, 0, 0, -1, gen=3, tog="%08x" % word)]
+        self.sent, self.closed, self.pending, self.max_pending, self.n = [], False, 0, 0, 0
+    def send(self, line):
+        self.sent.append(line)
+        parts = line.split()
+        if parts[0] == "TOG":
+            self.pending += 1
+            self.max_pending = max(self.max_pending, self.pending)
+            if not self.measure:
+                self.queue.append("SHELL_REMOTE error cmd=TOG unsupported (measurement image only)")
+                return
+            b, v = int(parts[1]), int(parts[2])
+            self.word = (self.word | (1 << b)) if v else (self.word & ~(1 << b))
+            w = self.word if self.ack_word is None else self.ack_word
+            self.queue.append(TOGACK % (b, v, "%08x" % w))
+        elif parts[0] in ("LOAD", "GEST"):
+            self.queue += self.after_load
+    def lines(self, until=None):
+        while self.queue:
+            item = self.queue.pop(0)
+            if isinstance(item, Exception): raise item
+            if item.startswith("SHELL_REMOTE tog bit=") or item.startswith("SHELL_REMOTE error cmd=TOG"):
+                self.pending -= 1
+            self.n += 1
+            yield 1000.0 + self.n, item
+    def close(self): self.closed = True
+
+after = [LOADED % (3, 7, -1), run(3, 1, 0, -1), LAW % (900000, 910000)]
+b = FakeBoard(0x4, after)
+rc, s, d = run_cmd(b, None, record=False, load=3)
+check("I3: a word carried over from the last run is cleared before the LOAD",
+      b.sent == ["TOG 2 0", "LOAD 3"] and rc == 0 and s["error"] is None
+      and s.get("expect_tog") == "00000000")
+b = FakeBoard(0x4, [LOADED % (3, 7, -1), runt(3, 1, "00000020"), LAW % (900000, 910000)])
+rc, s, d = run_cmd(b, None, record=False, load=3, tog=["5=1"])
+check("I3: --tog sets its bit and clears the rest, all before the LOAD",
+      b.sent == ["TOG 2 0", "TOG 5 1", "LOAD 3"] and rc == 0 and s.get("expect_tog") == "00000020")
+b = FakeBoard(0x0, [LOADED % (3, 7, -1), runt(3, 1, "000003ff"), LAW % (900000, 910000)])
+rc, s, d = run_cmd(b, None, record=False, load=3, expect_tog="000003ff")
+check("I3: ten bits go in paced chunks: never more than 7 unanswered in the ring",
+      b.word == 0x3ff and b.max_pending <= 7 and b.sent[-1] == "LOAD 3"
+      and len(b.sent) == 11 and rc == 0)
+b = FakeBoard(0x0, after)
+rc, s, d = run_cmd(b, None, record=False, load=3)
+check("I3: nothing to change, no TOG sent", b.sent == ["LOAD 3"] and rc == 0)
+b = FakeBoard(0x0, after, measure=False)
+rc, s, d = run_cmd(b, None, record=False, load=3, tog=["2=1"])
+check("I3: TOG on a listener image fails the run before the LOAD",
+      rc != 0 and (s["error"] or "").startswith("TogError") and "LOAD 3" not in b.sent)
+b = FakeBoard(0x0, after, ack_word=0)
+rc, s, d = run_cmd(b, None, record=False, load=3, tog=["2=1"])
+check("I3: a board whose acked word is not the wanted one fails the run",
+      rc != 0 and (s["error"] or "").startswith("TogError") and "LOAD 3" not in b.sent)
+b = FakeBoard(0x0, after, first=[])
+rc, s, d = run_cmd(b, None, record=False, load=3)
+check("I3: no run line to read the word from fails the run, nothing sent",
+      rc != 0 and (s["error"] or "").startswith("TogError") and b.sent == [])
+b = FakeBoard(0x0, [LOADED % (3, 7, -1), runt(3, 1, "00000004"), LAW % (900000, 910000)])
+rc, s, d = run_cmd(b, None, record=False, load=3)
+check("I3: a counted frame with another word than wanted exits non-zero",
+      rc != 0 and (s["error"] or "").startswith("ToggleMismatch"))
+
+# I4: a failed flash step is retried as a whole pair; a pair that never
+# completes is on record, and nothing boots or resets the board meanwhile.
+def fake_run_seq(results):
+    calls, res = [], list(results)
+    def run_(cmd, **kw):
+        calls.append(cmd)
+        if cmd[1] == "-l":
+            return Res(0, "Found DFU: [0483:df11]")
+        return Res(res.pop(0) if res else 0)
+    return run_, calls
+
+def flash_imgs(calls): return [c[c.index("-D") + 1] for c in calls if "-D" in c]
+
+def no_dfu():
+    if rl.PARTIAL_MARK.exists():
+        rl.PARTIAL_MARK.unlink()     # the QSPI-failure fixture above left one
+    run_, calls = fake_run_factory(dfu_after=10**9)
+    try:
+        rl.flash_pair(Path("q.bin"), Path("s.bin"), run=run_, wait_s=2, sleep=lambda s: None)
+    except rl.FlashError:
+        return not rl.PARTIAL_MARK.exists() and not flash_imgs(calls)
+    return False
+guarded("I4: no DFU device: nothing written and no partial flash on record", no_dfu)
+def qspi_fails():
+    run_, calls = fake_run_factory(fail_on="q.bin")
+    try:
+        rl.flash_pair(Path("q.bin"), Path("s.bin"), run=run_, sleep=lambda s: None)
+    except rl.PartialFlash:
+        ok = rl.PARTIAL_MARK.exists() and "s.bin" not in flash_imgs(calls)
+        rl.PARTIAL_MARK.unlink()
+        return ok
+    return False
+guarded("I4: a failed QSPI step is a partial flash too (the QSPI may be half erased)",
+        qspi_fails)
+run_, calls = fake_run_seq([0, 74, 0, 0])
+guarded("I4: a failed SRAM step retries the whole pair, QSPI first",
+        lambda: rl.flash_pair(Path("q.bin"), Path("s.bin"), run=run_, sleep=lambda s: None) is None
+        and flash_imgs(calls) == ["q.bin", "s.bin", "q.bin", "s.bin"]
+        and not rl.PARTIAL_MARK.exists())
+run_, calls = fake_run_seq([0, 74] * 5)
+def never_whole():
+    try:
+        rl.flash_pair(Path("q.bin"), Path("s.bin"), run=run_, sleep=lambda s: None, retries=2)
+    except rl.PartialFlash as e:
+        return "do not boot" in str(e).lower() and len(flash_imgs(calls)) == 6 \
+            and rl.PARTIAL_MARK.exists()
+    return False
+guarded("I4: a pair that never completes raises PartialFlash and stays on record", never_whole)
+bp = FakeRunPort([ONL % "abc1234"])
+guarded("I4: boot refuses while a partial flash is on record",
+        lambda: quiet(rr.cmd_boot, argparse.Namespace(port="COMx", wait=1, expect_build=None),
+                      port_factory=lambda a: bp, wait_fn=lambda **k: None) != 0 and bp.sent == [])
+cp = FakeRunPort([])
+guarded("I4: so does `cmd BOOT`",
+        lambda: quiet(rr.cmd_cmd, argparse.Namespace(port="COMx", line="BOOT", listen=0),
+                      port_factory=lambda a: cp) != 0 and cp.sent == [])
+run_, calls = fake_run_seq([0, 0])
+guarded("I4: a whole pair takes the partial flash off the record",
+        lambda: rl.flash_pair(Path("q.bin"), Path("s.bin"), run=run_, sleep=lambda s: None) is None
+        and not rl.PARTIAL_MARK.exists())
+bp = FakeRunPort([])
+guarded("I4: ... and boot works again",
+        lambda: quiet(rr.cmd_boot, argparse.Namespace(port="COMx", wait=1, expect_build=None),
+                      port_factory=lambda a: bp, wait_fn=lambda **k: None) == 0 and bp.sent == ["BOOT"])
+
+# M5: flash and boot confirm the image by its `SHELL_REMOTE on build=` stamp.
+guarded("M5: confirm_build accepts the expected stamp",
+        lambda: rl.confirm_build(FakeRunPort(["SHELL_PLAY_LAW cb_last=1", ONL % "abc1234 measure=1"]),
+                                 "abc1234", wait_s=5) == "abc1234")
+def mismatch(script, want, needle):
+    try:
+        rl.confirm_build(FakeRunPort(script), want, wait_s=5)
+    except rl.BuildMismatch as e:
+        return needle in str(e)
+    return False
+guarded("M5: another stamp (a dirty one included) is a BuildMismatch",
+        lambda: mismatch([ONL % "abc1234+"], "abc1234", "abc1234+"))
+guarded("M5: no on line in time is a BuildMismatch",
+        lambda: mismatch(["SHELL_PLAY_LAW cb_last=1"], "abc1234", "SHELL_REMOTE on"))
+flashed = []
+fa = argparse.Namespace(qspi="q.bin", sram="s.bin", expect_build="abc1234", port="COMx")
+guarded("M5: flash --expect-build passes on the expected stamp",
+        lambda: quiet(rr.cmd_flash, fa, flash_fn=lambda q, s: flashed.append((q, s)),
+                      port_factory=lambda a: FakeRunPort([ONL % "abc1234"])) == 0 and len(flashed) == 1)
+guarded("M5: flash --expect-build fails on another stamp",
+        lambda: quiet(rr.cmd_flash, fa, flash_fn=lambda q, s: flashed.append((q, s)),
+                      port_factory=lambda a: FakeRunPort([ONL % "0000000"])) != 0)
+bp = FakeRunPort([ONL % "abc1234"])
+guarded("M5: boot --expect-build confirms the running image, then sends BOOT",
+        lambda: quiet(rr.cmd_boot, argparse.Namespace(port="COMx", wait=1, expect_build="abc1234"),
+                      port_factory=lambda a: bp, wait_fn=lambda **k: None) == 0 and bp.sent == ["BOOT"])
+bp = FakeRunPort([ONL % "fff0000"])
+guarded("M5: boot --expect-build on another image sends nothing",
+        lambda: quiet(rr.cmd_boot, argparse.Namespace(port="COMx", wait=1, expect_build="abc1234"),
+                      port_factory=lambda a: bp, wait_fn=lambda **k: None) != 0 and bp.sent == [])
+
+# M6: a write that times out is handled like a vanished port.
+class TimeoutSerial(FakeSerial):
+    def write(self, data): raise rl.SerialTimeoutException("write timeout")
+open_kw.clear()
+t1, t2 = TimeoutSerial([]), FakeSerial([])
+def m6_retry():
+    port = rl.Port("COM3", opener=make_opener([t1, t2]), sleep=lambda s: None)
+    port.send("TOG 2 1")
+    return t1.closed and t2.written == [b"\nTOG 2 1\n"]
+guarded("M6: a write timeout reopens the port and sends the line again, behind a newline",
+        m6_retry)
+guarded("M6: the port is opened with a write timeout",
+        lambda: bool(open_kw) and (open_kw[0].get("write_timeout") or 0) > 0)
+def m6_gone():
+    port = rl.Port("COM3", opener=make_opener([TimeoutSerial([]), TimeoutSerial([])]),
+                   sleep=lambda s: None)
+    try:
+        port.send("PING")
+    except rl.PortGone:
+        return True
+    return False
+guarded("M6: a second write timeout raises PortGone", m6_gone)
 
 print("\n%d failed" % len(FAILS) if FAILS else "\nall ok")
 sys.exit(1 if FAILS else 0)

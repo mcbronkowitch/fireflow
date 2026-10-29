@@ -262,13 +262,18 @@ constexpr uint32_t kWinOverCycles  = 930000;
 static_assert(kWorkloadRowCount == kTable.count,
               "generated_workloads.h: one value per Rev A row (run gen_workloads.py)");
 
-// The self-limiter (spec 5.3): latched by kGuardBlocks consecutive callbacks
-// over kGuardLimitCycles in panel_scan_block_end(); main.cpp's callback then
-// writes silence instead of calling process(), so the foreground and USB get
-// the CPU back. LOAD, HOME and RST clear it. g_guard_blk: the block it
-// tripped in; g_guard_flag mirrors tripped() for the foreground.
-OverrunGuard      g_guard(kGuardLimitCycles, kGuardBlocks);
+// The self-limiter (spec 5.3): latched in panel_scan_block_end() by
+// kGuardBlocks consecutive callbacks over kGuardLimitCycles, or by as many
+// consecutive entry-to-entry periods over kGuardPeriodCycles (back to back
+// with cb under the limit; workload_run.h). main.cpp's callback then writes
+// silence instead of calling process(), and the measurement image's LATE
+// burn stops (panel_scan_late()), so the foreground and USB get the CPU back.
+// LOAD, HOME and RST clear it. g_guard_blk: the block it tripped in;
+// g_guard_by: which criterion (GuardCause); g_guard_flag mirrors tripped()
+// for the foreground.
+OverrunGuard      g_guard(kGuardLimitCycles, kGuardBlocks, kGuardPeriodCycles);
 volatile uint32_t g_guard_blk  = 0;
+volatile GuardCause g_guard_by = GuardCause::None;
 volatile bool     g_guard_flag = false;
 
 // LOAD, HOME and RST: the flag too, before their ack is queued -- otherwise
@@ -512,7 +517,9 @@ SecSnap read_sec()
 // the probe -- USB, SysTick, the audio interrupt's entry and exit, and the
 // callback's own code ahead of cb0 in main.cpp. A jump that held more than
 // one callback (back to back: the foreground starved) cannot be split, so it
-// and the block after it are not counted.
+// and the block after it are not counted. `neg` counts the blocks whose
+// split saturated (busy under cb, or out under the tail: out_split()), whose
+// out / ext then read 0 instead of a figure that adds up.
 constexpr uint32_t kOutWindowCycles = 500u * 1000u * kCoreMhz;   // 500 ms, as Delay(500)
 static_assert(kOutWindowCycles == 240000000u, "500 ms at 480 MHz");
 constexpr uint32_t kOutJumpCycles   = 64;
@@ -521,7 +528,7 @@ constexpr int      kOutMaxBlocks    = 512;   // 250 blocks in 500 ms, with room
 struct OutStats
 {
     uint32_t busy_max, busy_p50, out_max, tail_max, tail_p50, ext_max;
-    int      n;
+    int      n, neg;
 };
 
 // The foreground's alone: per counted block, its busy cycles and its tail.
@@ -530,7 +537,7 @@ uint32_t g_out_tail[kOutMaxBlocks];
 
 OutStats busy_window()
 {
-    OutStats       o       = {0, 0, 0, 0, 0, 0, 0};
+    OutStats       o       = {0, 0, 0, 0, 0, 0, 0, 0};
     const uint32_t t_start = cycles_now();
     uint32_t       prev    = t_start;
     uint32_t       blk     = g_blk_done;
@@ -554,6 +561,7 @@ OutStats busy_window()
                 g_out_tail[o.n] = tail;
                 ++o.n;
                 const OutSplit s = out_split(acc, cb, tail);
+                if(s.neg) ++o.neg;
                 if(acc > o.busy_max) o.busy_max = acc;
                 if(s.out > o.out_max) o.out_max = s.out;
                 if(tail > o.tail_max) o.tail_max = tail;
@@ -1099,10 +1107,15 @@ void panel_scan_block_end(uint32_t c0)
 #else
     constexpr bool off = false;
 #endif
+    // The entry-to-entry period, the back-to-back signature (workload_run.h,
+    // kGuardPeriodCycles): read here, before the WIN window below overwrites
+    // g_win_prev_entry with this callback's entry. 0 before the first block.
+    const uint32_t period = g_win_prev_entry != 0u ? c0 - g_win_prev_entry : 0u;
     const bool was_tripped = g_guard.tripped();
-    if(!off && g_guard.block(dc) && !was_tripped)
+    if(!off && g_guard.block(dc, period) && !was_tripped)
     {
         g_guard_blk = g_rblock;
+        g_guard_by  = g_guard.cause();
         g_run.on_guard_trip();
         publish_run();
     }
@@ -1177,6 +1190,12 @@ void panel_scan_late()
 {
     uint32_t n  = g_late_next;
     g_late_next = 0;
+    // Not while the guard holds the callback silent (final review C1): with
+    // bit 30 the burn would otherwise go on after the trip, keep the callback
+    // back to back and starve USB, so neither RST nor TOG nor BOOT could
+    // arrive. A LATE that lands while tripped is dropped, not deferred. With
+    // bit 31 panel_scan_guard_tripped() is false and the burn runs on purpose.
+    if(panel_scan_guard_tripped()) return;
     // Bit 30: the last LATE again, on every block.
     if(n == 0 && spky::probe::on(spky::probe::toggles(), spky::probe::kBitShellLateRepeat))
         n = g_late_last;
@@ -1202,7 +1221,7 @@ void run_panel_scan_report(bench::Board& hw)
 #endif
 #if SHELL_REMOTE_MEASURE
     // The last busy window's figures, printed with the next frame.
-    OutStats out_stats = {0, 0, 0, 0, 0, 0, 0};
+    OutStats out_stats = {0, 0, 0, 0, 0, 0, 0, 0};
 #endif
 #if SHELL_PERSIST_ON
     // Where boot's hidden state came from (spec 2026-10-28 section 8): the
@@ -1441,17 +1460,19 @@ void run_panel_scan_report(bench::Board& hw)
             }
             // The busy window ahead of this frame (busy_window()): its blocks
             // lie inside this frame's WIN window. Cycles per block; out takes
-            // in the probe tail, ext leaves it out. With seven-digit figures
-            // at most 109 bytes.
+            // in the probe tail, ext leaves it out; neg the blocks whose split
+            // saturated. With seven-digit figures and neg <= 512 at most 117
+            // bytes.
             if(out_stats.n > 0)
                 hw.PrintLine("SHELL_OUT busy_max=%u busy_p50=%u out_max=%u tail_max=%u "
-                             "tail_p50=%u ext_max=%u",
+                             "tail_p50=%u ext_max=%u neg=%d",
                              static_cast<unsigned>(out_stats.busy_max),
                              static_cast<unsigned>(out_stats.busy_p50),
                              static_cast<unsigned>(out_stats.out_max),
                              static_cast<unsigned>(out_stats.tail_max),
                              static_cast<unsigned>(out_stats.tail_p50),
-                             static_cast<unsigned>(out_stats.ext_max));
+                             static_cast<unsigned>(out_stats.ext_max),
+                             out_stats.neg);
 #endif
 #endif
         }
@@ -1584,9 +1605,11 @@ void run_panel_scan_report(bench::Board& hw)
             }
         }
         // While the guard holds the callback silent: every pass, so a host
-        // that attaches late still sees why the board is quiet.
+        // that attaches late still sees why the board is quiet. by= is the
+        // criterion: cb (the callback's cycles) or period (back to back).
         if(g_guard_flag)
-            hw.PrintLine("SHELL_REMOTE guard tripped blk=%u", static_cast<unsigned>(g_guard_blk));
+            hw.PrintLine("SHELL_REMOTE guard tripped blk=%u by=%s", static_cast<unsigned>(g_guard_blk),
+                         g_guard_by == GuardCause::Period ? "period" : "cb");
 #endif
 #if SHELL_PERSIST_ON
         if(persist_pass++ % kPersistSrcEvery == 0)

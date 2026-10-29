@@ -57,6 +57,16 @@ The measurement switch (plan Task 6):
   - LATE's burn runs in AudioCallback before process(), under
     SHELL_REMOTE_MEASURE, and both main.cpp and panel_scan.cpp include its
     generated header.
+The final review's fix wave:
+  - C1: panel_scan_late() returns before its burn while the guard is
+    tripped, so bit 30 cannot keep a tripped callback back to back.
+  - I2: panel_scan_block_end() feeds the guard the entry-to-entry period
+    (read from g_win_prev_entry before the WIN window overwrites it), the
+    guard is built with kGuardPeriodCycles, and the trip line says by=.
+  - M1: remote_enter_bootloader() cleans the D-cache between the boot_info
+    write and the reset.
+  - M8: NMI vectors to the fault entry too (in the vector-table check).
+  - out_split: busy_window() counts saturated splits, SHELL_OUT prints neg=.
 Every check has a sabotage below that must turn it red.
 """
 import os
@@ -296,10 +306,23 @@ def entry_is_infinite_and_quiet(listen):
         and "ResetToBootloader(" not in body and "Delay" not in body
 
 
+def entry_cleans_dcache(listen):
+    """The request written to boot_info reaches memory before the reset: the
+    D-cache is cleaned between the status write and NVIC_SystemReset() (a
+    reset does not write a dirty line back). Inline CMSIS, so no QSPI and no
+    SysTick."""
+    body = flat(code_only(function_body(listen, "void remote_enter_bootloader(")))
+    w = body.find("daisy::boot_info.status=daisy::System::BootInfo::Type::INF_TIMEOUT;")
+    c = max(body.find("SCB_CleanDCache();"), body.find("SCB_CleanDCache_by_Addr("))
+    r = body.find("NVIC_SystemReset();")
+    return 0 <= w < c < r
+
+
 def fault_vectors_installed(listen):
     body = code_only(function_body(listen, "void remote_install_fault_vectors("))
     code = code_only(listen)
-    names = ("HardFault_IRQn", "MemoryManagement_IRQn", "BusFault_IRQn", "UsageFault_IRQn")
+    names = ("NonMaskableInt_IRQn", "HardFault_IRQn", "MemoryManagement_IRQn", "BusFault_IRQn",
+             "UsageFault_IRQn")
     # The alignment on the table's own declaration, not anywhere in the file.
     decl = re.search(r"(alignas\s*\(\s*1024\s*\)|aligned\s*\(\s*1024\s*\))[^;{}]*"
                      r"\bg_ram_vectors\s*\[", code)
@@ -339,7 +362,8 @@ def guard_silences_callback(main, scan):
         prev = (idx, s)
     end = function_body(scan, "void panel_scan_block_end(")
     end_remote = remote_lines(end)
-    feeds = any("g_guard.block(dc)" in s and i in end_remote for i, s in code_lines(end))
+    feeds = any(re.search(r"\bg_guard\.block\(\s*dc\b", s) and i in end_remote
+                for i, s in code_lines(end))
     return fed and feeds
 
 
@@ -613,20 +637,56 @@ def tail_stamped_last(scan):
 
 def busy_window_splits_tail(scan):
     """busy_window() reads the tail beside the cb, splits each block with
-    out_split(), and SHELL_OUT prints tail_max, tail_p50 and ext_max."""
+    out_split(), counts the blocks where a subtraction saturated, and SHELL_OUT
+    prints tail_max, tail_p50, ext_max and that count (neg=)."""
     bw = [flat(s) for _, s in code_lines(function_body(scan, "OutStats busy_window("))]
     k = next((n for n, s in enumerate(bw) if s == "cb=g_cb_cycles_last;"), None)
     if k is None or k + 1 >= len(bw) or bw[k + 1] != "tail=g_tail_last;":
         return False
     if "constOutSplits=out_split(acc,cb,tail);" not in bw:
         return False
+    s_at = bw.index("constOutSplits=out_split(acc,cb,tail);")
+    if "if(s.neg)++o.neg;" not in bw[s_at + 1:]:
+        return False
     code = flat(code_only(scan))
-    fmt = ('"SHELL_OUTbusy_max=%ubusy_p50=%uout_max=%utail_max=%u""tail_p50=%uext_max=%u"')
+    fmt = ('"SHELL_OUTbusy_max=%ubusy_p50=%uout_max=%utail_max=%u""tail_p50=%uext_max=%uneg=%d"')
     i = code.find(fmt)
     args = code[i:i + 600] if i >= 0 else ""
     return i >= 0 and all(("out_stats.%s)" % f) in args
                           for f in ("busy_max", "busy_p50", "out_max", "tail_max",
-                                    "tail_p50", "ext_max"))
+                                    "tail_p50", "ext_max", "neg"))
+
+
+def late_stops_when_tripped(scan):
+    """panel_scan_late() returns before its burn while the guard holds the
+    callback silent (final review C1): otherwise bit 30's repeated LATE keeps
+    the callback back to back after the trip and USB never runs."""
+    body = [flat(s) for _, s in code_lines(function_body(scan, "void panel_scan_late("))]
+    stop = next((n for n, s in enumerate(body) if s == "if(panel_scan_guard_tripped())return;"),
+                None)
+    burn = next((n for n, s in enumerate(body) if s.startswith("while(cycles_now()-t0<n)")), None)
+    return stop is not None and burn is not None and stop < burn
+
+
+def guard_fed_period(scan):
+    """panel_scan_block_end() feeds the guard the entry-to-entry period (final
+    review I2): computed from g_win_prev_entry under SHELL_REMOTE before the WIN
+    window overwrites it, passed beside dc; the guard is built with
+    kGuardPeriodCycles, and the trip line says which criterion tripped."""
+    end = function_body(scan, "void panel_scan_block_end(")
+    lines = [(i, flat(s)) for i, s in code_lines(end)]
+    remote = remote_lines(end)
+    stmt = "constuint32_tperiod=g_win_prev_entry!=0u?c0-g_win_prev_entry:0u;"
+    p = next((n for n, (_, s) in enumerate(lines) if s == stmt), None)
+    f = next((n for n, (_, s) in enumerate(lines) if "g_guard.block(dc,period)" in s), None)
+    w = next((n for n, (_, s) in enumerate(lines) if s == "g_win_prev_entry=c0;"), None)
+    if p is None or f is None or w is None or not (p < f < w) or lines[p][0] not in remote:
+        return False
+    code = flat(code_only(scan))
+    trip = code.find('"SHELL_REMOTEguardtrippedblk=%uby=%s"')
+    return "OverrunGuardg_guard(kGuardLimitCycles,kGuardBlocks,kGuardPeriodCycles);" in code \
+        and trip >= 0 and "g_guard_by" in code[trip:trip + 200] \
+        and "g_guard_by=g_guard.cause();" in flat(code_only(end))
 
 
 def tog_bit31_restarts_streak(scan):
@@ -675,7 +735,7 @@ def run_checks(listen, main, scan, make, tick, inst, engine, writer):
         on_rx_holds_a_packet(listen)
     r["remote_enter_bootloader() asks for an infinite timeout without a delay"] = \
         entry_is_infinite_and_quiet(listen)
-    r["the RAM vector table routes all four faults and sets a 1 KB-aligned VTOR"] = \
+    r["the RAM vector table routes NMI and all four faults and sets a 1 KB-aligned VTOR"] = \
         fault_vectors_installed(listen)
     r["remote_install_fault_vectors() is main()'s first statement, under SHELL_REMOTE"] = \
         fault_vectors_first_in_main(main)
@@ -719,6 +779,12 @@ def run_checks(listen, main, scan, make, tick, inst, engine, writer):
     r["a TOG that flips bit 31 restarts the guard's streak"] = tog_bit31_restarts_streak(scan)
     r["a TOG re-settles the run and ends its settle by block number"] = tog_resettles_run(scan)
     r["the run line prints tog=, the settled line the run's gen"] = tog_and_gen_printed(scan)
+    # The final review's fix wave.
+    r["a tripped guard stops the LATE burn (C1)"] = late_stops_when_tripped(scan)
+    r["the guard is fed the entry-to-entry period and says what tripped it (I2)"] = \
+        guard_fed_period(scan)
+    r["remote_enter_bootloader() cleans the D-cache before the reset (M1)"] = \
+        entry_cleans_dcache(listen)
     return r
 
 
@@ -807,13 +873,13 @@ sabotage("a drain delay before the reset",
          listen=LISTEN.replace("void remote_enter_bootloader()\n{",
                                "void remote_enter_bootloader()\n{\n    daisy::System::Delay(100);", 1))
 sabotage("UsageFault left on the BKPT handler",
-         "the RAM vector table routes all four faults and sets a 1 KB-aligned VTOR",
+         "the RAM vector table routes NMI and all four faults and sets a 1 KB-aligned VTOR",
          listen=LISTEN.replace("UsageFault_IRQn", "SVCall_IRQn"))
 sabotage("VTOR never set",
-         "the RAM vector table routes all four faults and sets a 1 KB-aligned VTOR",
+         "the RAM vector table routes NMI and all four faults and sets a 1 KB-aligned VTOR",
          listen=LISTEN.replace("SCB->VTOR", "g_unused_vtor"))
 sabotage("a 256-byte alignment",
-         "the RAM vector table routes all four faults and sets a 1 KB-aligned VTOR",
+         "the RAM vector table routes NMI and all four faults and sets a 1 KB-aligned VTOR",
          listen=re.sub(r"(alignas|aligned)\s*\(\s*1024\s*\)", r"\1(256)", LISTEN))
 sabotage("board_init() before the vectors",
          "remote_install_fault_vectors() is main()'s first statement, under SHELL_REMOTE",
@@ -864,12 +930,12 @@ sabotage("a do-loop in on_rx()",
          "on_rx() never delays, prints or spins",
          listen=in_on_rx(LISTEN, "do { } while(g_ping);"))
 sabotage("a 1 KB alignment on another object, the table at 256",
-         "the RAM vector table routes all four faults and sets a 1 KB-aligned VTOR",
+         "the RAM vector table routes NMI and all four faults and sets a 1 KB-aligned VTOR",
          listen=re.sub(r"aligned\s*\(\s*1024\s*\)(\)\)\s*uint32_t\s+g_ram_vectors)", r"aligned(256)\1",
                        LISTEN).replace("LineAssembler g_assembler;",
                                        "alignas(1024) uint32_t g_spare[4];\nLineAssembler g_assembler;"))
 sabotage("VTOR pointed somewhere else",
-         "the RAM vector table routes all four faults and sets a 1 KB-aligned VTOR",
+         "the RAM vector table routes NMI and all four faults and sets a 1 KB-aligned VTOR",
          listen=LISTEN.replace("reinterpret_cast<uint32_t>(g_ram_vectors)",
                                "reinterpret_cast<uint32_t>(g_pfnVectors)"))
 sabotage("`b .` in the fault stub",
@@ -895,7 +961,7 @@ sabotage("process() after the silence, not in its else",
          main=re.sub(r"\n(\s*)else\n(#endif\n\s*inst\.process\()", r"\n\1(void)0;\n\2", MAIN, count=1))
 sabotage("the guard never fed",
          "the tripped guard silences process() in AudioCallback, fed per callback",
-         scan=SCAN.replace("g_guard.block(dc)", "false"))
+         scan=SCAN.replace("g_guard.block(dc, period)", "false"))
 sabotage("remote_block() twice per tick",
          "remote_poll() runs once per block, from panel_scan_tick()'s top level",
          scan=SCAN.replace("    remote_block();\n", "    remote_block();\n    remote_block();\n", 1))
@@ -1002,8 +1068,8 @@ sabotage("out_split() without the tail",
          scan=SCAN.replace("out_split(acc, cb, tail)", "out_split(acc, cb, 0u)"))
 sabotage("ext_max dropped from SHELL_OUT",
          "busy_window() splits each block's tail out, SHELL_OUT prints tail and ext",
-         scan=SCAN.replace(" ext_max=%u\"", "\"").replace(
-             ",\n                             static_cast<unsigned>(out_stats.ext_max)", ""))
+         scan=SCAN.replace(" ext_max=%u neg=%d\"", " neg=%d\"").replace(
+             "\n                             static_cast<unsigned>(out_stats.ext_max),", ""))
 sabotage("the streak left frozen on a bit-31 flip",
          "a TOG that flips bit 31 restarts the guard's streak",
          scan=SCAN.replace("g_guard.reset_streak();", "(void)0;"))
@@ -1030,6 +1096,50 @@ sabotage("the settled ack without the gen",
          "the run line prints tog=, the settled line the run's gen",
          scan=SCAN.replace("kAckTogSettledBase + static_cast<int32_t>(g_run.gen() & kGenPrintMask)",
                            "kAckTogSettledBase"))
+
+# The final review's fix wave.
+sabotage("the burn ignoring the guard (C1)",
+         "a tripped guard stops the LATE burn (C1)",
+         scan=in_body(SCAN, "void panel_scan_late(", "    if(panel_scan_guard_tripped()) return;\n", ""))
+sabotage("the guard asked after the burn (C1)",
+         "a tripped guard stops the LATE burn (C1)",
+         scan=in_body(SCAN, "void panel_scan_late(", "    if(panel_scan_guard_tripped()) return;\n",
+                      "").replace("    while(cycles_now() - t0 < n) {}\n",
+                                  "    while(cycles_now() - t0 < n) {}\n"
+                                  "    if(panel_scan_guard_tripped()) return;\n", 1))
+sabotage("the period never passed (I2)",
+         "the guard is fed the entry-to-entry period and says what tripped it (I2)",
+         scan=SCAN.replace("g_guard.block(dc, period)", "g_guard.block(dc, 0u)"))
+sabotage("the period read after the WIN window overwrote it (I2)",
+         "the guard is fed the entry-to-entry period and says what tripped it (I2)",
+         scan=re.sub(r"(    g_win_prev_entry = c0;\n)",
+                     r"\1    const uint32_t period = g_win_prev_entry != 0u ? c0 - g_win_prev_entry : 0u;\n",
+                     SCAN.replace("    const uint32_t period = g_win_prev_entry != 0u ? c0 - g_win_prev_entry"
+                                  " : 0u;\n", "", 1), count=1))
+sabotage("the guard built without the period limit (I2)",
+         "the guard is fed the entry-to-entry period and says what tripped it (I2)",
+         scan=SCAN.replace("g_guard(kGuardLimitCycles, kGuardBlocks, kGuardPeriodCycles)",
+                           "g_guard(kGuardLimitCycles, kGuardBlocks)"))
+sabotage("the trip line without its criterion (I2)",
+         "the guard is fed the entry-to-entry period and says what tripped it (I2)",
+         scan=SCAN.replace('"SHELL_REMOTE guard tripped blk=%u by=%s"', '"SHELL_REMOTE guard tripped blk=%u"'))
+sabotage("the reset without a cache clean (M1)",
+         "remote_enter_bootloader() cleans the D-cache before the reset (M1)",
+         listen=in_body(LISTEN, "void remote_enter_bootloader(", "SCB_CleanDCache();", "__DSB();"))
+sabotage("the cache cleaned before the request is written (M1)",
+         "remote_enter_bootloader() cleans the D-cache before the reset (M1)",
+         listen=in_body(LISTEN, "void remote_enter_bootloader(", "SCB_CleanDCache();", "").replace(
+             "    daisy::System::InitBackupSram();\n",
+             "    SCB_CleanDCache();\n    daisy::System::InitBackupSram();\n", 1))
+sabotage("NMI left on libDaisy's handler (M8)",
+         "the RAM vector table routes NMI and all four faults and sets a 1 KB-aligned VTOR",
+         listen=re.sub(r"\n[^\n]*NonMaskableInt_IRQn[^\n]*", "", LISTEN))
+sabotage("the saturated subtractions never counted (out_split)",
+         "busy_window() splits each block's tail out, SHELL_OUT prints tail and ext",
+         scan=SCAN.replace("if(s.neg) ++o.neg;", "(void)s.neg;"))
+sabotage("neg= dropped from SHELL_OUT (out_split)",
+         "busy_window() splits each block's tail out, SHELL_OUT prints tail and ext",
+         scan=SCAN.replace(" neg=%d\"", "\""))
 
 print("%d failed" % len(FAILS) if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

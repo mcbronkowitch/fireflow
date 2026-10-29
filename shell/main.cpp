@@ -196,7 +196,8 @@ static void AudioCallback(daisy::AudioHandle::InputBuffer  in,
 #if SHELL_REMOTE_MEASURE
     // LATE k (spec 5.5): the injected late block, burnt here so it lands
     // inside cb0's window and ahead of process(), where a real overrun's
-    // cost sits.
+    // cost sits. It burns nothing while the overrun guard below is tripped
+    // (panel_scan_late()), or the trip would not free the CPU.
     shell::panel_scan_late();
 #endif
 

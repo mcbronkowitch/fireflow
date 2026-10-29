@@ -216,6 +216,66 @@ TEST_CASE("outside-window split: out keeps the probe tail, ext leaves it out") {
     CHECK(shell::out_split(920, 900, 50).ext == 0u);
 }
 
+// ---- the final review's fix wave ---------------------------------------------
+TEST_CASE("overrun guard trips on 8 late entries in a row, cb under the limit (I2)") {
+    OverrunGuard g(shell::kGuardLimitCycles, shell::kGuardBlocks, shell::kGuardPeriodCycles);
+    CHECK(shell::kGuardPeriodCycles == 965000u);
+    CHECK(g.cause() == shell::GuardCause::None);
+    // cb 940 k, under the cycles limit, but every entry 970 k after the last:
+    // the callback and what runs around it take longer than a block.
+    for(int i = 0; i < 7; ++i) CHECK_FALSE(g.block(940000, 970000));
+    CHECK(g.block(940000, 970000));   // the 8th in a row
+    CHECK(g.cause() == shell::GuardCause::Period);
+    CHECK(g.block(1000, 960000));     // latched, as for the cycles criterion
+    g.clear();
+    CHECK_FALSE(g.tripped());
+    CHECK(g.cause() == shell::GuardCause::None);
+    // One late entry is followed by an early one (the DMA does not wait):
+    // never a streak.
+    for(int i = 0; i < 40; ++i) CHECK_FALSE(g.block(940000, (i % 2) ? 980000u : 940000u));
+    // Exactly the limit is not over it; 0 (no previous entry) is not late.
+    for(int i = 0; i < 20; ++i) CHECK_FALSE(g.block(940000, 965000));
+    for(int i = 0; i < 20; ++i) CHECK_FALSE(g.block(940000, 0));
+    // An unknown period ends a streak like an early one.
+    for(int i = 0; i < 7; ++i) CHECK_FALSE(g.block(940000, 970000));
+    CHECK_FALSE(g.block(940000, 0));
+    for(int i = 0; i < 7; ++i) CHECK_FALSE(g.block(940000, 970000));
+    CHECK(g.block(940000, 970000));
+}
+
+TEST_CASE("overrun guard: each criterion keeps its own streak, the first to n is the cause") {
+    OverrunGuard g(1000, 3, 5000);
+    CHECK_FALSE(g.block(2000, 100));    // cycles 1, period 0
+    CHECK_FALSE(g.block(10, 6000));     // cycles 0, period 1
+    CHECK_FALSE(g.block(2000, 6000));   // cycles 1, period 2
+    CHECK(g.block(2000, 6000));         // cycles 2, period 3: the period trips
+    CHECK(g.cause() == shell::GuardCause::Period);
+    g.clear();
+    CHECK_FALSE(g.block(2000, 100));
+    CHECK_FALSE(g.block(2000, 100));
+    CHECK(g.block(2000, 100));
+    CHECK(g.cause() == shell::GuardCause::Cycles);
+    // reset_streak() (bit 31 flipped) restarts the period streak too.
+    g.clear();
+    CHECK_FALSE(g.block(10, 6000));
+    CHECK_FALSE(g.block(10, 6000));
+    g.reset_streak();
+    CHECK_FALSE(g.block(10, 6000));
+    CHECK_FALSE(g.block(10, 6000));
+    CHECK(g.block(10, 6000));
+    // Built without a period limit, the guard has the cycles criterion only.
+    OverrunGuard h(1000, 3);
+    for(int i = 0; i < 10; ++i) CHECK_FALSE(h.block(10, 0xFFFFFFF0u));
+}
+
+TEST_CASE("outside-window split flags a saturated subtraction") {
+    CHECK_FALSE(shell::out_split(1000000, 900000, 7000).neg);
+    CHECK(shell::out_split(800, 900, 50).neg);        // busy under cb
+    CHECK(shell::out_split(920, 900, 50).neg);        // out under the tail
+    CHECK_FALSE(shell::out_split(900, 900, 0).neg);   // equal: 0, not negative
+    CHECK_FALSE(shell::out_split(950, 900, 50).neg);  // ext exactly 0
+}
+
 TEST_CASE("workload knobs: init patch, the rows through the panel path, REC latched") {
     // r4_noon: the hand entry, identical to the all-noon boot patch.
     const shell::WorkloadDef* w = nullptr;

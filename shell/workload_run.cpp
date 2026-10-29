@@ -9,16 +9,31 @@
 
 namespace shell {
 
-bool OverrunGuard::block(uint32_t cb)
+namespace {
+
+// One criterion's streak: a block over extends it (saturating at n), any
+// other ends it. True once it has reached n.
+bool streak_step(uint32_t& streak, bool over, uint32_t n)
 {
-    if(cb > limit_)
+    if(!over)
     {
-        if(streak_ < n_) ++streak_;
-        if(streak_ >= n_) tripped_ = true;
+        streak = 0;
+        return false;
     }
-    else
+    if(streak < n) ++streak;
+    return streak >= n;
+}
+
+} // namespace
+
+bool OverrunGuard::block(uint32_t cb, uint32_t period)
+{
+    const bool by_cb     = streak_step(streak_, cb > limit_, n_);
+    const bool by_period = streak_step(pstreak_, period != 0u && period > period_limit_, n_);
+    if(!tripped_ && (by_cb || by_period))
     {
-        streak_ = 0;
+        tripped_ = true;
+        cause_   = by_cb ? GuardCause::Cycles : GuardCause::Period;
     }
     return tripped_;
 }
@@ -26,12 +41,15 @@ bool OverrunGuard::block(uint32_t cb)
 void OverrunGuard::clear()
 {
     streak_  = 0;
+    pstreak_ = 0;
     tripped_ = false;
+    cause_   = GuardCause::None;
 }
 
 void OverrunGuard::reset_streak()
 {
-    streak_ = 0;
+    streak_  = 0;
+    pstreak_ = 0;
 }
 
 void TogSettle::arm(uint32_t now_block)
@@ -50,7 +68,7 @@ bool TogSettle::ends(uint32_t now_block)
 OutSplit out_split(uint32_t busy, uint32_t cb, uint32_t tail)
 {
     const uint32_t out = busy > cb ? busy - cb : 0u;
-    return {out, out > tail ? out - tail : 0u};
+    return {out, out > tail ? out - tail : 0u, busy < cb || out < tail};
 }
 
 void WorkloadRun::resettle(uint32_t now_block, uint32_t settle_blocks)

@@ -245,10 +245,21 @@ round:
   callback over budget would cut the command channel. After N consecutive
   over-budget blocks the image drops to silence (or the booted patch) and
   says so, as `SHELL_CPU_PROBE` already does (`shell/main.cpp:145-156`).
+  "Over budget" has two signatures, because 12–30 k of every block run
+  outside the callback's measured window (`docs/gotchas.md`): the callback's
+  own cycles above a limit, or the period from one callback's entry to the
+  next above the block length for N blocks in a row — the callback runs back
+  to back with its own cycles under the limit. Once tripped, nothing the
+  image injects (the measurement image's late-block burn) keeps running.
 - **The bootloader entry runs in the USB receive callback**, not the
-  foreground, so it works while the foreground is starved. It must not call
-  `HAL_Delay` there: SysTick is priority 14, so a delay inside a priority-0
-  handler hangs (the bench's `Delay(100)` drain cannot be copied).
+  foreground, so it works while the foreground is starved but the callback
+  still leaves gaps between blocks. Under true saturation — the callback,
+  with what runs around it, takes a block or longer and runs back to back —
+  the USB interrupt is starved by the same priority tie and no command, BOOT
+  included, arrives: the self-limiter above is the only way out of that
+  state. It must not call `HAL_Delay` there: SysTick is priority 14, so a
+  delay inside a priority-0 handler hangs (the bench's `Delay(100)` drain
+  cannot be copied).
 - **Toggles are read once per block into a const local**, never from a
   volatile global inside a per-sample loop — global stores in that loop once
   pushed every block over budget (`docs/gotchas.md`). Toggling a stateful
@@ -264,8 +275,8 @@ round:
   executes `BKPT`, which locks up without a debugger, and USB does not reset
   the board (it runs from 12 V alone). Every image of the round:
   - enters the bootloader instead of blinking when `itcm_load()` fails;
-  - routes HardFault to the same entry (vector table copied to RAM first
-    thing in `main()`);
+  - routes HardFault (and NMI, MemManage, BusFault, UsageFault) to the same
+    entry (vector table copied to RAM first thing in `main()`);
   - optionally arms the IWDG and checks the reset flag at the top of
     `main()` — whether an IWDG survives a software reset into the Daisy
     bootloader is unknown and is probed during the setup visit before it is
@@ -371,6 +382,28 @@ measured facts the next session needs into `docs/engine-map.md`, status into
 - The self-recovery paths cover an ITCM mismatch and a HardFault. A hang
   with interrupts masked, or a bad QSPI write that breaks the bootloader
   entry itself, is not covered without the IWDG or §9 item 1.
+- **A mismatched or half-flashed pair runs foreign code before the stamp
+  check.** `main()` calls `board_init()` → `DaisyPatchSM::Init()` before
+  `itcm_load()` compares the ITCM stamp, and with `qspi_cold.ld` that init
+  (ADC, DAC, I2C, GPIO) executes from the QSPI image — the other build's, or
+  a half-written one. The bootloader entry only follows if that code faults;
+  if it hangs or loops, the board is dark without a port. The runner
+  therefore retries a failed flash step as a whole pair and never resets or
+  sends BOOT while a begun pair is unfinished; whether the IWDG survives a
+  reset into the bootloader (and could cover this) is probed at the setup
+  visit.
+- **Full saturation is covered by the overrun guard alone.** A callback
+  that runs back to back starves the USB interrupt (§5.3), so BOOT cannot
+  help; the guard trips on N consecutive over-budget callbacks or N
+  consecutive late entries. Its period threshold carries a margin above the
+  block length for entry jitter (5 000 cycles, chosen, not measured): a
+  callback back to back by less than that per block is not caught. With the
+  guard switched off on purpose (measurement image) the board needs hands.
+- **A fault entry needs a stack the core can still push to.** The fault
+  vectors reset the stack pointer before any C runs, but the core pushes its
+  exception frame onto the old stack first; a stack pointer already outside
+  writable memory faults that push and the core locks up before the entry
+  runs. Only an overflow that still lands in writable memory is recovered.
 - The desktop sweep can still miss a board-only worst case; the corner
   vectors reduce, not remove, that.
 

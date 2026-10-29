@@ -18,10 +18,15 @@ extern "C" {
     shell::remote_enter_bootloader();
 }
 
-// What HardFault, MemManage, BusFault and UsageFault vector to. A fault may
-// come from a blown stack, and the entry needs a few words of one, so the
-// main stack pointer goes back to the top of DTCM (_estack, alt_sram.lds)
-// before any C runs. Naked: no prologue may touch the old stack first.
+// What NMI, HardFault, MemManage, BusFault and UsageFault vector to. The main
+// stack pointer goes back to the top of DTCM (_estack, alt_sram.lds) before
+// any C runs, so the C half never runs on whatever the faulting code left of
+// the stack. Naked: no prologue may touch the old stack first. What this
+// covers of a stack overflow is narrow: the core pushes its 8-word exception
+// frame onto the old stack BEFORE this entry runs, so the entry is reached
+// only when that push lands in writable memory. A stack pointer already
+// outside it (nothing here guards the stack's end) faults the push itself,
+// and the core locks up without ever getting here (spec section 8).
 __attribute__((naked, noreturn)) void shell_remote_fault_entry()
 {
     __asm volatile(
@@ -137,6 +142,11 @@ void remote_enter_bootloader()
     // to a BOOT_SRAM image.
     daisy::boot_info.status = daisy::System::BootInfo::Type::INF_TIMEOUT;
     RCC->CIER = 0x00000000;
+    // The request has to be in memory when the reset hits, and a reset does
+    // not write a dirty D-cache line back (final review M1). Inline CMSIS
+    // (set / way loop, then DSB / ISB): no QSPI code, no SysTick, and safe
+    // with the cache still off (a fault before board_init()).
+    SCB_CleanDCache();
     NVIC_SystemReset();
 }
 
@@ -146,6 +156,9 @@ void remote_install_fault_vectors()
     for(uint32_t i = 0; i < kVectorWords; ++i) g_ram_vectors[i] = from[i];
     // A Thumb function's address carries bit 0 already.
     const uint32_t entry = reinterpret_cast<uint32_t>(&shell_remote_fault_entry);
+    // NMI too (final review M8): libDaisy aliases NMI_Handler to its
+    // Default_Handler (core/startup_stm32h750xx.c), which never returns.
+    g_ram_vectors[16 + NonMaskableInt_IRQn]   = entry;
     g_ram_vectors[16 + HardFault_IRQn]        = entry;
     g_ram_vectors[16 + MemoryManagement_IRQn] = entry;
     g_ram_vectors[16 + BusFault_IRQn]         = entry;

@@ -5,8 +5,9 @@
 // 5.3, plan Task 5): the pure half, host tested (tests/test_workload_run.cpp).
 // panel_scan.cpp wires it under SHELL_REMOTE; nothing here touches hardware.
 //
-//   OverrunGuard        the self-limiter: N consecutive over-budget callbacks
-//                       latch it, and the callback then writes silence instead
+//   OverrunGuard        the self-limiter: N consecutive over-budget callbacks,
+//                       or N consecutive late entries (back to back), latch
+//                       it, and the callback then writes silence instead
 //                       of calling process() until LOAD, HOME or RST clears it,
 //                       so a workload that saturates the callback cannot cut
 //                       the USB command channel for good (USB and the audio
@@ -30,27 +31,52 @@ namespace shell {
 // sustained overrun, well past anything a single expensive tick produces.
 inline constexpr uint32_t kGuardLimitCycles = 950000;
 inline constexpr uint32_t kGuardBlocks      = 8;
+// The back-to-back signature (final review I2): cb alone misses a callback
+// that saturates with cb under kGuardLimitCycles, because 12-30 k of every
+// block run outside cb's window (libDaisy's sample conversion, the interrupt's
+// entry and exit, the code ahead of cb0, the measurement image's probe tail;
+// docs/gotchas.md). The audio DMA interrupt comes every 960 000 cycles, so the
+// period from one callback's entry to the next can stay above that only while
+// every callback starts later than the one before: the next interrupt is
+// already pending when the callback returns. A single late entry (another
+// priority-0 interrupt in the way) is followed by a short period and makes no
+// streak. 5 000 cycles of margin for that entry jitter: chosen, not measured
+// (plan Task 7 Step 5b). A callback back to back by less than the margin per
+// block is not caught (spec section 8).
+inline constexpr uint32_t kGuardPeriodCycles = 965000;
+
+// Which criterion tripped the guard; None while it is not tripped.
+enum class GuardCause : uint8_t { None = 0, Cycles = 1, Period = 2 };
 
 class OverrunGuard
 {
 public:
-    OverrunGuard(uint32_t limit, uint32_t n) : limit_(limit), n_(n) {}
-    // One callback's cycles. A block above the limit extends the streak, any
-    // other ends it; the n-th in a row trips the guard, which then stays
-    // tripped (the silenced callback is cheap) until clear(). Returns tripped().
-    bool block(uint32_t cb);
+    // limit: a callback above it is over budget; period_limit: an entry-to-
+    // entry period above it is late. Without a period_limit only cb counts.
+    OverrunGuard(uint32_t limit, uint32_t n, uint32_t period_limit = 0xFFFFFFFFu)
+        : limit_(limit), n_(n), period_limit_(period_limit) {}
+    // One callback: its cycles, and the cycles from the previous callback's
+    // entry to this one's (0: unknown, no previous entry). Each criterion keeps
+    // its own streak -- a block over it extends it, any other ends it -- and the
+    // first to reach n trips the guard (cause()), which then stays tripped (the
+    // silenced callback is cheap) until clear(). Returns tripped().
+    bool block(uint32_t cb, uint32_t period = 0);
     bool tripped() const { return tripped_; }
+    GuardCause cause() const { return cause_; }
     void clear();
-    // The streak starts again from 0; a tripped guard stays tripped. For the
+    // Both streaks start again from 0; a tripped guard stays tripped. For the
     // measurement image's bit 31, which stops feeding block(): without this,
-    // the streak would freeze while the bit is set and resume stale after it.
+    // the streaks would freeze while the bit is set and resume stale after it.
     void reset_streak();
 
 private:
-    uint32_t limit_;
-    uint32_t n_;
-    uint32_t streak_  = 0;
-    bool     tripped_ = false;
+    uint32_t   limit_;
+    uint32_t   n_;
+    uint32_t   period_limit_;
+    uint32_t   streak_  = 0;
+    uint32_t   pstreak_ = 0;
+    bool       tripped_ = false;
+    GuardCause cause_   = GuardCause::None;
 };
 
 class WorkloadRun
@@ -128,10 +154,13 @@ private:
 // after that window (the measurement image's own block-end bookkeeping: guard,
 // WIN, sections, cb_profile). out = busy - cb, with the tail in it; ext = out -
 // tail, the time outside the callback without it (USB, SysTick, the audio
-// interrupt's entry and exit). Both saturate at 0.
+// interrupt's entry and exit). Both saturate at 0; neg says one of them did
+// (busy under cb, or out under tail), so a block whose figures do not add up
+// is counted (SHELL_OUT neg=) instead of hiding in a 0.
 struct OutSplit
 {
     uint32_t out, ext;
+    bool     neg;
 };
 OutSplit out_split(uint32_t busy, uint32_t cb, uint32_t tail);
 
