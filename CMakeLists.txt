@@ -777,3 +777,11 @@ add_test(NAME hotpath_libm_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_hotpath_libm.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tools)
+
+# The sweep's deck split of the Rev A rows (corner vectors): every row's deck
+# from its name's _A / _B suffix, 29 / 29 / 15, so a param pair appended to
+# control/params.hpp without host/sweep/main.cpp's deck_of() list goes red.
+add_test(NAME sweep_rows_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_sweep_rows.py $<TARGET_FILE:sweep>
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tools)

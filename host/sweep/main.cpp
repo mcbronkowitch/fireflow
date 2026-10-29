@@ -7,9 +7,16 @@
 //   sweep --list-engines | --list-rows
 //
 // --seconds is simulated audio per vector (timed blocks, after the settle).
-// --reps renders each vector that many times and keeps each block's fastest
-// time (see run_vector()). CSV: vector_id, eng_a, eng_b, p50_ns, p99_ns,
-// max_ns, silent_frac (blocks with output peak below -60 dBFS), row0..row72.
+// --reps renders every vector that many times, REP-MAJOR (all vectors once,
+// then all again), and keeps each block's fastest time (see stats()).
+// Timings assume ONE sweep process on an otherwise idle machine: parallel
+// sweeps share caches and arrive in bursts, and a 10 s run then reported
+// higher maxima than the 100 s run it is an exact prefix of (Task 4 review).
+// CSV: vector_id, eng_a, eng_b, p50_ns, p99_ns, max_ns, silent_frac (blocks
+// with output peak below -60 dBFS), top8_mean_ns (mean of the 8 slowest
+// blocks: the ranking statistic), rep_spread (noise gauge), the load's
+// material excite_a, excite_b, rec_a, rec_b, settle_blocks, input, then
+// row0..row72.
 //
 // A vector is one value per row of the Rev A panel table (kRevaTable,
 // shell/generated_panel_map.h), x1000 of the normalised pot value -- what
@@ -193,7 +200,7 @@ char row_deck(int r)
 
 struct Vec { std::string id; std::vector<int> rows; };
 
-struct Result { double p50, p99, max, silent; };
+struct Result { double p50, p99, max, top8, spread, silent; };
 
 uint64_t splitmix64(uint64_t& s)
 {
@@ -219,6 +226,27 @@ struct InputNoise
     }
 };
 
+// What a load gives each deck besides the knob vector (file comment,
+// "Material"); written into the CSV so the board can apply the same.
+struct Material
+{
+    bool excite[2];   // excite_other_deck at load, held across the switch (BBD)
+    bool rec[2];      // REC latched through the settle, released at its end (SAMPLER)
+    int  settle;      // untimed blocks after the load
+};
+
+Material material_for(const EngineId want[2])
+{
+    Material m;
+    for(int p = 0; p < 2; ++p)
+    {
+        m.excite[p] = want[p] == ENGINE_BBD;
+        m.rec[p]    = want[p] == ENGINE_SAMPLER;
+    }
+    m.settle = (m.rec[0] || m.rec[1]) ? kRecBlocks : kSettleBlocks;
+    return m;
+}
+
 // One render of one vector: load, settle, then `timed_blocks` timed blocks
 // into ns. Returns the number of silent timed blocks.
 int render_once(Instrument& inst, const FxMem& mem, const std::vector<int>& rows,
@@ -239,17 +267,17 @@ int render_once(Instrument& inst, const FxMem& mem, const std::vector<int>& rows
     }
     law.on_restore();
     control::Options opt;
+    const Material mat = material_for(want);
     bool hold[2];
     bool sampler[2];
     for(int p = 0; p < 2; ++p)
     {
-        hold[p]                       = want[p] == ENGINE_BBD;
+        hold[p]                       = mat.excite[p];
         opt.deck[p].excite_other_deck = hold[p];
-        sampler[p]                    = want[p] == ENGINE_SAMPLER;
+        sampler[p]                    = mat.rec[p];
     }
     const int  rec_ids[2] = {ffctl::REC_A, ffctl::REC_B};
-    const bool any_sampler = sampler[0] || sampler[1];
-    const int  settle = any_sampler ? kRecBlocks : kSettleBlocks;
+    const int  settle = mat.settle;
     const int  flux_idx[2] = {-1, -1};
 
     InputNoise in_noise;
@@ -300,27 +328,15 @@ int render_once(Instrument& inst, const FxMem& mem, const std::vector<int>& rows
     return silent;
 }
 
-// `reps` renders of one vector, each from a fresh init(): the render is
-// deterministic, so block b does the same work every time, and the per-block
-// MINIMUM over the renders drops what the desktop OS added to one of them (a
-// preemption inside one timed process() otherwise IS the vector's max_ns).
-Result run_vector(Instrument& inst, const FxMem& mem, const std::vector<int>& rows,
-                  const int slot[2], const EngineId want[2], int timed_blocks, bool noise,
-                  int reps)
+// The statistics of one vector from its per-block minimum over the renders
+// (see main(): the renders are rep-major). The render is deterministic, so
+// block b does the same work in every rep, and the minimum drops what the
+// desktop OS added to one of them. top8_mean_ns -- the mean of the 8 slowest
+// blocks -- is what pick_workloads.py ranks on: one block's max is a single
+// sample of the noise. rep_spread: (largest - smallest) / smallest of the
+// per-rep max_ns, a noise gauge for the vector (0 with --reps 1).
+Result stats(const std::vector<double>& best, const std::vector<double>& rep_max, int silent)
 {
-    std::vector<double> best, ns;
-    int silent = 0;
-    for(int k = 0; k < reps; ++k)
-    {
-        const int sil = render_once(inst, mem, rows, slot, want, timed_blocks, noise, ns);
-        if(k == 0)
-        {
-            best   = ns;
-            silent = sil;
-        }
-        else
-            for(size_t b = 0; b < ns.size(); ++b) best[b] = std::min(best[b], ns[b]);
-    }
     std::vector<double> s = best;
     std::sort(s.begin(), s.end());
     const size_t n = s.size();
@@ -328,6 +344,12 @@ Result run_vector(Instrument& inst, const FxMem& mem, const std::vector<int>& ro
     res.p50    = s[n / 2];
     res.p99    = s[static_cast<size_t>(std::floor(0.99 * static_cast<double>(n - 1)))];
     res.max    = s[n - 1];
+    const size_t k = std::min<size_t>(8, n);
+    double sum = 0.0;
+    for(size_t i = n - k; i < n; ++i) sum += s[i];
+    res.top8 = sum / static_cast<double>(k);
+    const auto mm = std::minmax_element(rep_max.begin(), rep_max.end());
+    res.spread = *mm.first > 0.0 ? (*mm.second - *mm.first) / *mm.first : 0.0;
     res.silent = static_cast<double>(silent) / static_cast<double>(n);
     return res;
 }
@@ -418,7 +440,8 @@ int usage()
     std::fprintf(stderr,
                  "usage: sweep --pair ENGA,ENGB (--random N --seed S | --corners | --vector FILE)...\n"
                  "             [--seconds 100] [--reps 1] [--input noise|silence] --out CSV\n"
-                 "       sweep --list-engines | --list-rows\n");
+                 "       sweep --list-engines | --list-rows\n"
+                 "Timings assume ONE sweep process on an otherwise idle machine; --reps is rep-major.\n");
     return 1;
 }
 
@@ -503,30 +526,56 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "cannot write %s\n", out_path.c_str());
         return 2;
     }
-    std::fprintf(f, "vector_id,eng_a,eng_b,p50_ns,p99_ns,max_ns,silent_frac");
-    for(int r = 0; r < kRows; ++r) std::fprintf(f, ",row%d", r);
-    std::fprintf(f, "\n");
+    std::fprintf(stderr, "sweep: timings assume ONE sweep process on an otherwise idle machine; "
+                         "parallel runs or other load corrupt the ranking\n");
 
     static Instrument inst;
     const FxMem       mem    = make_fx_mem();
     const int         timed  = static_cast<int>(std::lround(seconds * kSampleRate / kBlock));
     const auto        start  = std::chrono::steady_clock::now();
+    // Rep-major: every vector once, then every vector again. A burst of
+    // outside load then lands in one rep of a vector, not in all of them,
+    // and the per-block minimum removes it.
+    std::vector<std::vector<double>> best(vecs.size());
+    std::vector<std::vector<double>> rep_max(vecs.size());
+    std::vector<int>                 silent(vecs.size(), 0);
+    std::vector<double>              ns;
+    for(int rep = 0; rep < reps; ++rep)
+        for(size_t k = 0; k < vecs.size(); ++k)
+        {
+            const int sil = render_once(inst, mem, vecs[k].rows, slot, want, timed, input == "noise", ns);
+            if(rep == 0)
+            {
+                best[k]   = ns;
+                silent[k] = sil;
+            }
+            else
+                for(size_t b = 0; b < ns.size(); ++b) best[k][b] = std::min(best[k][b], ns[b]);
+            rep_max[k].push_back(*std::max_element(ns.begin(), ns.end()));
+            const double el = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+            std::fprintf(stderr, "[rep %d/%d, %zu/%zu] %s %s,%s max=%.0f (%.1f s)\n", rep + 1, reps,
+                         k + 1, vecs.size(), vecs[k].id.c_str(), engine_name(want[0]),
+                         engine_name(want[1]), rep_max[k].back(), el);
+        }
+
+    const Material mat = material_for(want);
+    std::fprintf(f, "vector_id,eng_a,eng_b,p50_ns,p99_ns,max_ns,silent_frac,top8_mean_ns,rep_spread,"
+                    "excite_a,excite_b,rec_a,rec_b,settle_blocks,input");
+    for(int r = 0; r < kRows; ++r) std::fprintf(f, ",row%d", r);
+    std::fprintf(f, "\n");
     for(size_t k = 0; k < vecs.size(); ++k)
     {
-        const Vec& v = vecs[k];
-        const Result res = run_vector(inst, mem, v.rows, slot, want, timed, input == "noise", reps);
-        std::fprintf(f, "%s,%s,%s,%.0f,%.0f,%.0f,%.4f", v.id.c_str(), engine_name(want[0]),
-                     engine_name(want[1]), res.p50, res.p99, res.max, res.silent);
+        const Vec&   v   = vecs[k];
+        const Result res = stats(best[k], rep_max[k], silent[k]);
+        std::fprintf(f, "%s,%s,%s,%.0f,%.0f,%.0f,%.4f,%.0f,%.4f,%d,%d,%d,%d,%d,%s", v.id.c_str(),
+                     engine_name(want[0]), engine_name(want[1]), res.p50, res.p99, res.max, res.silent,
+                     res.top8, res.spread, mat.excite[0], mat.excite[1], mat.rec[0], mat.rec[1],
+                     mat.settle, input.c_str());
         for(int r = 0; r < kRows; ++r)
             std::fprintf(f, ",%d", r == kEngineRow[0] ? slot_x1000(slot[0])
                                    : r == kEngineRow[1] ? slot_x1000(slot[1])
                                                         : v.rows[static_cast<size_t>(r)]);
         std::fprintf(f, "\n");
-        std::fflush(f);
-        const double el = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-        std::fprintf(stderr, "[%zu/%zu] %s %s,%s p99=%.0f max=%.0f silent=%.3f (%.1f s)\n", k + 1,
-                     vecs.size(), v.id.c_str(), engine_name(want[0]), engine_name(want[1]), res.p99,
-                     res.max, res.silent, el);
     }
     std::fclose(f);
     return 0;

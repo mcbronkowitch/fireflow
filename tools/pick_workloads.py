@@ -4,8 +4,12 @@ Task 4, spec sections 5.1 and 5.2).
     python tools/pick_workloads.py SWEEP.csv... --top 5 --out shell/workloads.json
 
 Per pairing (eng_a, eng_b) of the sweep CSVs (build/sweep.exe output): the
-`--top` vectors by max_ns among those with silent_frac < 0.5, plus every corner
-vector (`corner_*`, kept whatever their cost or silence). Then the hand-written
+`--top` vectors by top8_mean_ns (the mean of the 8 slowest blocks; one block's
+max_ns is a single sample of desktop noise) among those with silent_frac < 0.5,
+plus every corner vector (`corner_*`, kept whatever their cost or silence).
+Warns per pairing with fewer than --top loud rows or a silent corner; exits
+non-zero when a pairing has no top entry at all. Each workload carries the
+material the sweep loaded it with (excite, rec, settle_blocks, input). Then the hand-written
 entries: the R4 all-noon frame as a workload, and the gestures of spec 5.2 as
 row/value sequences at a fixed rate (GESTURES below). An existing --out file's
 workloads with "kind": "hand" that this script does not write itself (e.g.
@@ -59,38 +63,59 @@ def read_sweep(paths, n_rows):
                 vec = [int(r[f"row{i}"]) for i in range(n_rows)]
                 if f"row{n_rows}" in r:
                     sys.exit(f"{p}: more row columns than the panel table's {n_rows}")
+                for col in ("top8_mean_ns", "rep_spread", "excite_a", "excite_b", "rec_a",
+                            "rec_b", "settle_blocks", "input"):
+                    if col not in r:
+                        sys.exit(f"{p}: no {col} column (a sweep.exe from before Task 4's fix round?)")
                 rows.append({
                     "vector_id": r["vector_id"], "pair": (r["eng_a"], r["eng_b"]),
                     "p50_ns": float(r["p50_ns"]), "p99_ns": float(r["p99_ns"]),
-                    "max_ns": float(r["max_ns"]), "silent_frac": float(r["silent_frac"]),
+                    "max_ns": float(r["max_ns"]), "top8_mean_ns": float(r["top8_mean_ns"]),
+                    "rep_spread": float(r["rep_spread"]), "silent_frac": float(r["silent_frac"]),
+                    "material": {"excite": [r["excite_a"] == "1", r["excite_b"] == "1"],
+                                 "rec": [r["rec_a"] == "1", r["rec_b"] == "1"],
+                                 "settle_blocks": int(r["settle_blocks"]),
+                                 "input": r["input"]},
                     "rows_x1000": vec, "csv": os.path.basename(p)})
     return rows
 
 
-def pick(sweep_rows, top):
-    """Per pairing: top `top` non-corner by max_ns (silent_frac < 0.5), then the corners."""
+def pick(sweep_rows, top, warn=print):
+    """Per pairing: top `top` non-corner by top8_mean_ns (silent_frac < 0.5), then
+    the corners. Warns when a pairing has fewer than `top` loud rows or a
+    corner is silent; returns (workloads, pairings with no top entry)."""
     by_pair = defaultdict(list)
     for r in sweep_rows:
         by_pair[r["pair"]].append(r)
-    out = []
+    out, empty = [], []
     for pair in sorted(by_pair):
         rs = by_pair[pair]
+        tag = f"{pair[0]}_{pair[1]}"
         corners = sorted((r for r in rs if r["vector_id"].startswith("corner_")),
                          key=lambda r: r["vector_id"])
         loud = [r for r in rs if not r["vector_id"].startswith("corner_") and r["silent_frac"] < 0.5]
-        loud.sort(key=lambda r: (-r["max_ns"], r["vector_id"]))
-        tag = f"{pair[0]}_{pair[1]}"
+        loud.sort(key=lambda r: (-r["top8_mean_ns"], r["vector_id"]))
+        if len(loud) < top:
+            warn(f"warning: {tag}: only {len(loud)} non-silent rows for --top {top}")
+        if not loud:
+            empty.append(tag)
+        for r in corners:
+            if r["silent_frac"] >= 0.5:
+                warn(f"warning: {tag}: {r['vector_id']} is silent (silent_frac {r['silent_frac']:.3f})")
         for k, r in enumerate(loud[:top], 1):
             out.append(_workload(f"{tag}_top{k}", "top", r, rank=k))
         for r in corners:
             out.append(_workload(f"{tag}_{r['vector_id']}", "corner", r))
-    return out
+    return out, empty
 
 
 def _workload(name, kind, r, rank=None):
     w = {"name": name, "kind": kind, "pair": list(r["pair"]), "source": f"{r['csv']}:{r['vector_id']}",
-         "desk_ns": {"p50": r["p50_ns"], "p99": r["p99_ns"], "max": r["max_ns"]},
-         "silent_frac": r["silent_frac"], "rows_x1000": r["rows_x1000"]}
+         "desk_ns": {"p50": r["p50_ns"], "p99": r["p99_ns"], "max": r["max_ns"],
+                     "top8_mean": r["top8_mean_ns"], "rep_spread": r["rep_spread"]},
+         "silent_frac": r["silent_frac"]}
+    w.update(r["material"])
+    w["rows_x1000"] = r["rows_x1000"]
     if rank is not None:
         w["rank"] = rank
     return w
@@ -202,14 +227,20 @@ def main(argv=None):
     names = read_row_names()
     n = len(names)
     sweep_rows = read_sweep(a.csv, n)
-    picked = pick(sweep_rows, a.top)
+    picked, empty = pick(sweep_rows, a.top, warn=lambda m: print(m, file=sys.stderr))
+    if empty:
+        sys.exit(f"no top entry (every non-corner row silent) for: {', '.join(empty)}")
 
     noon = read_noon()
     if len(noon) != n:
         sys.exit(f"generated_boot_patch_noon.h has {len(noon)} rows, the panel table {n}")
+    # r4_noon was not swept; its material follows the sweep's rule for its
+    # engines (ENGINE_A row 531 -> slot 3 FEED, ENGINE_B row 410 -> slot 2
+    # BODY: neither BBD nor SAMPLER), with the sweep's input.
     hand = [{"name": "r4_noon", "kind": "hand",
              "source": "shell/generated_boot_patch_noon.h (fault R4's all-noon frame, captured on Rev A #1)",
-             "rows_x1000": noon}]
+             "excite": [False, False], "rec": [False, False], "settle_blocks": 500,
+             "input": "noise", "rows_x1000": noon}]
     mine = {w["name"] for w in hand}
     if os.path.exists(a.out):
         old = json.load(open(a.out, encoding="utf-8"))
@@ -224,17 +255,24 @@ def main(argv=None):
                   "rows_x1000: one value per kRevaTable row, x1000 of the normalised pot value. "
                   "Gesture steps: at `block` (from the gesture's start) set `row` to "
                   "`value_x1000` through the pot path; row -1 = a MOD key press, row -2 = "
-                  "SHIFT held + MOD press (clear_mod_layer). `bastian` is captured in Task 7."),
+                  "SHIFT held + MOD press (clear_mod_layer). `bastian` is captured in Task 7. "
+                  "Per-workload material, as the sweep applied it at load: `excite` [deck A, "
+                  "deck B] = excite_other_deck set at load and held across the engine switch "
+                  "(apply_excite_hold; the BBD decks); `rec` [A, B] = REC latched from the load "
+                  "through the settle and released at its end (the SAMPLER decks); "
+                  "`settle_blocks` = untimed blocks after the load (2500 with a SAMPLER deck, "
+                  "else 500); `input` = what the sweep fed the audio input: `noise` = xorshift32 "
+                  "white noise through a one-pole low-pass (y += 0.2 (w - y)), times 0.6, the "
+                  "same on L and R, restarted at every load (about -12 dBFS peak); `silence` = "
+                  "zeros. Ranking: `rank` orders a pairing's tops by desk_ns.top8_mean (the "
+                  "mean of the 8 slowest blocks after the per-block minimum over reps)."),
         "table": "kRevaTable (shell/generated_panel_map.h)",
         "row_count": n,
         "rows": names,
         "block": 96,
         "sample_rate": 48000,
         "sweep": {"csv": sorted({os.path.basename(p) for p in a.csv}), "top": a.top,
-                  "note": a.sweep_note,
-                  "material": ("BBD decks: excite_other_deck held across the switch; SAMPLER "
-                               "decks: REC latched for a 2500-block settle, then released; "
-                               "audio in: low-passed noise about -12 dBFS")},
+                  "note": a.sweep_note},
         "workloads": picked + hand,
         "gestures": gestures(names, "r4_noon", noon),
     }
