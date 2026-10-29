@@ -212,6 +212,8 @@ add_executable(spky_tests
     tests/test_smooth_law.cpp
     tests/test_skip_unchanged.cpp
     shell/boot_patch.cpp
+    shell/remote_cmd.cpp
+    tests/test_remote_cmd.cpp
     shell/persist_record.cpp
     tests/test_persist_record.cpp
     shell/persist_policy.cpp
