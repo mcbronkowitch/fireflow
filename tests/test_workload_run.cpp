@@ -17,13 +17,13 @@ using shell::WorkloadRun;
 
 TEST_CASE("overrun guard trips on the 8th consecutive block") {
     OverrunGuard g(shell::kGuardLimitCycles, shell::kGuardBlocks);
-    CHECK(shell::kGuardLimitCycles == 950000u);
+    CHECK(shell::kGuardLimitCycles == 965000u);
     CHECK(shell::kGuardBlocks == 8u);
-    for(int i = 0; i < 7; ++i) CHECK_FALSE(g.block(951000));
+    for(int i = 0; i < 7; ++i) CHECK_FALSE(g.block(966000));
     CHECK_FALSE(g.tripped());
     CHECK_FALSE(g.block(900000));   // one block under the limit resets the streak
-    for(int i = 0; i < 7; ++i) CHECK_FALSE(g.block(951000));
-    CHECK(g.block(951000));          // the 8th in a row
+    for(int i = 0; i < 7; ++i) CHECK_FALSE(g.block(966000));
+    CHECK(g.block(966000));          // the 8th in a row
     CHECK(g.tripped());
     // Latched: cheap blocks (the silenced callback) do not untrip it.
     CHECK(g.block(1000));
@@ -31,7 +31,12 @@ TEST_CASE("overrun guard trips on the 8th consecutive block") {
     g.clear();
     CHECK_FALSE(g.tripped());
     // Exactly the limit is not over it.
-    for(int i = 0; i < 20; ++i) CHECK_FALSE(g.block(950000));
+    for(int i = 0; i < 20; ++i) CHECK_FALSE(g.block(965000));
+    // 2026-10-29: the limit sits above the 960 000 block period. Bastian's
+    // patch peaks at 959-968 k on its own (docs/hardware/cpu-hunt-measured.md
+    // section 1): 960 000 (over the old 950 000 limit) must never trip.
+    for(int i = 0; i < 40; ++i) CHECK_FALSE(g.block(960000));
+    CHECK_FALSE(g.tripped());
 }
 
 TEST_CASE("workload run settles 500 blocks") {

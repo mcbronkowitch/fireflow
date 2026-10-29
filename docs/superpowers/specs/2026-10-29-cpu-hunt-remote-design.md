@@ -249,7 +249,11 @@ round:
   outside the callback's measured window (`docs/gotchas.md`): the callback's
   own cycles above a limit, or the period from one callback's entry to the
   next above the block length for N blocks in a row — the callback runs back
-  to back with its own cycles under the limit. Once tripped, nothing the
+  to back with its own cycles under the limit. The callback limit is
+  965 000 cycles, above the 960 000 block period: raised from 950 000 on
+  2026-10-29 after Bastian's patch tripped the cb criterion by itself
+  (`docs/hardware/cpu-hunt-measured.md` §1); saturation stays covered by
+  the period criterion. Once tripped, nothing the
   image injects (the measurement image's late-block burn) keeps running.
 - **The bootloader entry runs in the USB receive callback**, not the
   foreground, so it works while the foreground is starved but the callback

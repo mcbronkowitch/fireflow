@@ -164,7 +164,7 @@ No code. Ask Bastian, record the answers in the spec's §9, commit the spec.
 **Interfaces:**
 - Consumes: Task 1's `Command`, Task 2's `remote_poll`, `apply_boot_patch_rows`, `control_rearm_after_take()`, `shell/workloads.json` from Task 4.
 - Produces:
-  - `class OverrunGuard { public: OverrunGuard(uint32_t limit, uint32_t n); bool block(uint32_t cb); bool tripped() const; void clear(); };` — limit 950 000, n 8. Once tripped, the callback writes silence and skips `process()` until `clear()`. `LOAD`, `HOME` and `RST` clear it.
+  - `class OverrunGuard { public: OverrunGuard(uint32_t limit, uint32_t n); bool block(uint32_t cb); bool tripped() const; void clear(); };` — limit 965 000 (raised from 950 000 on 2026-10-29, see the spec section 5.3), n 8. Once tripped, the callback writes silence and skips `process()` until `clear()`. `LOAD`, `HOME` and `RST` clear it.
   - `class WorkloadRun { public: void start(int id, uint32_t now_block); void on_pot_take(); bool counting(uint32_t now_block) const; bool void_run() const; };` — `counting` is false for the first 500 blocks after `start` (settle); `on_pot_take` during a run sets `void_run`.
   - `void panel_scan_load_knobs(const float* knobs);` — writes the knob vector, re-bases pot ownership so a pot must move `kPotTouch` from its current reading to take over, then calls `control_rearm_after_take()`.
   - Generated `struct WorkloadDef { const char* name; const int* rows_x1000; int n; };` `struct GestureStep { uint32_t block; int16_t row; int16_t value_x1000; };` plus `workload_by_id(int)` and `gesture_by_id(int, int* n)`.
@@ -172,7 +172,7 @@ No code. Ask Bastian, record the answers in the spec's §9, commit the spec.
 - Determinism: before writing code, search `engine/instrument.h` for a transport reset and a seed setter. If both exist, `LOAD` calls them. If not, do **not** add engine API in this task: record that runs are not seed-identical and rely on the A/A floor (Task 8).
 
 - [ ] **Step 1: Write the failing tests** in `tests/test_workload_run.cpp`:
-  - `"overrun guard trips on the 8th consecutive block"` — 7 × 951 000 → not tripped; one 900 000 resets the streak; 8 × 951 000 → tripped.
+  - `"overrun guard trips on the 8th consecutive block"` — 7 × 966 000 → not tripped; one 900 000 resets the streak; 8 × 966 000 → tripped; 960 000 (over the original 950 000 limit) never trips.
   - `"workload run settles 500 blocks"` — `counting(start+499)` false, `counting(start+500)` true.
   - `"pot take voids the run"` — `on_pot_take()` after start gives `void_run()` true; a new `start` clears it.
   

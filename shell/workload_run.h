@@ -27,9 +27,13 @@
 namespace shell {
 
 // A 2 ms block is 960 000 cycles at 480 MHz; the measured deadline band is
-// ~930-960 k (docs/gotchas.md). 950 000 for 8 blocks in a row: 16 ms of
+// ~930-960 k (docs/gotchas.md). 965 000 for 8 blocks in a row: 16 ms of
 // sustained overrun, well past anything a single expensive tick produces.
-inline constexpr uint32_t kGuardLimitCycles = 950000;
+// Raised from 950 000 on 2026-10-29: Bastian's patch peaks at 959-968 k on
+// its own and tripped the old limit every ~20 s without saturating
+// (docs/hardware/cpu-hunt-measured.md section 1). Back-to-back saturation
+// is the period criterion's job (kGuardPeriodCycles).
+inline constexpr uint32_t kGuardLimitCycles = 965000;
 inline constexpr uint32_t kGuardBlocks      = 8;
 // The back-to-back signature (final review I2): cb alone misses a callback
 // that saturates with cb under kGuardLimitCycles, because 12-30 k of every
