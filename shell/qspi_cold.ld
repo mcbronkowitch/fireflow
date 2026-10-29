@@ -125,5 +125,23 @@ SECTIONS
 
     . = ALIGN(4);
   } > QSPI_COLD
+
+  /* Read-only DATA in QSPI, in an output section of its own so that it is
+     never in an executable section: objdump -d (qspi_placement.py's call
+     graph) would otherwise disassemble it, and its words are checked as data
+     instead. Today it holds the SHELL_REMOTE workload tables
+     (generated_workloads.h, about 40 KB that SRAM_EXEC cannot spare), read
+     only when a remote LOAD / GEST arrives. Data here is read memory-mapped,
+     so it must never be read while the QSPI is out of that mode: SHELL_REMOTE
+     images suppress the panel-state save (panel_scan.cpp), the only thing
+     that takes it out after boot. Empty, and so not emitted, elsewhere.
+     shell/Makefile lists it in QSPI_SECTIONS (shell-qspi.bin). */
+  .qspi_rodata :
+  {
+    . = ALIGN(4);
+    *(.qspi_rodata)
+    *(.qspi_rodata.*)
+    . = ALIGN(4);
+  } > QSPI_COLD
 }
 INSERT AFTER .qspiflash_data;

@@ -1,4 +1,5 @@
 #include "shell_panel_scan.h"
+#include "shell_remote.h"
 
 // Only the playing images run the law. Elsewhere this file is empty, so the
 // law's static constructor does not land in images that never call it.
@@ -21,10 +22,14 @@ control::ControlLaw g_law;
 // the first tick the deck is off BBD (the panel has no checkbox to clear it).
 control::Options    g_opt;
 spkyled::Panel      g_panel;
-#if SHELL_PERSIST_ON
+// The excite hold and its setters exist where something sets excite from
+// outside the law: the boot record and take (SHELL_PERSIST_ON), and a remote
+// LOAD's material (SHELL_REMOTE, plan 2026-10-29-cpu-hunt-remote Task 5).
+#define SHELL_EXCITE_SET (SHELL_PERSIST_ON || SHELL_REMOTE)
+#if SHELL_EXCITE_SET
 // A restored excite_other_deck, held until its deck's BBD engine has landed
 // (apply_excite_hold(), panel_step.h): the boot runs another engine first,
-// and bbd_part follows the running one.
+// and bbd_part follows the running one. A LOAD onto BBD is the same case.
 bool                g_excite_hold[2] = {false, false};
 #endif
 } // namespace
@@ -71,7 +76,7 @@ void control_boot(float* knobs)
     (void)spkyled::gamma_table(spkyled::kLedSteps);
 }
 
-#if SHELL_PERSIST_ON
+#if SHELL_EXCITE_SET
 void control_set_excite(const bool excite[2])
 {
     for(int p = 0; p < 2; ++p)
@@ -96,7 +101,7 @@ control::Events control_tick(const float* knobs, spky::Instrument& inst, float m
     g_opt.measured_bpm = measured_bpm;
     const control::Events ev = g_law.tick(knobs, g_opt, inst);
     apply_excite_events(ev, g_opt);
-#if SHELL_PERSIST_ON
+#if SHELL_EXCITE_SET
     apply_excite_hold(ev, knobs, g_excite_hold, g_opt);
 #endif
     return ev;

@@ -4,12 +4,16 @@ section 5.4). The board stays on USB; this drives it from the PC.
     remote_run.py flash QSPI.bin SRAM.bin       DFU pair, QSPI first (board must be in DFU)
     remote_run.py boot                          send BOOT, wait for the DFU device
     remote_run.py cmd "LOAD 3"                  send one line, print the replies for a moment
-    remote_run.py run --load 3 [--gest 1] [--tog 2=1 ...] --seconds 60 --out DIR [--record]
+    remote_run.py run (--load 3 | --gest 1) [--tog 2=1 ...] --seconds 60 --out DIR [--record]
 
 `run` writes DIR/serial.txt (every line prefixed with the host time), DIR/summary.json
 (from the SHELL_PLAY_LAW / SHELL_PLAY_WIN frame lines, see run_stats.py) and, with
 --record, DIR/audio.wav plus DIR/audio.wav.start. The COM port is found by USB
-VID/PID 0483:5740 unless --port is given. Workload ids are integers for now.
+VID/PID 0483:5740 unless --port is given. Ids index shell/generated_workloads.h;
+a gesture loads its own base workload. summary.json counts only the frames the
+board reports settled for this run (`counting=1`) and says `void` when a pot
+took a parameter over during it. --seconds includes the settle (1 s, or 5 s
+with a SAMPLER deck).
 """
 import argparse
 import json
@@ -98,9 +102,12 @@ def cmd_run(args, port_factory=_port, capture_fn=rl.start_capture,
                     # A little margin: ffmpeg starts late, the serial loop ends on time.
                     capture = capture_fn(wav, rl.CAPTURE_DEVICE, args.seconds + 2.0)
                     sleep(1.0)
-                port.send("LOAD %d" % args.load)
+                # A gesture loads its own base workload (shell/panel_scan.cpp),
+                # so GEST goes alone; a LOAD before it would only be replaced.
                 if args.gest is not None:
                     port.send("GEST %d" % args.gest)
+                else:
+                    port.send("LOAD %d" % args.load)
                 for tog in args.tog or []:
                     bit, val = tog.split("=")
                     port.send("TOG %d %d" % (int(bit), int(val)))
@@ -114,7 +121,12 @@ def cmd_run(args, port_factory=_port, capture_fn=rl.start_capture,
         if capture is not None:
             record = _finish_capture(capture, wav, abort=not completed)
         with open(out / "serial.txt", encoding="utf-8") as fh:
-            summary = rs.summarize_run(fh)
+            # Only the settled frames of this run (the board's `SHELL_REMOTE
+            # run ... counting=1` lines); `void` once a pot took over.
+            if args.gest is not None:
+                summary = rs.summarize_run(fh, gest_id=args.gest)
+            else:
+                summary = rs.summarize_run(fh, load_id=args.load)
         summary["error"] = error
         summary["record"] = record
         (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n",
@@ -140,8 +152,8 @@ def main(argv=None) -> int:
     p.set_defaults(fn=cmd_cmd)
 
     p = sub.add_parser("run")
-    p.add_argument("--load", type=int, required=True, help="workload id (integer)")
-    p.add_argument("--gest", type=int)
+    p.add_argument("--load", type=int, help="workload id (shell/generated_workloads.h)")
+    p.add_argument("--gest", type=int, help="gesture id; loads its own base, --load not needed")
     p.add_argument("--tog", action="append", metavar="BIT=V")
     p.add_argument("--seconds", type=float, required=True)
     p.add_argument("--out", required=True)
@@ -149,6 +161,8 @@ def main(argv=None) -> int:
     p.set_defaults(fn=cmd_run)
 
     args = ap.parse_args(argv)
+    if args.verb == "run" and args.load is None and args.gest is None:
+        ap.error("run needs --load ID or --gest ID")
     return args.fn(args)
 
 

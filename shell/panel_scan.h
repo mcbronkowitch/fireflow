@@ -41,6 +41,17 @@ void panel_scan_gate(float* l, float* r, size_t n);
 // SHELL_PLAY_LAW's cb_last / cb_max (same warm-up rule as cyc_max).
 void panel_scan_block_end(uint32_t c0);
 
+// SHELL_REMOTE only (plan 2026-10-29-cpu-hunt-remote Task 5); audio-callback
+// context, like panel_scan_tick():
+// - panel_scan_load_knobs(): the knob vector becomes `knobs`, every pot lets
+//   go (a pot takes over again only once it moves kPotTouch from its reading
+//   after the load), and the law is re-armed as for a restore
+//   (control_rearm_after_take()), so the load fires no bbd_edge.
+// - panel_scan_guard_tripped(): the overrun guard (workload_run.h) has
+//   tripped; the callback then writes silence instead of calling process().
+void panel_scan_load_knobs(const float* knobs);
+bool panel_scan_guard_tripped();
+
 // Starts the log and prints SHELL_PLAY twice a second. Never returns.
 [[noreturn]] void run_panel_scan_report(bench::Board& hw);
 

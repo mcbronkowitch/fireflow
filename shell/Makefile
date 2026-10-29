@@ -519,6 +519,9 @@ endif
 # holds this.
 ifeq ($(SHELL_REMOTE),1)
 CPP_SOURCES += remote_cmd.cpp remote_listen.cpp
+# The workloads, gestures and overrun guard (plan Task 5). Its generated tables
+# (generated_workloads.h) go to .qspi_rodata, i.e. QSPI (qspi_cold.ld).
+CPP_SOURCES += workload_run.cpp
 endif
 
 # -O3, und das ist nicht optional. libDaisys core/Makefile setzt `OPT ?= -O2`,
@@ -617,7 +620,7 @@ SWITCH_HEADERS := \
   $(shell python write_shell_persist.py $(BUILD_DIR)/shell_persist.h $(SHELL_PERSIST) $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o $(BUILD_DIR)/persist_flash.o) \
   $(shell python write_shell_persist_stress.py $(BUILD_DIR)/shell_persist_stress.h $(SHELL_PERSIST_STRESS) $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o $(BUILD_DIR)/persist_flash.o) \
   $(shell python write_shell_itcm.py $(BUILD_DIR)/shell_itcm.h $(SHELL_ITCM) $(SWITCH_OBJECTS)) \
-  $(shell python write_shell_remote.py $(BUILD_DIR)/shell_remote.h $(SHELL_REMOTE) $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o) \
+  $(shell python write_shell_remote.py $(BUILD_DIR)/shell_remote.h $(SHELL_REMOTE) $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o) \
   $(shell python write_shell_link_stamp.py $(BUILD_DIR)/shell_link_stamp.h $(BUILD_DIR)/itcm_load.o) \
   $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/pot_report.o $(BUILD_DIR)/scan_check.o $(BUILD_DIR)/remote_listen.o)
 
@@ -635,7 +638,7 @@ $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o: $(BUILD_DIR)/shell_coupon_pr
 $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/wait_probe.o: $(BUILD_DIR)/shell_pot_round.h
 $(BUILD_DIR)/pot_report.o: $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/remote_listen.o: $(BUILD_DIR)/shell_git_hash.h
-$(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_remote.h
+$(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o: $(BUILD_DIR)/shell_remote.h
 $(BUILD_DIR)/scan_check.o: $(BUILD_DIR)/shell_scan_check.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_keys_nc.h $(BUILD_DIR)/shell_raw_spread.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h
 $(BUILD_DIR)/control_tick.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h
@@ -665,6 +668,10 @@ FORCE:
 # All three travel as one image, shell-qspi.bin, which pairs with the
 # shell-sram.bin of the same build: always flash both, QSPI first.
 QSPI_SECTIONS = .qspiflash_text .qspiflash_data .qspi_cold
+# The SHELL_REMOTE workload tables (qspi_cold.ld), read at a LOAD / GEST only.
+# Listed in every build: an empty section is not emitted, and left out of the
+# list a filled one would stretch shell-sram.bin from 0x24000000 to QSPI.
+QSPI_SECTIONS += .qspi_rodata
 # The ITCM code travels in shell-qspi.bin too, behind .qspi_cold: the SRAM
 # image of an ITCM build is only ever correct with its own QSPI image.
 ifeq ($(SHELL_ITCM),1)

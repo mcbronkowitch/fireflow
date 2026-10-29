@@ -32,7 +32,10 @@
 #include "persist_policy.h"
 #endif
 #if SHELL_REMOTE
+#include <cstring>
+#include "generated_workloads.h"
 #include "remote_listen.h"
+#include "workload_run.h"
 #endif
 #if !SHELL_COUPON_PROBE
 #include "control/clock_law.hpp"
@@ -222,12 +225,16 @@ void finish_take(const bool was_bbd[2])
 float             g_pub_knobs[ffctl::NUM_PARAMS];
 bool              g_pub_excite[2] = {false, false};
 volatile uint32_t g_pub_seq       = 0;
+#endif
+
 #ifndef SHELL_CB_WINDOW
 #define SHELL_CB_WINDOW 0
 #endif
-#if SHELL_PERSIST_STRESS_ON || SHELL_CB_WINDOW
 // panel_scan_block_end()'s per-save window (stress image) or per-frame window
-// (SHELL_CB_WINDOW, C_USER_FLAGS), probe images only.
+// (SHELL_CB_WINDOW, C_USER_FLAGS, and every SHELL_REMOTE image: the remote
+// runner's frame_max is this window's worst block).
+#define SHELL_WIN_ON (SHELL_PERSIST_STRESS_ON || SHELL_CB_WINDOW || SHELL_REMOTE)
+#if SHELL_WIN_ON
 volatile uint32_t g_win_gap_max    = 0;
 volatile uint32_t g_win_cb_max     = 0;
 volatile uint32_t g_win_over       = 0;
@@ -238,6 +245,216 @@ uint32_t          g_win_prev_entry = 0;
 // deadline band (docs/gotchas.md, ~930-960 k).
 constexpr uint32_t kWinOverCycles  = 930000;
 #endif
+
+#if SHELL_REMOTE
+// The remote CPU hunt's workloads (spec 2026-10-29-cpu-hunt-remote-design.md
+// 5.2/5.3, plan Task 5). Everything here runs in the audio callback, after
+// the pot loop and before the control tick, so a LOAD reaches the law in the
+// block it arrives; the foreground only prints. The pure half -- the guard,
+// the run's settle and void, the load's vector, a gesture step -- is
+// workload_run.h, host tested.
+static_assert(kWorkloadRowCount == kTable.count,
+              "generated_workloads.h: one value per Rev A row (run gen_workloads.py)");
+
+// The self-limiter (spec 5.3): latched by kGuardBlocks consecutive callbacks
+// over kGuardLimitCycles in panel_scan_block_end(); main.cpp's callback then
+// writes silence instead of calling process(), so the foreground and USB get
+// the CPU back. LOAD, HOME and RST clear it. g_guard_blk: the block it
+// tripped in; g_guard_flag mirrors tripped() for the foreground.
+OverrunGuard      g_guard(kGuardLimitCycles, kGuardBlocks);
+volatile uint32_t g_guard_blk  = 0;
+volatile bool     g_guard_flag = false;
+
+// The block clock the runs count on: every block that reaches the law.
+uint32_t    g_rblock = 0;
+WorkloadRun g_run;
+int         g_run_gest = -1;       // the gesture id of this run, -1 for a LOAD
+bool        g_run_rec[2] = {false, false};   // REC latched by the material
+// The running gesture: its steps copied out of QSPI at GEST, so the measured
+// blocks never read QSPI; the next step to apply; the gesture's length.
+GestureStep g_gest_steps[kGestureMaxSteps];
+int         g_gest_n      = 0;
+int         g_gest_next   = 0;
+uint32_t    g_gest_blocks = 0;
+bool        g_gest_done   = false;
+// The LOAD's knob vector, built here and not on the interrupt's stack (1 KB).
+float g_load_knobs[ffctl::NUM_PARAMS];
+// HOME: the panel as it played when the first LOAD / GEST arrived -- the
+// booted patch plus whatever the hands had done -- and its excite bits.
+float g_home_knobs[ffctl::NUM_PARAMS];
+bool  g_home_excite[2] = {false, false};
+bool  g_home_valid     = false;
+// The run as the foreground reads it, refreshed every block. A torn set is
+// harmless: a LOAD changes gen and clears counting for at least 500 blocks,
+// so the foreground's "counting at two passes in a row, same gen" rule
+// (run_panel_scan_report()) cannot straddle one.
+volatile int      g_rs_id       = -1;
+volatile int      g_rs_gest     = -1;
+volatile uint32_t g_rs_gen      = 0;
+volatile bool     g_rs_counting = false;
+volatile bool     g_rs_void     = false;
+
+// What the callback did, for the foreground to print (the callback never
+// prints): CmdRing as a callback -> foreground queue, the command kind and its
+// id, `b` one of these. A full queue drops the line, never the command.
+enum AckCode : int32_t { kAckOk = 0, kAckBadId = 1, kAckUnsupported = 2, kAckGestDone = 3,
+                         kAckTake = 4 };
+CmdRing g_acks;
+
+void ack(CmdKind k, int32_t a, AckCode b)
+{
+    const Command c{k, a, b};
+    (void)g_acks.push(c);
+}
+
+// The maxima the frame lines report, so each run's numbers are its own:
+// SHELL_PLAY_LAW's cyc/led/cb maxima and the WIN window (reset by
+// panel_scan_block_end() on its next call). The warm-up rule still holds:
+// nothing is recorded in the first kLawWarmupBlocks after boot.
+void reset_maxima()
+{
+    g_law_cycles_max = 0;
+    g_led_cycles_max = 0;
+    g_cb_cycles_max  = 0;
+    g_win_reset      = true;
+}
+
+// A workload as the sweep loaded it (host/sweep/main.cpp render_once()): the
+// init patch with the rows over it and REC latched for its SAMPLER decks
+// (workload_knobs()), the law re-armed, every pot let go, the excite bits set
+// and held across the engine switch (control_set_excite(), apply_excite_hold()).
+// The run starts settling; the maxima reset now and again when it counts.
+void start_workload(const WorkloadDef& w, int id, int gest)
+{
+    if(!g_home_valid)
+    {
+        for(int i = 0; i < ffctl::NUM_PARAMS; ++i) g_home_knobs[i] = g_knobs[i];
+        control_get_excite(g_home_excite);
+        g_home_valid = true;
+    }
+    (void)workload_knobs(w, kTable, g_load_knobs);   // row count: static_assert above
+    panel_scan_load_knobs(g_load_knobs);
+    const bool excite[2] = {w.excite[0] != 0, w.excite[1] != 0};
+    control_set_excite(excite);
+    g_run_rec[0] = w.rec[0] != 0;
+    g_run_rec[1] = w.rec[1] != 0;
+    g_run.start(id, g_rblock, w.settle_blocks);
+    g_run_gest = gest;
+    g_guard.clear();
+    reset_maxima();
+}
+
+void remote_command(const Command& c)
+{
+    switch(c.kind)
+    {
+        case CmdKind::Load:
+        {
+            // The parser bounds nothing above 0; the table does.
+            const WorkloadDef* w = workload_by_id(c.a);
+            if(w == nullptr) { ack(c.kind, c.a, kAckBadId); break; }
+            g_gest_n = 0;
+            start_workload(*w, c.a, -1);
+            ack(c.kind, c.a, kAckOk);
+            break;
+        }
+        case CmdKind::Gesture:
+        {
+            // A gesture plays on its base workload (r4_noon, with its
+            // material), loaded here; step 0 lands in the first counted block.
+            int                n  = 0;
+            const GestureStep* st = gesture_by_id(c.a, &n);
+            const GestureDef*  d  = gesture_def(c.a);
+            if(st == nullptr || d == nullptr || n > kGestureMaxSteps
+               || workload_by_id(d->base) == nullptr)
+            {
+                ack(c.kind, c.a, kAckBadId);
+                break;
+            }
+            std::memcpy(g_gest_steps, st, sizeof(GestureStep) * static_cast<size_t>(n));
+            g_gest_n      = n;
+            g_gest_next   = 0;
+            g_gest_blocks = d->blocks;
+            g_gest_done   = false;
+            start_workload(*workload_by_id(d->base), d->base, c.a);
+            ack(c.kind, c.a, kAckOk);
+            break;
+        }
+        case CmdKind::Home:
+            // Back to the panel as it was before the first LOAD; no run.
+            if(g_home_valid)
+            {
+                panel_scan_load_knobs(g_home_knobs);
+                control_set_excite(g_home_excite);
+            }
+            g_run.stop();
+            g_run_gest = -1;
+            g_gest_n   = 0;
+            g_guard.clear();
+            reset_maxima();
+            ack(c.kind, g_home_valid ? 1 : 0, kAckOk);
+            break;
+        case CmdKind::ResetMax:
+            g_guard.clear();
+            reset_maxima();
+            ack(c.kind, 0, kAckOk);
+            break;
+        case CmdKind::Toggle:
+        case CmdKind::Late:
+            // The measurement switch's (plan Task 6); said, not silently eaten.
+            ack(c.kind, c.a, kAckUnsupported);
+            break;
+        default:
+            break;   // PING and BOOT never get here (remote_listen.cpp)
+    }
+}
+
+// Once per block, before the control tick: at most one command, the settle's
+// end, the gesture's steps due by this block, and the run for the foreground.
+void remote_block()
+{
+    const uint32_t now = ++g_rblock;
+    Command        c;
+#if SHELL_PERSIST_ON
+    // Not before the boot take: it would write the pot positions over a load.
+    if(g_take.done && remote_poll(&c)) remote_command(c);
+#else
+    if(remote_poll(&c)) remote_command(c);
+#endif
+    if(g_run.settle_ends(now))
+    {
+        // The sweep releases REC at the settle's end, so the counted blocks
+        // play back what was recorded; and the maxima start from here.
+        if(g_run_rec[0]) g_knobs[ffctl::REC_A] = 0.0f;
+        if(g_run_rec[1]) g_knobs[ffctl::REC_B] = 0.0f;
+        reset_maxima();
+    }
+    if(g_gest_n > 0 && g_run.counting(now))
+    {
+        const uint32_t off = g_run.counted(now);
+        while(g_gest_next < g_gest_n && g_gest_steps[g_gest_next].block <= off)
+        {
+            // Through the pot / key path; SHIFT + MOD lets every pot go and
+            // starts the MOD lamp's receipt blink, as the live keys do.
+            if(apply_gesture_step(g_gest_steps[g_gest_next], kTable, kKeyMap, g_knobs))
+            {
+                for(PotOwner& o : g_owner) pot_release(o);
+                g_mod_cleared = true;
+            }
+            ++g_gest_next;
+        }
+        if(!g_gest_done && g_gest_next >= g_gest_n && off + 1u >= g_gest_blocks)
+        {
+            g_gest_done = true;
+            ack(CmdKind::Gesture, g_run_gest, kAckGestDone);
+        }
+    }
+    g_rs_id       = g_run.id();
+    g_rs_gest     = g_run.active() ? g_run_gest : -1;
+    g_rs_gen      = g_run.gen();
+    g_rs_counting = g_run.counting(now);
+    g_rs_void     = g_run.void_run();
+}
 #endif
 
 } // namespace
@@ -342,8 +559,20 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
         // position on the move that takes it, the filter, and the write by
         // an owner only: pot_row_step(), host tested.
         float v;
+#if SHELL_REMOTE
+        // A pot that takes its parameter over during a run voids it (spec
+        // 5.2, "Pot drift"), and every take is logged with its row.
+        const bool owned_before = g_owner[idx].owned;
+#endif
         if(pot_row_step(*e, g_owner[idx], g_filter[idx], raw, g_span, g_knobs, &v))
             g_value[idx] = v;               // every row is reported
+#if SHELL_REMOTE
+        if(!owned_before && g_owner[idx].owned)
+        {
+            g_run.on_pot_take();
+            ack(CmdKind::None, static_cast<int32_t>(e - kTable.entries), kAckTake);
+        }
+#endif
     }
 
 #if SHELL_PERSIST_ON
@@ -358,6 +587,12 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
         boot_take_apply(g_take, kTable, g_span, g_knobs);
         if(g_take.done) finish_take(was_bbd);
     }
+#endif
+
+#if SHELL_REMOTE
+    // The remote commands and the running workload, once per block, after
+    // the pots and before the law sees the vector (see remote_block()).
+    remote_block();
 #endif
 
     // The block period and size come from the board (AudioBlockSize /
@@ -514,7 +749,14 @@ void panel_scan_block_end(uint32_t c0)
     const uint32_t dc = cycles_now() - c0;
     g_cb_cycles_last  = dc;
     if(g_law_blocks >= kLawWarmupBlocks && dc > g_cb_cycles_max) g_cb_cycles_max = dc;
-#if SHELL_PERSIST_STRESS_ON || SHELL_CB_WINDOW
+#if SHELL_REMOTE
+    // The overrun guard (workload_run.h) on this callback's cycles: integer
+    // compares only, nothing printed here (the foreground says it).
+    const bool was_tripped = g_guard.tripped();
+    if(g_guard.block(dc) && !was_tripped) g_guard_blk = g_rblock;
+    g_guard_flag = g_guard.tripped();
+#endif
+#if SHELL_WIN_ON
     // The probe image's per-save window (plan Task 6 probe 1): the worst
     // callback and the worst interval between two callback entries since the
     // foreground's last save line. A callback held off by the QSPI shows in
@@ -541,6 +783,23 @@ void panel_scan_block_end(uint32_t c0)
                              g_law_blocks >= kLawWarmupBlocks, *g_inst);
 }
 
+#if SHELL_REMOTE
+void panel_scan_load_knobs(const float* knobs)
+{
+    if(knobs != g_knobs)
+        for(int i = 0; i < ffctl::NUM_PARAMS; ++i) g_knobs[i] = knobs[i];
+    // pot_release(): the next valid reading is the new reference, so a pot
+    // must move kPotTouch from where it stands now before it writes again.
+    for(PotOwner& o : g_owner) pot_release(o);
+    control_rearm_after_take();
+}
+
+bool panel_scan_guard_tripped()
+{
+    return g_guard.tripped();
+}
+#endif
+
 void run_panel_scan_report(bench::Board& hw)
 {
     hw.StartLog(false);
@@ -552,6 +811,9 @@ void run_panel_scan_report(bench::Board& hw)
     // waits for the host, and a line printed once is gone before it attaches.
     constexpr uint32_t kRemoteEvery = 10;
     uint32_t           remote_pass  = 0;
+    // The previous pass's run reading, for the counting=1 rule below.
+    bool     remote_prev_counting = false;
+    uint32_t remote_prev_gen      = 0;
 #endif
 #if SHELL_PERSIST_ON
     // Where boot's hidden state came from (spec 2026-10-28 section 8): the
@@ -712,6 +974,24 @@ void run_panel_scan_report(bench::Board& hw)
         // process(), under the same rule. Six counters of at most seven
         // digits (a 2 ms block is 960 000 cycles) keep the line at 111 bytes
         // or less, inside libDaisy's 128-byte log buffer.
+#if SHELL_REMOTE
+        // The run this frame belongs to, right before the frame's LAW / WIN
+        // lines (tools/run_stats.py reads it that way). counting=1 only when
+        // the run was settled at the previous pass too, with the same gen: the
+        // WIN window below began at that pass, so it then holds counted blocks
+        // only. A LOAD in between changes gen and settles for >= 500 blocks.
+        {
+            const bool     cnt = g_rs_counting;
+            const uint32_t gen = g_rs_gen;
+            const int      id = g_rs_id, gest = g_rs_gest;
+            const bool     vd = g_rs_void;
+            const bool     counted = cnt && remote_prev_counting && gen == remote_prev_gen;
+            remote_prev_counting = cnt;
+            remote_prev_gen      = gen;
+            hw.PrintLine("SHELL_REMOTE run id=%d counting=%d void=%d gest=%d", id,
+                         counted ? 1 : 0, vd ? 1 : 0, gest);
+        }
+#endif
         hw.PrintLine("SHELL_PLAY_LAW cyc_last=%d cyc_max=%d led_last=%d led_max=%d "
                      "cb_last=%d cb_max=%d",
                      static_cast<int>(g_law_cycles_last),
@@ -720,7 +1000,7 @@ void run_panel_scan_report(bench::Board& hw)
                      static_cast<int>(g_led_cycles_max),
                      static_cast<int>(g_cb_cycles_last),
                      static_cast<int>(g_cb_cycles_max));
-#if SHELL_CB_WINDOW && !SHELL_PERSIST_STRESS_ON
+#if (SHELL_CB_WINDOW || SHELL_REMOTE) && !SHELL_PERSIST_STRESS_ON
         // Since the previous frame: the worst callback, the worst interval
         // between two callback entries (a late block shows here even when its
         // own cycles stay under the deadline), the blocks above
@@ -761,6 +1041,53 @@ void run_panel_scan_report(bench::Board& hw)
         // PING is answered here, at most one pass (500 ms) late: the USB
         // interrupt only raises the flag, it never prints.
         if(remote_take_ping()) hw.PrintLine("SHELL_REMOTE pong");
+        // What the callback did since the last pass. The tables are read here
+        // from QSPI (memory-mapped; the save that would unmap it is
+        // suppressed below). Every line stays inside the 128-byte log buffer:
+        // the longest, a load line with a 31-character name, is ~110 bytes.
+        Command a;
+        while(g_acks.pop(&a))
+        {
+            if(a.b == kAckTake)
+                hw.PrintLine("SHELL_REMOTE take row=%d", static_cast<int>(a.a));
+            else if(a.b == kAckBadId)
+                hw.PrintLine("SHELL_REMOTE error cmd=%s id=%d range=0..%d",
+                             a.kind == CmdKind::Load ? "LOAD" : "GEST", static_cast<int>(a.a),
+                             (a.kind == CmdKind::Load ? kWorkloadCount : kGestureCount) - 1);
+            else if(a.b == kAckUnsupported)
+                hw.PrintLine("SHELL_REMOTE error cmd=%s unsupported (measurement image only)",
+                             a.kind == CmdKind::Toggle ? "TOG" : "LATE");
+            else if(a.b == kAckGestDone)
+                hw.PrintLine("SHELL_REMOTE gest done id=%d", static_cast<int>(a.a));
+            else if(a.kind == CmdKind::Home)
+                hw.PrintLine("SHELL_REMOTE home restored=%d", static_cast<int>(a.a));
+            else if(a.kind == CmdKind::ResetMax)
+                hw.PrintLine("SHELL_REMOTE rst");
+            else if(a.kind == CmdKind::Load || a.kind == CmdKind::Gesture)
+            {
+                int id = a.a;
+                if(a.kind == CmdKind::Gesture)
+                {
+                    const GestureDef* g = gesture_def(a.a);
+                    hw.PrintLine("SHELL_REMOTE gest id=%d name=%s base=%d steps=%d blocks=%u",
+                                 static_cast<int>(a.a), g->name, static_cast<int>(g->base),
+                                 static_cast<int>(g->n), static_cast<unsigned>(g->blocks));
+                    id = g->base;
+                }
+                // input= is what the sweep fed the audio input; the board
+                // feeds nothing and plays whatever is patched to its input.
+                const WorkloadDef* w = workload_by_id(id);
+                hw.PrintLine("SHELL_REMOTE load id=%d name=%s input=%s settle=%u excite=%d,%d "
+                             "rec=%d,%d",
+                             id, w->name, w->input == WorkloadInput::Noise ? "noise" : "silence",
+                             static_cast<unsigned>(w->settle_blocks), w->excite[0], w->excite[1],
+                             w->rec[0], w->rec[1]);
+            }
+        }
+        // While the guard holds the callback silent: every pass, so a host
+        // that attaches late still sees why the board is quiet.
+        if(g_guard_flag)
+            hw.PrintLine("SHELL_REMOTE guard tripped blk=%u", static_cast<unsigned>(g_guard_blk));
 #endif
 #if SHELL_PERSIST_ON
         if(persist_pass++ % kPersistSrcEvery == 0)
@@ -833,6 +1160,20 @@ void run_panel_scan_report(bench::Board& hw)
             // 15 s unchanged and at most one save per 5 min (save_due()).
             const bool due = save_due(persist_policy, changed, now);
 #endif
+#if SHELL_REMOTE
+            // Saves are suppressed in every SHELL_REMOTE image (spec 5.3): a
+            // loaded workload must not replace Bastian's saved patch, and the
+            // erase would take the QSPI out of memory-mapped mode under the
+            // workload tables a LOAD reads (qspi_cold.ld, .qspi_rodata). The
+            // policy is told the save happened, so one line per due save.
+            // Nothing calls persist_write() here, so it is not even linked.
+            (void)persist_cur_excite;
+            if(due)
+            {
+                hw.PrintLine("SHELL_PERSIST save suppressed");
+                save_done(persist_policy, now);
+            }
+#else
             if(due)
             {
                 // Here and only here, in the foreground: the QSPI erase and
@@ -875,6 +1216,7 @@ void run_panel_scan_report(bench::Board& hw)
                              ok ? 1 : 0);
 #endif
             }
+#endif // SHELL_REMOTE
         }
 #endif
         hw.Delay(500);

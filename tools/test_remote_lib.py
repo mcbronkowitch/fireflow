@@ -237,6 +237,8 @@ check("summarize_run: a run without WIN lines still summarizes",
 import argparse, contextlib, io, json, subprocess
 
 LAW = "SHELL_PLAY_LAW cyc_last=1 cyc_max=2 led_last=3 led_max=4 cb_last=%d cb_max=%d"
+RUN = "SHELL_REMOTE run id=%d counting=%d void=%d gest=%d"
+WIN = "SHELL_PLAY_WIN win=%d gap=%d over=%d n=250"
 
 class FakeRunPort:
     """lines() yields the script, then raises if an exception is last."""
@@ -261,9 +263,9 @@ class FakeCapture:
             Path(self.wav).write_bytes(b"RIFF")
         return self.rc
 
-def run_cmd(port, capture_factory, record):
+def run_cmd(port, capture_factory, record, load=1, gest=None):
     d = tempfile.mkdtemp()
-    args = argparse.Namespace(load=1, gest=None, tog=None, seconds=5, out=d,
+    args = argparse.Namespace(load=load, gest=gest, tog=None, seconds=5, out=d,
                               record=record, port="COMx")
     with contextlib.redirect_stdout(io.StringIO()):
         rc = rr.cmd_run(args, port_factory=lambda a: port,
@@ -271,7 +273,8 @@ def run_cmd(port, capture_factory, record):
     s = json.loads((Path(d) / "summary.json").read_text())
     return rc, s, Path(d)
 
-p = FakeRunPort([LAW % (900000, 910000), LAW % (905000, 920000), rl.PortGone("lost for 60 s")])
+p = FakeRunPort([RUN % (1, 1, 0, -1), LAW % (900000, 910000), RUN % (1, 1, 0, -1),
+                 LAW % (905000, 920000), rl.PortGone("lost for 60 s")])
 cap = {}
 def mk(wav, device, seconds):
     cap["c"] = FakeCapture(wav=wav); return cap["c"]
@@ -283,18 +286,18 @@ check("run: ... records the error and exits non-zero",
 check("run: ... serial.txt kept, port closed, ffmpeg terminated",
       "cb_last=900000" in (d / "serial.txt").read_text() and p.closed and cap["c"].terminated)
 
-p = FakeRunPort([LAW % (900000, 910000)])
+p = FakeRunPort([RUN % (1, 1, 0, -1), LAW % (900000, 910000)])
 rc, s, d = run_cmd(p, lambda w, dev, sec: FakeCapture(wav=None), record=True)
 check("run: --record with no audio.wav is reported and non-zero",
       rc != 0 and s["error"] is None and s["record"]["ok"] is False
       and s["record"]["wav_exists"] is False)
 
-p = FakeRunPort([LAW % (900000, 910000)])
+p = FakeRunPort([RUN % (1, 1, 0, -1), LAW % (900000, 910000)])
 rc, s, d = run_cmd(p, lambda w, dev, sec: FakeCapture(wav=w, rc=1), record=True)
 check("run: non-zero ffmpeg exit is reported and non-zero",
       rc != 0 and s["record"]["ok"] is False and s["record"]["exit"] == 1)
 
-p = FakeRunPort([LAW % (900000, 910000)])
+p = FakeRunPort([RUN % (1, 1, 0, -1), LAW % (900000, 910000)])
 cap = {}
 def mk_hang(wav, device, seconds):
     cap["c"] = FakeCapture(hang=True); return cap["c"]
@@ -302,12 +305,59 @@ rc, s, d = run_cmd(p, mk_hang, record=True)
 check("run: ffmpeg that never finishes is killed and reported",
       cap["c"].killed and rc != 0 and s["record"]["ok"] is False)
 
-p = FakeRunPort([LAW % (900000, 910000)])
+p = FakeRunPort([RUN % (1, 1, 0, -1), LAW % (900000, 910000)])
 rc, s, d = run_cmd(p, lambda w, dev, sec: FakeCapture(wav=w), record=True)
 check("run: clean recorded run is exit 0 with record ok",
       rc == 0 and s["error"] is None and s["record"]["ok"] is True)
-rc, s, d = run_cmd(FakeRunPort([LAW % (900000, 910000)]), None, record=False)
+rc, s, d = run_cmd(FakeRunPort([RUN % (1, 1, 0, -1), LAW % (900000, 910000)]), None, record=False)
 check("run: no --record means no record field and exit 0", rc == 0 and s["record"] is None)
+
+# ---- the settle and void filter (Task 5) -----------------------------------
+# The board prints `SHELL_REMOTE run id=.. counting=.. void=.. gest=..` right
+# before each frame's LAW line; counting=1 means the whole frame window lay
+# after the load's settle. Only those frames of the asked-for run count.
+settle_txt = [
+    "SHELL_REMOTE load id=3 name=BBD_BBD_top3 input=noise settle=500 excite=1,1 rec=0,0",
+    RUN % (3, 0, 0, -1), LAW % (955000, 955000), WIN % (990000, 990000, 9),
+    RUN % (3, 1, 0, -1), LAW % (900000, 910000), WIN % (912000, 960100, 2),
+    RUN % (3, 1, 0, -1), LAW % (905000, 920000), WIN % (920000, 960150, 1),
+]
+sm = rs.summarize_run(settle_txt, load_id=3)
+check("filter: settle frames are excluded (cb_last, frame_max, totals)",
+      sm["frames"] == 2 and sm["skipped"] == 1 and sm["cb_last"]["max"] == 905000
+      and sm["frame_max"]["max"] == 920000 and sm["over_total"] == 3
+      and sm["gap_max"] == 960150 and sm["cb_max_final"] == 920000)
+check("filter: a clean run is not void", sm["void"] is False)
+sm = rs.summarize_run(settle_txt, load_id=4)
+check("filter: frames of another id do not count",
+      sm["frames"] == 0 and sm["cb_last"] is None and sm["frame_max"] is None)
+void_txt = settle_txt + [RUN % (3, 1, 1, -1), LAW % (901000, 920000), WIN % (915000, 960000, 0)]
+check("filter: any void=1 run line makes the run void",
+      rs.summarize_run(void_txt, load_id=3)["void"] is True)
+check("filter: a void line of another id does not void this run",
+      rs.summarize_run(void_txt, load_id=4)["void"] is False)
+gest_txt = [RUN % (144, 0, 0, 2), LAW % (950000, 950000),
+            RUN % (144, 1, 0, 2), LAW % (930000, 940000)]
+check("filter: a gesture run counts by its gest id",
+      rs.summarize_run(gest_txt, gest_id=2)["frames"] == 1
+      and rs.summarize_run(gest_txt, gest_id=1)["frames"] == 0)
+check("filter: a gesture's base is not the plain LOAD of that id",
+      rs.summarize_run(gest_txt, load_id=144)["frames"] == 0)
+check("no filter: every frame counts, as before",
+      rs.summarize_run(settle_txt)["frames"] == 3)
+
+p = FakeRunPort(settle_txt)
+rc, s, d = run_cmd(p, None, record=False, load=3)
+check("run: sends LOAD and summarizes only the counting frames of that id",
+      p.sent == ["LOAD 3"] and s["frames"] == 2 and s["cb_last"]["max"] == 905000
+      and s["void"] is False and rc == 0)
+p = FakeRunPort(void_txt)
+rc, s, d = run_cmd(p, None, record=False, load=3)
+check("run: summary.json records void", s["void"] is True)
+p = FakeRunPort(gest_txt)
+rc, s, d = run_cmd(p, None, record=False, load=None, gest=2)
+check("run: --gest sends GEST alone (it loads its own base) and filters by it",
+      p.sent == ["GEST 2"] and s["frames"] == 1)
 
 print("\n%d failed" % len(FAILS) if FAILS else "\nall ok")
 sys.exit(1 if FAILS else 0)

@@ -219,6 +219,8 @@ add_executable(spky_tests
     shell/persist_policy.cpp
     tests/test_persist_policy.cpp
     tests/test_boot_patch.cpp
+    shell/workload_run.cpp
+    tests/test_workload_run.cpp
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)
 target_include_directories(spky_tests PRIVATE host ${CMAKE_SOURCE_DIR})
@@ -695,6 +697,16 @@ add_test(NAME shell_panel_map_guard
 add_test(NAME shell_boot_patch_noon_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_gen_boot_patch_noon.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
+
+# The remote CPU hunt's board workloads (plan 2026-10-29-cpu-hunt-remote.md
+# Task 5): shell/generated_workloads.h is regenerated from shell/workloads.json
+# and compared, round-tripped through its own parser, and every refusal of the
+# generator (a vector whose length is not the table's row count first) proves
+# its RED.
+add_test(NAME shell_workloads_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_gen_workloads.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
 
 # The callback profile's window reader (CBP_WIN / CBP_WIN2 lines of a play

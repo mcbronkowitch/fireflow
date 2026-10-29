@@ -192,6 +192,17 @@ static void AudioCallback(daisy::AudioHandle::InputBuffer  in,
     shell::panel_scan_tick(hw, inst);
 #endif
 
+#if SHELL_REMOTE
+    // The overrun guard (workload_run.h, spec 2026-10-29 section 5.3): once
+    // it has tripped, silence instead of process(), so the callback turns
+    // cheap and USB and the foreground get the CPU back. The scan, the law
+    // and the command poll above still run: LOAD, HOME or RST clears it.
+    if(shell::panel_scan_guard_tripped())
+    {
+        for(size_t i = 0; i < size; ++i) { out[0][i] = 0.f; out[1][i] = 0.f; }
+    }
+    else
+#endif
     inst.process(in[0], in[1], out[0], out[1], size);
 
 #if SHELL_PANEL_SCAN

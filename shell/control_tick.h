@@ -28,7 +28,9 @@ namespace shell {
 // control_boot by its mangled name.
 void control_boot(float* knobs);
 
-// Panel-state persistence only (SHELL_PERSIST_ON). Called from the audio
+// Panel-state persistence (SHELL_PERSIST_ON) and the remote listener's LOAD
+// (SHELL_REMOTE, which sets a workload's excite material and re-arms the law
+// the same way); compiled nowhere else. Called from the audio
 // interrupt, where control_tick() runs too -- except control_set_excite()'s
 // first call, from control_boot() before StartAudio():
 // - control_set_excite(): deck p's excite_other_deck, at boot from the record

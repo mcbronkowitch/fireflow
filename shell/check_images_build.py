@@ -42,6 +42,9 @@ IMAGES = [
     # The persistence probe image (plan 2026-10-28, Task 6): forced saves.
     ("reva_play_stress", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_PERSIST_STRESS=1"]),
     ("coupon_play", ["SHELL_PANEL_SCAN=1", "SHELL_COUPON_PROBE=1"]),
+    # The remote CPU hunt's listener image (plan 2026-10-29-cpu-hunt-remote):
+    # workloads, gestures and the overrun guard, its tables in QSPI.
+    ("reva_remote", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1"]),
 ]
 
 TOOLCHAIN_BIN = os.environ.get("DAISY_TOOLCHAIN_BIN",
