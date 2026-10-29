@@ -723,3 +723,11 @@ add_test(NAME click_detect_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_click_detect.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tools)
+
+# The remote CPU hunt's host runner (plan 2026-10-29-cpu-hunt-remote.md Task 3):
+# port reconnection, DFU pair order, capture command, and the run statistics.
+# Hermetic -- no serial port, dfu-util or ffmpeg is touched.
+add_test(NAME remote_lib_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_remote_lib.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tools)
