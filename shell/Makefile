@@ -445,6 +445,34 @@ play image's report loop)
 endif
 endif
 
+# The measurement image of the remote CPU hunt (spec
+# 2026-10-29-cpu-hunt-remote-design.md sections 5.3-5.5, plan Task 6): the
+# listener image plus the callback's section split (SHELL_SEC, SHELL_SECMAX),
+# the outside-window busy loop in place of the report loop's 500 ms delay
+# (SHELL_OUT), LATE's injected late block and the candidate toggles (TOG,
+# engine/util/probe_toggles.h). It turns on SPKY_PROBE_MARKS (cb_profile's
+# per-sample stamps) and SPKY_PROBE_TOGGLES, both of which reach every engine
+# object -- which is why write_shell_remote_measure.py deletes EVERY object of
+# the build directory when the switch flips, not a list of them. It costs
+# more outside the callback and prints far more, so engine worst cases are
+# judged on the listener image (spec 5.3, "Which image judges what").
+SHELL_REMOTE_MEASURE ?= 0
+
+ifneq ($(filter $(SHELL_REMOTE_MEASURE),0 1),$(SHELL_REMOTE_MEASURE))
+$(error SHELL_REMOTE_MEASURE must be 0 or 1)
+endif
+
+ifeq ($(SHELL_REMOTE_MEASURE),1)
+ifneq ($(SHELL_REMOTE),1)
+$(error SHELL_REMOTE_MEASURE=1 needs SHELL_REMOTE=1: its commands (TOG, LATE, \
+RST) arrive through the listener)
+endif
+endif
+
+ifeq ($(SHELL_REMOTE_MEASURE),1)
+C_DEFS += -DSPKY_PROBE_MARKS=1 -DSPKY_PROBE_TOGGLES=1
+endif
+
 CPP_SOURCES = \
 	main.cpp \
 	cb_profile.cpp \
@@ -621,6 +649,7 @@ SWITCH_HEADERS := \
   $(shell python write_shell_persist_stress.py $(BUILD_DIR)/shell_persist_stress.h $(SHELL_PERSIST_STRESS) $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o $(BUILD_DIR)/persist_flash.o) \
   $(shell python write_shell_itcm.py $(BUILD_DIR)/shell_itcm.h $(SHELL_ITCM) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_remote.py $(BUILD_DIR)/shell_remote.h $(SHELL_REMOTE) $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o) \
+  $(shell python write_shell_remote_measure.py $(BUILD_DIR)/shell_remote_measure.h $(SHELL_REMOTE_MEASURE) $(BUILD_DIR)) \
   $(shell python write_shell_link_stamp.py $(BUILD_DIR)/shell_link_stamp.h $(BUILD_DIR)/itcm_load.o) \
   $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/pot_report.o $(BUILD_DIR)/scan_check.o $(BUILD_DIR)/remote_listen.o)
 
@@ -639,6 +668,9 @@ $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/wait_probe.o: $(BUILD_DIR)/shell_pot_ro
 $(BUILD_DIR)/pot_report.o: $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/remote_listen.o: $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o: $(BUILD_DIR)/shell_remote.h
+# The objects that read the header; the writer deletes every object on a flip
+# anyway (the probe defines reach the engine), so this edge is the ordering.
+$(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_remote_measure.h
 $(BUILD_DIR)/scan_check.o: $(BUILD_DIR)/shell_scan_check.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_keys_nc.h $(BUILD_DIR)/shell_raw_spread.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h
 $(BUILD_DIR)/control_tick.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h

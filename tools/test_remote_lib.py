@@ -416,5 +416,24 @@ rc, s, d = run_cmd(p, None, record=False, load=None, gest=2)
 check("run: --gest sends GEST alone (it loads its own base) and filters by it",
       p.sent == ["GEST 2"] and s["frames"] == 1)
 
+# ---- a run that measured nothing is a failure (Task 6, deferred from Task 5) --
+# No ack of the asked-for run (gen None: the board never loaded it, or another
+# image answered) or not one counted frame (the run never settled inside the
+# capture): summary.json says why, and the exit code is not 0, so a sweep
+# script cannot record an empty run as a measurement.
+p = FakeRunPort(settle_txt[1:])      # no load ack
+rc, s, d = run_cmd(p, None, record=False, load=3)
+check("run: no ack of the run (gen None) exits non-zero with an error",
+      rc != 0 and s["gen"] is None and s["error"] and "gen" in s["error"])
+p = FakeRunPort([LOADED % (3, 7, -1), run(3, 0, 0, -1), LAW % (950000, 950000)])
+rc, s, d = run_cmd(p, None, record=False, load=3)
+check("run: an ack but no counted frame exits non-zero with an error",
+      rc != 0 and s["gen"] == 7 and s["frames"] == 0 and s["error"]
+      and "frames" in s["error"])
+p = FakeRunPort([LOADED % (1, 7, -1), rl.PortGone("lost for 60 s")])
+rc, s, d = run_cmd(p, None, record=False, load=1)
+check("run: an earlier error is kept, not replaced by the empty-run one",
+      rc != 0 and "PortGone" in s["error"])
+
 print("\n%d failed" % len(FAILS) if FAILS else "\nall ok")
 sys.exit(1 if FAILS else 0)

@@ -708,6 +708,16 @@ private:
     int      _last_scale_idx = -1;
     float _bpm = 120.f;
     float _pace = 1.f;
+    // The candidate toggles of the remote CPU hunt (util/probe_toggles.h):
+    // probe::toggles() latched once at the top of process(), and the word a
+    // candidate tests with probe::on(_probe_tog, bit). Without
+    // SPKY_PROBE_TOGGLES (every build but shell/'s measurement image) a
+    // constant 0, so neither the member nor the read exists there.
+#if defined(SPKY_PROBE_TOGGLES)
+    uint32_t _probe_tog = 0;
+#else
+    static constexpr uint32_t _probe_tog = 0;
+#endif
 };
 
 } // namespace spky

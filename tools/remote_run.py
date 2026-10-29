@@ -89,7 +89,9 @@ def cmd_run(args, port_factory=_port, capture_fn=rl.start_capture,
             sleep=time.sleep) -> int:
     """Always leaves summary.json behind, built from whatever was read, with
     `error` (the exception that ended the run, or null) and `record` (the
-    capture's outcome, or null without --record). Exit 1 on either failing."""
+    capture's outcome, or null without --record). Exit 1 on either failing,
+    and on a run that measured nothing (no ack, or no counted frame): its
+    `error` then starts with EmptyRun."""
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     wav = out / "audio.wav"
@@ -129,6 +131,13 @@ def cmd_run(args, port_factory=_port, capture_fn=rl.start_capture,
                 summary = rs.summarize_run(fh, gest_id=args.gest)
             else:
                 summary = rs.summarize_run(fh, load_id=args.load)
+        # A run that measured nothing is a failed run, not an empty
+        # measurement: no ack of it (gen None -- never loaded, or another
+        # image answered) or not one counted frame. An earlier error stays.
+        if error is None and summary.get("gen") is None:
+            error = "EmptyRun: no ack of the run (gen None)"
+        elif error is None and summary.get("frames", 0) == 0:
+            error = "EmptyRun: no counted frames (the run never settled in the capture)"
         summary["error"] = error
         summary["record"] = record
         (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n",

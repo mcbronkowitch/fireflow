@@ -52,6 +52,13 @@ void panel_scan_block_end(uint32_t c0);
 void panel_scan_load_knobs(const float* knobs);
 bool panel_scan_guard_tripped();
 
+// SHELL_REMOTE_MEASURE only (plan Task 6), audio-callback context: call
+// after panel_scan_tick() and before process(). Burns the cycles a LATE
+// command asked for in this callback (k * 1000), and with toggle bit 30 the
+// last LATE's on every block, so the late block lands inside the measured
+// callback. Nothing to do otherwise.
+void panel_scan_late();
+
 // Starts the log and prints SHELL_PLAY twice a second. Never returns.
 [[noreturn]] void run_panel_scan_report(bench::Board& hw);
 

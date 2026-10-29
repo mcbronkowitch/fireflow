@@ -739,7 +739,9 @@ add_test(NAME shell_itcm_placement_guard
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
 
 # The shell images actually build: default, Rev A play (with and without
-# SHELL_PERSIST) and coupon play, each a
+# SHELL_PERSIST, and its stress image), coupon play, and the remote CPU hunt's
+# listener and measurement images (which must not link the save path:
+# arm-none-eabi-nm on the ELF, with the play image as the canary), each a
 # clean ARM build in its own directory under the build tree (shell/build is not
 # touched), with SRAM_EXEC use in the output. Nothing else in ctest compiles
 # shell/, which is how the Rev A play image stayed broken behind a green suite

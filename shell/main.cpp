@@ -18,6 +18,7 @@
 #include "shell_scan_check.h"
 #include "shell_panel_scan.h"
 #include "shell_remote.h"
+#include "shell_remote_measure.h"
 #include "hw/board.h"
 #include "sdram_mem.h"
 #include "itcm_load.h"
@@ -190,6 +191,13 @@ static void AudioCallback(daisy::AudioHandle::InputBuffer  in,
     const uint32_t cb0 = shell::cycles_now();
     // FIRST, before process(), for the same reason as the scan check above.
     shell::panel_scan_tick(hw, inst);
+#endif
+
+#if SHELL_REMOTE_MEASURE
+    // LATE k (spec 5.5): the injected late block, burnt here so it lands
+    // inside cb0's window and ahead of process(), where a real overrun's
+    // cost sits.
+    shell::panel_scan_late();
 #endif
 
 #if SHELL_REMOTE

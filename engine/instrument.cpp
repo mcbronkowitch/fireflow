@@ -9,6 +9,7 @@
                               // chain ever changes).
 #include "util/math.h"
 #include "util/probe_mark.h"
+#include "util/probe_toggles.h"
 #include <algorithm>
 #include <cmath>
 
@@ -248,6 +249,11 @@ void Instrument::_apply_tempo() {
 
 void Instrument::process(const float* inL, const float* inR,
                          float* outL, float* outR, size_t n) {
+#if defined(SPKY_PROBE_TOGGLES)
+    // The candidate toggles, once per block and never inside the loop below
+    // (util/probe_toggles.h; shell/test_remote_wiring.py holds the place).
+    _probe_tog = probe::toggles();
+#endif
     SPKY_PROBE_DECL;
     for (size_t i = 0; i < n; ++i) {
         SPKY_PROBE_STAMP(i);

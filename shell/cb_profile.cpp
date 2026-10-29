@@ -328,6 +328,13 @@ void cb_profile_init()
     cycles_init();
 }
 
+void cb_profile_split(uint32_t* a, uint32_t* b, uint32_t* mix)
+{
+    *a   = g_deck[0];
+    *b   = g_deck[1];
+    *mix = g_mix;
+}
+
 void cb_profile_block_end(uint32_t cb, uint32_t law, uint32_t led, bool warm,
                           const spky::Instrument& inst)
 {
