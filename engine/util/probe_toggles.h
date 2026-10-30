@@ -29,7 +29,12 @@
 //                                                        only path now (the
 //                                                        discarded Decimator
 //                                                        step does state only)
-//   1-29 (free: candidates; bit 0 is never reused)
+//   1-3  FLUX_PROBE_*         engine/fx/flux.cpp,        USED, reverted: probes
+//                             tape_echo.h                splitting FLUX (no echo,
+//                                                        no filter, DTCM line);
+//                                                        docs/hardware/cpu-hunt-
+//                                                        measured.md §5
+//   4-29 (free: candidates; bits 0-3 are never reused)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE
 //                                                        burn on every block
 //   31   SHELL_GUARD_OFF      shell/panel_scan.cpp       the overrun guard is

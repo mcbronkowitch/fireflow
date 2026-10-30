@@ -380,3 +380,43 @@ that. There the decimator stayed out of line in ITCM, called from
 `GritReduce::process` in SRAM_EXEC through a veneer. In the final build
 the step and the bitcrush inline into `GritReduce::process`, and the
 decimator's ITCM entry is gone (the in-build guard requires that).
+
+### Probe: where FLUX's ~62 k per deck goes
+
+Toggle bits 1-3 (6d33f013, 3d8aaccf + db002737; measurement image only,
+reverted afterwards). Window means per deck, w313 / w143 / w132, 2 x 30 s
+each, interleaved, spread under 2 k:
+
+| state | FLUX per deck |
+|---|---|
+| as is | 61-65 k |
+| bit 1, no echo (both `TapeEcho::Process` skipped) | 14.3-15.0 k |
+| bit 2, line read/write without band-pass + tanh | 39-43 k |
+| bit 3, same code, the line in DTCM instead of SDRAM (4096 cells) | 51-54 k |
+
+So the two tape echoes cost ~47 k per deck: ~21 k band-pass + `fast_tanh`,
+~26.5 k for the line. Moving the line into zero-wait DTCM saves only
+9-13 k of those 26.5 k: the SDRAM costs ~10 k per deck, and the rest of
+the line is per-sample arithmetic (`SetDelay`'s conversion and clamps,
+`Read`'s two bounds tests and interpolation, `Write`). This corrects §4's
+guess: the `corner_*1000` gap is not explained by FLUX's SDRAM alone.
+
+### Candidate: SDRAM write-allocate — rejected
+
+libDaisy maps SDRAM write-back without write-allocate (MPU region 1, TEX 0),
+so a store to an uncached line goes straight to the FMC. `SHELL_SDRAM_WA=1`
+(129d0eac) re-set region 1 to TEX 1 (write-back, read + write allocate)
+after the board init. No DMA touches SDRAM (the only SDRAM objects are the
+echo, BBD and sampler arenas, `shell/sdram_mem.cpp`; every libDaisy DMA
+buffer is in D2). Board, A-B-A-B by reflash, w313 / w143 / w99 / `bastian`,
+30 s each:
+
+- FLUX got slightly dearer on all four (+0.4 to +2.8 k per deck).
+- Engine and deck deltas ran from -16 k to +4 k. The same image's two rounds
+  differ by as much (`bastian` deck A engine 130.8 k / 116.8 k with
+  write-allocate, deck B 152.4 k / 170.4 k), so none of it is a measured
+  saving.
+
+Reverted (75020e86). The engines' per-run spread of ±10-18 k on a static
+workload also bounds what a section-mean verdict can resolve for engine-side
+candidates: those need more than 2 x 30 s.
