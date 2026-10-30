@@ -449,7 +449,7 @@ TEST_CASE("workload knobs: init patch, the rows through the panel path, REC latc
 }
 
 TEST_CASE("workload table: ids in range, out of range is null") {
-    CHECK(shell::kWorkloadCount == 146);
+    CHECK(shell::kWorkloadCount == 326);
     CHECK(shell::kWorkloadRowCount == shell::kRevaTable.count);
     CHECK(shell::workload_by_id(-1) == nullptr);
     CHECK(shell::workload_by_id(shell::kWorkloadCount) == nullptr);
