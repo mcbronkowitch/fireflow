@@ -40,7 +40,8 @@ C_INCLUDES = -I. -I../ -I../src/ -I../engine/ -I../third_party/ -I../lib/DaisySP
 # kept it that way (spec 2026-07-30-o3-lto-benchmark-design.md section 2), and
 # every CPU figure in docs/bench/ is measured without the two flags. Turning
 # them on is a measured round of its own: -ffinite-math-only can fold away the
-# engine's isfinite/NaN guards.
+# engine's isfinite/NaN guards. That round exists now as the SHELL_FAST_MATH
+# switch below (default 0 = this text still holds).
 
 # Dieses Board und nur dieses. Ein blankes -D ist hier zulaessig, obwohl die
 # Bench fuer denselben Schalter einen generierten Header baut: dort ist
@@ -587,6 +588,36 @@ $(BUILD_DIR)/mux_plan.o: override OPT := -Os
 # SHELL_PLAY_LAW reports its cycles.
 $(BUILD_DIR)/control_tick.o: override OPT := -O2
 
+# Class-2 candidate of the CPU hunt (spec 2026-10-29-cpu-hunt-remote-design.md
+# section 4): -ffast-math on engine/'s translation units only -- not libDaisy,
+# not the shell's own code. The output may change, so this is for a blind A/B
+# listen, not an adoption by measurement alone.
+#   0: today's flags.
+#   1: -ffast-math -fno-finite-math-only. Reassociation, reciprocal division,
+#      no errno, no signed zeros -- but isnan / isfinite stay real, so the
+#      engine's input guards (transport.h, bbd.h, instrument.cpp) survive.
+#   2: full -ffast-math, i.e. -ffinite-math-only too: the compiler may fold
+#      every isfinite() to true. Only a candidate if the objdump check of the
+#      built objects (docs / the round's report) finds each guard's compare
+#      still there.
+# The value is resolved at parse time and stamped into build/shell_fast_math.h
+# (write_shell_fast_math.py, which deletes the engine objects on a flip), so
+# two positions cannot yield the same image. The denormal floors in the engine
+# are explicit compares and are not affected; nothing sets FPSCR.FZ either way.
+SHELL_FAST_MATH ?= 0
+
+ifneq ($(filter $(SHELL_FAST_MATH),0 1 2),$(SHELL_FAST_MATH))
+$(error SHELL_FAST_MATH must be 0, 1 or 2)
+endif
+
+ENGINE_OBJECTS := $(addprefix $(BUILD_DIR)/,$(patsubst %.cpp,%.o,$(notdir $(filter ../engine/%,$(CPP_SOURCES)))))
+
+ifeq ($(SHELL_FAST_MATH),1)
+$(ENGINE_OBJECTS): override OPT += -ffast-math -fno-finite-math-only
+else ifeq ($(SHELL_FAST_MATH),2)
+$(ENGINE_OBJECTS): override OPT += -ffast-math
+endif
+
 # Boot-only code executes in place from QSPI (spec 2026-10-09-rev-a-p6b1
 # section 5); the list and the rules for what may go on it are in
 # qspi_cold.ld. As -Wl,-T and not as a second plain -T: gcc puts -Wl options
@@ -651,6 +682,7 @@ SWITCH_HEADERS := \
   $(shell python write_shell_itcm.py $(BUILD_DIR)/shell_itcm.h $(SHELL_ITCM) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_remote.py $(BUILD_DIR)/shell_remote.h $(SHELL_REMOTE) $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o) \
   $(shell python write_shell_remote_measure.py $(BUILD_DIR)/shell_remote_measure.h $(SHELL_REMOTE_MEASURE) $(BUILD_DIR)) \
+  $(shell python write_shell_fast_math.py $(BUILD_DIR)/shell_fast_math.h $(SHELL_FAST_MATH) $(ENGINE_OBJECTS)) \
   $(shell python write_shell_link_stamp.py $(BUILD_DIR)/shell_link_stamp.h $(BUILD_DIR)/itcm_load.o) \
   $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/pot_report.o $(BUILD_DIR)/scan_check.o $(BUILD_DIR)/remote_listen.o)
 
@@ -672,6 +704,7 @@ $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o: $(BUI
 # The objects that read the header; the writer deletes every object on a flip
 # anyway (the probe defines reach the engine), so this edge is the ordering.
 $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_remote_measure.h
+$(ENGINE_OBJECTS): $(BUILD_DIR)/shell_fast_math.h
 $(BUILD_DIR)/scan_check.o: $(BUILD_DIR)/shell_scan_check.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_keys_nc.h $(BUILD_DIR)/shell_raw_spread.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h
 $(BUILD_DIR)/control_tick.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h

@@ -53,6 +53,11 @@ IMAGES = [
     # LATE and the candidate toggles, with the probe stamps on.
     ("reva_remote_measure", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
                              "SHELL_REMOTE_MEASURE=1"]),
+    # The class-2 build switch (CPU hunt): -ffast-math on engine/ only.
+    ("reva_remote_measure_fm1", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
+                                 "SHELL_REMOTE_MEASURE=1", "SHELL_FAST_MATH=1"]),
+    ("reva_remote_measure_fm2", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
+                                 "SHELL_REMOTE_MEASURE=1", "SHELL_FAST_MATH=2"]),
 ]
 
 # The save path, as linked symbols (nm -C): persist_write() and the QSPI
