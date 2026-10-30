@@ -77,9 +77,12 @@ stays inside the run spread after the rounds of §5.2. The round ends when the
 list is done, or earlier if Bastian says the reserve is enough.
 
 **Reserve check (at the end, reported, Bastian judges).** Phase A prices one
-active sampler grain per sample (§5.1). It takes the price from an ablation
-delta (all grains skipped against all grains run, divided by the active
-grain-samples), so the probe stamps are in both arms and cancel. At the end
+active sampler grain per sample (§5.1). It takes the price from the grain loop's
+stamp: the slope of the loop's cycles against its active grain-samples
+across the windows of the SAMPLER runs. The stamp pair sits around the whole
+loop, so its own cost is the same at any grain count and falls into the
+intercept. (An ablation that skips the grains cannot price them: skipped
+grains never end, so the active count runs to the cap.) At the end
 the record gives three numbers side by side: 96 × that price, the final
 batch's worst `frame_max`, and 945 000. No margin is set here. The element's
 real code is unbuilt (§9), and how much room is enough is Bastian's call
@@ -165,8 +168,7 @@ block:
   probe of the last round (bits 1-3, measured, then reverted). Each skips
   one stage on the measurement image only, so its delta prices the stage.
   Voice: the second oscillator, the sub oscillator, the `SvfLp`, the
-  envelope and pan. Grain: all grains skipped (the
-  price of §3's reserve check), the Hann window, the fold in
+  envelope and pan. Grain: the Hann window, the fold in
   `SampleBuffer::read_linear`, and the buffer read itself, redirected to a
   small SRAM array as FLUX bit 3 did with DTCM. That last one tells how much
   of a grain is SDRAM. The ablations change the sound. They exist only to
