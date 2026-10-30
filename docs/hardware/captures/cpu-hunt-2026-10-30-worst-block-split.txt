@@ -1,0 +1,12 @@
+runs with a hot block: 325 of 325
+BBD      eng p50=163496 max=207091  fx p50=156966 max=219825  mod p50= 76639 max=102472  lanes p50= 35638 max= 54859  tick p50=  5021 max=  9607  flux p50= 79639 max=103888  deck p50=397646 max=500441
+BODY     eng p50=148787 max=177615  fx p50=154960 max=220707  mod p50= 69842 max=126756  lanes p50= 32002 max= 43951  tick p50=  3119 max=  7360  flux p50= 75117 max=101113  deck p50=382223 max=499441
+FEED     eng p50=160850 max=184970  fx p50=149779 max=219883  mod p50= 68523 max=110885  lanes p50= 31638 max= 43412  tick p50=  3252 max=  7742  flux p50= 73239 max=102045  deck p50=382524 max=458307
+SAMPLER  eng p50=123876 max=384640  fx p50=154237 max=198292  mod p50= 71832 max= 94656  lanes p50= 35779 max= 56532  tick p50=  3216 max=  6044  flux p50= 69799 max= 98078  deck p50=348979 max=576530
+SYNTH    eng p50=188191 max=201280  fx p50=158374 max=218375  mod p50= 67082 max=107070  lanes p50= 31271 max= 43269  tick p50=  3023 max=  7234  flux p50= 77204 max=105333  deck p50=410721 max=483024
+WAVE     eng p50=178043 max=291267  fx p50=157910 max=224083  mod p50= 67447 max=103346  lanes p50= 31614 max= 41053  tick p50=  2830 max=  5468  flux p50= 81563 max=124317  deck p50=410709 max=517651
+shell cb    p50=1041002 p90=1115050 max=1256067
+shell proc  p50= 949848 p90=1024779 max=1198382
+shell law   p50=  44582 p90=  67982 max=  71810
+shell led   p50=   1457 p90=   1558 max=   1848
+shell mix   p50= 153936 p90= 155582 max= 168433

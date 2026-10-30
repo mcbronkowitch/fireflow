@@ -183,3 +183,151 @@ candidates is the worst block of `bastian`, not its mean: the A/A floor
 above says a candidate must take `frame_max` p99 and max down by more than
 ~2.7 k to count, and a click-free 10 minutes needs its max under ~945 000
 with margin.
+
+## 4. Worst cases per engine and the candidate list (plan Task 9), 2026-10-29/30
+
+### Which image these numbers come from
+
+The 154 runs of step 1 (145 workloads x 60 s, 9 gestures x 20 s) ran on the
+**measurement image** 50250a0, not on the listener as intended: Task 8's
+last flash was the calibration's measurement image. The 180 random vectors
+of step 2 ran on the measurement image 117c6ac (the same code plus the
+longer table). That is the image with the section splits (`SHELL_SEC`,
+`CBP_REC*`, `CBP_WIN*`), so the ranking and the breakdown below are
+measurement-image numbers. The absolute worst cases were re-measured on the
+listener 117c6ac (the 20 highest by `frame_max` p99, 60 s each). Measure
+minus listener on those 20 is +72 k median, with a spread of -12 k to +135 k:
+the +55 k of §2 holds for `bastian`, not as a constant for every workload.
+
+A run is `void` when the overrun guard tripped. Most voids are a workload
+that overruns on every block after each re-arm. Their `frame_max` is then
+taken over all frames: the re-armed block is a real full block. 39 of 59
+voided again on the one repeat. The random vectors got no repeat.
+
+Tables: `captures/cpu-hunt-2026-10-30-worst-cases.csv` (every run; desk ns,
+measurement and listener `frame_max`, trips, void),
+`…-rank-correlation.json`, `…-section-means.txt` (window means per section,
+per run the max over its windows), `…-worst-block-split.txt` (each run's
+hottest block, per deck).
+
+### It is not one patch: half the vectors overrun
+
+On the measurement image 171 of 325 static workloads have a block ≥ 960 000
+cycles. On the listener, all 20 of the top 20 still reach ≥ 945 000 (the
+lowest 946 559), the click line of §3. The worst on the listener:
+
+| workload | listener `frame_max` max | trips / 60 s |
+|---|---|---|
+| SYNTH_WAVE_top1 | 1 057 583 | 0 |
+| WAVE_SYNTH_top2 | 1 049 539 | 0 |
+| WAVE_WAVE_rnd8 | 1 011 799 | 0 |
+| SAMPLER_WAVE_top1 | 1 011 029 | 55 |
+| WAVE_WAVE_rnd9 | 1 001 041 | 2 |
+| BBD_SYNTH_rnd4 | 1 000 878 | 57 |
+| SAMPLER_SYNTH_top3 | 994 167 | 44 |
+| BODY_WAVE_rnd1 | 991 575 | 0 |
+
+Zero trips at ~1.05 M looks contradictory. Those runs report few frames
+(49 in 60 s for SYNTH_WAVE_top1, against ~60 for a listener run at the
+period, e.g. 61 for BBD_WAVE_top4):
+the main loop starves and reports late. Why the guard does not trip there
+is not examined. Worst per engine on the measurement image (any pairing it
+is in):
+
+| engine | worst workload | measurement `frame_max` max |
+|---|---|---|
+| SAMPLER / SYNTH | SAMPLER_SYNTH_top2 | 1 105 301 |
+| WAVE | WAVE_SYNTH_top2 | 1 091 000 |
+| FEED | FEED_SYNTH_top2 | 1 070 673 |
+| BBD | BBD_SYNTH_top2 | 1 068 055 |
+| BODY | BODY_WAVE_rnd1 | 1 053 586 |
+
+The gestures stay under the period on the measurement image: the worst is
+`bbd_swap_A` at 962 362, the next `morph_sweep` at 955 051. Their base is
+`r4_noon` (927 870 static).
+
+The plan's stop criterion is every worst case ≤ 880 000. On the listener
+that is ~180 k off SYNTH_WAVE_top1, i.e. 19 % of the block.
+
+### The desktop does not rank the board
+
+Spearman between desk `max_ns` and the board's `frame_max` max per pairing,
+step 1 (n = 9 per pairing: 5 tops + 4 corners): 9 of 16 below 0.5. With the
+20 random vectors per weak pairing (seed 1, sweep pass 1; 117c6ac9), still
+below 0.5 in BBD_BBD (-0.53), BBD_SYNTH 0.27, BBD_WAVE 0.46, BODY_SYNTH
+0.20, BODY_WAVE 0.32 and FEED_FEED 0.35. Over all 323 static vectors the
+correlation is 0.37. Random vectors became the worst of their pairing in
+BBD_BBD, BODY_SYNTH and BODY_WAVE. One pattern is systematic. The
+`corner_*1000` vectors (every pot at the right stop) are among the
+lightest on the desktop (BBD_BBD: 26.7 µs against 45.4 µs for top1) and
+among the heaviest on the board (985 k against 912 k). The mechanism is
+not measured. A guess: long delay lines in SDRAM, cheap in the desktop's
+cache, missing in the board's 16 KB D-cache.
+
+**Ruling:** no further vector rounds. The desktop sweep is a pre-filter at
+best. Candidates are judged on the board's own worst cases, i.e. the table
+above.
+
+### Where a hot block's cycles go
+
+Window means over all 325 static runs, per block, measurement image (per
+run the max over its windows, then the median over runs; p90 in brackets):
+
+| section | per deck | both decks / once |
+|---|---|---|
+| engine | 161 k (194 k) A, 180 k (194 k) B | |
+| FX chain | 148 k (170 k) | ~295 k |
+| - FLUX | 64-68 k (81-85 k) | ~132 k |
+| - GRIT | 57 k (58 k), flat | ~114 k |
+| -- stage 1 (Decimator) / 2 (SR reducer) / x-fade | 21.0 k / 24.5 k / 6.3 k | |
+| - tap + FX mix + COMP | 24-26 k | ~50 k |
+| - send law | 8.6 k | 17 k |
+| modulation + control | 69 k (82 k) | ~138 k |
+| - lanes | 32-33 k (36 k) | ~65 k |
+| - before the deck | 20 k (27 k) | 40 k |
+| mix | | 152 k (154 k) |
+| - reverb | | 102 k |
+| - limiter / blend + duck / observers / return | | 17 k / 17 k / 12 k / 3 k |
+| law (`control_tick`) | | 12 k mean; 44 k p50, 72 k max in the run's hottest block |
+| scan / led / gate / persist (§2) | | 16 k / 1.4 k / 0.1 k / 0.01 k |
+
+About 600 k of the ~900 k mean block (FX ×2, mix, mod ×2) does not depend
+on which engine a deck runs. In each run's hottest block, the engine, FX
+and mod sit within 2-10 k of their window means. Two things lift a block
+over the mean. One is the law (12 k mean → 44 k p50). The other is the
+block's first sample: 60 % of the 413 258 hot-block records have their
+slowest sample at index 0, i.e. the control-rate work (in the example of
+§2, `maxs` 26.7 k against a 9.4 k median sample).
+
+### The candidate list
+
+Expected cycles are estimates from the split above, or from reading the
+code. None is measured yet; Task 10 measures each. Highest first. "Toggle"
+means a `probe_toggles.h` bit on the measurement image, "build" a compile
+switch.
+
+| # | candidate | expected | class | applies to | switch |
+|---|---|---|---|---|---|
+| 1 | GRIT REDUCE: the doubled Decimator step bitcrushes and divides on the step whose output is discarded (`engine/fx/grit.cpp:73-80`, `Decimator::Process`). Step the state only on the first call; replace the two `/ (65536 * k)` with a multiply by a reciprocal set in `apply()` | 15-25 k (both decks; stage 1 is 21 k per deck) | 1 | every workload with GRIT engaged in REDUCE (the stage costs are flat over all 325, so all of them) | toggle |
+| 2 | FLUX echo reads: probe first whether the 64-104 k per deck is SDRAM misses (the line in a short SRAM buffer); if so, batch or prefetch the read per block | 0-60 k, unknown until probed | 1 | every workload, most on `corner_*1000` / long FLUX time | toggle |
+| 3 | `-ffast-math` (incl. `-ffinite-math-only`) on `engine/` | unknown, one build measures it | 2 (NaN guards, spec §4) | all | build |
+| 4 | Reverb at half rate (decimate in, interpolate out) | ~45-50 k of 102 k | 2 | all | toggle |
+| 5 | Law spike sources (per-block setter audit, read not measured). `BbdEngine::set_flow` (`engine/parts/bbd_engine.h:49`) runs `_recompute()` every block for a BBD deck in FLOW, with no unchanged check (pow ×3, exp ×2, `SetStages` ×2). `Instrument::set_tempo_bpm` (`engine/instrument.cpp:219-248`) always runs `_apply_tempo()` → FLUX `update_thin_pattern()`. Each needs an unchanged-value guard; `Part::_engine_swap` relies on `set_flow`, so that use must keep working | 3-10 k per BBD deck in FLOW; ~1-2 k | 1 | BBD decks in FLOW; all | toggle |
+| 6 | Sample-0 control work: `Center::update` computes cos/sin for MORPH and pow ×2 for `rate_drift` even at `w == 0` (`engine/center/center.cpp:140-222`), then `set_rate_scale` → `_apply_rate` on 10 lanes | 2-8 k | 1 | all | toggle |
+| 7 | `control_tick` at `-O3` (today `-O2` because -O3 cost 14.3 KB; ITCM_HOT has 13 376 B free, §2) | 1-4 k of the 12-72 k law | 1 | all | build |
+| 8 | COMP `update_curve` → `compute_gain` log10 + pow(10, …) on every control tick while the amount glides (`engine/fx/comp.cpp:63-73`) | 1-3 k | 1 | decks with LVL > 0.6 | toggle |
+| 9 | Mix: limiter 17 k, blend + duck 17 k, observers 12 k; block rate where a per-sample value is block-constant | 5-15 k | 1 | all | toggle |
+| 10 | Scan path 16 k; `mux_plan` at `-Os` (-O3 costs ~2.6 KB of SRAM_EXEC, which has 29 424 B free) | 1-3 k | 1 | all | build |
+| 11 | The engines: SYNTH 188 k, WAVE 179 k (max 291 k), SAMPLER 124 k p50 (max 385 k) per deck in the hottest block; per-engine kernel work, sized only after rows 1-10 | open | 1-2 | per engine | toggle |
+
+The hot-path libm scan (`hotpath_libm.py`: 61 hot functions, 132 libm call
+sites) shows control-rate setters (rows 5, 6, 8), not per-sample work. Its
+`daisysp::CrossFade::Process` `sinf`/`cosf` is the CPOW branch; the one
+user, `KsString` (BODY), runs LIN, so the branch never runs.
+
+Even the upper estimates of the class-1 rows 1, 2 and 5-10 add up to about
+130 k. That leaves the worst listener case (1 057 583) near 930 k. The
+880 000 stop criterion cannot be reached without class 2 (rows 3-4) or
+engine work (row 11), whose size is open. Task 10 starts with row 1, the
+only row with a measured section and a known mechanism. Row 2 gets its
+probe before anything is built.
