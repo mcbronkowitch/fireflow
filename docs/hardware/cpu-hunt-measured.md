@@ -612,3 +612,30 @@ Against b8470e2 the median workload dropped by a further 64 k (−177 k to
 +7 k). The worst block of every one of the 20 now sits under the ~945 000
 click line. But the worst three (944 258, 942 907, 937 971) are within
 7 k of it. The 880 000 stop criterion is met by 11 of 20.
+
+### What ships: `bastian` on the play image of main, 10 minutes
+
+The play image of main 47f3901b (clean build, `SHELL_PANEL_SCAN=1
+SHELL_KEYS_NC=1`, both class-2 switches at their default), booted from
+Bastian's persisted patch, no pot moved during the run. 601.7 s recorded
+through the Twin (inputs 1/2), with the §3 detector (second difference,
+k = 12). Summary in `captures/cpu-hunt-2026-10-30-bastian-600-play-main.json`.
+
+| | `SHELL_PLAY_LAW`, 771 prints |
+|---|---|
+| `cb_last` p50 / p99 / max | 797 546 / 835 384 / 841 852 |
+| `cb_max` at the end | 853 706 |
+| detector hits above score 16 | 0 (top scores 15.9 / 14.0) |
+
+So the shipping firmware has no click on Bastian's patch in ten minutes,
+and its worst callback is ~91 k under the ~945 000 line. One persistence
+save (seq 581, 21.8 ms of QSPI erase and write) fell inside the run and
+left no hit either.
+
+These are play-image numbers. The listener rows above come from a
+different image and are not one-to-one comparable with them.
+
+A first attempt was discarded. In it two pots (COMP_A, COMP_B) were turned
+to 0 by hand to quiet the room. The PC's GPU noise Bastian heard over the
+monitors was not in the recording: the silent stretch read about −90 dBFS
+at the Twin's inputs.

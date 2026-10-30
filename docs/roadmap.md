@@ -4219,7 +4219,9 @@ over USB on Rev A #1 (remote measurement and listener images).
   NaN guards.
 - **Result.** The 20 worst listener workloads: 0 of 20 at or above 945 000
   (was 20 of 20), worst 944 258 (was 1 057 583), median 878 505 (was
-  984 707), no guard trips (was 12 runs).
+  984 707), no guard trips (was 12 runs). What ships: the play image of
+  main on Bastian's patch, 10 minutes through the Twin, has no click, with
+  `cb_max` 853 706 (`cb_last` p99 835 384).
 - **Not reached:** the 880 000 stop criterion; 9 of 20 are still above it,
   the worst three within 7 k of the click line. The remaining lever is
   per-engine kernel work (SYNTH, WAVE, SAMPLER; §4 row 11), its own round.

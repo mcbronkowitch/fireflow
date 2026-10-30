@@ -1,0 +1,12 @@
+{
+  "image": "play, main 47f3901b, SHELL_PANEL_SCAN=1 SHELL_KEYS_NC=1, class-2 defaults",
+  "patch": "bastian (persisted record, COMP_B restored by hand to 827 against 835 before)",
+  "recorded_s": 601.7,
+  "law_prints": 771,
+  "cb_last": {"p50": 797546, "p99": 835384, "max": 841852},
+  "cb_max": 853706,
+  "cb_last_ge_945000": 0,
+  "detector": {"method": "tools/click_detect.py, k = 12", "hits_above_16": 0, "top_score_ch0": 15.9, "top_score_ch1": 14.0},
+  "persist_saves_in_run": [{"seq": 581, "us": 21766, "ok": 1}],
+  "pot_row_changes": 0
+}
