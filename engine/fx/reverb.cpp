@@ -89,7 +89,7 @@ void AmbientReverb::init(float sample_rate) {
     set_diffuser_mod_depth(0.5f); // wash smear default (~56)
     set_mod_depth(0.2f);          // gentle tail wobble default (~the calm 22.5)
 #if OLIVERB_HALF_ONLY
-    set_half_rate(true);          // SHELL_REVERB_HALF=1: the tank always runs at 24 kHz
+    switch_rate(true);            // SHELL_REVERB_HALF=1: the tank always runs at 24 kHz
 #endif
     _wet_peak = 0.f;
     _lim_gain = 1.f;   // boot wide open; nothing has overshot yet
@@ -197,7 +197,7 @@ void AmbientReverb::apply_hp() {
     _verb.set_hp(_half ? clouds::Oliverb::coef_for_half_rate(kHpPin) : kHpPin);
 }
 
-void AmbientReverb::set_half_rate(bool on) {
+void AmbientReverb::switch_rate(bool on) {
     if (on == _half) return;
     _half = on;
     _second = false;

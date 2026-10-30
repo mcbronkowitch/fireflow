@@ -279,6 +279,26 @@ file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/host_switches/shell_tone_probe.h
 target_include_directories(spky_tests PRIVATE
      ${CMAKE_CURRENT_BINARY_DIR}/host_switches)
 
+# --- the half-rate reverb, both compile shapes (spec 2026-10-29-cpu-hunt-remote
+# section 4: a firmware-only switch needs the desktop suite to exercise it) ---
+# SHELL_REVERB_HALF=1 compiles Oliverb with SPKY_REVERB_HALF_ONLY (only the
+# half-rate tank, switched on in init()); the desktop tests run the dispatch
+# variant (SPKY_TESTING). These two tiny programs render the same room in each
+# and `reverb_half_variants` requires bit-identical output, so the tests check
+# the code the firmware ships.
+add_executable(reverb_dump_dispatch tests/reverb_dump.cpp engine/fx/reverb.cpp)
+target_compile_definitions(reverb_dump_dispatch PRIVATE SPKY_TESTING=1 REVERB_DUMP_SET_HALF=1)
+target_link_libraries(reverb_dump_dispatch PRIVATE spky_engine daisysp_min)
+add_executable(reverb_dump_only tests/reverb_dump.cpp engine/fx/reverb.cpp)
+target_compile_definitions(reverb_dump_only PRIVATE SPKY_REVERB_HALF_ONLY=1)
+target_link_libraries(reverb_dump_only PRIVATE spky_engine daisysp_min)
+add_test(NAME reverb_half_variants
+         COMMAND ${CMAKE_COMMAND}
+                 -DDUMP_A=$<TARGET_FILE:reverb_dump_dispatch>
+                 -DDUMP_B=$<TARGET_FILE:reverb_dump_only>
+                 -DOUT_DIR=${CMAKE_BINARY_DIR}/reverb_half_variants
+                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/compare_reverb_dumps.cmake)
+
 # --- render host CLI ---
 add_executable(render
     host/render/main.cpp
@@ -739,16 +759,28 @@ add_test(NAME shell_itcm_placement_guard
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_itcm_placement.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
 
+# The math guard (shell/math_guards.py): every image build checks, on the linked
+# ELF, that the engine's isfinite guards are still compiled in (SHELL_FAST_MATH
+# defaults to 1 and must never fold them). This is its host test; the image
+# builds below run the real thing.
+add_test(NAME shell_math_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_math_guards.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
+
 # The shell images actually build: default, Rev A play (with and without
-# SHELL_PERSIST, and its stress image), coupon play, and the remote CPU hunt's
+# SHELL_PERSIST, and its stress image), coupon play, the remote CPU hunt's
 # listener and measurement images (which must not link the save path:
-# arm-none-eabi-nm on the ELF, with the play image as the canary), each a
-# clean ARM build in its own directory under the build tree (shell/build is not
-# touched), with SRAM_EXEC use in the output. Nothing else in ctest compiles
-# shell/, which is how the Rev A play image stayed broken behind a green suite
-# on 2026-10-09 (450eed36). Skipped, not failed, without the DaisyToolchain or
-# the built libDaisy/DaisySP. About a minute for the seven images (47 s in a
-# -j4 ctest run, 76 s in a serial one, 2026-10-29).
+# arm-none-eabi-nm on the ELF, with the play image as the canary), the listener
+# with both class-2 savings switched back, the measurement image with both
+# reverb tanks, and a full -ffast-math build that must be REFUSED by the math
+# guard (the list is IMAGES in shell/check_images_build.py, ten entries at the
+# time of writing). Each is a clean ARM build in its own directory under the
+# build tree (shell/build is not touched), with SRAM_EXEC use in the output.
+# Nothing else in ctest compiles shell/, which is how the Rev A play image
+# stayed broken behind a green suite on 2026-10-09 (450eed36). Skipped, not
+# failed, without the DaisyToolchain or the built libDaisy/DaisySP. About 80 s
+# serial for ten images (2026-10-30).
 add_test(NAME shell_images_build_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/check_images_build.py

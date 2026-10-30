@@ -48,17 +48,22 @@ public:
     void set_mod_depth(float norm);       // tail-delay LFO wobble depth, independent
     void process(float in_l, float in_r, float& out_l, float& out_r);
 #if OLIVERB_HALF_PATH
-    // Toggle bit 9 (util/probe_toggles.h, REVERB_HALF; class 2 -- the output
-    // changes): run the tank at 24 kHz between two halfband converters
-    // (fx/halfband.h). Every time constant keeps its meaning in seconds / Hz
-    // (see reverb.cpp). Switching CUTS the running tail to silence in one
-    // sample (it empties the part of the room the new layout uses and resets
-    // the converters): a click on a loud tail, so a flip belongs in the
-    // measurement image only. Set once per block by Instrument::process, off
-    // by default. Exists only where the half-rate path is compiled
-    // (third_party/oliverb/stmlib_shim.h: SPKY_PROBE_TOGGLES, SPKY_TESTING or
-    // the SHELL_REVERB_HALF=1 build, where it is on from init()).
-    void set_half_rate(bool on);
+    // The half-rate reverb (class 2; the firmware default since the blind A/B,
+    // build switch SHELL_REVERB_HALF): the tank runs at 24 kHz between two
+    // halfband converters (fx/halfband.h). Every time constant keeps its
+    // meaning in seconds / Hz (see reverb.cpp). Two compile-time shapes
+    // (third_party/oliverb/stmlib_shim.h):
+    //  - SHELL_REVERB_HALF=1 (SPKY_REVERB_HALF_ONLY): only the half-rate tank
+    //    exists and init() puts the room in it; there is no way back at run
+    //    time, so there is no setter;
+    //  - dispatch (the measurement image with SHELL_REVERB_HALF=0, toggle bit
+    //    9; the desktop tests): both tanks, set_half_rate() picks. Switching
+    //    CUTS the running tail to silence in one sample (it empties the part
+    //    of the room the new layout uses and resets the converters): a click
+    //    on a loud tail, so a flip belongs in the measurement image only.
+#if !OLIVERB_HALF_ONLY
+    void set_half_rate(bool on) { switch_rate(on); }
+#endif
     bool half_rate() const { return _half; }
 #endif
 #ifdef SPKY_TESTING
@@ -86,6 +91,7 @@ private:
 #if OLIVERB_HALF_PATH
     void apply_tone();
     void apply_hp();
+    void switch_rate(bool on);   // the work of set_half_rate (and of init() when always half)
 #endif
 
     clouds::Oliverb _verb;
