@@ -1,6 +1,7 @@
 #include "fx/comp.h"
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 using namespace spky;
 
@@ -70,7 +71,16 @@ void Comp::compute_gain() {
         const float t = over + kKneeDb * 0.5f;
         gr_db = -(t * t) / (2.f * kKneeDb) * (1.f - _inv_ratio);
     }
-    _gain_target = std::pow(10.f, (gr_db + _makeup_db) / 20.f);
+    const float pow_x = (gr_db + _makeup_db) / 20.f;
+    if (_curve_memo && _pow_ok && std::memcmp(&pow_x, &_pow_x, sizeof pow_x) == 0) {
+        _gain_target = _pow_r;
+    } else {
+#ifdef SPKY_TESTING
+        ++_pow_calls;
+#endif
+        _gain_target = std::pow(10.f, pow_x);
+        if (_curve_memo) { _pow_x = pow_x; _pow_r = _gain_target; _pow_ok = true; }
+    }
     // Never command a gain that lifts the envelope above the post-comp
     // ceiling; quiet material sits far below the cap and keeps its full
     // makeup, so the loudness intent survives.

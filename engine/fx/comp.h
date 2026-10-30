@@ -21,6 +21,16 @@ public:
     float gain_db() const;                    // applied gain incl. makeup (tests/meter)
     void process(float& l, float& r);
 
+    // Toggle bit 7 (util/probe_toggles.h, COMP_CURVE): compute_gain() returns
+    // the last pow(10, x) when x is the same float again (below the knee gr_db
+    // is 0 and x is the constant makeup term; a held signal repeats it too)
+    // instead of calling libm. Same arguments, same result: output and state
+    // are identical either way. Set once per block by Instrument::process.
+    void set_curve_memo(bool on) { _curve_memo = on; }
+#ifdef SPKY_TESTING
+    int pow_calls_for_test() const { return _pow_calls; }   // libm calls compute_gain made
+#endif
+
 private:
     static constexpr int   kDecimate = 16;
     static constexpr float kEps      = 1e-4f;
@@ -47,6 +57,13 @@ private:
     float _gain_coef   = 0.f;                 // ~2 ms (upward recovery)
     float _gain_down_coef = 0.f;              // ~0.5 ms (downward, enforces the ceiling)
     int   _ctr         = 0;                   // decimation counter
+    bool  _curve_memo  = false;               // set_curve_memo()
+    bool  _pow_ok      = false;               // the memo below holds a result
+    float _pow_x       = 0.f;                 // the last pow(10, x) argument ...
+    float _pow_r       = 1.f;                 // ... and its result
+#ifdef SPKY_TESTING
+    int   _pow_calls   = 0;
+#endif
 };
 
 } // namespace spky

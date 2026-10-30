@@ -48,7 +48,10 @@
 //                                                        cos / sin / pow results
 //                                                        whose inputs did not
 //                                                        change (same output)
-//   7-29 (free: candidates; bits 0-6 are never reused)
+//   7    COMP_CURVE           engine/fx/comp.cpp         compute_gain reuses the
+//                                                        last pow(10, x) for a
+//                                                        repeated x (same output)
+//   8-29 (free: candidates; bits 0-7 are never reused)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE
 //                                                        burn on every block
 //   31   SHELL_GUARD_OFF      shell/panel_scan.cpp       the overrun guard is
@@ -67,6 +70,7 @@ namespace probe {
 
 // The candidates' bits (above).
 inline constexpr int kBitCenterIdle = 6;
+inline constexpr int kBitCompCurve  = 7;
 
 // The shell's two bits (above).
 inline constexpr int kBitShellLateRepeat = 30;

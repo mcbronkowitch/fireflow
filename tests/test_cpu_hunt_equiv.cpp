@@ -437,3 +437,56 @@ TEST_CASE("center idle skip: update() writes the same bits with it on, idle and 
     CHECK(center_scenario(false, 0.7f, 0.25f, true, 700) == 0);   // flipped mid-stream
     CHECK(center_scenario(true, 0.5f, 0.25f, false, 1300) == 0);
 }
+
+// ---- candidate 8: COMP reuses pow(10, x) (toggle bit 7) --------------------
+
+#include "fx/comp.h"
+
+namespace {
+// Two comps, the second with the memo (from `flip_at` samples in, or the
+// start), through a signal that is loud, quiet, silent and held in turn, with
+// the amount static, gliding and static again.
+int comp_scenario(float base, bool glide, int flip_at, int* pow_off, int* pow_on) {
+    Comp x, y;
+    x.init(48000.f); y.init(48000.f);
+    x.set_amount(base); y.set_amount(base);
+    if (flip_at == 0) y.set_curve_memo(true);
+    Noise n;
+    int mismatches = 0;
+    const int total = 240000;
+    for (int i = 0; i < total; ++i) {
+        if (i == flip_at && flip_at > 0) y.set_curve_memo(true);
+        if (glide && i >= 60000 && i < 120000 && (i % 4000) == 0) {
+            const float v = base + 0.3f * std::sin(i * 0.0004f);
+            x.set_amount(v); y.set_amount(v);
+        }
+        // envelope of the test signal: bursts, a held tone, silence
+        const int seg = (i / 20000) % 6;
+        const float level = seg == 0 ? 0.6f : seg == 1 ? 0.05f : seg == 2 ? 0.f
+                          : seg == 3 ? 0.3f : seg == 4 ? 0.9f : 0.01f;
+        float lx = level * (seg == 3 ? std::sin(i * 0.05f) : n.next());
+        float rx = level * (seg == 3 ? std::sin(i * 0.05f) : n.next());
+        float ly = lx, ry = rx;
+        x.process(lx, rx);
+        y.process(ly, ry);
+        if (bits_of(lx) != bits_of(ly) || bits_of(rx) != bits_of(ry)) ++mismatches;
+    }
+    if (pow_off) *pow_off = x.pow_calls_for_test();
+    if (pow_on)  *pow_on  = y.pow_calls_for_test();
+    return mismatches;
+}
+} // namespace
+
+TEST_CASE("comp curve memo: the same bits with it on, static and gliding") {
+    for (float base : {0.2f, 0.45f, 0.8f}) {
+        for (bool glide : {false, true}) {
+            INFO("amount " << base << " glide " << glide);
+            int off = 0, on = 0;
+            CHECK(comp_scenario(base, glide, 0, &off, &on) == 0);
+            CAPTURE(off);
+            CAPTURE(on);
+            CHECK(on < off);          // the memo really skipped libm calls
+        }
+    }
+    CHECK(comp_scenario(0.45f, true, 90000, nullptr, nullptr) == 0);   // flipped mid-stream
+}

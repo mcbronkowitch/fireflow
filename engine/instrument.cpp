@@ -255,6 +255,7 @@ void Instrument::process(const float* inL, const float* inR,
     _probe_tog = probe::toggles();
     // The CPU hunt's candidates, once per block, before the sample loop.
     set_center_idle(probe::on(_probe_tog, probe::kBitCenterIdle));
+    set_comp_curve(probe::on(_probe_tog, probe::kBitCompCurve));
 #endif
     SPKY_PROBE_DECL;
     for (size_t i = 0; i < n; ++i) {
