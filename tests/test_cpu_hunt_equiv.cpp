@@ -490,3 +490,65 @@ TEST_CASE("comp curve memo: the same bits with it on, static and gliding") {
     }
     CHECK(comp_scenario(0.45f, true, 90000, nullptr, nullptr) == 0);   // flipped mid-stream
 }
+
+// ---- candidate 9: the mix's block-rate memos (toggle bit 8) ----------------
+
+namespace {
+// A full Instrument: CHOKE (settled and gliding), PAN (static and moving),
+// reverb, loud input so the limiter bends, master drive on and moved.
+std::vector<float> render_mix(bool mix_block, int flip_at, float* squash_max, float* duck_min) {
+    InstMem mem;
+    Instrument inst;
+    inst.init(48000.f, mem.fx());
+    inst.set_tempo_bpm(120.f);
+    inst.set_reverb_mix(0.4f);
+    inst.set_master_drive(0.4f);
+    for (int p = 0; p < PART_COUNT; ++p) {
+        inst.set_fx_on(p, FxBlock::Flux, true);
+        inst.set_comp(p, 0.5f);
+    }
+    inst.set_pan(0, -0.4f);
+    inst.set_pan(1, 0.5f);
+    if (flip_at == 0) inst.set_mix_block(mix_block);
+    Noise n;
+    std::vector<float> out;
+    const int kBlock = 96, kBlocks = 900;
+    float inl[kBlock], inr[kBlock], ol[kBlock], orr[kBlock];
+    float sq = 0.f, dk = 1.f;
+    for (int b = 0; b < kBlocks; ++b) {
+        if (b == flip_at && flip_at > 0) inst.set_mix_block(mix_block);
+        if (b == 100) inst.set_choke(0.35f);           // duck zone, settles
+        if (b == 300) inst.set_choke(-0.9f);           // hot zone, other deck priority
+        if (b == 500) inst.set_choke(0.f);
+        if (b == 560) inst.set_master_drive(0.9f);     // the limiter's pre-gain glides
+        if (b >= 600 && b < 700) inst.set_pan(0, -0.4f + 0.008f * (b - 600));   // moving PAN
+        if (b == 750) inst.set_choke(0.6f);
+        for (int i = 0; i < kBlock; ++i) {
+            inl[i] = n.next() * 0.9f;                  // loud: the limiter and the duck act
+            inr[i] = n.next() * 0.9f;
+        }
+        inst.process(inl, inr, ol, orr, kBlock);
+        sq = std::max(sq, inst.limiter_squash());
+        dk = std::min(dk, inst.choke_duck_gain());
+        for (int i = 0; i < kBlock; ++i) { out.push_back(ol[i]); out.push_back(orr[i]); }
+    }
+    if (squash_max) *squash_max = sq;
+    if (duck_min) *duck_min = dk;
+    return out;
+}
+} // namespace
+
+TEST_CASE("mix block memos: ducking, panning and limiting render the same bits") {
+    float sq = 0.f, dk = 1.f;
+    const auto off = render_mix(false, 0, &sq, &dk);
+    const auto on  = render_mix(true,  0, nullptr, nullptr);
+    const auto flip = render_mix(true, 400, nullptr, nullptr);
+    CHECK(count_diff(off, on) == 0);
+    CHECK(count_diff(off, flip) == 0);
+    CHECK(energy(off) > 1.0);
+    // The path was really exercised: the limiter bent and the duck pulled down.
+    CAPTURE(sq);
+    CAPTURE(dk);
+    CHECK(sq > 0.f);
+    CHECK(dk < 0.9f);
+}

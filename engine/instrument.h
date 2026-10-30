@@ -103,6 +103,11 @@ public:
     void set_comp_curve(bool on) {                                      // bit 7
         for (auto& p : _parts) p.fx().comp().set_curve_memo(on);
     }
+    void set_mix_block(bool on) {                                       // bit 8
+        _mix_block = on;
+        if (!on) _pan_c_ok = false;
+        _limiter.set_knee_memo(on);
+    }
 #ifdef SPKY_TESTING
     // Tests only: push every set_flow / set_rhythm_pace again, as the code did
     // before the unchanged-value guards (BbdEngine::set_flow_redundant,
@@ -680,6 +685,15 @@ private:
     // The knob's own glide (kMixSmoothS). The follower smooths the SIGNAL side;
     // this smooths the CONTROL side, so turning CHOKE cannot step the mix gain.
     OnePole _choke_depth;
+    // Toggle bit 8 (MIX_BLOCK) memos: the CHOKE duck's depth chain keyed on
+    // depth_raw's bits, and the PAN gains read once per control tick. See
+    // process(); the limiter's knee memo is Limiter::set_knee_memo().
+    bool     _mix_block = false;
+    bool     _ck_ok = false;
+    uint32_t _ck_bits = 0;
+    float    _ck_over = 0.f, _ck_depth = 0.f, _ck_floor = 0.f, _ck_atk = 0.f, _ck_rel = 0.f;
+    bool     _pan_c_ok = false;
+    float    _pan_c[PART_COUNT][2] = {};
     // The gain actually applied to the yielding deck. Exactly 1.0f whenever the
     // depth is 0 -- that exactness, not a branch, is what makes CHOKE at noon a
     // bit-identical bypass (see the mix in process()).
