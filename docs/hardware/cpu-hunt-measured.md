@@ -442,3 +442,49 @@ scored 94 and more in the calibration). None is on both channels, and the
 §3 clicks were on both. So in these ten minutes `bastian` did not click. Its
 worst block is now ~14 k under the ~945 000 line. That is above the A/A
 floor, but not a guarantee: the margin is one 10-minute sample.
+
+### Candidates 4-6: FLUX stereo line, law guards, `control_tick` at -O3
+
+Built behind toggle bits 4 and 5 and the build switch `SHELL_CTL_O3`
+(c53f1fae, 4e292566). Measurement image c53f1fa. Base and toggle runs
+alternated on each workload, 3 rounds x 30 s; FLUX workloads w313, w143,
+w132, `bastian` (bit 4); BBD workloads w0, w9, w18, w169, w161 (bit 5).
+Then the -O3 image for 2 rounds and one more base round on c53f1fa. Window
+means per deck:
+
+| candidate | what it does | measured | verdict |
+|---|---|---|---|
+| 4 `FLUX_STEREO_LINE` | the two TapeEchos share `SetDelay`, read indices, fill tests and write index; band-pass and `fast_tanh` stay per channel (their inputs differ) | FLUX per deck −4 to −7 k (w132 58.0 → 53.4 / 62.0 → 57.0, `bastian` 58.4 → 53.7 / 61.5 → 54.3) | adopted, 1453fa93 |
+| 5 `LAW_GUARDS` | `BbdEngine::set_flow` skips `_recompute()` when the last one is still current; `Flux::set_rhythm_pace` skips an unchanged pace | BBD-in-FLOW deck engine −2.7 / −3.3 k (w0, w161; w9, w18 nil); FLUX per deck −1.3 to −2 k on the BBD workloads | adopted, d7aaafed |
+| 6 `SHELL_CTL_O3` | `control_tick` at -O3 (+2 816 B SRAM_EXEC) | the window-mean law section unchanged (w0 12.1 / 11.95 k, w161 12.1 / 12.15 k) | reverted, 36d9316d |
+
+Candidate 5 skips only what is provably the same. `_apply_tempo()` as a
+whole cannot be skipped: `SuperModulator` re-runs `_refresh_slews()` on its
+unchanged path. Only the Flux pace push under it is guarded. The BBD flag
+is cleared by `set_cycle` (load-bearing: `clock_flow` reads the window
+that `_cycle` sets; removing the clear gives 7 005 mismatches in
+`tests/test_cpu_hunt_equiv.cpp`). The width, decay and resonance setters
+apply their own helper and leave the same state. On candidate 6: the
+shell's per-run worst-block `law` split did read 0.5-1 k higher on the
+-O3 image. The final image below, without -O3, reads the same +1 k, so
+that split is noise, not a cost.
+
+Bit identity is shown on the desktop (clang, x86, no FMA). The board's
+GCC contracts multiply-adds by default (`-ffp-contract=fast`), so two
+code shapes of the same arithmetic could round differently there. That
+has no bearing on the CPU verdict and is not audible at that size, but
+the board's bit identity is not shown.
+
+Final image d7aaafe (both adopted, toggles gone), 2 x 30 s on the same
+nine workloads against the c53f1fa base rounds:
+
+- FLUX per deck −3 to −5 k on every workload, up to −8.9 k on BBD
+  workloads, where the pace guard adds to it. About −8 k per block for
+  two FLUX decks.
+- That is 1.5-3 k less on w132 and `bastian` than the toggle build read.
+  The adopted pair sits in a different place in SRAM_EXEC. Unlike GRIT,
+  the inlining did not add.
+- The BBD engine section is within its ±10 k run spread, so candidate 5's
+  engine saving cannot be resolved in two runs.
+
+Board left on listener d7aaafe.
