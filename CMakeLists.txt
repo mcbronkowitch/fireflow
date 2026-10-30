@@ -397,8 +397,12 @@ target_link_libraries(sweep PRIVATE spky_engine daisysp_min)
 # the board's (shell/cb_profile.cpp). Its own executable because the define
 # changes Part::process's signature. Also built with SPKY_PROBE_LAW=1
 # (engine/util/probe_law.h), the control law's TIDE split, for the same reason.
+# And with SPKY_PROBE_TOGGLES=1 (engine/util/probe_toggles.h), as the
+# measurement image is, so the CPU round's ablation bits are compiled and
+# tested here (tests/test_cpu_round2_probes.cpp).
 add_executable(spky_probe_tests
     tests/test_probe_marks.cpp
+    tests/test_cpu_round2_probes.cpp
     engine/mod/lane.cpp
     engine/mod/super_modulator.cpp
     engine/parts/part.cpp
@@ -423,7 +427,7 @@ add_executable(spky_probe_tests
     engine/body/body_voice.cpp
 )
 target_include_directories(spky_probe_tests PRIVATE engine third_party)
-target_compile_definitions(spky_probe_tests PRIVATE SPKY_PROBE_MARKS=1 SPKY_PROBE_LAW=1)
+target_compile_definitions(spky_probe_tests PRIVATE SPKY_PROBE_MARKS=1 SPKY_PROBE_LAW=1 SPKY_PROBE_TOGGLES=1)
 target_link_libraries(spky_probe_tests PRIVATE doctest daisysp_min)
 add_test(NAME spky_probe_tests COMMAND spky_probe_tests)
 

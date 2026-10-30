@@ -3,6 +3,7 @@
 #include "fx/fx_util.h"      // hann_value_at
 #include "util/fast_sin.h"
 #include "util/math.h"
+#include "util/probe_toggles.h"
 
 namespace spky {
 
@@ -141,7 +142,14 @@ public:
         _rel_ctr  = want;
     }
 
+#if defined(SPKY_PROBE_TOGGLES)
+    // abl: the toggle word (util/probe_toggles.h bit 14), handed in per call
+    // by SamplerEngine::process from its own member. Measurement image only.
+    void process(const SampleBuffer& buf, float& outL, float& outR, uint32_t abl = 0) {
+#else
     void process(const SampleBuffer& buf, float& outL, float& outR) {
+        constexpr uint32_t abl = 0;
+#endif
         if (!_active) { outL = 0.f; outR = 0.f; return; }
 
         float l = 0.f, r = 0.f;
@@ -162,6 +170,8 @@ public:
             w = _rel_from * hann_value_at(static_cast<float>(_rel_ctr)
                                           / static_cast<float>(_rel_len));
             if (_rel_ctr <= 0) _active = false;
+        } else if (probe::on(abl, probe::kBitAblGrainWin)) {
+            w = 1.f;                 // bit 14: no window; _i still advances below
         } else {
             w = _window();
         }

@@ -34,6 +34,19 @@ public:
     // out-of-range positions back into [0, rec_size). Silent when empty.
     void read_linear(float frame, float& out0, float& out1) const;
 
+#if defined(SPKY_PROBE_TOGGLES)
+    // Measurement image only (util/probe_toggles.h bits 15 and 16): the toggle
+    // word, handed down once per block by SamplerEngine::set_probe_word, so
+    // read_linear() keeps its signature (and its ITCM placement,
+    // shell/itcm_hot.ld names it) and reads a member, never the global.
+    void set_probe_word(uint32_t w) { _probe_word = w; }
+    // Bit 16 reads kProbeSramFrames frames of a static array (DTCM on the
+    // board) instead of the buffer. Zeroed here: on the board the array is
+    // NOLOAD memory, which nothing else zeroes.
+    static constexpr size_t kProbeSramFrames = 4096;
+    static void probe_sram_clear();
+#endif
+
     // --- transport ---
     void set_recording(bool on);
     bool is_recording() const { return _state != State::idle; }
@@ -80,6 +93,11 @@ private:
     // equals _write_head at the moment of the stop, so restoring it is a
     // no-op there.
     size_t  _fadeout_resume_head = 0;
+#if defined(SPKY_PROBE_TOGGLES)
+    uint32_t _probe_word = 0;
+#else
+    static constexpr uint32_t _probe_word = 0;
+#endif
 };
 
 }  // namespace spky

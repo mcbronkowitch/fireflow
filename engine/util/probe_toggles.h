@@ -68,7 +68,39 @@
 //                                                        the tank in a
 //                                                        measurement image built
 //                                                        with SHELL_REVERB_HALF=0
-//   10-29 (free: candidates; bits 0-9 are never reused)
+//   10   ABL_OSC_B            engine/synth/voice.cpp     USED, reverted after
+//                                                        Phase A: VoiceT runs osc
+//                                                        A twice, not osc B
+//   11   ABL_SUB              engine/synth/voice.cpp     USED, reverted after
+//                                                        Phase A: no sub osc
+//   12   ABL_SVF              engine/synth/voice.cpp     USED, reverted after
+//                                                        Phase A: the voice
+//                                                        passes unfiltered
+//   13   ABL_ENV_PAN          engine/synth/voice.cpp     USED, reverted after
+//                                                        Phase A: envelope a
+//                                                        constant 0.5, unit
+//                                                        gains (Env::process
+//                                                        still runs for state)
+//   14   ABL_GRAIN_WIN        engine/sampler/grain.h     USED, reverted after
+//                                                        Phase A: window w = 1,
+//                                                        counters as before
+//   15   ABL_GRAIN_FOLD       engine/sampler/            USED, reverted after
+//                             sample_buffer.cpp          Phase A: read_linear
+//                                                        skips the fold inside
+//                                                        the content, clamps
+//                                                        outside it
+//   16   ABL_GRAIN_SRAM       engine/sampler/            USED, reverted after
+//                             sample_buffer.cpp          Phase A: read_linear
+//                                                        reads a 4096-frame
+//                                                        static array (DTCM on
+//                                                        the board), not the
+//                                                        buffer
+//                                                        (bits 10-16: spec
+//                                                        2026-10-30-cpu-engine-
+//                                                        kernels-design.md 5.1;
+//                                                        each prices one stage
+//                                                        and changes the sound)
+//   17-29 (free: candidates; bits 0-16 are never reused)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE
 //                                                        burn on every block
 //   31   SHELL_GUARD_OFF      shell/panel_scan.cpp       the overrun guard is
@@ -85,6 +117,16 @@ namespace probe {
 
 // The candidates' bits (above).
 inline constexpr int kBitReverbHalf = 9;
+// CPU round 2's Phase A ablations. The engines get the word once per block
+// through set_probe_word() (Instrument::process); a voice reads its own copy,
+// refreshed on the control tick, and a grain gets it as an argument.
+inline constexpr int kBitAblOscB       = 10;
+inline constexpr int kBitAblSub        = 11;
+inline constexpr int kBitAblSvf        = 12;
+inline constexpr int kBitAblEnvPan     = 13;
+inline constexpr int kBitAblGrainWin   = 14;
+inline constexpr int kBitAblGrainFold  = 15;
+inline constexpr int kBitAblGrainSram  = 16;
 
 // The shell's two bits (above).
 inline constexpr int kBitShellLateRepeat = 30;

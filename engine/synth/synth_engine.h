@@ -140,6 +140,13 @@ public:
     };
     const ProbeEng& probe_eng() const { return _probe_eng; }
 #endif
+#if defined(SPKY_PROBE_TOGGLES)
+    // Measurement image only (util/probe_toggles.h bits 10-13): the toggle
+    // word, handed down once per block by Instrument::process. The next
+    // control tick passes it to the voices; BODY's voice has no bits and
+    // never gets it.
+    void set_probe_word(uint32_t w) { _probe_word = w; }
+#endif
 #ifdef SPKY_TESTING
     // The accent set_accent() last stored, same idiom as the SPKY_TESTING
     // accessors in engine/instrument.h, engine/mod/lane.h and
@@ -171,6 +178,9 @@ private:
     uint32_t _seq = 0;
 #if defined(SPKY_PROBE_MARKS)
     ProbeEng _probe_eng {};
+#endif
+#if defined(SPKY_PROBE_TOGGLES)
+    uint32_t _probe_word = 0;
 #endif
     uint32_t _seed = 0xC0FFEEu;
 

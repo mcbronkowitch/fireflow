@@ -32,17 +32,28 @@ Lines read (transcribed from cb_profile.cpp's PrintLine calls):
     CBP_WIN8 w=N agp= agw= ag1= ag2= agx= bgp= bgw= bg1= bg2= bgx=
     CBP_WORST w=N last= am= al= at= ae= af= bm= bl= bt= be= bf= x=
     CBP_WIN9 w=N awp= awc= awv= ati= ata= bwp= bwc= bwv= bti= bta=
-                                           (a WAVE deck's engine: strewn tones,
-                                           control tick, voices; strikes inside
-                                           process() and all, window totals --
-                                           read as per-block means)
+                                           (a SYNTH or WAVE deck's engine:
+                                           strewn tones, control tick, voices;
+                                           strikes inside process() and all,
+                                           window totals -- read as per-block
+                                           means)
+    CBP_WIN11 w=N d=0|1 sc= ss= sg= sp= sn=
+                                           (deck d's SAMPLER engine, per-block
+                                           means: control tick, scheduling +
+                                           spawn, grain loop, norm + SvfLp +
+                                           level, active grain-samples; joined
+                                           as asc.. / bsc..; sg / sn is the
+                                           cycles per active grain-sample)
     CBP_BOOT patch= eng_a= eng_b=          (the last one seen)
     CBP_RVCLR n= last= max=                (every one; the report lists them)
     CBP_REC  blk=N cb= proc= law= led= maxs=V@I med= ev=HEX
     CBP_REC2 blk=N a= b= mix= va= vb=
     CBP_REC3 blk=N am= ae= af= bm= be= bf=
     CBP_REC4 blk=N al= at= ax= bl= bt= bx=
-    CBP_REC5 blk=N d=0|1 wp= wc= wv= ti= ta=   (deck d on WAVE: CBP_WIN9's
+    CBP_REC5 blk=N d=0|1 wp= wc= wv= ti= ta=   (deck d on SYNTH or WAVE:
+                                           CBP_WIN9's fields for that block,
+                                           a* / b*)
+    CBP_REC7 blk=N d=0|1 sc= ss= sg= sp= sn=   (deck d on SAMPLER: CBP_WIN11's
                                            fields for that block, a* / b*)
 The CBP_REC* lines are the ring's single blocks (one above the firmware's
 kHot, or one in which a phrase advanced), joined by blk. Those above --hot
@@ -83,6 +94,9 @@ _WIN8 = re.compile(r"^CBP_WIN8 w=(\d+) agp=(\d+) agw=(\d+) ag1=(\d+) ag2=(\d+) a
 _WIN9 = re.compile(r"^CBP_WIN9 w=(\d+) awp=(\d+) awc=(\d+) awv=(\d+) ati=(\d+) ata=(\d+)"
                    r" bwp=(\d+) bwc=(\d+) bwv=(\d+) bti=(\d+) bta=(\d+)\s*$")
 WIN9_FIELDS = ("awp", "awc", "awv", "ati", "ata", "bwp", "bwc", "bwv", "bti", "bta")
+_WIN11 = re.compile(r"^CBP_WIN11 w=(\d+) d=([01]) sc=(\d+) ss=(\d+) sg=(\d+) sp=(\d+) sn=(\d+)\s*$")
+SAMP_NAMES = ("sc", "ss", "sg", "sp", "sn")
+WIN11_FIELDS = tuple(k + n for k in "ab" for n in SAMP_NAMES)
 kWinBlocks = 1000   # cb_profile.cpp: a window's blocks; ti / ta print as totals
 _WORST = re.compile(r"^CBP_WORST w=(\d+) last=(\d+) am=(\d+) al=(\d+) at=(\d+) ae=(\d+) af=(\d+)"
                     r" bm=(\d+) bl=(\d+) bt=(\d+) be=(\d+) bf=(\d+) x=(\d+)\s*$")
@@ -95,10 +109,11 @@ _REC2 = re.compile(r"^CBP_REC2 blk=(\d+) a=(\d+) b=(\d+) mix=(\d+) va=(-?\d+) vb
 _REC3 = re.compile(r"^CBP_REC3 blk=(\d+) am=(\d+) ae=(\d+) af=(\d+) bm=(\d+) be=(\d+) bf=(\d+)\s*$")
 _REC4 = re.compile(r"^CBP_REC4 blk=(\d+) al=(\d+) at=(\d+) ax=(\d+) bl=(\d+) bt=(\d+) bx=(\d+)\s*$")
 _REC5 = re.compile(r"^CBP_REC5 blk=(\d+) d=([01]) wp=(\d+) wc=(\d+) wv=(\d+) ti=(\d+) ta=(\d+)\s*$")
+_REC7 = re.compile(r"^CBP_REC7 blk=(\d+) d=([01]) sc=(\d+) ss=(\d+) sg=(\d+) sp=(\d+) sn=(\d+)\s*$")
 # A hot block's columns; every one but ev also names a window field, so the
 # excess row can subtract the window mean.
 REC_FIELDS = ("cb", "law", "a", "am", "al", "at", "ae", "af", "ax",
-              "b", "bm", "bl", "bt", "be", "bf", "bx", "mix") + WIN9_FIELDS
+              "b", "bm", "bl", "bt", "be", "bf", "bx", "mix") + WIN9_FIELDS + WIN11_FIELDS
 REC_SPLITS = (("a", ("am", "ae", "af")), ("b", ("bm", "be", "bf")))
 kHot = 930000
 
@@ -106,7 +121,7 @@ FIELDS = ("cb", "cb_max", "a", "am", "ap", "al", "aq", "aqc", "aqh", "aqs", "aqt
           "as", "ag", "agp", "agw", "ag1", "ag2", "agx", "ax", "ac", "an",
           "b", "bm", "bp", "bl", "bq", "bqc", "bqh", "bqs", "bqt", "bo", "bu", "bi", "bt", "br", "be", "bf",
           "bs", "bg", "bgp", "bgw", "bg1", "bg2", "bgx", "bx", "bc", "bn",
-          "mix", "xo", "xd", "xr", "xt", "xl", "law") + WIN9_FIELDS
+          "mix", "xo", "xd", "xr", "xt", "xl", "law") + WIN9_FIELDS + WIN11_FIELDS
 # A whole and the parts that must add up to it, within kSplitSlack.
 SPLITS = (("a", ("am", "ae", "af")), ("b", ("bm", "be", "bf")),
           ("af", ("as", "ag", "ax", "ac", "an")), ("bf", ("bs", "bg", "bx", "bc", "bn")),
@@ -138,6 +153,13 @@ def parse(lines, clears=None, worst=None, recs=None):
                 d = recs.setdefault(int(m.group(1)), {})
                 k = "ab"[int(m.group(2))]
                 for j, name in enumerate(("wp", "wc", "wv", "ti", "ta")):
+                    d[k + name] = int(m.group(3 + j))
+                continue
+            m = _REC7.match(line)
+            if m:
+                d = recs.setdefault(int(m.group(1)), {})
+                k = "ab"[int(m.group(2))]
+                for j, name in enumerate(SAMP_NAMES):
                     d[k + name] = int(m.group(3 + j))
                 continue
             for rx, names in ((_REC2, ("a", "b", "mix", "va", "vb")),
@@ -214,6 +236,13 @@ def parse(lines, clears=None, worst=None, recs=None):
                 v = int(m.group(2 + k))
                 # Strikes print as window totals; per block, like the rest.
                 d[name] = v / kWinBlocks if name.endswith(("ti", "ta")) else v
+            continue
+        m = _WIN11.match(line)
+        if m:
+            d = wins.setdefault(int(m.group(1)), {})
+            k = "ab"[int(m.group(2))]
+            for j, name in enumerate(SAMP_NAMES):
+                d[k + name] = int(m.group(3 + j))
             continue
         m = _WORST.match(line)
         if m:
