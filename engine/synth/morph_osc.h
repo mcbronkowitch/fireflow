@@ -59,7 +59,7 @@ public:
     }
 
     // The segment (0 sine->tri, 1 tri->saw, 2 saw->pulse) and its weight are
-    // fixed here, not per sample (candidate V1): the same float operations
+    // fixed here, not per sample (CPU round 2, V1): the same float operations
     // on the same _morph, so process() returns the same bits
     // (tests/test_cpu_round2_equiv.cpp).
     void set_morph(float m) {
@@ -72,34 +72,17 @@ public:
 
     void reset_phase(float ph = 0.f) { _phase = clampf(ph, 0.f, 0.999999f); }
 
-#if defined(SPKY_PROBE_TOGGLES)
-    // Measurement image only (util/probe_toggles.h bit 17, MORPH_INV): set
-    // by VoiceT::set_probe_word on the control tick. Off runs the per-sample
-    // arithmetic V1 replaced, for the board's A/B.
-    void set_probe_inv(bool on) { _probe_inv = on; }
-    bool probe_inv() const { return _probe_inv; }
-#endif
-
-    // always_inline, as WtOsc::process (synth/wt_osc.h): with bit 17's two
-    // paths in the measurement image, arm-none-eabi-g++ -O3 stopped inlining
-    // this into VoiceT<MorphOsc>::process and `bl`-called a 1500-byte copy
-    // in SRAM, through a veneer from ITCM, twice per voice sample (read off
-    // the linked ELF, 2026-10-30). The attribute keeps both A/B arms inline,
-    // as the single path was (shell/itcm_hot.ld lists no MorphOsc::process).
+    // always_inline, as WtOsc::process (synth/wt_osc.h): with V1's two paths
+    // in the measurement image, arm-none-eabi-g++ -O3 stopped inlining this
+    // into VoiceT<MorphOsc>::process and `bl`-called a 1500-byte copy in
+    // SRAM, through a veneer from ITCM, twice per voice sample (read off the
+    // linked ELF, 2026-10-30). Nothing diagnoses that, so the attribute
+    // stays: shell/itcm_hot.ld lists no MorphOsc::process of its own.
     __attribute__((always_inline)) inline
     float process() {
         _phase += _inc;
         if (_phase >= 1.f) _phase -= 1.f;
         const float t = _phase;
-#if defined(SPKY_PROBE_TOGGLES)
-        if (!_probe_inv) {
-            const float dt = _inc > 1e-6f ? _inc : 1e-6f;
-            const float seg = _morph * 3.f;
-            if (seg <= 1.f) return lerpf(fast_sin(t), _tri(t), seg);
-            if (seg <= 2.f) return lerpf(_tri(t), _saw(t, dt), seg - 1.f);
-            return lerpf(_saw(t, dt), _pulse(t, dt), seg - 2.f);
-        }
-#endif
         if (_seg_idx == 0) return lerpf(fast_sin(t), _tri(t), _seg_t);
         if (_seg_idx == 1) return lerpf(_tri(t), _saw(t, _dt), _seg_t);
         return lerpf(_saw(t, _dt), _pulse(t, _dt), _seg_t);
@@ -150,9 +133,6 @@ private:
     float _dt = 1e-6f;           // _inc floored (_set_dt)
     float _seg_t = 0.f;          // the segment's lerp weight (set_morph)
     int   _seg_idx = 0;          // 0, 1 or 2 (set_morph)
-#if defined(SPKY_PROBE_TOGGLES)
-    bool  _probe_inv = false;    // bit 17 (set_probe_inv)
-#endif
 };
 
 } // namespace spky

@@ -43,7 +43,7 @@ SECTIONS
     /* Tier 1: every sample. */
     *(.text._ZN4spky10Instrument7processEPKfS2_PfS3_j)                /* 7560 */
     /* @REVERB_TANK@ -- the reverb tank's instance(s), written by write_shell_reverb_half.py into build/itcm_hot.ld, which is what the link and itcm_placement.py read: SHELL_REVERB_HALF=1 (the default, every image) holds only ProcessImpl<2>, the half-rate tank (2864 B); SHELL_REVERB_HALF=0 holds only ProcessImpl<1> (2800 B), and in the measurement image <1> and <2> both (toggle bit 9 picks). Sizes from the 2026-10-30 listener images. */
-    *(.text._ZN4spky6VoiceTINS_8MorphOscEE7processERfS3_)              /* 2008 */
+    *(.text._ZN4spky6VoiceTINS_8MorphOscEE7processERfS3_)              /* 1960 */
     *(.text._ZN4spky9BbdEngine7processERfS1_)                          /* 1980 */
     *(.text._ZN4spky10FeedEngine7processERfS1_)                        /* 1792 */
     *(.text._ZN4spky6VoiceTINS_5WtOscEE7processERfS3_)                 /* 1668 */
