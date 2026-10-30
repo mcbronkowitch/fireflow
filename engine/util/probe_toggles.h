@@ -44,10 +44,6 @@
 //                                                        for a BBD deck's
 //                                                        set_flow and FLUX's
 //                                                        rhythm pace)
-//   6    CENTER_IDLE          engine/center/center.cpp   Center::update reuses the
-//                                                        cos / sin / pow results
-//                                                        whose inputs did not
-//                                                        change (same output)
 //   8    MIX_BLOCK            engine/instrument.cpp,     the mix's CHOKE depth
 //                             engine/fx/limiter.h        chain, the PAN gains
 //                                                        and the limiter knee
@@ -69,9 +65,6 @@ namespace spky {
 namespace probe {
 
 // The candidates' bits (above).
-
-// The candidates' bits (above).
-inline constexpr int kBitCenterIdle = 6;
 inline constexpr int kBitMixBlock   = 8;
 
 // The shell's two bits (above).

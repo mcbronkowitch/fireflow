@@ -77,14 +77,6 @@ public:
     // one control tick: read both banks, write hooks, advance weather + morph
     void update(SuperModulator& a, SuperModulator& b, Part& pa, Part& pb);
 
-    // Toggle bit 6 (util/probe_toggles.h, CENTER_IDLE): update() reuses the
-    // libm results whose inputs did not change since the last tick -- MORPH's
-    // cos / sin, every pow() it makes -- and skips a pow whose exponent is
-    // zero or whose base is one. Each is a pure function of the same float
-    // bits, so output and state are identical either way; it can flip
-    // mid-stream. Set once per block by Instrument::process; off by default.
-    void set_idle_skip(bool on) { _idle_skip = on; }
-
     // gestures
     void spot(SuperModulator& a, SuperModulator& b);
     void settle(SuperModulator& a, SuperModulator& b);
@@ -113,17 +105,6 @@ private:
     // das Ziel auf die Phase. Damit startet der Servofehler bei 0 -- kein
     // Zerren, kein Tempo-Wobble.
     void _snap_phase(SuperModulator& m, Part& p, int i, const SuperModulator& other);
-
-    // The last pow() of one call site: its two argument bit patterns and the
-    // result. A repeat of both arguments returns the stored result, which is
-    // what the libm call would return again.
-    struct PowMemo { uint32_t xb = 0, yb = 0; float r = 0.f; bool ok = false; };
-    float _pow(PowMemo& m, float x, float y);
-    bool     _idle_skip = false;
-    PowMemo  _pm_rate[2], _pm_tex[2], _pm_conv[2], _pm_grid;
-    bool     _morph_memo_ok = false;
-    uint32_t _morph_memo_bits = 0;
-    float    _morph_cos = 1.f, _morph_sin = 0.f;
 
     Transport _transport;
     bool      _sync = false;
