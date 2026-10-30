@@ -100,9 +100,6 @@ public:
     // once per block by process() from the toggle word; all off by default.
     // Each switches to a path with the same output and state as the old one.
     void set_center_idle(bool on) { _center.set_idle_skip(on); }        // bit 6
-    void set_comp_curve(bool on) {                                      // bit 7
-        for (auto& p : _parts) p.fx().comp().set_curve_memo(on);
-    }
     void set_mix_block(bool on) {                                       // bit 8
         _mix_block = on;
         if (!on) _pan_c_ok = false;

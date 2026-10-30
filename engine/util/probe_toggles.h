@@ -48,9 +48,6 @@
 //                                                        cos / sin / pow results
 //                                                        whose inputs did not
 //                                                        change (same output)
-//   7    COMP_CURVE           engine/fx/comp.cpp         compute_gain reuses the
-//                                                        last pow(10, x) for a
-//                                                        repeated x (same output)
 //   8    MIX_BLOCK            engine/instrument.cpp,     the mix's CHOKE depth
 //                             engine/fx/limiter.h        chain, the PAN gains
 //                                                        and the limiter knee
@@ -75,7 +72,6 @@ namespace probe {
 
 // The candidates' bits (above).
 inline constexpr int kBitCenterIdle = 6;
-inline constexpr int kBitCompCurve  = 7;
 inline constexpr int kBitMixBlock   = 8;
 
 // The shell's two bits (above).
