@@ -80,6 +80,13 @@ public:
     bool probe_inv() const { return _probe_inv; }
 #endif
 
+    // always_inline, as WtOsc::process (synth/wt_osc.h): with bit 17's two
+    // paths in the measurement image, arm-none-eabi-g++ -O3 stopped inlining
+    // this into VoiceT<MorphOsc>::process and `bl`-called a 1500-byte copy
+    // in SRAM, through a veneer from ITCM, twice per voice sample (read off
+    // the linked ELF, 2026-10-30). The attribute keeps both A/B arms inline,
+    // as the single path was (shell/itcm_hot.ld lists no MorphOsc::process).
+    __attribute__((always_inline)) inline
     float process() {
         _phase += _inc;
         if (_phase >= 1.f) _phase -= 1.f;
