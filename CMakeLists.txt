@@ -398,8 +398,8 @@ target_link_libraries(sweep PRIVATE spky_engine daisysp_min)
 # changes Part::process's signature. Also built with SPKY_PROBE_LAW=1
 # (engine/util/probe_law.h), the control law's TIDE split, for the same reason.
 # And with SPKY_PROBE_TOGGLES=1 (engine/util/probe_toggles.h), as the
-# measurement image is, so the CPU round's ablation bits are compiled and
-# tested here (tests/test_cpu_round2_probes.cpp).
+# measurement image is, so the CPU round's toggle-word plumbing is compiled
+# here (tests/test_cpu_round2_probes.cpp).
 add_executable(spky_probe_tests
     tests/test_probe_marks.cpp
     tests/test_cpu_round2_probes.cpp

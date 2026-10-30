@@ -126,34 +126,13 @@ template <class OscT>
 void VoiceT<OscT>::process(float& accL, float& accR) {
     if (!_env.active()) return;            // idle voices are free
 
-    // The ablation bits (util/probe_toggles.h 10-13) each skip one stage, in
-    // the measurement image only. Everywhere else _abl is a constant 0 and
-    // probe::on() a constant false, so only the full path compiles.
-    float s;
-    if (probe::on(_abl, probe::kBitAblOscB)) {
-        const float a = _osc_a.process();
-        s = 0.5f * (a + a);
-    } else {
-        s = 0.5f * (_osc_a.process() + _osc_b.process());
-    }
-    if (!probe::on(_abl, probe::kBitAblSub)) {
-        _sub_phase += _sub_inc;
-        if (_sub_phase >= 1.f) _sub_phase -= 1.f;
-        s += _sub_level * fast_sin(_sub_phase);
-    }
+    float s = 0.5f * (_osc_a.process() + _osc_b.process());
+    _sub_phase += _sub_inc;
+    if (_sub_phase >= 1.f) _sub_phase -= 1.f;
+    s += _sub_level * fast_sin(_sub_phase);
 
-    if (!probe::on(_abl, probe::kBitAblSvf)) {
-        _filt.Process(s);
-        s = _filt.Low();
-    }
-    if (probe::on(_abl, probe::kBitAblEnvPan)) {
-        (void)_env.process();              // the envelope keeps its state
-        s *= 0.5f;
-        accL += s;
-        accR += s;
-        return;
-    }
-    s = s * _env.process() * _vel;
+    _filt.Process(s);
+    s = _filt.Low() * _env.process() * _vel;
 
     accL += s * _gain_l;
     accR += s * _gain_r;

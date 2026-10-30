@@ -95,7 +95,10 @@
 //                                                        static array (DTCM on
 //                                                        the board), not the
 //                                                        buffer
-//                                                        (bits 10-16: spec
+//                                                        (bits 10-16: measured
+//                                                        in docs/hardware/
+//                                                        cpu-hunt-measured.md
+//                                                        section 7; spec
 //                                                        2026-10-30-cpu-engine-
 //                                                        kernels-design.md 5.1;
 //                                                        each prices one stage
@@ -117,16 +120,6 @@ namespace probe {
 
 // The candidates' bits (above).
 inline constexpr int kBitReverbHalf = 9;
-// CPU round 2's Phase A ablations. The engines get the word once per block
-// through set_probe_word() (Instrument::process); a voice reads its own copy,
-// refreshed on the control tick, and a grain gets it as an argument.
-inline constexpr int kBitAblOscB       = 10;
-inline constexpr int kBitAblSub        = 11;
-inline constexpr int kBitAblSvf        = 12;
-inline constexpr int kBitAblEnvPan     = 13;
-inline constexpr int kBitAblGrainWin   = 14;
-inline constexpr int kBitAblGrainFold  = 15;
-inline constexpr int kBitAblGrainSram  = 16;
 
 // The shell's two bits (above).
 inline constexpr int kBitShellLateRepeat = 30;

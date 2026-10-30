@@ -4,7 +4,6 @@
 #include "util/svf_lp.h"
 #include "synth/morph_osc.h"
 #include "synth/env.h"
-#include "util/probe_toggles.h"
 
 namespace spky {
 
@@ -68,12 +67,6 @@ public:
         return (xf ? 1 : 0) | (_env.attacking() ? 2 : 0);
     }
 #endif
-#if defined(SPKY_PROBE_TOGGLES)
-    // Measurement image only (util/probe_toggles.h bits 10-13): the toggle
-    // word, pushed by SynthEngineT::_update_control on the control tick, so
-    // process() reads a member and never the global.
-    void set_probe_word(uint32_t w) { _abl = w; }
-#endif
     float env_value() const { return _env.value(); }
     float detune_cents() const { return _detune_ct; }
 
@@ -117,11 +110,6 @@ private:
     float _drift_pan_hz = 0.1f;
     float _drift_det_hz = 0.1f;
     float _drift_ct_cur = 0.f;            // current micro-detune drift (cents)
-#if defined(SPKY_PROBE_TOGGLES)
-    uint32_t _abl = 0;                    // the ablation bits (set_probe_word)
-#else
-    static constexpr uint32_t _abl = 0;
-#endif
 };
 
 using Voice = VoiceT<MorphOsc>;

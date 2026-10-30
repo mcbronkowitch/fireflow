@@ -257,8 +257,8 @@ void Instrument::process(const float* inL, const float* inR,
     // The candidate toggles, once per block and never inside the loop below
     // (util/probe_toggles.h; shell/test_remote_wiring.py holds the place).
     _probe_tog = probe::toggles();
-    // Bits 10-16, once per block: every deck's SYNTH, WAVE and SAMPLER keep
-    // the word in a member (BODY's voice has no bits and does not get it).
+    // Once per block: every deck's SYNTH, WAVE and SAMPLER keep the word in a
+    // member (BODY does not get it).
     for (int p = 0; p < PART_COUNT; ++p) {
         _parts[p].synth().set_probe_word(_probe_tog);
         _parts[p].wave().set_probe_word(_probe_tog);

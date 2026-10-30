@@ -116,9 +116,6 @@ void SamplerEngine::init(float sample_rate) {
     _spawn_ctr   = 0.f;
     _ctrl_ctr    = 0;
     _update_control();
-#if defined(SPKY_PROBE_TOGGLES)
-    SampleBuffer::probe_sram_clear();   // bit 16's array: zero before any read
-#endif
 }
 
 void SamplerEngine::set_targets(const float* t, float /*tune*/) {
@@ -945,11 +942,7 @@ void SamplerEngine::process(float& outL, float& outR) {
     for (int i = 0; i < kGrains; ++i) {
         if (!_grains[i].active()) continue;
         float gl = 0.f, gr = 0.f;
-#if defined(SPKY_PROBE_TOGGLES)
-        _grains[i].process(_buf, gl, gr, _probe_word);
-#else
         _grains[i].process(_buf, gl, gr);
-#endif
 #if defined(SPKY_PROBE_MARKS)
         plive += _grains[i].active() ? 1u : 0u;
 #endif

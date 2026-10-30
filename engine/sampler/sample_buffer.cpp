@@ -2,7 +2,6 @@
 #include "sampler/sampler_config.h"
 #include "util/math.h"
 #include "util/fast_tanh.h"
-#include "util/probe_toggles.h"
 #include <cmath>
 #include <cstring>
 
@@ -10,27 +9,7 @@ namespace spky {
 
 namespace {
 constexpr float kFadeKof = 1.f / static_cast<float>(sampler_cfg::kRecordFade);
-
-#if defined(SPKY_PROBE_TOGGLES)
-// Bit 16's array (sample_buffer.h). On the board in .dtcmram_bss (NOLOAD,
-// alt_sram.lds), the section the FLUX probe's DTCM lines used, because .bss
-// lies in AXI SRAM there; on the desktop a plain static.
-#if defined(__ARM_EABI__)
-#define SPKY_PROBE_DTCM __attribute__((section(".dtcmram_bss")))
-#else
-#define SPKY_PROBE_DTCM
-#endif
-SampleBuffer::Frame g_probe_sram[SampleBuffer::kProbeSramFrames] SPKY_PROBE_DTCM;
-static_assert((SampleBuffer::kProbeSramFrames & (SampleBuffer::kProbeSramFrames - 1)) == 0,
-              "read_linear masks the index into the array");
-#endif
-} // namespace
-
-#if defined(SPKY_PROBE_TOGGLES)
-void SampleBuffer::probe_sram_clear() {
-    std::memset(g_probe_sram, 0, sizeof g_probe_sram);
 }
-#endif
 
 void SampleBuffer::init(Frame* buf, size_t length, float sample_rate) {
     _buffer      = buf;
@@ -286,15 +265,7 @@ void SampleBuffer::read_linear(float frame, float& out0, float& out1) const {
     // std::floor is a single instruction on both targets -- roundsd on x86,
     // VRINTM on the Daisy's Cortex-M7 FPv5 -- not a libm call, and cheaper
     // than the loop even in the common case.
-    //
-    // Bit 15 (util/probe_toggles.h, measurement image only): no fold for a
-    // position inside the content, a clamp for one outside it.
-    if (probe::on(_probe_word, probe::kBitAblGrainFold)) {
-        if (frame < 0.f) frame = 0.f;
-        else if (frame >= fsz) frame = fsz - 1.f;
-    } else {
-        frame -= fsz * std::floor(frame / fsz);
-    }
+    frame -= fsz * std::floor(frame / fsz);
     // BEIDE Kanten hier, vor i0 und frac, und nicht nur i0 spaeter: bei
     // grossem fsz rundet fsz - epsilon in float32 auf exakt fsz, was ein
     // knapp negatives frame genau hierher bringt. Wurde nur i0 korrigiert,
@@ -311,21 +282,8 @@ void SampleBuffer::read_linear(float frame, float& out0, float& out1) const {
     if (i1 >= _size) i1 = 0;
 
     const float frac = frame - static_cast<float>(i0);
-#if defined(SPKY_PROBE_TOGGLES)
-    // Bit 16 (util/probe_toggles.h): the same read from the static array,
-    // index masked, so the delta is where the frames live.
-    const Frame* src = _buffer;
-    if (probe::on(_probe_word, probe::kBitAblGrainSram)) {
-        src = g_probe_sram;
-        i0 &= kProbeSramFrames - 1;
-        i1 &= kProbeSramFrames - 1;
-    }
-    const Frame a = src[i0];
-    const Frame b = src[i1];
-#else
     const Frame a = _buffer[i0];
     const Frame b = _buffer[i1];
-#endif
     out0 = a.l + frac * (b.l - a.l);
     out1 = a.r + frac * (b.r - a.r);
 }
