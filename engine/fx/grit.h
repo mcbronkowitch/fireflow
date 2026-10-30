@@ -59,13 +59,6 @@ public:
             _downsampled = input;
         }
     }
-    // Not inlined, on purpose: daisysp::Decimator::Process was an
-    // out-of-line call, and inlined here the optimiser could drop the
-    // discarded first call's bitcrush by itself -- which would make the
-    // toggle's OFF path cheaper than today's code and hide the saving.
-#if defined(__GNUC__) || defined(__clang__)
-    __attribute__((noinline))
-#endif
     float process(float input) {
         step(input);
         int32_t temp = (int32_t)(_downsampled * 65536.0f);
@@ -102,10 +95,6 @@ public:
     void set_intensity(float norm);
     float mix() const { return _mix.Stage(); }
     void set_mix(float norm) { _mix.SetStage(norm); }
-    // The discarded first Decimator step of each channel does state only
-    // (probe toggle GRIT_DECIM_STEP, util/probe_toggles.h). Output and state
-    // are identical either way, so it can flip mid-stream. Off by default.
-    void set_fast(bool fast) { _fast = fast; }
     void process(float& l, float& r SPKY_PROBE_PART_PARAMS);
 
 private:
@@ -115,7 +104,6 @@ private:
     daisysp::SampleRateReducer _reducer[2];
     XFade _mix;
     float _intensity = 0.55f;
-    bool _fast = false;
 };
 
 // GRIT block: Drive <-> Reduce behind one click-free SoftSwitch. Replaces the
@@ -146,10 +134,6 @@ public:
     // received (both GritDrive/GritReduce apply the same value; there is no
     // per-mode split to read back).
     float mix_for_test() const { return _mix_norm; }
-    // Forwarded to GritReduce (see there); latched once per block by the
-    // Instrument, never per sample.
-    void set_fast(bool fast) { _reduce.set_fast(fast); }
-
 private:
     GritDrive _drive;
     GritReduce _reduce;

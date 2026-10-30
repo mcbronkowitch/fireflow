@@ -15,9 +15,10 @@ DAISYSP_DIR  = ../lib/DaisySP
 # NICHT gesetzt, anders als in bench/Makefile: die Bench misst die
 # LGPL-Module in Familie 2 und darf sie deshalb hereinziehen, weil sie nie
 # ausgeliefert wird. Diese Firmware wird ausgeliefert. Geprueft, dass es
-# reicht: engine/ inkludiert aus DaisySP nur Effects/{overdrive,decimator,
+# reicht: engine/ inkludiert aus DaisySP nur Effects/{overdrive,
 # sampleratereducer}.h, Filters/onepole.h, Utility/{dcblock,delayline,dsp}.h
-# und Dynamics/crossfade.h -- alles im MIT-Teil. Taucht hier je ein
+# und Dynamics/crossfade.h -- alles im MIT-Teil (Effects/decimator.h
+# inkludieren nur noch die Tests). Taucht hier je ein
 # undefined reference auf einen LGPL-Typ auf, ist das eine Lizenzfrage und
 # keine Build-Frage: dann gehoert der Aufrufer in engine/ geaendert, nicht
 # diese Zeile eingeschaltet.

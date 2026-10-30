@@ -245,39 +245,56 @@ TEST_CASE("GritDecimator: step() + process() equals two daisysp Process() calls"
     }
 }
 
-TEST_CASE("GritReduce: fast on, off and flipped mid-stream render the same bits") {
+TEST_CASE("GritReduce: output equals the daisysp-built reference (two full Process() per frame)") {
+    // The reference is GritReduce as it was before the discarded step went
+    // state-only: two daisysp::Decimator per channel, each Process()-ed twice
+    // per frame with the same input, the same SampleRateReducer pair and
+    // XFade mix.
     struct Setting { float intensity, mix; };
     for (Setting st : {Setting{0.f, 1.f}, Setting{0.3f, 0.7f}, Setting{0.55f, 1.f},
                        Setting{0.8f, 0.5f}, Setting{1.f, 1.f}}) {
         INFO("intensity " << st.intensity << " mix " << st.mix);
-        auto render = [&](int mode /*0 off, 1 on, 2 flip every 37 frames*/) {
-            GritReduce g;
-            g.init(48000.f);
-            g.set_intensity(st.intensity);
-            g.set_mix(st.mix);
-            Noise n;
-            std::vector<float> out;
-            for (int i = 0; i < 6000; ++i) {
-                if (mode == 1) g.set_fast(true);
-                if (mode == 2) g.set_fast(((i / 37) & 1) != 0);
-                float l = n.next(), r = n.next();
-                g.process(l, r);
-                out.push_back(l);
-                out.push_back(r);
-            }
-            return out;
-        };
-        const auto off = render(0), on = render(1), flip = render(2);
-        int d_on = 0, d_flip = 0;
-        for (size_t i = 0; i < off.size(); ++i) {
-            if (bits_of(off[i]) != bits_of(on[i])) ++d_on;
-            if (bits_of(off[i]) != bits_of(flip[i])) ++d_flip;
+        GritReduce g;
+        g.init(48000.f);
+        g.set_intensity(st.intensity);
+        g.set_mix(st.mix);
+
+        daisysp::Decimator dec[2];
+        daisysp::SampleRateReducer red[2];
+        XFade mix;
+        for (int c = 0; c < 2; ++c) {
+            dec[c].Init();
+            dec[c].SetBitsToCrush(16);
+            red[c].Init();
+            red[c].SetFreq(0.6f);
+            dec[c].SetDownsampleFactor(st.intensity);
+            dec[c].SetBitcrushFactor(crush_for(st.intensity));
         }
-        CHECK(d_on == 0);
-        CHECK(d_flip == 0);
-        // The render is not silence: a test on zeros proves nothing.
+        mix.SetStage(st.mix);
+
+        Noise n;
+        int mismatches = 0;
         double acc = 0.0;
-        for (float v : off) acc += (double)v * v;
+        for (int i = 0; i < 6000; ++i) {
+            float l = n.next(), r = n.next();
+            float rl = l, rr = r;
+            dec[0].Process(l);
+            const float c0 = dec[0].Process(l);
+            red[0].Process(c0);
+            const float r0 = red[0].Process(c0);
+            dec[1].Process(r);
+            const float c1 = dec[1].Process(r);
+            red[1].Process(c1);
+            const float r1 = red[1].Process(c1);
+            mix.Process(rl, rr, r0, r1, rl, rr);
+
+            g.process(l, r);
+            if (bits_of(l) != bits_of(rl)) ++mismatches;
+            if (bits_of(r) != bits_of(rr)) ++mismatches;
+            acc += (double)l * l + (double)r * r;
+        }
+        CHECK(mismatches == 0);
+        // The render is not silence: a test on zeros proves nothing.
         CHECK(acc > 1.0);
     }
 }

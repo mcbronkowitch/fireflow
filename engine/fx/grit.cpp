@@ -73,15 +73,16 @@ void GritReduce::process(float& l, float& r SPKY_PROBE_PART_PARAMS) {
     // Decimator) and stage 2 (the SampleRateReducer).
     //
     // The first Decimator call's return value is discarded, and the second
-    // call overwrites the bitcrush it computed: with _fast it does the state
-    // step only. Same state, same output (tests/test_grit.cpp).
-    if (_fast) _decimator[0].step(l); else _decimator[0].process(l);
+    // call overwrites the bitcrush it computed, so it does the state step
+    // only. Same state, same output as two full daisysp Process() calls
+    // (tests/test_grit.cpp).
+    _decimator[0].step(l);
     const float c0 = _decimator[0].process(l);
     SPKY_PROBE_PART_MARK(17);
     _reducer[0].Process(c0);
     float r0 = _reducer[0].Process(c0);
     SPKY_PROBE_PART_MARK(18);
-    if (_fast) _decimator[1].step(r); else _decimator[1].process(r);
+    _decimator[1].step(r);
     const float c1 = _decimator[1].process(r);
     SPKY_PROBE_PART_MARK(19);
     _reducer[1].Process(c1);
