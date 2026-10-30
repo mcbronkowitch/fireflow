@@ -95,19 +95,18 @@ public:
     void set_principle(int p, int pr) {
         set_form(p, pr);
     }
-    void set_step(int p, bool on, int steps) {
-        _parts[p].set_step(on, steps, _law_guards);
+    void set_step(int p, bool on, int steps) { _parts[p].set_step(on, steps); }
+#ifdef SPKY_TESTING
+    // Tests only: push every set_flow / set_rhythm_pace again, as the code did
+    // before the unchanged-value guards (BbdEngine::set_flow_redundant,
+    // Flux::set_rhythm_pace), to compare the two bit for bit.
+    void set_unguarded_for_test(bool on) {
+        for (auto& p : _parts) {
+            p.set_always_push_flow_for_test(on);
+            p.fx().flux().set_always_update_pace_for_test(on);
+        }
     }
-    // Toggle bit 5 (util/probe_toggles.h, LAW_GUARDS): leave out the work the
-    // control-law pushes repeat with unchanged values -- a BBD deck's
-    // set_flow(true) re-running its _recompute() every block, and FLUX's
-    // set_rhythm_pace() re-deriving the thin pattern from an unchanged pace.
-    // Output and state are identical either way. Set once per block by
-    // process() from the toggle word; off by default.
-    void set_law_guards(bool on) {
-        _law_guards = on;
-        for (auto& p : _parts) p.fx().flux().set_skip_same_pace(on);
-    }
+#endif
     // Routed through Part, not straight into mod(): "what NEW means" is a
     // per-deck question, and Part is the only scope that knows which engine is
     // active (part.cpp). Until FEED there was no engine with an individual to
@@ -720,7 +719,6 @@ private:
     int      _last_scale_idx = -1;
     float _bpm = 120.f;
     float _pace = 1.f;
-    bool  _law_guards = false;   // set_law_guards()
     // The candidate toggles of the remote CPU hunt (util/probe_toggles.h):
     // probe::toggles() latched once at the top of process(), and the word a
     // candidate tests with probe::on(_probe_tog, bit). Without

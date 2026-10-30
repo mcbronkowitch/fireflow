@@ -195,7 +195,9 @@ void BbdEngine::reset() {
 }
 
 void BbdEngine::set_cycle(float seconds) {
-    _recompute_clean = false;   // _recompute() reads _cycle; this does not run it
+    // _recompute() reads _cycle and set_cycle() does not run it; moving the
+    // window without re-deriving _f_clk is exactly what a pending recompute is.
+    _recompute_clean = false;
     _cycle = seconds > 0.f ? seconds : 1.f;
     _refresh_window();
 }
@@ -318,7 +320,8 @@ void BbdEngine::set_attack(float n) {
 }
 
 void BbdEngine::set_decay(float n) {
-    _recompute_clean = false;
+    // No _recompute_clean clear: _apply_freeze() is what _recompute() ends
+    // with, and it reads nothing that changed (see set_flow_redundant()).
     _decay = clampf(n, 0.f, 1.f);
     _apply_freeze();          // it scales the loop gain, so it lands at once
 }
@@ -329,8 +332,8 @@ void BbdEngine::set_resonance(float n) {
     // freeze condition. The same filter the freeze needs, so it costs one
     // biquad that is already there -- _apply_freeze() re-derives the
     // crossfade from this new endpoint immediately.
-    _recompute_clean = false;
-    _res_tilt = (clampf(n, 0.f, 1.f) - 0.5f) * 2.f * kFreezeTilt;
+    // No _recompute_clean clear, as in set_decay().
+    _res_tilt =(clampf(n, 0.f, 1.f) - 0.5f) * 2.f * kFreezeTilt;
     _apply_freeze();
 }
 

@@ -92,6 +92,9 @@ void Flux::set_time_mod(float norm) {
 }
 
 void Flux::update_thin_pattern() {
+#ifdef SPKY_TESTING
+    ++_thin_updates;
+#endif
     const float rep = _delay_time * _sr;
     for (int i = 0; i < 2; ++i) {
         int n = 1;

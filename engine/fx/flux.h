@@ -56,23 +56,33 @@ public:
     // themselves are paced -- so update_thin_pattern needs the factor back to
     // put both sides of its ratio in the same time frame (spec 2026-08-12
     // §3.3). Instrument::_apply_tempo forwards PACE here on every change.
+    //
+    // An unchanged pace is a no-op: update_thin_pattern() is a pure function
+    // of _delay_time, _rhy_gap, _rhythm_pace and _sr, and every setter of
+    // those re-runs it, so _thin_n already matches (Instrument::_apply_tempo
+    // pushes the pace on every tempo push).
     void set_rhythm_pace(float p) {
-        if (_skip_same_pace && p == _rhythm_pace) return;
+        if (p == _rhythm_pace) {
+#ifdef SPKY_TESTING
+            if (!_test_always_update_pace)
+#endif
+                return;
+        }
         _rhythm_pace = p;
         update_thin_pattern();
     }
     void process(float& l, float& r);
 
-    // Toggle bit 5 (LAW_GUARDS): set_rhythm_pace() with the pace it already
-    // holds is a no-op. update_thin_pattern() is a pure function of
-    // _delay_time, _rhy_gap, _rhythm_pace and _sr, and every setter of those
-    // re-runs it, so _thin_n already matches; re-running it changes nothing.
-    void set_skip_same_pace(bool on) { _skip_same_pace = on; }
-
     float delay_target_for_test() const { return _dt_target; }
     float delay_current_for_test() const { return _dt_current; }
     float gate_for_test() const { return _gate; }
     int thin_n_for_test(int i) const { return _thin_n[i]; }
+#ifdef SPKY_TESTING
+    // How often update_thin_pattern() ran, and the switch that undoes the
+    // unchanged-pace guard (tests compare the two bit for bit).
+    int thin_updates_for_test() const { return _thin_updates; }
+    void set_always_update_pace_for_test(bool on) { _test_always_update_pace = on; }
+#endif
     void set_rhythm_gap_for_test(int i, int32_t gap) {
         _rhy_gap[i] = gap;
         update_thin_pattern();
@@ -88,7 +98,10 @@ private:
 
     TapeEcho<kTapeSamples> _echo_l;
     TapeEcho<kTapeSamples> _echo_r;
-    bool _skip_same_pace = false;
+#ifdef SPKY_TESTING
+    int  _thin_updates = 0;
+    bool _test_always_update_pace = false;
+#endif
     SoftSwitch _sw;
     float _mix_lin = 0.f;
     bool _buf_ok = false;

@@ -58,10 +58,16 @@ public:
     // set_targets(), which runs _recompute() itself; _freeze moves in
     // process(), which re-pushes everything _recompute() derives from it in
     // the same call (the `_freeze != _freeze_last` push); the remaining
-    // inputs are written by init(), init_buffers(), reset(), set_cycle(),
-    // set_width(), set_decay() and set_resonance(), and each of those clears
-    // _recompute_clean. So with the flag set, a second _recompute() writes
-    // the values already there. Used by Part::set_step (toggle bit 5).
+    // inputs are written by init(), init_buffers(), reset() and set_cycle(),
+    // which clear _recompute_clean, and by set_width(), set_decay() and
+    // set_resonance(), which do not: each of those runs the very helper
+    // (_apply_width / _apply_freeze) that _recompute() ends with, on inputs
+    // _recompute() would read unchanged, so it leaves exactly the state a
+    // recompute would. set_cycle() is different and needs its clear: it moves
+    // _win (window(T) derives f_lo/f_hi from the cycle) but keeps _f_clk, and
+    // only _recompute() re-derives _f_clk from the new window. So with the
+    // flag set, a second _recompute() writes the values already there.
+    // Used by Part::set_step; tests/test_cpu_hunt_equiv.cpp holds each claim.
     bool set_flow_redundant(bool flow) const override {
         return flow && _flow && _recompute_clean;
     }
@@ -87,10 +93,9 @@ public:
     // the clock at PITCH 0.5). _apply_width() only reads the already-settled
     // _f_clk/_win, so it cannot reach _pitch or _latched at all -- the same
     // reasoning _refresh_window() already rests on for the same reason.
-    void set_width(float n) override {
-        _recompute_clean = false;
-        _width = clampf(n, 0.f, 1.f); _apply_width();
-    }
+    // No _recompute_clean clear: _apply_width() is what _recompute() runs on
+    // the same _win / _f_clk (see set_flow_redundant()).
+    void set_width(float n) override { _width = clampf(n, 0.f, 1.f); _apply_width(); }
     // Observers: the two lines' actual clock and stage count, as split by
     // COLOR. clock_hz()/stages() above stay the un-spread CENTRE -- the value
     // COLOR spreads away from -- so existing callers of those two are

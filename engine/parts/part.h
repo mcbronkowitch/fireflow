@@ -152,9 +152,13 @@ public:
     EngineId engine_id() const { return _engine_id; }
 
     // STEP/FLOW reaches both the lanes and the engine (drone rule)
-    // skip_redundant_flow (toggle bit 5): leave out the engine's set_flow when
-    // the engine says it would change nothing (IPartEngine::set_flow_redundant).
-    void set_step(bool on, int steps, bool skip_redundant_flow = false);
+    // The engine's set_flow is left out when the engine says it would change
+    // nothing (IPartEngine::set_flow_redundant: BbdEngine, whose set_flow
+    // re-runs a pow/exp-heavy _recompute()); the host pushes it every block.
+    void set_step(bool on, int steps);
+#ifdef SPKY_TESTING
+    void set_always_push_flow_for_test(bool on) { _test_always_push_flow = on; }
+#endif
     bool flow() const { return !_step_on; }   // CHOKE: a FLOW drone is always "on"
 
     // Liefert true GENAU EINMAL nach einer FLOW->STEP-Flanke und loescht das
@@ -562,6 +566,9 @@ private:
     // false -- ein mit STEP an geladenes Patch erzeugte sonst beim ersten
     // Push eine Flanke und schnappte, ohne dass jemand etwas geschaltet haette.
     bool           _step_seen = false;
+#ifdef SPKY_TESTING
+    bool           _test_always_push_flow = false;
+#endif
     bool           _step_snap = false;
     bool           _inhibit = false;
     // NEW's bookkeeping. _seed_base is what init() was handed; _new_ctr counts

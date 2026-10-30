@@ -226,15 +226,18 @@ void Part::set_engine(EngineId e) {
     _engine_fade.set_on(false);   // fade out; process() swaps at the idle point
 }
 
-void Part::set_step(bool on, int steps, bool skip_redundant_flow) {
+void Part::set_step(bool on, int steps) {
     // Die steigende Flanke ist die Geste, nicht der Zustand: der Host pusht
     // hier jeden Control-Tick denselben Wert.
     if (_step_seen && on && !_step_on) _step_snap = true;
     _step_seen = true;
     _step_on = on;
     _mod.set_step(on, steps);
-    if (!(skip_redundant_flow && _engine->set_flow_redundant(!on)))
-        _engine->set_flow(!on);
+    bool skip = _engine->set_flow_redundant(!on);
+#ifdef SPKY_TESTING
+    if (_test_always_push_flow) skip = false;
+#endif
+    if (!skip) _engine->set_flow(!on);
 }
 
 void Part::trigger_manual() {
