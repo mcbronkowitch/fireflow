@@ -349,6 +349,9 @@ int main(void)
     // bank yet, and nothing reads it while the copy runs.
     shell::wt_bank_to_d2();
     inst.init(shell::kSampleRate, shell::fx_mem());
+#if defined(SPKY_PROBE_TOGGLES)
+    inst.set_probe_flux_lines(shell::probe_flux_lines());   // toggle bit 3
+#endif
 
 #if SHELL_XTALK_PROBE
     // The board under test is the coupon, and the question is whether the

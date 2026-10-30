@@ -41,6 +41,15 @@ class Instrument {
 public:
     void init(float sample_rate);                    // engine only, no FX chain
     void init(float sample_rate, const FxMem& mem);  // full FX chain
+#if defined(SPKY_PROBE_TOGGLES)
+    // Probe only (util/probe_toggles.h bit 3, measurement image): four short
+    // delay lines for the FLUX tape echoes -- {A.L, A.R, B.L, B.R} -- in
+    // whatever memory the host picks. Once, after init().
+    void set_probe_flux_lines(float* const lines[4]) {
+        for (int p = 0; p < PART_COUNT; ++p)
+            _parts[p].fx().flux().set_probe_lines(lines[2 * p], lines[2 * p + 1]);
+    }
+#endif
     void set_tempo_bpm(float bpm);
     // PACE (spec 2026-08-12 modulation-pace). Guards ONLY non-finite input --
     // NOT positivity, unlike set_tempo_bpm's guard on `bpm`. norm == 0.f is

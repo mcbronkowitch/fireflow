@@ -1,4 +1,5 @@
 #include "sdram_mem.h"
+#include <cstring>   // memset (the DTCM probe lines)
 #include "hw/board.h"   // zieht daisy_core.h und damit DSY_SDRAM_BSS herein
 
 namespace shell {
@@ -59,6 +60,26 @@ spky::FxMem g_mem;
 bool        g_mem_ready = false;
 
 } // namespace
+
+#if defined(SPKY_PROBE_TOGGLES)
+float* const* probe_flux_lines()
+{
+    // .dtcmram_bss (NOLOAD, alt_sram.lds): 64 KB of the 128 KB, the stack
+    // keeps the top (_estack) as it did with the SHELL_WT_DTCM test. Zeroed
+    // here, once, because NOLOAD memory is not.
+    static float __attribute__((section(".dtcmram_bss"))) lines[4][4096];
+    static float* ptrs[4];
+    static bool ready = false;
+    if (!ready) {
+        for (int i = 0; i < 4; ++i) {
+            std::memset(lines[i], 0, sizeof lines[i]);
+            ptrs[i] = lines[i];
+        }
+        ready = true;
+    }
+    return ptrs;
+}
+#endif
 
 const spky::FxMem& fx_mem()
 {

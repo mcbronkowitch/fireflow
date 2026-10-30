@@ -48,4 +48,12 @@ constexpr size_t kSamplerFrames =
 // nicht dort liegt, steht in sdram_mem.cpp.
 const spky::FxMem& fx_mem();
 
+#if defined(SPKY_PROBE_TOGGLES)
+// Measurement image only (toggle bit 3, FLUX_PROBE_DTCM_LINE): four short
+// zeroed lines of 4096 floats in DTCM -- {A.L, A.R, B.L, B.R}, 64 KB -- for
+// Instrument::set_probe_flux_lines(), to tell the tape echoes' memory latency
+// from their compute.
+float* const* probe_flux_lines();
+#endif
+
 } // namespace shell

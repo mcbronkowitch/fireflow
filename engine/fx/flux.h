@@ -63,10 +63,16 @@ public:
     // Probe only (util/probe_toggles.h bits 1 and 2, measurement image):
     // skip the two echo lines altogether / keep them but skip their band-pass
     // and tanh. Handed down once per block by Instrument::process.
-    void set_probe(bool no_echo, bool no_filter) {
+    // Bit 3 (dtcm) runs both lines on the short host-provided lines handed
+    // over once by set_probe_lines().
+    void set_probe(bool no_echo, bool no_filter, bool dtcm) {
         _probe_no_echo = no_echo;
-        _echo_l.set_probe_no_filter(no_filter);
-        _echo_r.set_probe_no_filter(no_filter);
+        _echo_l.set_probe(no_filter, dtcm);
+        _echo_r.set_probe(no_filter, dtcm);
+    }
+    void set_probe_lines(float* left, float* right) {
+        _echo_l.set_probe_line(left);
+        _echo_r.set_probe_line(right);
     }
 #endif
 

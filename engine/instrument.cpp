@@ -256,7 +256,8 @@ void Instrument::process(const float* inL, const float* inR,
     // The FLUX probe bits, handed down once per block, before the loop.
     for (auto& p : _parts)
         p.fx().flux().set_probe(probe::on(_probe_tog, probe::kBitFluxProbeNoEcho),
-                                probe::on(_probe_tog, probe::kBitFluxProbeNoFilter));
+                                probe::on(_probe_tog, probe::kBitFluxProbeNoFilter),
+                                probe::on(_probe_tog, probe::kBitFluxProbeDtcmLine));
 #endif
     SPKY_PROBE_DECL;
     for (size_t i = 0; i < n; ++i) {
