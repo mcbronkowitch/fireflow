@@ -25,6 +25,18 @@ struct Noise {
 };
 uint32_t bits_of(float f) { uint32_t u; std::memcpy(&u, &f, 4); return u; }
 
+// fast_sin as it was before V3 (util/fast_sin.h): the floor wrap inline, then
+// the polynomial. Kept here so the references below do not share a body with
+// the code under test.
+float fast_sin_ref(float phase) {
+    float p = phase - std::floor(phase);
+    float q = p < 0.5f ? p : p - 1.f;
+    float aq = q < 0.f ? -q : q;
+    float y = 8.f * q * (1.f - 2.f * aq);
+    float ay = y < 0.f ? -y : y;
+    return 0.225f * (y * ay - y) + y;
+}
+
 // ---- V1: MorphOsc's per-sample invariants --------------------------------
 
 // MorphOsc as it was before V1: dt, the segment and its weight recomputed on
@@ -58,7 +70,7 @@ struct MorphOscRef {
         const float t = _phase;
         const float dt = _inc > 1e-6f ? _inc : 1e-6f;
         const float seg = _morph * 3.f;
-        if (seg <= 1.f) return lerpf(fast_sin(t), _tri(t), seg);
+        if (seg <= 1.f) return lerpf(fast_sin_ref(t), _tri(t), seg);
         if (seg <= 2.f) return lerpf(_tri(t), _saw(t, dt), seg - 1.f);
         return lerpf(_saw(t, dt), _pulse(t, dt), seg - 2.f);
     }
@@ -160,6 +172,65 @@ TEST_CASE("V1: MorphOsc morph and frequency moving together stay bit-identical")
             }
         }
         if (bits_of(osc.process()) != bits_of(ref.process())) ++bad;
+    }
+    CHECK(bad == 0);
+}
+
+// ---- V3: sin without the redundant wrap ----------------------------------
+
+namespace {
+
+float float_of(uint32_t u) { float f; std::memcpy(&f, &u, 4); return f; }
+
+} // namespace
+
+TEST_CASE("V3: fast_sin_wrapped equals fast_sin on [0,1)") {
+    // The sweep: every float of the 2^16 ulps just below 2^-10, the first and
+    // last 4096 floats of every binade below 2^-10, +0 and the smallest
+    // denormal; then 2^16 evenly spaced values from 2^-10 up, and the float
+    // just below 1 (all of [0, 1) at 1 ulp would be ~1e9 floats).
+    int bad = 0;
+    long n = 0;
+    auto check = [&](float p) {
+        const float want = fast_sin_ref(p);
+        if (bits_of(fast_sin_wrapped(p)) != bits_of(want)) ++bad;
+        if (bits_of(fast_sin(p)) != bits_of(want)) ++bad;
+        ++n;
+    };
+    const uint32_t k2m10 = 117u << 23;                        // 2^-10
+    for (uint32_t u = k2m10 - 65536u; u < k2m10; ++u) check(float_of(u));
+    for (uint32_t e = 1; e < 117u; ++e) {                     // binades 2^-126 .. 2^-11
+        const uint32_t lo = e << 23, hi = (e + 1u) << 23;
+        for (uint32_t i = 0; i < 4096u; ++i) { check(float_of(lo + i)); check(float_of(hi - 1u - i)); }
+    }
+    check(0.f);
+    check(float_of(1u));                                      // smallest denormal
+    for (uint32_t i = 0; i < 65536u; ++i) {
+        const float p = 0.0009765625f + (1.f - 0.0009765625f) * ((float)i * (1.f / 65536.f));
+        check(p < 1.f ? p : float_of(0x3F7FFFFFu));
+    }
+    check(float_of(0x3F7FFFFFu));
+    CHECK(n > 900000);
+    CHECK(bad == 0);
+}
+
+TEST_CASE("V3: the sub oscillator's wrapped phase gives the same bits") {
+    // VoiceT::process' sub loop as it was: phase += inc, wrap once with >=,
+    // fast_sin (which wraps again). The new loop hands the wrapped phase to
+    // fast_sin_wrapped. inc is 0.5 * pitch / sr, as set_pitch_hz computes it
+    // (about 5 Hz to 9 kHz).
+    const float freqs[] = { 10.f, 55.f, 220.f, 1760.f, 8000.f, 18000.f, 0.03f };
+    int bad = 0;
+    for (float f : freqs) {
+        const float inc = 0.5f * f / 48000.f;
+        float ph_new = 0.f, ph_old = 0.f;
+        for (int i = 0; i < 48000; ++i) {
+            ph_old += inc;
+            if (ph_old >= 1.f) ph_old -= 1.f;
+            ph_new += inc;
+            if (ph_new >= 1.f) ph_new -= 1.f;
+            if (bits_of(fast_sin_ref(ph_old)) != bits_of(fast_sin_wrapped(ph_new))) ++bad;
+        }
     }
     CHECK(bad == 0);
 }

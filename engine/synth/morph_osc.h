@@ -72,6 +72,14 @@ public:
 
     void reset_phase(float ph = 0.f) { _phase = clampf(ph, 0.f, 0.999999f); }
 
+#if defined(SPKY_PROBE_TOGGLES)
+    // Measurement image only (util/probe_toggles.h bit 18, SIN_WRAPPED): set
+    // by VoiceT::set_probe_word on the control tick. Off keeps fast_sin's own
+    // wrap on the sine segment, for the board's A/B.
+    void set_probe_sin_wrapped(bool on) { _probe_sinw = on; }
+    bool probe_sin_wrapped() const { return _probe_sinw; }
+#endif
+
     // always_inline, as WtOsc::process (synth/wt_osc.h): with V1's two paths
     // in the measurement image, arm-none-eabi-g++ -O3 stopped inlining this
     // into VoiceT<MorphOsc>::process and `bl`-called a 1500-byte copy in
@@ -83,7 +91,15 @@ public:
         _phase += _inc;
         if (_phase >= 1.f) _phase -= 1.f;
         const float t = _phase;
-        if (_seg_idx == 0) return lerpf(fast_sin(t), _tri(t), _seg_t);
+        if (_seg_idx == 0) {
+            // t is in [0, 1) here (one wrap above), so fast_sin's floor wrap is
+            // the identity: fast_sin_wrapped returns the same bits (CPU round 2, V3).
+#if defined(SPKY_PROBE_TOGGLES)
+            return lerpf(_probe_sinw ? fast_sin_wrapped(t) : fast_sin(t), _tri(t), _seg_t);
+#else
+            return lerpf(fast_sin_wrapped(t), _tri(t), _seg_t);
+#endif
+        }
         if (_seg_idx == 1) return lerpf(_tri(t), _saw(t, _dt), _seg_t);
         return lerpf(_saw(t, _dt), _pulse(t, _dt), _seg_t);
     }
@@ -133,6 +149,9 @@ private:
     float _dt = 1e-6f;           // _inc floored (_set_dt)
     float _seg_t = 0.f;          // the segment's lerp weight (set_morph)
     int   _seg_idx = 0;          // 0, 1 or 2 (set_morph)
+#if defined(SPKY_PROBE_TOGGLES)
+    bool  _probe_sinw = false;   // bit 18 (set_probe_sin_wrapped)
+#endif
 };
 
 } // namespace spky
