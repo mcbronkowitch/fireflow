@@ -371,18 +371,6 @@ only the Rev A play image reads the panel keys)
 endif
 endif
 
-# libDaisy's MPU (lib/libDaisy/src/sys/system.cpp, ConfigureMpu) maps SDRAM
-# write-back without write-allocate: a store to a line that is not in the
-# D-cache goes straight to the SDRAM. 1 has main() reconfigure that one region
-# to write-back WITH read and write allocate right after the board init, before
-# any audio (main.cpp, sdram_write_allocate). A build switch for the CPU hunt;
-# 0 is today's image.
-SHELL_SDRAM_WA ?= 0
-
-ifneq ($(filter $(SHELL_SDRAM_WA),0 1),$(SHELL_SDRAM_WA))
-$(error SHELL_SDRAM_WA must be 0 or 1)
-endif
-
 # Fault R3 (docs/hardware/reva-bring-up.md 5.3, 5.5, 5.7): 1 adds the raw-count
 # readout to the Rev A play image -- per mux channel the min and max of the raw
 # 16-bit word over a 20-sweep (one-second) window, printed as SHELL_PLAY_R
@@ -663,7 +651,6 @@ SWITCH_HEADERS := \
   $(shell python write_shell_itcm.py $(BUILD_DIR)/shell_itcm.h $(SHELL_ITCM) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_remote.py $(BUILD_DIR)/shell_remote.h $(SHELL_REMOTE) $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o) \
   $(shell python write_shell_remote_measure.py $(BUILD_DIR)/shell_remote_measure.h $(SHELL_REMOTE_MEASURE) $(BUILD_DIR)) \
-  $(shell python write_shell_sdram_wa.py $(BUILD_DIR)/shell_sdram_wa.h $(SHELL_SDRAM_WA) $(BUILD_DIR)/main.o) \
   $(shell python write_shell_link_stamp.py $(BUILD_DIR)/shell_link_stamp.h $(BUILD_DIR)/itcm_load.o) \
   $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/pot_report.o $(BUILD_DIR)/scan_check.o $(BUILD_DIR)/remote_listen.o)
 
@@ -685,7 +672,6 @@ $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o: $(BUI
 # The objects that read the header; the writer deletes every object on a flip
 # anyway (the probe defines reach the engine), so this edge is the ordering.
 $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_remote_measure.h
-$(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_sdram_wa.h
 $(BUILD_DIR)/scan_check.o: $(BUILD_DIR)/shell_scan_check.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_keys_nc.h $(BUILD_DIR)/shell_raw_spread.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h
 $(BUILD_DIR)/control_tick.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h

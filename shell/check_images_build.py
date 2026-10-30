@@ -53,10 +53,6 @@ IMAGES = [
     # LATE and the candidate toggles, with the probe stamps on.
     ("reva_remote_measure", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
                              "SHELL_REMOTE_MEASURE=1"]),
-    # The SDRAM write-allocate build switch (CPU hunt): the same measurement
-    # image with libDaisy's SDRAM region redone as write-back + write-allocate.
-    ("reva_remote_measure_sdram_wa", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
-                                      "SHELL_REMOTE_MEASURE=1", "SHELL_SDRAM_WA=1"]),
 ]
 
 # The save path, as linked symbols (nm -C): persist_write() and the QSPI

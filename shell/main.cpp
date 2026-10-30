@@ -19,7 +19,6 @@
 #include "shell_panel_scan.h"
 #include "shell_remote.h"
 #include "shell_remote_measure.h"
-#include "shell_sdram_wa.h"
 #include "hw/board.h"
 #include "sdram_mem.h"
 #include "itcm_load.h"
@@ -29,40 +28,6 @@ static bench::Board    hw;
 static spky::Instrument inst;
 
 namespace shell { void wt_bank_to_d2(); }   // wt_bank_d2.cpp
-
-#if SHELL_SDRAM_WA
-// SHELL_SDRAM_WA=1: libDaisy's ConfigureMpu() maps SDRAM (region 1, 64 MB at
-// 0xC0000000) cacheable + bufferable with TEX 0 = write-back, NO
-// write-allocate, so a store to an uncached line bypasses the D-cache. This
-// redoes region 1 with TEX 1 (C=1, B=1: write-back, read AND write allocate)
-// and every other field as libDaisy set it: enabled, 64 MB, full access, not
-// shareable, no sub-region disable, execute allowed. Regions 0 and 2 are left
-// alone (HAL_MPU_ConfigRegion writes one region). Runs once, after the board
-// init (the FMC is up) and before the first SDRAM write and any audio. The
-// only objects in SDRAM are sdram_mem.cpp's arrays, which no DMA touches (the
-// library's DMA buffers are .sram1_bss in D2).
-static void sdram_write_allocate()
-{
-    MPU_Region_InitTypeDef r;
-    r.Enable           = MPU_REGION_ENABLE;
-    r.Number           = MPU_REGION_NUMBER1;
-    r.BaseAddress      = 0xC0000000;
-    r.Size             = MPU_REGION_SIZE_64MB;
-    r.SubRegionDisable = 0x00;
-    r.TypeExtField     = MPU_TEX_LEVEL1;
-    r.AccessPermission = MPU_REGION_FULL_ACCESS;
-    r.DisableExec      = MPU_INSTRUCTION_ACCESS_ENABLE;
-    r.IsShareable      = MPU_ACCESS_NOT_SHAREABLE;
-    r.IsCacheable      = MPU_ACCESS_CACHEABLE;
-    r.IsBufferable     = MPU_ACCESS_BUFFERABLE;
-    SCB_CleanInvalidateDCache();
-    HAL_MPU_Disable();   // the HAL brackets this with DMB / DSB / ISB itself
-    HAL_MPU_ConfigRegion(&r);
-    HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
-    __DSB();
-    __ISB();
-}
-#endif
 
 #if SHELL_MUX_PROBE
 #include "mux_scan.h"
@@ -345,9 +310,6 @@ int main(void)
     // beiden je eine eigene Init-Sequenz, waere jeder Vergleich zwischen
     // ihren Zahlen wertlos.
     bench::board_init(hw);
-#if SHELL_SDRAM_WA
-    sdram_write_allocate();
-#endif
 
     // The per-sample audio path into ITCM (itcm_load.h; a no-op at
     // SHELL_ITCM=0). FIRST after board_init(): the QSPI it copies from is
