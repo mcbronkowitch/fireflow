@@ -61,7 +61,7 @@ public:
         if (_filled < kMask) ++_filled;
     }
 
-    // ---- Two lines in lock step (FLUX's L and R; toggle bit 4) ----
+    // ---- Two lines in lock step (FLUX's L and R; the only path since toggle bit 4 was retired) ----
     // Both lines are Init-ed, Reset, SetDelay-ed and Write-n together and
     // nowhere else, so their _write, _filled, _delay and _frac are always
     // equal; only the memory differs. These do the shared part (SetDelay's

@@ -297,6 +297,28 @@ add_test(NAME reverb_half_variants
                  -DDUMP_A=$<TARGET_FILE:reverb_dump_dispatch>
                  -DDUMP_B=$<TARGET_FILE:reverb_dump_only>
                  -DOUT_DIR=${CMAKE_BINARY_DIR}/reverb_half_variants
+                 "-DWHAT=the SHELL_REVERB_HALF=1 variant (SPKY_REVERB_HALF_ONLY) renders differently from the tested dispatch variant"
+                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/compare_reverb_dumps.cmake)
+
+# The other direction: VCV, the render host and every firmware image with
+# SHELL_REVERB_HALF=0 build the reverb with none of the three defines
+# (OLIVERB_HALF_PATH 0, the full-rate code alone); the doctests run the
+# dispatch variant (SPKY_TESTING) with the half-rate switch off. This renders
+# the same room in the plain build and in the dispatch build at full rate and
+# requires bit-identical output, so an edit inside `#if !OLIVERB_HALF_PATH`
+# (or a dispatch change that alters the full-rate tank) goes red here and not
+# only in a render hash.
+add_executable(reverb_dump_plain tests/reverb_dump.cpp engine/fx/reverb.cpp)
+target_link_libraries(reverb_dump_plain PRIVATE spky_engine daisysp_min)
+add_executable(reverb_dump_dispatch_full tests/reverb_dump.cpp engine/fx/reverb.cpp)
+target_compile_definitions(reverb_dump_dispatch_full PRIVATE SPKY_TESTING=1)
+target_link_libraries(reverb_dump_dispatch_full PRIVATE spky_engine daisysp_min)
+add_test(NAME reverb_full_rate_variants
+         COMMAND ${CMAKE_COMMAND}
+                 -DDUMP_A=$<TARGET_FILE:reverb_dump_dispatch_full>
+                 -DDUMP_B=$<TARGET_FILE:reverb_dump_plain>
+                 -DOUT_DIR=${CMAKE_BINARY_DIR}/reverb_full_rate_variants
+                 "-DWHAT=the plain build (VCV, render, SHELL_REVERB_HALF=0) renders differently from the tested dispatch variant at full rate"
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/compare_reverb_dumps.cmake)
 
 # --- render host CLI ---
@@ -472,6 +494,14 @@ add_test(
         -DREFERENCE=WAVE
         -P ${CMAKE_SOURCE_DIR}/tests/check_render_hash.cmake
 )
+
+# The halfband coefficients in engine/fx/halfband.h against their generator
+# (tools/gen_halfband.py): bit for bit in float32, and the check goes red on a
+# changed constant.
+add_test(NAME halfband_generator
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_gen_halfband.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tools)
 
 add_test(
     NAME wavetable_bank_fresh

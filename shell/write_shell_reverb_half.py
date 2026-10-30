@@ -31,8 +31,8 @@ import sys
 from pathlib import Path
 
 MARKER = "@REVERB_TANK@"
-IMPL1 = "    *(.text._ZN6clouds7Oliverb11ProcessImplILi1EEEvPfS2_)              /* 2798 */\n"
-IMPL2 = "    *(.text._ZN6clouds7Oliverb11ProcessImplILi2EEEvPfS2_)              /* 2850 */\n"
+IMPL1 = "    *(.text._ZN6clouds7Oliverb11ProcessImplILi1EEEvPfS2_)              /* 2800 */\n"
+IMPL2 = "    *(.text._ZN6clouds7Oliverb11ProcessImplILi2EEEvPfS2_)              /* 2864 */\n"
 
 
 def run() -> int:

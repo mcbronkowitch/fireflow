@@ -42,7 +42,11 @@
 //  - SPKY_REVERB_HALF_ONLY (shell build switch SHELL_REVERB_HALF=1): only the
 //    half-rate tank is compiled and it always runs.
 // Everywhere else (desktop hosts, VCV, every other firmware image) the reverb
-// is the full-rate code and nothing else.
+// is the full-rate code and nothing else. The doctests are built with
+// SPKY_TESTING, i.e. the dispatch shape, so the `#if !OLIVERB_HALF_PATH` code
+// is exercised by ctest `reverb_full_rate_variants` (a plain build and the
+// dispatch build at full rate must render bit-identically), by the render
+// hash gates, and not by the doctests themselves.
 #if defined(SPKY_REVERB_HALF_ONLY)
 #define OLIVERB_HALF_PATH 1
 #define OLIVERB_HALF_ONLY 1

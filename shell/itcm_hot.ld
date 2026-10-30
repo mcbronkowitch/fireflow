@@ -42,7 +42,7 @@ SECTIONS
 
     /* Tier 1: every sample. */
     *(.text._ZN4spky10Instrument7processEPKfS2_PfS3_j)                /* 7560 */
-    /* @REVERB_TANK@ -- the reverb tank's instance(s), written by write_shell_reverb_half.py into build/itcm_hot.ld, which is what the link and itcm_placement.py read: ProcessImpl<1> (2798 B) in the plain images, <1> and <2> (2850 B) in the measurement image (toggle bit 9), only <2> under SHELL_REVERB_HALF=1. */
+    /* @REVERB_TANK@ -- the reverb tank's instance(s), written by write_shell_reverb_half.py into build/itcm_hot.ld, which is what the link and itcm_placement.py read: SHELL_REVERB_HALF=1 (the default, every image) holds only ProcessImpl<2>, the half-rate tank (2864 B); SHELL_REVERB_HALF=0 holds only ProcessImpl<1> (2800 B), and in the measurement image <1> and <2> both (toggle bit 9 picks). Sizes from the 2026-10-30 listener images. */
     *(.text._ZN4spky6VoiceTINS_8MorphOscEE7processERfS3_)              /* 2008 */
     *(.text._ZN4spky9BbdEngine7processERfS1_)                          /* 1980 */
     *(.text._ZN4spky10FeedEngine7processERfS1_)                        /* 1792 */
@@ -54,7 +54,7 @@ SECTIONS
     *(.text._ZN4spky6PartFx7processERfS1_S1_S1_)                       /* 1142 */
     *(.text._ZN4spky13SamplerEngine7processERfS1_)                     /* 1100 */
     *(.text._ZN4spky7ModLane7processEv)                                /* 1056 */
-    *(.text._ZN4spky13AmbientReverb7processEffRfS1_)                   /*  920; 2732 in the measurement image (half-rate path, converters inlined) */
+    *(.text._ZN4spky13AmbientReverb7processEffRfS1_)                   /* 2592 with SHELL_REVERB_HALF=1 (the default: half-rate path, converters inlined); 920 with SHELL_REVERB_HALF=0 */
     *(.text._ZN4spky8KsString7processEf)                               /*  848 */
     *(.text._ZN4spky4Grit7processERfS1_)                               /*  624 */
     *(.text._ZN4spky14SuperModulator7processEv)                        /*  604 */

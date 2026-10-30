@@ -96,7 +96,9 @@ private:
 
     clouds::Oliverb _verb;
 #if OLIVERB_HALF_PATH
-    // Half-rate path (set_half_rate): the converters, the second output of the
+    // Half-rate path (switch_rate; set_half_rate in a dispatch build, init()
+    // in the always-half firmware build, where set_half_rate does not exist):
+    // the converters, the second output of the
     // last upsampled pair, and which half of the input pair comes next.
     bool _half = false;
     bool _second = false;

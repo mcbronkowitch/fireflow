@@ -177,7 +177,7 @@ TEST_CASE("GRIT Reduce: per-channel state keeps the inherited crush rate") {
     CHECK(events < 3201 * 1.1);
 }
 
-// ---- GRIT_DECIM_STEP (probe toggle bit 0): the discarded Decimator step ----
+// ---- the discarded Decimator step (was probe toggle bit 0, retired: the only path now) ----
 
 namespace {
 // xorshift32, mixed before use (small seeds start biased).

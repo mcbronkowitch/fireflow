@@ -1,12 +1,16 @@
 // Renders 6 s of the reverb (a 0.5 s noise burst into a room at decay 0.7,
 // size 0.6, TONE 0.5, then the tail) and writes the wet left / right samples as
-// raw floats to the file named on the command line. Built twice by CMake:
+// raw floats to the file named on the command line. Built four ways by CMake:
 //  - reverb_dump_dispatch: SPKY_TESTING, set_half_rate(true) after init() --
 //    the variant the desktop tests (test_cpu_hunt_equiv.cpp) exercise;
 //  - reverb_dump_only: SPKY_REVERB_HALF_ONLY, the variant SHELL_REVERB_HALF=1
 //    compiles into the firmware (no setter, init() puts the room in the
 //    half-rate tank).
-// The ctest `reverb_half_variants` runs both and requires the two files to be
+//  - reverb_dump_dispatch_full / reverb_dump_plain (no REVERB_DUMP_SET_HALF): the
+//    dispatch variant left at full rate, and the plain build with none of the
+//    defines that VCV, the render host and SHELL_REVERB_HALF=0 compile.
+// The ctest `reverb_half_variants` runs the first two and `reverb_full_rate_variants`
+// the last two, each requiring the two files to be
 // identical, so what the tests check is the code that ships.
 #include <cstdint>
 #include <cstdio>

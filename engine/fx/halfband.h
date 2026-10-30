@@ -1,11 +1,13 @@
 #pragma once
 
-// Halfband sample-rate converters for the half-rate reverb (toggle bit 9,
-// class 2): 48 kHz -> 24 kHz in front of the tank, 24 kHz -> 48 kHz behind it.
+// Halfband sample-rate converters for the half-rate reverb (class 2; the
+// firmware default SHELL_REVERB_HALF=1, compiled only into shell images):
+// 48 kHz -> 24 kHz in front of the tank, 24 kHz -> 48 kHz behind it.
 //
 // One linear-phase halfband lowpass, 47 taps, Kaiser window (beta 6), gain 1 at
-// DC. Designed offline (scratchpad hb_design.py; the numbers are in
-// .superpowers/sdd/2026-10-29-cpu-hunt-remote/task-10-class2-report.md):
+// DC. The coefficients below are regenerated, bit for bit in float32, by
+// tools/gen_halfband.py (`--check` compares this file; tools/test_gen_halfband.py
+// holds it in ctest; `--report` prints the figures):
 //   passband 0..10 kHz   ripple +0.007 / -0.006 dB
 //   12 kHz               -6.02 dB (every halfband is -6 dB at fs/4)
 //   stopband 14..24 kHz  <= -62 dB
