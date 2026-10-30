@@ -34,9 +34,10 @@
 //                                                        no filter, DTCM line);
 //                                                        docs/hardware/cpu-hunt-
 //                                                        measured.md §5
-//   4    FLUX_STEREO_LINE     engine/fx/tape_echo.h      the two tape echoes share
-//                                                        one line-bookkeeping
-//                                                        pass (same output)
+//   4    FLUX_STEREO_LINE     engine/fx/tape_echo.h      RETIRED: adopted, the
+//                                                        only path now (the two
+//                                                        tape echoes share one
+//                                                        line-bookkeeping pass)
 //   5    LAW_GUARDS           engine/parts/part.cpp,     unchanged-value guards:
 //                             engine/fx/flux.h           a BBD deck's set_flow
 //                                                        and FLUX's rhythm pace
@@ -56,7 +57,6 @@ namespace spky {
 namespace probe {
 
 // The candidates' bits (above).
-inline constexpr int kBitFluxStereoLine = 4;
 inline constexpr int kBitLawGuards      = 5;
 
 // The shell's two bits (above).

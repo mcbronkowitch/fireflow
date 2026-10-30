@@ -1,6 +1,5 @@
-// The CPU hunt's class-1 candidates that carry a runtime flag (toggle bits 4 and
-// 5, engine/util/probe_toggles.h): each is rendered on and off, bit for bit.
-// Toggles compile away on the desktop, so the tests flip the flags directly.
+// The CPU hunt's adopted class-1 candidates 4 and 5 (engine/util/probe_toggles.h):
+// each is compared bit for bit with the path it replaced.
 #include <doctest/doctest.h>
 #include <cmath>
 #include <cstdint>
@@ -10,6 +9,8 @@
 #include "parts/part.h"
 #include "parts/bbd_engine.h"
 #include "fx/flux.h"
+#include "fx/tape_echo.h"
+#include "util/fast_tanh.h"
 
 using namespace spky;
 
@@ -25,42 +26,77 @@ struct Noise {
 };
 uint32_t bits_of(float f) { uint32_t u; std::memcpy(&u, &f, 4); return u; }
 
-// ---- bit 4: FLUX_STEREO_LINE -------------------------------------------
+// ---- candidate 4: the tape echoes share their line bookkeeping -----------
 
 struct TapeMem {
     std::vector<float> l, r;
     TapeMem() : l(Flux::kMaxSamples), r(Flux::kMaxSamples) {}
 };
 
-// mode 0: stereo line off, 1: on, 2: flipped every 977 samples.
-std::vector<float> render_flux(int mode) {
-    TapeMem mem;
-    Flux f;
-    f.init(48000.f, mem.l.data(), mem.r.data());
-    f.set_bpm(120.f);
-    f.set_rate(3);
-    f.set_mix(1.f);
-    f.set_feedback(0.9f);           // high feedback: the loop carries the state
-    f.set_time_mod(0.5f);
-    f.set_on(true, true);
-    Noise n;
-    std::vector<float> out;
-    const int total = 60000;
-    for (int i = 0; i < total; ++i) {
-        if (mode == 1) f.set_stereo_line(true);
-        if (mode == 2) f.set_stereo_line(((i / 977) & 1) != 0);
-        if (i == 6000)  f.set_time_mod(0.15f);   // the smoothed delay time moves
-        if (i == 14000) f.set_time_mod(0.9f);
-        if (i == 24000) f.set_rate(5);
-        if (i == 33000) f.set_on(false);         // fall, then the idle flush
-        if (i == 41000) f.set_on(true);          // a fresh take on flushed lines
-        if (i == 50000) f.set_time_mod(0.4f);
-        float l = n.next() * 0.5f, r = n.next() * 0.5f;
-        f.process(l, r);
-        out.push_back(l);
-        out.push_back(r);
+// The tape echo as it was before the two channels shared their bookkeeping:
+// one InjectedDelayLine and one band-pass per channel, SetDelay / Read / bpf /
+// tanh / Write per sample. A test-local copy of that arithmetic (the way
+// test_grit.cpp keeps the daisysp Decimator), so the pair is compared with
+// something that cannot drift along with it.
+template <size_t N>
+struct MonoEchoRef {
+    InjectedDelayLine<float, N> line;
+    TapeBpf bpf;
+    float feedback = 0.f;
+    float process(float in, float delay_samples) {
+        line.SetDelay(delay_samples);
+        float out = bpf.Process(line.Read());
+        out = fast_tanh(out);
+        line.Write(out * feedback + in);
+        return out;
     }
-    return out;
+};
+
+// Pair vs two mono references over `total` samples. The line is small enough
+// (kN cells) that the run saturates _filled (past kMask) several times over,
+// the delay sweeps through both of SetDelay's clamps (below 1 sample and above
+// kN - 2, the upper one for a stretch), feedback 1.2 (the loop's maximum),
+// and both lines are Reset mid-run (what flush_lines does). Honest limit: a
+// slip in the saturating count itself (nf < kMask) is not observable here --
+// the delay never exceeds kMask - 1, and at that clamp frac is 0 -- so the
+// run covers the saturated state, not a test for that one comparison.
+int pair_vs_mono(float feedback, int total) {
+    constexpr size_t kN = 4096;
+    static float ma[kN], mb[kN], ra[kN], rb[kN];
+    TapeEcho<kN> ea, eb;
+    ea.Init(48000.f, ma);
+    eb.Init(48000.f, mb);
+    ea.SetFeedback(feedback);
+    eb.SetFeedback(feedback);
+    MonoEchoRef<kN> xa, xb;
+    xa.line.Init(ra);
+    xb.line.Init(rb);
+    xa.bpf.Init(48000.f);
+    xb.bpf.Init(48000.f);
+    xa.feedback = xb.feedback = feedback;
+    Noise n;
+    int mismatches = 0;
+    double acc = 0.0;
+    for (int i = 0; i < total; ++i) {
+        // 0.3 .. 5200 samples: crosses the lower clamp, the whole range, and
+        // sits above kN - 2 = 4094 for a stretch of every sweep.
+        const float ph = 0.5f + 0.5f * std::sin(i * (2.f * 3.14159265f / 16411.f));
+        float d = 0.3f + 5200.f * ph * ph;
+        if (i > total / 2 && i < total / 2 + 3000) d = 9000.f;   // pinned at the clamp
+        if (i == total / 3 || i == (total * 3) / 4) {            // flush_lines
+            ea.Reset(); eb.Reset(); xa.line.Reset(); xb.line.Reset();
+            xa.bpf.Reset(); xb.bpf.Reset();
+        }
+        const float ia = n.next() * 0.5f, ib = n.next() * 0.5f;
+        float oa, ob;
+        TapeEcho<kN>::ProcessPair(ea, eb, ia, ib, d, oa, ob);
+        const float wa = xa.process(ia, d), wb = xb.process(ib, d);
+        if (bits_of(oa) != bits_of(wa)) ++mismatches;
+        if (bits_of(ob) != bits_of(wb)) ++mismatches;
+        acc += (double)oa * oa + (double)ob * ob;
+    }
+    REQUIRE(acc > 1.0);
+    return mismatches;
 }
 
 // ---- bit 5: LAW_GUARDS ---------------------------------------------------
@@ -155,12 +191,11 @@ double energy(const std::vector<float>& v) {
 
 } // namespace
 
-TEST_CASE("FLUX stereo line: on, off and flipped mid-stream render the same bits") {
-    const auto off = render_flux(0), on = render_flux(1), flip = render_flux(2);
-    CHECK(count_diff(off, on) == 0);
-    CHECK(count_diff(off, flip) == 0);
-    // Not silence, and the wet tail really exists after the flush and re-entry.
-    CHECK(energy(off) > 1.0);
+TEST_CASE("tape echo pair: equals two mono echoes bit for bit (saturated, clamped, flushed)") {
+    for (float fb : {0.f, 0.45f, 0.9f, 1.2f}) {
+        INFO("feedback " << fb);
+        CHECK(pair_vs_mono(fb, 80000) == 0);
+    }
 }
 
 TEST_CASE("law guards: a BBD deck's set_flow and FLUX's pace guard change no bit") {
