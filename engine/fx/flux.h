@@ -56,8 +56,23 @@ public:
     // themselves are paced -- so update_thin_pattern needs the factor back to
     // put both sides of its ratio in the same time frame (spec 2026-08-12
     // §3.3). Instrument::_apply_tempo forwards PACE here on every change.
-    void set_rhythm_pace(float p) { _rhythm_pace = p; update_thin_pattern(); }
+    void set_rhythm_pace(float p) {
+        if (_skip_same_pace && p == _rhythm_pace) return;
+        _rhythm_pace = p;
+        update_thin_pattern();
+    }
     void process(float& l, float& r);
+
+    // Toggle bit 4 (util/probe_toggles.h, FLUX_STEREO_LINE): the two tape
+    // echoes share their line bookkeeping (TapeEcho::ProcessPair). Output and
+    // state are identical either way, so it can flip mid-stream. Set once per
+    // block by Instrument::process; off by default.
+    void set_stereo_line(bool on) { _stereo_line = on; }
+    // Toggle bit 5 (LAW_GUARDS): set_rhythm_pace() with the pace it already
+    // holds is a no-op. update_thin_pattern() is a pure function of
+    // _delay_time, _rhy_gap, _rhythm_pace and _sr, and every setter of those
+    // re-runs it, so _thin_n already matches; re-running it changes nothing.
+    void set_skip_same_pace(bool on) { _skip_same_pace = on; }
 
     float delay_target_for_test() const { return _dt_target; }
     float delay_current_for_test() const { return _dt_current; }
@@ -78,6 +93,8 @@ private:
 
     TapeEcho<kTapeSamples> _echo_l;
     TapeEcho<kTapeSamples> _echo_r;
+    bool _stereo_line = false;
+    bool _skip_same_pace = false;
     SoftSwitch _sw;
     float _mix_lin = 0.f;
     bool _buf_ok = false;

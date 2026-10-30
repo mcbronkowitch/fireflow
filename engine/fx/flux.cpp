@@ -208,8 +208,12 @@ void Flux::process(float& l, float& r) {
     // The line always hears the live input; the RAMP rides the return —
     // the signal that is actually audible (GRIT's pattern, grit.cpp:99).
     // The old form gated the send, i.e. audio already in the past.
-    float wet_l = _echo_l.Process(l, samples);
-    float wet_r = _echo_r.Process(r, samples);
+    float wet_l, wet_r;
+    if (_stereo_line) TapeEcho<kTapeSamples>::ProcessPair(_echo_l, _echo_r, l, r, samples, wet_l, wet_r);
+    else {
+        wet_l = _echo_l.Process(l, samples);
+        wet_r = _echo_r.Process(r, samples);
+    }
     _line_dirty = true;
     if (thinning || _gate != 1.f) {
         daisysp::fonepole(_gate, _gate_target, _gate_coef);

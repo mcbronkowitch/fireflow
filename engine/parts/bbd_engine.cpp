@@ -87,6 +87,7 @@ constexpr float kSlewMaxS = 0.5f;
 }  // namespace
 
 void BbdEngine::init(float sample_rate) {
+    _recompute_clean = false;
     _sr = sample_rate > 0.f ? sample_rate : 48000.f;
     _l.Init(_sr, nullptr, 0);
     _r.Init(_sr, nullptr, 0);
@@ -123,6 +124,7 @@ void BbdEngine::init(float sample_rate) {
 }
 
 void BbdEngine::init_buffers(float* l, float* r, size_t cells) {
+    _recompute_clean = false;
     _buf_ok = (l != nullptr && r != nullptr && cells > 0);
     _l.Init(_sr, l, cells);
     _r.Init(_sr, r, cells);
@@ -152,6 +154,7 @@ void BbdEngine::init_buffers(float* l, float* r, size_t cells) {
 }
 
 void BbdEngine::reset() {
+    _recompute_clean = false;
     _l.Reset();
     _r.Reset();
     _in_l = 0.f;
@@ -192,6 +195,7 @@ void BbdEngine::reset() {
 }
 
 void BbdEngine::set_cycle(float seconds) {
+    _recompute_clean = false;   // _recompute() reads _cycle; this does not run it
     _cycle = seconds > 0.f ? seconds : 1.f;
     _refresh_window();
 }
@@ -219,6 +223,9 @@ void BbdEngine::set_targets(const float* t, float /*tune*/) {
 }
 
 void BbdEngine::_recompute() {
+#ifdef SPKY_TESTING
+    ++_recompute_count;
+#endif
     const float T = _cycle * bbd_music::kDivs[_ladder.index()];
     _win = bbd_music::window(T);
     if (_flow) {
@@ -245,6 +252,7 @@ void BbdEngine::_recompute() {
     // to re-push it. It doubles as set_targets()' push of _drive/_fb_lane,
     // which are written just above the call there.
     _apply_freeze();
+    _recompute_clean = true;
 }
 
 // See the declaration in bbd_engine.h for why this is split from _recompute().
@@ -310,6 +318,7 @@ void BbdEngine::set_attack(float n) {
 }
 
 void BbdEngine::set_decay(float n) {
+    _recompute_clean = false;
     _decay = clampf(n, 0.f, 1.f);
     _apply_freeze();          // it scales the loop gain, so it lands at once
 }
@@ -320,6 +329,7 @@ void BbdEngine::set_resonance(float n) {
     // freeze condition. The same filter the freeze needs, so it costs one
     // biquad that is already there -- _apply_freeze() re-derives the
     // crossfade from this new endpoint immediately.
+    _recompute_clean = false;
     _res_tilt = (clampf(n, 0.f, 1.f) - 0.5f) * 2.f * kFreezeTilt;
     _apply_freeze();
 }

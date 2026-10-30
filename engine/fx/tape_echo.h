@@ -61,6 +61,43 @@ public:
         if (_filled < kMask) ++_filled;
     }
 
+    // ---- Two lines in lock step (FLUX's L and R; toggle bit 4) ----
+    // Both lines are Init-ed, Reset, SetDelay-ed and Write-n together and
+    // nowhere else, so their _write, _filled, _delay and _frac are always
+    // equal; only the memory differs. These do the shared part (SetDelay's
+    // clamp / whole / frac, the read indices, the _filled tests, the write
+    // index and the _filled count) once and then do each line's own cell
+    // reads and writes with exactly the single-line arithmetic. Precondition:
+    // `a` and `b` are in the same state.
+    static void SetDelayPair(InjectedDelayLine& a, InjectedDelayLine& b,
+                             float samples) {
+        a.SetDelay(samples);
+        b._delay = a._delay;
+        b._frac  = a._frac;
+    }
+    static void ReadPair(const InjectedDelayLine& a, const InjectedDelayLine& b,
+                         T& ra, T& rb) {
+        const int32_t d = a._delay, w = a._write, f = a._filled;
+        const bool have_a = d <= f, have_b = d < f;
+        const int32_t ia = (w + d) & kMask, ib = (w + d + 1) & kMask;
+        const T a0 = have_a ? a._line[ia] : T{};
+        const T a1 = have_b ? a._line[ib] : T{};
+        const T b0 = have_a ? b._line[ia] : T{};
+        const T b1 = have_b ? b._line[ib] : T{};
+        ra = a0 + (a1 - a0) * a._frac;
+        rb = b0 + (b1 - b0) * a._frac;
+    }
+    static void WritePair(InjectedDelayLine& a, InjectedDelayLine& b, T xa, T xb) {
+        const int32_t w = a._write;
+        a._line[w] = xa;
+        b._line[w] = xb;
+        const int32_t nw = (w - 1) & kMask;
+        a._write = b._write = nw;
+        int32_t nf = a._filled;
+        if (nf < kMask) ++nf;
+        a._filled = b._filled = nf;
+    }
+
 private:
     T* _line = nullptr;
     float _frac = 0.f;
@@ -131,6 +168,26 @@ public:
         out = fast_tanh(out);
         _line.Write(out * _feedback + in);
         return out;
+    }
+
+    // Process() for two echoes that have always been driven together (same
+    // delay, same state; see InjectedDelayLine::ReadPair): the same filter,
+    // saturator and feedback arithmetic per channel, the line bookkeeping
+    // once. Bit-identical to a.Process(in_a, d) and b.Process(in_b, d).
+    static void ProcessPair(TapeEcho& a, TapeEcho& b, float in_a, float in_b,
+                            float delay_samples, float& out_a, float& out_b) {
+        InjectedDelayLine<float, MaxSize>::SetDelayPair(a._line, b._line,
+                                                        delay_samples);
+        float la, lb;
+        InjectedDelayLine<float, MaxSize>::ReadPair(a._line, b._line, la, lb);
+        float oa = a._bpf.Process(la);
+        float ob = b._bpf.Process(lb);
+        oa = fast_tanh(oa);
+        ob = fast_tanh(ob);
+        InjectedDelayLine<float, MaxSize>::WritePair(
+            a._line, b._line, oa * a._feedback + in_a, ob * b._feedback + in_b);
+        out_a = oa;
+        out_b = ob;
     }
 
 private:

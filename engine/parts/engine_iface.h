@@ -48,6 +48,10 @@ public:
     // sample), flow on STEP/FLOW switches.
     virtual void set_cycle(float /*seconds*/) {}   // master-lane cycle length
     virtual void set_flow(bool /*flow*/) {}        // true = FLOW, false = STEP
+    // True only when set_flow(flow) provably changes nothing (BbdEngine, whose
+    // set_flow re-runs a pow/exp-heavy _recompute() every call). Default
+    // false: always push.
+    virtual bool set_flow_redundant(bool /*flow*/) const { return false; }
 
     // CHOKE hold (spec 2026-07-16 choke-priority rev. 2): while held, a FLOW
     // engine releases its sustaining drone (decays out, click-free) and stops

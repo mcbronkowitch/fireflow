@@ -48,6 +48,26 @@ public:
     // the next reader does not have to re-derive it.
     void set_flow(bool flow) override { _flow = flow; if (_flow) _recompute(); }
     bool flow() const { return _flow; }
+    // True when set_flow(flow) would be a no-op: already in FLOW, and the last
+    // _recompute() (which ran in FLOW) is still current. _recompute() is a
+    // function of _cycle, the ladder rung, _pitch, _width, _decay, _res_tilt,
+    // _drive, _fb_lane, _freeze, _flow and _latched, and writes only values
+    // derived from them (_win, _f_clk, _latched=false, _stages, _f_l/_f_r,
+    // _st_l/_st_r, the lines' cells_, _freeze_k, tilt, feedback, DC block).
+    // The ladder rung, _pitch, _drive and _fb_lane change only inside
+    // set_targets(), which runs _recompute() itself; _freeze moves in
+    // process(), which re-pushes everything _recompute() derives from it in
+    // the same call (the `_freeze != _freeze_last` push); the remaining
+    // inputs are written by init(), init_buffers(), reset(), set_cycle(),
+    // set_width(), set_decay() and set_resonance(), and each of those clears
+    // _recompute_clean. So with the flag set, a second _recompute() writes
+    // the values already there. Used by Part::set_step (toggle bit 5).
+    bool set_flow_redundant(bool flow) const override {
+        return flow && _flow && _recompute_clean;
+    }
+#ifdef SPKY_TESTING
+    int recompute_count_for_test() const { return _recompute_count; }
+#endif
 
     // COLOR (spec 5.7): a symmetric geometric clock spread with the delay
     // held on the grid for both lines -- see _apply_width() for the maths and
@@ -67,7 +87,10 @@ public:
     // the clock at PITCH 0.5). _apply_width() only reads the already-settled
     // _f_clk/_win, so it cannot reach _pitch or _latched at all -- the same
     // reasoning _refresh_window() already rests on for the same reason.
-    void set_width(float n) override { _width = clampf(n, 0.f, 1.f); _apply_width(); }
+    void set_width(float n) override {
+        _recompute_clean = false;
+        _width = clampf(n, 0.f, 1.f); _apply_width();
+    }
     // Observers: the two lines' actual clock and stage count, as split by
     // COLOR. clock_hz()/stages() above stay the un-spread CENTRE -- the value
     // COLOR spreads away from -- so existing callers of those two are
@@ -290,6 +313,11 @@ private:
     // still show a clock derived from PITCH, not the raw ctor literal above,
     // the moment its first real set_targets() lands -- see _recompute().
     bool  _latched = true;
+    // See set_flow_redundant(): the last _recompute() is current.
+    bool  _recompute_clean = false;
+#ifdef SPKY_TESTING
+    int   _recompute_count = 0;
+#endif
 };
 
 }  // namespace spky

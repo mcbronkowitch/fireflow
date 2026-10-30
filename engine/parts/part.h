@@ -152,7 +152,9 @@ public:
     EngineId engine_id() const { return _engine_id; }
 
     // STEP/FLOW reaches both the lanes and the engine (drone rule)
-    void set_step(bool on, int steps);
+    // skip_redundant_flow (toggle bit 5): leave out the engine's set_flow when
+    // the engine says it would change nothing (IPartEngine::set_flow_redundant).
+    void set_step(bool on, int steps, bool skip_redundant_flow = false);
     bool flow() const { return !_step_on; }   // CHOKE: a FLOW drone is always "on"
 
     // Liefert true GENAU EINMAL nach einer FLOW->STEP-Flanke und loescht das

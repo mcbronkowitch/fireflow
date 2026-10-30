@@ -34,7 +34,13 @@
 //                                                        no filter, DTCM line);
 //                                                        docs/hardware/cpu-hunt-
 //                                                        measured.md §5
-//   4-29 (free: candidates; bits 0-3 are never reused)
+//   4    FLUX_STEREO_LINE     engine/fx/tape_echo.h      the two tape echoes share
+//                                                        one line-bookkeeping
+//                                                        pass (same output)
+//   5    LAW_GUARDS           engine/parts/part.cpp,     unchanged-value guards:
+//                             engine/fx/flux.h           a BBD deck's set_flow
+//                                                        and FLUX's rhythm pace
+//   6-29 (free: candidates; bits 0-5 are never reused)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE
 //                                                        burn on every block
 //   31   SHELL_GUARD_OFF      shell/panel_scan.cpp       the overrun guard is
@@ -48,6 +54,10 @@
 
 namespace spky {
 namespace probe {
+
+// The candidates' bits (above).
+inline constexpr int kBitFluxStereoLine = 4;
+inline constexpr int kBitLawGuards      = 5;
 
 // The shell's two bits (above).
 inline constexpr int kBitShellLateRepeat = 30;

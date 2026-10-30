@@ -142,6 +142,7 @@ add_executable(spky_tests
     tests/test_grit.cpp
     engine/fx/flux.cpp
     tests/test_flux.cpp
+    tests/test_cpu_hunt_equiv.cpp
     tests/test_tape_echo.cpp
     engine/fx/bbd.cpp
     tests/test_bbd.cpp
