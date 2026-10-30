@@ -23,16 +23,18 @@ The guards (function: what it protects):
                                 (engine/center/transport.h:23)
   Instrument::set_tempo_bpm     engine/instrument.cpp:232
   Instrument::init              the same guard, inlined (set_tempo_bpm(_bpm))
-  Instrument::set_pace          engine/instrument.cpp:238
+  Instrument::set_pace          engine/instrument.cpp:238 -- optional: an image
+                                that never calls it (the default image) has
+                                it garbage-collected
   BbdEngine::process            BbdLine::SetClock, inlined (engine/fx/bbd.h:315)
-  shell::panel_scan_tick        Transport::clock_pulse / clock_pulse_counted, inlined
-                                via Instrument::clock_pulse* (transport.h:37, :52);
-                                shell code, so not affected by the engine's flags --
-                                checked anyway; only in images with SHELL_PANEL_SCAN=1
-bbd_clock_hz (bbd.h:202) has no caller in the firmware and is not compiled in.
+Not listed: Transport::clock_pulse / clock_pulse_counted (transport.h:37, :52)
+are inlined only into shell::panel_scan_tick, which is shell code compiled
+without the engine's flags and, in the coupon image, without a clock path at
+all; bbd_clock_hz (bbd.h:202) has no caller in the firmware and is not
+compiled in.
 
 A required function that is missing from the image is a refusal too (an inline
-that moved elsewhere would otherwise escape the check); only the optional ones
+that moved elsewhere would otherwise escape the check); only the optional one
 may be absent.
 
 usage: math_guards.py <objdump -d -C output of the linked ELF>
@@ -44,9 +46,8 @@ GUARDED = [
     ("spky::Instrument::_apply_tempo()", False),
     ("spky::Instrument::set_tempo_bpm(float)", False),
     ("spky::Instrument::init(float, spky::FxMem const&)", False),
-    ("spky::Instrument::set_pace(float)", False),
+    ("spky::Instrument::set_pace(float)", True),
     ("spky::BbdEngine::process(float&, float&)", False),
-    ("shell::panel_scan_tick(daisy::patch_sm::DaisyPatchSM&, spky::Instrument&)", True),
 ]
 
 _HEADER = re.compile(r"^[0-9a-f]+ <(.+)>:$")
