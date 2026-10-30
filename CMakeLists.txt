@@ -858,6 +858,13 @@ add_test(NAME remote_lib_guard
                  ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_remote_lib.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tools)
 
+# The CPU round 2 section-means tool (plan 2026-10-30-cpu-engine-kernels
+# Task 1): CBP_WIN* serial lines to per-section window means. Pure Python.
+add_test(NAME section_means_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_section_means.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tools)
+
 # The hot-path libm scan (plan 2026-10-29-cpu-hunt-remote.md Task 4): which
 # functions count as hot (.itcm_hot plus the direct-call closure from
 # AudioCallback, veneers and tail calls followed), on hand-written objdump text.
