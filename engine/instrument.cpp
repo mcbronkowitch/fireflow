@@ -253,6 +253,8 @@ void Instrument::process(const float* inL, const float* inR,
     // The candidate toggles, once per block and never inside the loop below
     // (util/probe_toggles.h; shell/test_remote_wiring.py holds the place).
     _probe_tog = probe::toggles();
+    // The CPU hunt's candidates, once per block, before the sample loop.
+    set_center_idle(probe::on(_probe_tog, probe::kBitCenterIdle));
 #endif
     SPKY_PROBE_DECL;
     for (size_t i = 0; i < n; ++i) {

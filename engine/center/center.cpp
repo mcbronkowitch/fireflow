@@ -1,5 +1,6 @@
 #include "center/center.h"
 #include <cmath>
+#include <cstring>
 
 using namespace spky;
 
@@ -82,6 +83,25 @@ void Center::init(float sample_rate, uint32_t seed) {
     _settle_coef = std::exp(-1.f / (0.3f * _cr));
 }
 
+namespace {
+inline uint32_t float_bits(float f) { uint32_t u; std::memcpy(&u, &f, sizeof u); return u; }
+} // namespace
+
+// std::pow(x, y), or with _idle_skip: skip the call where the C standard fixes
+// the result (pow(x, +-0) == 1 and pow(1, y) == 1 for every x and y, NaN
+// included -- the arguments are tested at run time, nothing is assumed about
+// where they came from), and return the stored result for a repeat of the
+// call site's last two argument bit patterns.
+float Center::_pow(PowMemo& m, float x, float y) {
+    if (!_idle_skip) return std::pow(x, y);
+    if (y == 0.f || x == 1.f) return 1.f;
+    const uint32_t xb = float_bits(x), yb = float_bits(y);
+    if (m.ok && m.xb == xb && m.yb == yb) return m.r;
+    m.r = std::pow(x, y);
+    m.xb = xb; m.yb = yb; m.ok = true;
+    return m.r;
+}
+
 void Center::update(SuperModulator& a, SuperModulator& b, Part& pa, Part& pb) {
     _transport.tick();
     _rebase_grid(a, 0);
@@ -137,8 +157,22 @@ void Center::update(SuperModulator& a, SuperModulator& b, Part& pa, Part& pb) {
 
     // --- MORPH (equal-power, smoothed at control rate) ---
     _morph = _morph_smooth.process(_morph_target);
-    _g_a = std::cos(_morph * kQuarter) * _lvl_smooth[0].process(_lvl_target[0]);
-    _g_b = std::sin(_morph * kQuarter) * _lvl_smooth[1].process(_lvl_target[1]);
+    float morph_cos, morph_sin;
+    if (_idle_skip && _morph_memo_ok && float_bits(_morph) == _morph_memo_bits) {
+        morph_cos = _morph_cos;     // MORPH did not move: the same cos / sin
+        morph_sin = _morph_sin;
+    } else {
+        morph_cos = std::cos(_morph * kQuarter);
+        morph_sin = std::sin(_morph * kQuarter);
+        if (_idle_skip) {
+            _morph_memo_bits = float_bits(_morph);
+            _morph_cos = morph_cos;
+            _morph_sin = morph_sin;
+            _morph_memo_ok = true;
+        }
+    }
+    _g_a = morph_cos * _lvl_smooth[0].process(_lvl_target[0]);
+    _g_b = morph_sin * _lvl_smooth[1].process(_lvl_target[1]);
 
     // PAN rides its own smoother and is NOT multiplied into _g_a/_g_b -- see
     // set_pan()'s comment in center.h. The mix stage reads pan_l()/pan_r().
@@ -150,8 +184,8 @@ void Center::update(SuperModulator& a, SuperModulator& b, Part& pa, Part& pb) {
     _step_weather();
     const float w = _weather * _drift;          // exactly 0 while drift is 0
 
-    const float rate_drift_a = std::pow(2.f, kRateOct * kRateTap[0] * w);
-    const float rate_drift_b = std::pow(2.f, kRateOct * kRateTap[1] * w);
+    const float rate_drift_a = _pow(_pm_rate[0], 2.f, kRateOct * kRateTap[0] * w);
+    const float rate_drift_b = _pow(_pm_rate[1], 2.f, kRateOct * kRateTap[1] * w);
     a.set_shape_offset(kShapeMax * kShapeTap[0] * w);
     b.set_shape_offset(kShapeMax * kShapeTap[1] * w);
     pa.set_detune_cents(kTuneCents * kTuneTap[0] * w);
@@ -179,8 +213,8 @@ void Center::update(SuperModulator& a, SuperModulator& b, Part& pa, Part& pb) {
         const float pitch_a = 1.f + _grid_servo(a, _grid_off[0]);
         const float pitch_b = 1.f + _grid_servo(b, _grid_off[1]);
         const float texture = 1.f - _couple;
-        const float mod_a = pitch_a * std::pow(rate_drift_a, texture);
-        const float mod_b = pitch_b * std::pow(rate_drift_b, texture);
+        const float mod_a = pitch_a * _pow(_pm_tex[0], rate_drift_a, texture);
+        const float mod_b = pitch_b * _pow(_pm_tex[1], rate_drift_b, texture);
         a.set_rate_scale(pitch_a, mod_a);
         b.set_rate_scale(pitch_b, mod_b);
     } else {
@@ -190,8 +224,8 @@ void Center::update(SuperModulator& a, SuperModulator& b, Part& pa, Part& pb) {
 
         // convergence: both banks slide toward the geometric mean.
         const float conv_e = _couple * 0.5f;
-        float conv_a = std::pow(fb / fa, conv_e);
-        float conv_b = std::pow(fa / fb, conv_e);
+        float conv_a = _pow(_pm_conv[0], fb / fa, conv_e);
+        float conv_b = _pow(_pm_conv[1], fa / fb, conv_e);
 
         // phase pull: opposite sign on the two banks. At full COUPLE this becomes a
         // HARD lock — a much stronger gain (kKHard) with a per-tick slew cap
@@ -219,7 +253,7 @@ void Center::update(SuperModulator& a, SuperModulator& b, Part& pa, Part& pb) {
             const float geo  = std::sqrt(fa * fb);
             const int   div  = nearest_division(geo, _transport.bpm());
             const float grid = division_hz(div, _transport.bpm());
-            const float grid_mult = std::pow(grid / geo, g);   // common-mode rate pull
+            const float grid_mult = _pow(_pm_grid, grid / geo, g);   // common-mode rate pull
             conv_a *= grid_mult;
             conv_b *= grid_mult;
             // Common-mode phase gravity. Bank A is the pair's phase reference:

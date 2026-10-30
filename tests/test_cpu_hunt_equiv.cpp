@@ -360,3 +360,80 @@ TEST_CASE("law guards: Flux::set_rhythm_pace skips only an unchanged pace") {
     CHECK(repeats >= 5);             // the sequence does repeat paces
     CHECK(changed >= 3);             // the pace really moves the pattern
 }
+
+// ---- candidate 7: Center::update reuses libm results (toggle bit 6) -------
+
+#include "center/center.h"
+#include "mod/super_modulator.h"
+
+namespace {
+struct CenterRig {
+    Center c; SuperModulator a, b; Part pa, pb;
+    void init() {
+        c.init(48000.f, 123u);
+        a.init(48000.f, 1u); b.init(48000.f, 2u);
+        pa.init(48000.f, 1u); pb.init(48000.f, 2u);
+    }
+};
+
+// One scenario on two rigs (the second with the idle skip on from `flip_at`
+// ticks in, or from the start when flip_at is 0): every tick, everything
+// update() writes -- the gains, the weather, the rate hooks the banks got and
+// the banks' own phases -- is compared bit for bit.
+int center_scenario(bool sync, float couple, float drift, bool moving, int flip_at) {
+    CenterRig x, y;
+    x.init(); y.init();
+    int mismatches = 0;
+    for (CenterRig* r : {&x, &y}) {
+        r->c.set_sync(sync); r->c.set_couple(couple); r->c.set_drift(drift);
+        r->c.set_morph(0.5f); r->c.set_level(0, 0.9f); r->c.set_level(1, 0.8f);
+        r->c.set_pan(0, 0.2f); r->c.set_pan(1, -0.3f);
+        r->a.set_synced(sync); r->b.set_synced(sync);
+        r->c.set_tempo_bpm(120.f); r->a.set_tempo_bpm(120.f); r->b.set_tempo_bpm(120.f);
+        r->a.set_step(sync, 8); r->b.set_step(sync, 8);
+        r->a.set_rate(0.4f); r->b.set_rate(0.65f);
+    }
+    if (flip_at == 0) y.c.set_idle_skip(true);
+    const int ticks = 2500;
+    for (int k = 0; k < ticks; ++k) {
+        if (k == flip_at && flip_at > 0) y.c.set_idle_skip(true);
+        if (moving) {
+            const float m = 0.5f + 0.4f * std::sin(k * 0.01f);
+            x.c.set_morph(m); y.c.set_morph(m);
+        }
+        if (k == 900) {                         // knobs move mid-run: new exponents
+            x.c.set_couple(couple * 0.5f); y.c.set_couple(couple * 0.5f);
+            x.c.set_drift(drift * 0.5f);   y.c.set_drift(drift * 0.5f);
+            x.a.set_rate(0.7f); y.a.set_rate(0.7f);
+        }
+        x.c.update(x.a, x.b, x.pa, x.pb);
+        y.c.update(y.a, y.b, y.pa, y.pb);
+        for (int s = 0; s < Center::kCtrlInterval; ++s) { x.a.process(); x.b.process(); y.a.process(); y.b.process(); }
+        const float xs[] = { x.c.gain_a(), x.c.gain_b(), x.c.weather(), x.c.drift(), x.c.phase_err(),
+                             x.a.pitch_scale(), x.a.mod_scale(), x.b.pitch_scale(), x.b.mod_scale(),
+                             x.a.master_hz(), x.b.master_hz(), x.a.pitch_phase(), x.b.pitch_phase() };
+        const float ys[] = { y.c.gain_a(), y.c.gain_b(), y.c.weather(), y.c.drift(), y.c.phase_err(),
+                             y.a.pitch_scale(), y.a.mod_scale(), y.b.pitch_scale(), y.b.mod_scale(),
+                             y.a.master_hz(), y.b.master_hz(), y.a.pitch_phase(), y.b.pitch_phase() };
+        for (size_t i = 0; i < sizeof xs / sizeof xs[0]; ++i)
+            if (bits_of(xs[i]) != bits_of(ys[i])) ++mismatches;
+    }
+    return mismatches;
+}
+} // namespace
+
+TEST_CASE("center idle skip: update() writes the same bits with it on, idle and moving") {
+    for (bool sync : {false, true}) {
+        for (float couple : {0.f, 0.3f, 0.7f, 1.f}) {
+            for (float drift : {0.f, 0.25f}) {
+                for (bool moving : {false, true}) {
+                    INFO("sync " << sync << " couple " << couple << " drift " << drift
+                                 << " moving " << moving);
+                    CHECK(center_scenario(sync, couple, drift, moving, 0) == 0);
+                }
+            }
+        }
+    }
+    CHECK(center_scenario(false, 0.7f, 0.25f, true, 700) == 0);   // flipped mid-stream
+    CHECK(center_scenario(true, 0.5f, 0.25f, false, 1300) == 0);
+}
