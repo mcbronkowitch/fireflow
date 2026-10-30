@@ -370,12 +370,6 @@ void SynthEngineT<V>::_update_control() {
         // A no-op on VoiceT (synth/voice.h), so SYNTH and WAVE are
         // bit-identical (ctrl_identity, wave_formant_sweep).
         vc.set_hold(_hold);
-#if defined(SPKY_PROBE_TOGGLES)
-        // The candidate bits (synth_engine.h, set_probe_word): SYNTH and WAVE
-        // voices only, so BODY's voice stays as it was.
-        if constexpr (std::is_same_v<V, VoiceT<WtOsc>> || std::is_same_v<V, VoiceT<MorphOsc>>)
-            vc.set_probe_word(_probe_word);
-#endif
         vc.update_control(dt_s);
     }
 

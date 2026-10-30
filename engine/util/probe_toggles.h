@@ -109,14 +109,14 @@
 //                                                        weight and dt fixed in
 //                                                        the setters, bit-
 //                                                        identical)
-//   18   SIN_WRAPPED          engine/util/fast_sin.h,    candidate V3 (round 2):
-//                             synth/voice.cpp,           the sub oscillator and
-//                             synth/morph_osc.h          MorphOsc's sine
+//   18   SIN_WRAPPED          engine/util/fast_sin.h     RETIRED: adopted, the
+//                                                        only path now (round 2
+//                                                        V3: the sub oscillator
+//                                                        and MorphOsc's sine
 //                                                        segment call
 //                                                        fast_sin_wrapped, no
-//                                                        second floor wrap; off
-//                                                        calls fast_sin
-//                                                        (bit-identical)
+//                                                        second floor wrap, bit-
+//                                                        identical)
 //   19-29 (free: candidates; bits 0-18 are never reused)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE
 //                                                        burn on every block
@@ -134,7 +134,6 @@ namespace probe {
 
 // The candidates' bits (above).
 inline constexpr int kBitReverbHalf = 9;
-inline constexpr int kBitSinWrapped = 18;
 
 // The shell's two bits (above).
 inline constexpr int kBitShellLateRepeat = 30;

@@ -129,14 +129,10 @@ void VoiceT<OscT>::process(float& accL, float& accR) {
     float s = 0.5f * (_osc_a.process() + _osc_b.process());
     _sub_phase += _sub_inc;
     if (_sub_phase >= 1.f) _sub_phase -= 1.f;
-    // _sub_phase is in [0, 1) after the wrap above, so fast_sin's own floor
-    // wrap is the identity: fast_sin_wrapped returns the same bits (CPU round
-    // 2, V3).
-#if defined(SPKY_PROBE_TOGGLES)
-    s += _sub_level * (_probe_sinw ? fast_sin_wrapped(_sub_phase) : fast_sin(_sub_phase));
-#else
+    // _sub_phase is in [0, 1) after the wrap above: _sub_inc < 1 (the pitch
+    // stays below the sample rate), so fast_sin's own floor wrap would be the
+    // identity; fast_sin_wrapped returns the same bits (CPU round 2, V3).
     s += _sub_level * fast_sin_wrapped(_sub_phase);
-#endif
 
     _filt.Process(s);
     s = _filt.Low() * _env.process() * _vel;

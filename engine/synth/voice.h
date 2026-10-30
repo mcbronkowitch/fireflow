@@ -4,7 +4,6 @@
 #include "util/svf_lp.h"
 #include "synth/morph_osc.h"
 #include "synth/env.h"
-#include "util/probe_toggles.h"
 
 namespace spky {
 
@@ -68,28 +67,6 @@ public:
         return (xf ? 1 : 0) | (_env.attacking() ? 2 : 0);
     }
 #endif
-#if defined(SPKY_PROBE_TOGGLES)
-    // Measurement image only (util/probe_toggles.h): the toggle word, pushed
-    // by SynthEngineT::_update_control on the control tick. A candidate bit
-    // lands in a member, so process() never reads the word or the global.
-    // Bit 18 (SIN_WRAPPED): the sub oscillator here, and MorphOsc's sine
-    // segment on both oscillators.
-    void set_probe_word(uint32_t w) {
-        _probe_sinw = probe::on(w, probe::kBitSinWrapped);
-        if constexpr (std::is_same_v<OscT, MorphOsc>) {
-            _osc_a.set_probe_sin_wrapped(_probe_sinw);
-            _osc_b.set_probe_sin_wrapped(_probe_sinw);
-        }
-    }
-    // The sub and, on MorphOsc, both oscillators carry bit 18
-    // (tests/test_cpu_round2_probes.cpp).
-    bool probe_sin_wrapped() const {
-        if constexpr (std::is_same_v<OscT, MorphOsc>)
-            return _probe_sinw && _osc_a.probe_sin_wrapped() && _osc_b.probe_sin_wrapped();
-        else
-            return _probe_sinw;
-    }
-#endif
     float env_value() const { return _env.value(); }
     float detune_cents() const { return _detune_ct; }
 
@@ -133,9 +110,6 @@ private:
     float _drift_pan_hz = 0.1f;
     float _drift_det_hz = 0.1f;
     float _drift_ct_cur = 0.f;            // current micro-detune drift (cents)
-#if defined(SPKY_PROBE_TOGGLES)
-    bool  _probe_sinw = false;            // bit 18 (set_probe_word)
-#endif
 };
 
 using Voice = VoiceT<MorphOsc>;
