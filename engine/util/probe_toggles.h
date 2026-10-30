@@ -59,11 +59,15 @@
 //                                                        limiter-knee part cost
 //                                                        3.3 k more and was
 //                                                        dropped
-//   9    REVERB_HALF          engine/fx/reverb.cpp,      CLASS 2 (the output
-//                             third_party/oliverb        changes): the reverb
-//                                                        tank runs at 24 kHz
-//                                                        between halfband
-//                                                        converters
+//   9    REVERB_HALF          engine/fx/reverb.cpp,      RETIRED: adopted as the
+//                             third_party/oliverb        firmware build default
+//                                                        SHELL_REVERB_HALF=1
+//                                                        (class 2; blind A/B:
+//                                                        no difference heard).
+//                                                        The bit still selects
+//                                                        the tank in a
+//                                                        measurement image built
+//                                                        with SHELL_REVERB_HALF=0
 //   10-29 (free: candidates; bits 0-9 are never reused)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE
 //                                                        burn on every block

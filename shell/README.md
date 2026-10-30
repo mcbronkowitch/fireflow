@@ -97,6 +97,27 @@ prints each image's SRAM_EXEC use. It never touches `shell/build`, and it is
 skipped (exit 77) without the DaisyToolchain or the built libraries. A new
 image that gets flashed belongs in its `IMAGES` list.
 
+### Turning a CPU saving back
+
+Two savings of the CPU hunt change the sound slightly (class 2) and are ON in
+every shell image, because a blind A/B listen heard no difference. Each is a
+`make` switch, so either can be turned back with one word on the command line
+(no `make clean` needed: the Makefile deletes the stale objects itself):
+
+| Switch | Default | What it does | Turn it back |
+|---|---|---|---|
+| `SHELL_REVERB_HALF` | `1` | the reverb's tank runs at 24 kHz between two halfband filters (a cheaper reverb; a duller top above ~4 kHz, same decay, size and wobble) | `make images SHELL_REVERB_HALF=0` -- the full-rate reverb, exactly the code it was before |
+| `SHELL_FAST_MATH` | `1` | the engine (only `engine/`, not libDaisy or the shell) is compiled with `-ffast-math -fno-finite-math-only` | `make images SHELL_FAST_MATH=0` |
+
+`SHELL_FAST_MATH=2` (full `-ffast-math`) exists only to prove the guard check:
+it folds the engine's `isfinite` tests away and the build refuses it
+(`math_guards.py`, run on the linked ELF by every image build). In the
+measurement image (`SHELL_REMOTE_MEASURE=1`) `SHELL_REVERB_HALF=1` means the
+half-rate reverb always, and toggle bit 9 selects nothing; with
+`SHELL_REVERB_HALF=0` that image holds both tanks and bit 9 switches between
+them. The VCV module and the desktop render never had either saving -- they
+build the engine as before.
+
 ## Flashen
 
 Das Submodule hat **keine SWD-Pins**. Alles geht über DFU (USB), es gibt

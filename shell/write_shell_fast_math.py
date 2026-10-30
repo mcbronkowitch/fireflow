@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 
-def main() -> int:
+def run() -> int:
     if len(sys.argv) < 3 or sys.argv[2] not in {"0", "1", "2"}:
         raise SystemExit(
             "usage: write_shell_fast_math.py OUTPUT {0|1|2} [STALE_OBJECT...]")
@@ -28,6 +28,17 @@ def main() -> int:
         for stale in sys.argv[3:]:
             Path(stale).unlink(missing_ok=True)
     return 0
+
+
+def main() -> int:
+    try:
+        return run()
+    except SystemExit:
+        # A refused run must not leave the previous stamp in place (the
+        # Makefile ignores this script's exit status).
+        if len(sys.argv) > 1:
+            Path(sys.argv[1]).unlink(missing_ok=True)
+        raise
 
 
 if __name__ == "__main__":

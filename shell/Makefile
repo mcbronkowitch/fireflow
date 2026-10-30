@@ -460,7 +460,7 @@ endif
 # judged on the listener image (spec 5.3, "Which image judges what").
 SHELL_REMOTE_MEASURE ?= 0
 
-ifneq ($(filter $(SHELL_REMOTE_MEASURE),0 1),$(SHELL_REMOTE_MEASURE))
+ifneq ($(words $(SHELL_REMOTE_MEASURE))-$(filter $(SHELL_REMOTE_MEASURE),0 1),1-$(SHELL_REMOTE_MEASURE))
 $(error SHELL_REMOTE_MEASURE must be 0 or 1)
 endif
 
@@ -588,50 +588,52 @@ $(BUILD_DIR)/mux_plan.o: override OPT := -Os
 # SHELL_PLAY_LAW reports its cycles.
 $(BUILD_DIR)/control_tick.o: override OPT := -O2
 
-# Class-2 candidate of the CPU hunt (spec 2026-10-29-cpu-hunt-remote-design.md
-# section 4): -ffast-math on engine/'s translation units only -- not libDaisy,
-# not the shell's own code. The output may change, so this is for a blind A/B
-# listen, not an adoption by measurement alone.
+# Two CPU savings of the remote CPU hunt that change the output (class 2,
+# spec 2026-10-29-cpu-hunt-remote-design.md section 4). Both were listened to
+# blind against today's build and made no audible difference, so both are ON by
+# default in every shell image; each has a switch back (shell/README.md,
+# "Turning a CPU saving back"). VCV and the desktop render never had them.
+#
+# SHELL_FAST_MATH (default 1): -ffast-math on engine/'s translation units only
+# -- not libDaisy, not the shell's own code.
 #   0: today's flags.
 #   1: -ffast-math -fno-finite-math-only. Reassociation, reciprocal division,
 #      no errno, no signed zeros -- but isnan / isfinite stay real, so the
 #      engine's input guards (transport.h, bbd.h, instrument.cpp) survive.
-#   2: full -ffast-math, i.e. -ffinite-math-only too: the compiler may fold
-#      every isfinite() to true. Only a candidate if the objdump check of the
-#      built objects (docs / the round's report) finds each guard's compare
-#      still there.
+#   2: full -ffast-math, i.e. -ffinite-math-only too: the compiler folds
+#      every isfinite() to true. NOT a candidate; it exists so that the guard
+#      check (math_guards.py, run on the linked ELF by every image build)
+#      has something to fail on.
+# Every image build runs math_guards.py after the link: each engine
+# isfinite guard must still be in the disassembly of its function.
 # The value is resolved at parse time and stamped into build/shell_fast_math.h
 # (write_shell_fast_math.py, which deletes the engine objects on a flip), so
 # two positions cannot yield the same image. The denormal floors in the engine
 # are explicit compares and are not affected; nothing sets FPSCR.FZ either way.
-SHELL_FAST_MATH ?= 0
+SHELL_FAST_MATH ?= 1
 
 ifneq ($(words $(SHELL_FAST_MATH))-$(filter $(SHELL_FAST_MATH),0 1 2),1-$(SHELL_FAST_MATH))
 $(error SHELL_FAST_MATH must be 0, 1 or 2)
 endif
 
-# The class-2 reverb A/B (toggle bit 9 in the measurement image; here as a
-# build, so the pair can be recorded on listener images by reflash):
-# SHELL_REVERB_HALF=1 compiles ONLY the half-rate tank (24 kHz between the
-# halfband converters, engine/fx/halfband.h) and it always runs. 0 compiles the
-# full-rate tank only -- exactly the code of 2ac8ee07, no half-rate path in the
-# image (third_party/oliverb/stmlib_shim.h). The measurement image
-# (SHELL_REMOTE_MEASURE=1) has both and switches with bit 9, so the two
-# switches exclude each other. build/itcm_hot.ld, written at parse time by
-# write_shell_reverb_half.py, is the linker script with the tank's hot-list
-# entries for this build; the writer also deletes every object when the state
-# changes.
-SHELL_REVERB_HALF ?= 0
+# SHELL_REVERB_HALF (default 1): the reverb tank at 24 kHz between two halfband
+# converters (engine/fx/halfband.h), every time constant kept in seconds / Hz.
+# 1 compiles ONLY the half-rate tank, in every image -- the measurement image
+# too, where toggle bit 9 then selects nothing (it is retired). 0 compiles the
+# full-rate tank only: exactly the code of 2ac8ee07 -- except in the
+# measurement image, which then holds both tanks and bit 9 switches between
+# them (third_party/oliverb/stmlib_shim.h). The simplest rule: the switch says
+# which reverb the image has; bit 9 only exists where the image has both.
+# build/itcm_hot.ld, written at parse time by write_shell_reverb_half.py, is the
+# linker script with the tank's hot-list entries for this build; the writer
+# also deletes every object when the state changes.
+SHELL_REVERB_HALF ?= 1
 
 ifneq ($(words $(SHELL_REVERB_HALF))-$(filter $(SHELL_REVERB_HALF),0 1),1-$(SHELL_REVERB_HALF))
 $(error SHELL_REVERB_HALF must be 0 or 1)
 endif
 
 ifeq ($(SHELL_REVERB_HALF),1)
-ifeq ($(SHELL_REMOTE_MEASURE),1)
-$(error SHELL_REVERB_HALF=1 with SHELL_REMOTE_MEASURE=1: the measurement image \
-switches the tank with toggle bit 9)
-endif
 C_DEFS += -DSPKY_REVERB_HALF_ONLY=1
 endif
 
@@ -793,7 +795,7 @@ images: $(BUILD_DIR)/$(TARGET)-sram.bin $(BUILD_DIR)/$(TARGET)-qspi.bin
 # its functions mangled.
 ITCM_GUARD = $(if $(filter 1,$(SHELL_ITCM)),&& $(NM) -S $< > $(BUILD_DIR)/$(TARGET).rawnm && python itcm_placement.py $(BUILD_DIR)/$(TARGET).rawnm $(BUILD_DIR)/$(TARGET).dis $(BUILD_DIR)/itcm_hot.ld)
 $(BUILD_DIR)/$(TARGET).nm: $(BUILD_DIR)/$(TARGET).elf FORCE
-	( $(NM) -C -S $< > $@ && $(OBJDUMP) -d -C --no-show-raw-insn $< > $(BUILD_DIR)/$(TARGET).dis && python qspi_placement.py $@ $(BUILD_DIR)/$(TARGET).dis $< $(ITCM_GUARD) ) || (rm -f $@ $(BUILD_DIR)/$(TARGET).dis $(BUILD_DIR)/$(TARGET)-sram.bin $(BUILD_DIR)/$(TARGET)-qspi.bin && exit 1)
+	( $(NM) -C -S $< > $@ && $(OBJDUMP) -d -C --no-show-raw-insn $< > $(BUILD_DIR)/$(TARGET).dis && python qspi_placement.py $@ $(BUILD_DIR)/$(TARGET).dis $< && python math_guards.py $(BUILD_DIR)/$(TARGET).dis $(ITCM_GUARD) ) || (rm -f $@ $(BUILD_DIR)/$(TARGET).dis $(BUILD_DIR)/$(TARGET)-sram.bin $(BUILD_DIR)/$(TARGET)-qspi.bin && exit 1)
 
 $(BUILD_DIR)/$(TARGET)-sram.elf: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).nm FORCE
 	$(CP) $(foreach s,$(QSPI_SECTIONS),--remove-section=$(s)) $< $@

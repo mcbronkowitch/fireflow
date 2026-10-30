@@ -53,15 +53,25 @@ IMAGES = [
     # LATE and the candidate toggles, with the probe stamps on.
     ("reva_remote_measure", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
                              "SHELL_REMOTE_MEASURE=1"]),
-    # The class-2 half-rate reverb as a build (listener image, always half).
-    ("reva_remote_reverb_half", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
-                                 "SHELL_REVERB_HALF=1"]),
-    # The class-2 build switch (CPU hunt): -ffast-math on engine/ only.
-    ("reva_remote_measure_fm1", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
-                                 "SHELL_REMOTE_MEASURE=1", "SHELL_FAST_MATH=1"]),
-    ("reva_remote_measure_fm2", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
-                                 "SHELL_REMOTE_MEASURE=1", "SHELL_FAST_MATH=2"]),
+    # The two class-2 CPU savings are ON in every image above (SHELL_REVERB_HALF
+    # and SHELL_FAST_MATH default to 1; shell/README.md, "Turning a CPU saving
+    # back"). Their switches back, in the listener image:
+    ("reva_remote_off", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
+                         "SHELL_REVERB_HALF=0", "SHELL_FAST_MATH=0"]),
+    # The measurement image with BOTH reverb tanks (toggle bit 9 selects).
+    ("reva_remote_measure_dispatch", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
+                                      "SHELL_REMOTE_MEASURE=1", "SHELL_REVERB_HALF=0"]),
+    # Full -ffast-math folds the engine's isfinite guards: the image build must
+    # REFUSE it (math_guards.py on the linked ELF). Expected to fail; passing
+    # this entry means the guard check can still go red.
+    ("reva_remote_fm2_refused", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
+                                 "SHELL_FAST_MATH=2"]),
 ]
+
+# Images whose build must be refused, and the refusal's text (name -> text).
+EXPECT_REFUSED = {
+    "reva_remote_fm2_refused": "math guard: isfinite guard folded away in",
+}
 
 # The save path, as linked symbols (nm -C): persist_write() and the QSPI
 # erase and program entry points it is the only caller of. A SHELL_REMOTE
@@ -186,6 +196,16 @@ def main():
                            stderr=subprocess.STDOUT, text=True, errors="replace")
         images_ok = all(os.path.isfile(os.path.join(build_dir, "shell-%s.bin" % k))
                         for k in ("sram", "qspi"))
+        if name in EXPECT_REFUSED:
+            if (r.returncode != 0 and not images_ok
+                    and EXPECT_REFUSED[name] in r.stdout):
+                print("ok   %s -- refused as expected (%s)" % (label, EXPECT_REFUSED[name]))
+            else:
+                print("FAIL %s -- expected the build to be refused with %r (make exit %d, "
+                      "images %s)" % (label, EXPECT_REFUSED[name], r.returncode,
+                                      "built" if images_ok else "absent"))
+                fails.append(name)
+            continue
         mem = sram_exec(r.stdout)
         if r.returncode != 0 or not images_ok or mem is None:
             why = ("make exit %d" % r.returncode if r.returncode != 0 else
