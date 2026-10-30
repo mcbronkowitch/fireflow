@@ -111,6 +111,13 @@ void AmbientReverb::begin_clear() {
     _wet_peak = 0.f;
     _lim_gain = 1.f;
     _lim_target = 1.f;
+#if OLIVERB_HALF_PATH
+    // The converters hold the pre-clear signal too (up to ~1 ms of it), and
+    // so does the second sample of the last upsampled pair.
+    _second = false;
+    _in_a = _pend_l = _pend_r = 0.f;
+    _dn.reset(); _upl.reset(); _upr.reset();
+#endif
     _clear_pos = 0;
 }
 

@@ -709,3 +709,26 @@ TEST_CASE("reverb half rate: the tail keeps its tone balance") {
         CHECK(std::fabs((half - full) - c.expect_db) < 2.5);
     }
 }
+
+TEST_CASE("reverb half rate: a clear also empties the converters") {
+    // clear() (the sleeping room's spread clear is the same thing in steps)
+    // must leave a room that outputs exact silence for silent input -- the
+    // halfband histories and the pending sample of the last upsampled pair
+    // would otherwise play out for about a millisecond.
+    g_rev_half.init(48000.f);
+    g_rev_half.set_half_rate(true);
+    Noise n;
+    for (int i = 0; i < 24000; ++i) {
+        const float x = 0.3f * n.next();
+        float l, r;
+        g_rev_half.process(x, x, l, r);
+    }
+    g_rev_half.clear();
+    int nonzero = 0;
+    for (int i = 0; i < 200; ++i) {
+        float l, r;
+        g_rev_half.process(0.f, 0.f, l, r);
+        if (l != 0.f || r != 0.f) ++nonzero;
+    }
+    CHECK(nonzero == 0);
+}
