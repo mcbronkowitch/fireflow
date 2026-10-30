@@ -119,9 +119,6 @@ public:
 
     void Reset() {
         _line.Reset();
-#if defined(SPKY_PROBE_TOGGLES)
-        _probe_line.Reset();
-#endif
         _bpf.Reset();
     }
 
@@ -129,59 +126,34 @@ public:
     float Feedback() const { return _feedback; }
 
 #if defined(SPKY_PROBE_TOGGLES)
-    // Probes only (util/probe_toggles.h bits 2 and 3, measurement image).
-    // no_filter: the line is read and written as usual but the band-pass and
-    // the tanh are skipped. dtcm: the whole path runs unchanged on a short
-    // line (kProbeLine floats) in memory the host provides -- DTCM on the
-    // board -- instead of the SDRAM arena, so the only difference is where
-    // the line lives. Without a line from set_probe_line() the bit is inert.
-    static constexpr size_t kProbeLine = 4096;
-    void set_probe_line(float* memory) {
-        _probe_line.Init(memory);
-        _probe_line_ok = memory != nullptr;
-    }
-    void set_probe(bool no_filter, bool dtcm) {
-        const bool use = dtcm && _probe_line_ok;
-        if (use && !_probe_dtcm) _probe_line.Reset();   // fresh line on entry
-        _probe_dtcm = use;
-        _probe_no_filter = no_filter;
-    }
+    // Probe only (util/probe_toggles.h bit 2, measurement image): the line is
+    // read and written as usual but the band-pass and the tanh are skipped.
+    void set_probe_no_filter(bool on) { _probe_no_filter = on; }
 #endif
 
     float Process(float in, float delay_samples) {
-#if defined(SPKY_PROBE_TOGGLES)
-        if (_probe_dtcm) return process_on(_probe_line, in, delay_samples);
-#endif
-        return process_on(_line, in, delay_samples);
-    }
-
-private:
-    template <class Line>
-    float process_on(Line& line, float in, float delay_samples) {
-        line.SetDelay(delay_samples);
+        _line.SetDelay(delay_samples);
 #if defined(SPKY_PROBE_TOGGLES)
         if (_probe_no_filter) {
             // Feedback can reach 1.2 and there is no tanh here: clamp the
             // line's output to [-1, 1] so the loop cannot blow up (a clamp
             // costs less than the tanh it replaces).
-            float o = line.Read();
+            float o = _line.Read();
             o = o > 1.f ? 1.f : (o < -1.f ? -1.f : o);
-            line.Write(o * _feedback + in);
+            _line.Write(o * _feedback + in);
             return o;
         }
 #endif
-        float out = _bpf.Process(line.Read());
+        float out = _bpf.Process(_line.Read());
         out = fast_tanh(out);
-        line.Write(out * _feedback + in);
+        _line.Write(out * _feedback + in);
         return out;
     }
 
+private:
     float _feedback = 0.f;
 #if defined(SPKY_PROBE_TOGGLES)
     bool _probe_no_filter = false;
-    bool _probe_dtcm = false;
-    bool _probe_line_ok = false;
-    InjectedDelayLine<float, kProbeLine> _probe_line;
 #endif
     InjectedDelayLine<float, MaxSize> _line;
     TapeBpf _bpf;

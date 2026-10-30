@@ -38,12 +38,7 @@
 //                                                        line keeps its read and
 //                                                        write, skips band-pass
 //                                                        and tanh (clamped)
-//   3    FLUX_PROBE_DTCM_LINE engine/fx/tape_echo.h      PROBE (measurement only,
-//                                                        never adopted): each
-//                                                        tape echo runs on a
-//                                                        short line the shell
-//                                                        puts in DTCM
-//   4-29 (free: candidates; bits 0-3 are never reused)
+//   3-29 (free: candidates; bits 0-2 are never reused)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE
 //                                                        burn on every block
 //   31   SHELL_GUARD_OFF      shell/panel_scan.cpp       the overrun guard is
@@ -61,7 +56,6 @@ namespace probe {
 // The FLUX probe bits (above): measurement only, never adopted.
 inline constexpr int kBitFluxProbeNoEcho   = 1;
 inline constexpr int kBitFluxProbeNoFilter = 2;
-inline constexpr int kBitFluxProbeDtcmLine = 3;
 
 // The shell's two bits (above).
 inline constexpr int kBitShellLateRepeat = 30;
