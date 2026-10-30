@@ -96,15 +96,11 @@ public:
         set_form(p, pr);
     }
     void set_step(int p, bool on, int steps) { _parts[p].set_step(on, steps); }
-    // The CPU hunt's candidate flags (util/probe_toggles.h bits 6, 7, 8), set
-    // once per block by process() from the toggle word; all off by default.
-    // Each switches to a path with the same output and state as the old one.
-    void set_mix_block(bool on) {                                       // bit 8
-        _mix_block = on;
-        if (!on) _pan_c_ok = false;
-        _limiter.set_knee_memo(on);
-    }
 #ifdef SPKY_TESTING
+    // Tests only: compute the PAN gains and the CHOKE duck chain from scratch
+    // every sample, as the mix did before they were memoised, to compare the
+    // two bit for bit.
+    void set_always_compute_mix_for_test(bool on) { _test_no_mix_memo = on; }
     // Tests only: push every set_flow / set_rhythm_pace again, as the code did
     // before the unchanged-value guards (BbdEngine::set_flow_redundant,
     // Flux::set_rhythm_pace), to compare the two bit for bit.
@@ -681,10 +677,15 @@ private:
     // The knob's own glide (kMixSmoothS). The follower smooths the SIGNAL side;
     // this smooths the CONTROL side, so turning CHOKE cannot step the mix gain.
     OnePole _choke_depth;
-    // Toggle bit 8 (MIX_BLOCK) memos: the CHOKE duck's depth chain keyed on
-    // depth_raw's bits, and the PAN gains read once per control tick. See
-    // process(); the limiter's knee memo is Limiter::set_knee_memo().
-    bool     _mix_block = false;
+    // Memos of the mix (see process()): the CHOKE duck's depth chain keyed on
+    // depth_raw's bits, and the PAN gains read once per control tick. Both
+    // are dropped by init().
+#ifdef SPKY_TESTING
+    bool     _test_no_mix_memo = false;
+    bool     mix_memo_on() const { return !_test_no_mix_memo; }
+#else
+    static constexpr bool mix_memo_on() { return true; }
+#endif
     bool     _ck_ok = false;
     uint32_t _ck_bits = 0;
     float    _ck_over = 0.f, _ck_depth = 0.f, _ck_floor = 0.f, _ck_atk = 0.f, _ck_rel = 0.f;

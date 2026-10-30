@@ -196,7 +196,7 @@ void Instrument::init(float sample_rate, const FxMem& mem) {
     _choke_depth.reset(0.f);
     _choke_duck_gain = 1.f;
     _center.init(sample_rate, 0x5ce47e12u);
-    _pan_c_ok = false;     // the MIX_BLOCK memos belong to the old init
+    _pan_c_ok = false;     // the mix memos belong to the old init
     _ck_ok = false;
     _ctrl_ctr = 0;
     set_tempo_bpm(_bpm);
@@ -257,8 +257,6 @@ void Instrument::process(const float* inL, const float* inR,
     // The candidate toggles, once per block and never inside the loop below
     // (util/probe_toggles.h; shell/test_remote_wiring.py holds the place).
     _probe_tog = probe::toggles();
-    // The CPU hunt's candidates, once per block, before the sample loop.
-    set_mix_block(probe::on(_probe_tog, probe::kBitMixBlock));
 #endif
     SPKY_PROBE_DECL;
     for (size_t i = 0; i < n; ++i) {
@@ -268,16 +266,15 @@ void Instrument::process(const float* inL, const float* inR,
         if (_ctrl_ctr == 0) {                 // control-rate center update (per 96 samples)
             _center.update(_parts[PART_A].mod(), _parts[PART_B].mod(),
                            _parts[PART_A], _parts[PART_B]);
-            // Toggle bit 8 (MIX_BLOCK): the pan gains are read from the PAN
-            // smoothers, which only update() advances, so they are constant
-            // until the next tick -- read them once here.
-            if (_mix_block) {
-                for (int p = 0; p < PART_COUNT; ++p) {
-                    _pan_c[p][0] = _center.pan_l(p);
-                    _pan_c[p][1] = _center.pan_r(p);
-                }
-                _pan_c_ok = true;
+            // The pan gains are read from the PAN smoothers, which only
+            // update() advances (and Center::init resets), so they are
+            // constant until the next tick -- read them once here instead of
+            // four times per sample in the mix.
+            for (int p = 0; p < PART_COUNT; ++p) {
+                _pan_c[p][0] = _center.pan_l(p);
+                _pan_c[p][1] = _center.pan_r(p);
             }
+            _pan_c_ok = true;
             // Excitation bus, cross-deck hand-over (spec §6, Task 10): each
             // part gets the SIBLING's dry mono output as latched at the end
             // of the block that just finished (see the capture point below,
@@ -459,31 +456,29 @@ void Instrument::process(const float* inL, const float* inR,
         // through the gain formula below would cross zero and flip phase. The
         // surplus becomes `over` instead, 0 at 100 % and 1 at the top.
         //
-        // Toggle bit 8 (MIX_BLOCK): over / depth / floor_g / atk / rel are a
-        // function of depth_raw and of coefficients fixed at init(), so while
-        // the knob glide has settled (depth_raw the same float as last sample)
-        // the stored five are the values the expressions below would give.
+        // over / depth / floor_g / atk / rel are a function of depth_raw and
+        // of coefficients fixed at init(), so while the knob glide has
+        // settled (depth_raw the same float as last sample) the stored five
+        // are the values the expressions below would give. init() drops them.
         float over, depth, floor_g, atk, rel;
-        if (_mix_block && _ck_ok && float_bits(depth_raw) == _ck_bits) {
+        if (mix_memo_on() && _ck_ok && float_bits(depth_raw) == _ck_bits) {
             over = _ck_over; depth = _ck_depth; floor_g = _ck_floor;
             atk = _ck_atk; rel = _ck_rel;
         } else {
-        over  = std::min(1.f, std::max(0.f, (depth_raw - 1.f)
-                                     / (kChokeDepthTop - 1.f)));
-        depth = std::min(depth_raw, 1.f);
-        floor_g = kChokeDuckFloor
-                            + over * (kChokeDuckFloorHot - kChokeDuckFloor);
-        // Lerping the coefficients, not the time constants: the two are not the
-        // same curve, but both are monotone in the same direction and the
-        // interval is crossed by a knob, not by a spec. What it buys is an
-        // exp()-free audio loop.
-        atk = _choke_atk + over * (_choke_atk_hot - _choke_atk);
-        rel = _choke_rel + over * (_choke_rel_hot - _choke_rel);
-        if (_mix_block) {
+            over  = std::min(1.f, std::max(0.f, (depth_raw - 1.f)
+                                         / (kChokeDepthTop - 1.f)));
+            depth = std::min(depth_raw, 1.f);
+            floor_g = kChokeDuckFloor
+                    + over * (kChokeDuckFloorHot - kChokeDuckFloor);
+            // Lerping the coefficients, not the time constants: the two are
+            // not the same curve, but both are monotone in the same direction
+            // and the interval is crossed by a knob, not by a spec. What it
+            // buys is an exp()-free audio loop.
+            atk = _choke_atk + over * (_choke_atk_hot - _choke_atk);
+            rel = _choke_rel + over * (_choke_rel_hot - _choke_rel);
             _ck_bits = float_bits(depth_raw); _ck_ok = true;
             _ck_over = over; _ck_depth = depth; _ck_floor = floor_g;
             _ck_atk = atk; _ck_rel = rel;
-        }
         }
         _choke_env += (rect > _choke_env ? atk : rel) * (rect - _choke_env);
 
@@ -586,7 +581,7 @@ void Instrument::process(const float* inL, const float* inR,
         // pair into ga/gb -- tests/test_pan.cpp's third gate exists to catch
         // exactly that, because it would also pan the send.
         float pla, pra, plb, prb;
-        if (_mix_block && _pan_c_ok) {
+        if (mix_memo_on() && _pan_c_ok) {   // refreshed after every Center::update
             pla = _pan_c[PART_A][0]; pra = _pan_c[PART_A][1];
             plb = _pan_c[PART_B][0]; prb = _pan_c[PART_B][1];
         } else {

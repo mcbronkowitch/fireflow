@@ -1,7 +1,6 @@
 #pragma once
 #include <algorithm>
 #include <cmath>
-#include <cstring>
 #include "util/fast_tanh.h"
 
 namespace spky {
@@ -44,10 +43,6 @@ public:
         _pre_target = 1.f + 3.f * c * c;
     }
     float pre_gain() const { return _pre_target; }
-    // Toggle bit 8 (util/probe_toggles.h, MIX_BLOCK): drive and knee are a
-    // function of _pre alone; with the flag they are re-derived only when _pre
-    // moved (the same expressions on the same float, so the same values).
-    void set_knee_memo(bool on) { _knee_memo = on; }
     float squash() const { return _squash; }
 
     void process(float& l, float& r) {
@@ -68,14 +63,8 @@ public:
         // DRIVE morphs the knee: 0.89 (transparent) at drive 0 -> 0.45 (warm)
         // at full drive. Lower knee => the tanh bends earlier and its (1-knee)
         // transition is wider => softer, warmer saturation of the driven peaks.
-        float knee;
-        if (_knee_memo && _knee_ok && std::memcmp(&_pre, &_knee_pre, sizeof _pre) == 0) {
-            knee = _knee;
-        } else {
-            const float drive = (_pre - 1.f) * (1.f / 3.f);          // 0..1
-            knee = kKneeHi - (kKneeHi - kKneeLo) * drive;
-            if (_knee_memo) { _knee_pre = _pre; _knee = knee; _knee_ok = true; }
-        }
+        const float drive = (_pre - 1.f) * (1.f / 3.f);              // 0..1
+        const float knee  = kKneeHi - (kKneeHi - kKneeLo) * drive;
         const float gain = _peak > 1.f ? 1.f / _peak : 1.f;
         // How hard the shaper is bending, for the panel's ceiling lamp. Read
         // from the SMOOTHED _peak, not from this sample's peak: an
@@ -116,10 +105,6 @@ private:
     // shipped DRIVE 0.40 arrives about 1.5-1.7 dB before gain reduction
     // exists at all (bus peak 0.5545 against 0.676, measured 2026-08-16).
     float _squash = 0.f;
-    bool  _knee_memo = false;     // set_knee_memo()
-    bool  _knee_ok = false;
-    float _knee_pre = 1.f;        // the _pre the stored knee belongs to
-    float _knee = kKneeHi;
 };
 
 } // namespace spky

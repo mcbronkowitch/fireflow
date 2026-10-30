@@ -44,11 +44,21 @@
 //                                                        for a BBD deck's
 //                                                        set_flow and FLUX's
 //                                                        rhythm pace)
-//   8    MIX_BLOCK            engine/instrument.cpp,     the mix's CHOKE depth
-//                             engine/fx/limiter.h        chain, the PAN gains
-//                                                        and the limiter knee
-//                                                        are reused while their
-//                                                        inputs repeat
+//   6-7  CENTER_IDLE,         engine/center/center.cpp,  USED, reverted: Center::
+//        COMP_CURVE           engine/fx/comp.cpp         update's libm memo and
+//                                                        COMP's pow memo saved
+//                                                        nothing on the board
+//                                                        (docs/hardware/cpu-hunt-
+//                                                        measured.md §5)
+//   8    MIX_BLOCK            engine/instrument.cpp      RETIRED: adopted, the
+//                                                        only path now (the PAN
+//                                                        gains read once per
+//                                                        tick, the CHOKE duck
+//                                                        chain reused while
+//                                                        depth_raw repeats); the
+//                                                        limiter-knee part cost
+//                                                        3.3 k more and was
+//                                                        dropped
 //   9-29 (free: candidates; bits 0-8 are never reused)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE
 //                                                        burn on every block
@@ -63,9 +73,6 @@
 
 namespace spky {
 namespace probe {
-
-// The candidates' bits (above).
-inline constexpr int kBitMixBlock   = 8;
 
 // The shell's two bits (above).
 inline constexpr int kBitShellLateRepeat = 30;
