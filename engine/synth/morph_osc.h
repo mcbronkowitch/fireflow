@@ -28,6 +28,7 @@ public:
     void set_freq(float hz) {
         _freq = hz < 0.f ? 0.f : hz;
         _inc = _freq * _ratio / _sr;
+        _set_dt();
     }
 
     void set_detune_cents(float ct) {                    // control rate
@@ -54,24 +55,53 @@ public:
         _ct = ct;
         _ratio = std::pow(2.f, ct * (1.f / 1200.f));
         _inc = _freq * _ratio / _sr;
+        _set_dt();
     }
 
-    void set_morph(float m) { _morph = clampf(m, 0.f, 1.f); }
+    // The segment (0 sine->tri, 1 tri->saw, 2 saw->pulse) and its weight are
+    // fixed here, not per sample (candidate V1): the same float operations
+    // on the same _morph, so process() returns the same bits
+    // (tests/test_cpu_round2_equiv.cpp).
+    void set_morph(float m) {
+        _morph = clampf(m, 0.f, 1.f);
+        const float seg = _morph * 3.f;
+        if (seg <= 1.f)      { _seg_idx = 0; _seg_t = seg; }
+        else if (seg <= 2.f) { _seg_idx = 1; _seg_t = seg - 1.f; }
+        else                 { _seg_idx = 2; _seg_t = seg - 2.f; }
+    }
 
     void reset_phase(float ph = 0.f) { _phase = clampf(ph, 0.f, 0.999999f); }
+
+#if defined(SPKY_PROBE_TOGGLES)
+    // Measurement image only (util/probe_toggles.h bit 17, MORPH_INV): set
+    // by VoiceT::set_probe_word on the control tick. Off runs the per-sample
+    // arithmetic V1 replaced, for the board's A/B.
+    void set_probe_inv(bool on) { _probe_inv = on; }
+    bool probe_inv() const { return _probe_inv; }
+#endif
 
     float process() {
         _phase += _inc;
         if (_phase >= 1.f) _phase -= 1.f;
         const float t = _phase;
-        const float dt = _inc > 1e-6f ? _inc : 1e-6f;
-        const float seg = _morph * 3.f;
-        if (seg <= 1.f) return lerpf(fast_sin(t), _tri(t), seg);
-        if (seg <= 2.f) return lerpf(_tri(t), _saw(t, dt), seg - 1.f);
-        return lerpf(_saw(t, dt), _pulse(t, dt), seg - 2.f);
+#if defined(SPKY_PROBE_TOGGLES)
+        if (!_probe_inv) {
+            const float dt = _inc > 1e-6f ? _inc : 1e-6f;
+            const float seg = _morph * 3.f;
+            if (seg <= 1.f) return lerpf(fast_sin(t), _tri(t), seg);
+            if (seg <= 2.f) return lerpf(_tri(t), _saw(t, dt), seg - 1.f);
+            return lerpf(_saw(t, dt), _pulse(t, dt), seg - 2.f);
+        }
+#endif
+        if (_seg_idx == 0) return lerpf(fast_sin(t), _tri(t), _seg_t);
+        if (_seg_idx == 1) return lerpf(_tri(t), _saw(t, _dt), _seg_t);
+        return lerpf(_saw(t, _dt), _pulse(t, _dt), _seg_t);
     }
 
 private:
+    // dt for the polyblep, floored; follows _inc (set_freq, set_detune_cents)
+    void _set_dt() { _dt = _inc > 1e-6f ? _inc : 1e-6f; }
+
     // triangle phase-aligned with the sine: peak +1 at t=0.25, -1 at t=0.75
     static float _tri(float t) {
         if (t < 0.25f) return 4.f * t;
@@ -110,6 +140,12 @@ private:
     float _ct = 0.f;             // last set_detune_cents argument (change guard)
     float _inc = 0.f;
     float _morph = 0.f;
+    float _dt = 1e-6f;           // _inc floored (_set_dt)
+    float _seg_t = 0.f;          // the segment's lerp weight (set_morph)
+    int   _seg_idx = 0;          // 0, 1 or 2 (set_morph)
+#if defined(SPKY_PROBE_TOGGLES)
+    bool  _probe_inv = false;    // bit 17 (set_probe_inv)
+#endif
 };
 
 } // namespace spky

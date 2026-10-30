@@ -4,6 +4,7 @@
 #include "util/svf_lp.h"
 #include "synth/morph_osc.h"
 #include "synth/env.h"
+#include "util/probe_toggles.h"
 
 namespace spky {
 
@@ -65,6 +66,26 @@ public:
         if constexpr (!std::is_same_v<OscT, MorphOsc>)
             xf = _osc_a.mip_crossfading() || _osc_b.mip_crossfading();
         return (xf ? 1 : 0) | (_env.attacking() ? 2 : 0);
+    }
+#endif
+#if defined(SPKY_PROBE_TOGGLES)
+    // Measurement image only (util/probe_toggles.h): the toggle word, pushed
+    // by SynthEngineT::_update_control on the control tick. A candidate bit
+    // lands in a member of the oscillator, so process() never reads the word
+    // or the global. Bit 17 (MORPH_INV): MorphOsc only.
+    void set_probe_word(uint32_t w) {
+        if constexpr (std::is_same_v<OscT, MorphOsc>) {
+            const bool inv = probe::on(w, probe::kBitMorphInv);
+            _osc_a.set_probe_inv(inv);
+            _osc_b.set_probe_inv(inv);
+        }
+    }
+    // Both oscillators carry bit 17 (tests/test_cpu_round2_probes.cpp).
+    bool probe_morph_inv() const {
+        if constexpr (std::is_same_v<OscT, MorphOsc>)
+            return _osc_a.probe_inv() && _osc_b.probe_inv();
+        else
+            return false;
     }
 #endif
     float env_value() const { return _env.value(); }

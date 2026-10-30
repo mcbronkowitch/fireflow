@@ -143,6 +143,7 @@ add_executable(spky_tests
     engine/fx/flux.cpp
     tests/test_flux.cpp
     tests/test_cpu_hunt_equiv.cpp
+    tests/test_cpu_round2_equiv.cpp
     tests/test_tape_echo.cpp
     engine/fx/bbd.cpp
     tests/test_bbd.cpp

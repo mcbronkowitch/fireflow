@@ -103,7 +103,13 @@
 //                                                        kernels-design.md 5.1;
 //                                                        each prices one stage
 //                                                        and changes the sound)
-//   17-29 (free: candidates; bits 0-16 are never reused)
+//   17   MORPH_INV            engine/synth/morph_osc.h   candidate V1 (round 2):
+//                                                        MorphOsc's segment,
+//                                                        weight and dt fixed
+//                                                        in the setters; off
+//                                                        recomputes them per
+//                                                        sample (bit-identical)
+//   18-29 (free: candidates; bits 0-17 are never reused)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE
 //                                                        burn on every block
 //   31   SHELL_GUARD_OFF      shell/panel_scan.cpp       the overrun guard is
@@ -120,6 +126,7 @@ namespace probe {
 
 // The candidates' bits (above).
 inline constexpr int kBitReverbHalf = 9;
+inline constexpr int kBitMorphInv   = 17;
 
 // The shell's two bits (above).
 inline constexpr int kBitShellLateRepeat = 30;
