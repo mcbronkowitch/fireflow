@@ -131,6 +131,17 @@ half-rate reverb always, and toggle bit 9 selects nothing; with
 them. The VCV module and the desktop render never had either saving -- they
 build the engine as before.
 
+The next round's class-2 candidates come the other way round: each is a
+`SHELL_LEAN_<NAME>` switch that is **0** (off) until it has been listened to,
+and `SHELL_LEAN_<NAME>=1` added to the image's flags turns it on. With every
+lean switch at 0 the engine is compiled as it was. One stamp
+(`build/shell_engine_lean.h`, `write_shell_engine_lean.py`) holds them all and
+deletes the objects when one changes, so no `make clean` is needed here either.
+
+| Switch | Default | What it does |
+|---|---|---|
+| `SHELL_LEAN_SVF1` | `0` | the SYNTH and WAVE voices' low-pass runs one pass per sample instead of two (the same response up to rounding); toggle bit 19 in the measurement image |
+
 ## Flashen
 
 Das Submodule hat **keine SWD-Pins**. Alles geht über DFU (USB), es gibt

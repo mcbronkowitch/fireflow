@@ -322,6 +322,23 @@ add_test(NAME reverb_full_rate_variants
                  "-DWHAT=the plain build (VCV, render, SHELL_REVERB_HALF=0) renders differently from the tested dispatch variant at full rate"
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/compare_reverb_dumps.cmake)
 
+# --- the class-2 lean switches (spec 2026-10-30-cpu-engine-kernels section 4;
+# shell/Makefile, SHELL_LEAN_*) ---
+# SHELL_LEAN_<NAME>=1 compiles the engine with SPKY_LEAN_<NAME>=1, in the
+# firmware only: VCV, the render host and spky_tests build the old code, so the
+# render hashes do not move. This target compiles each candidate's property
+# tests with its lean define on, as a SHELL_LEAN_*=1 image does, against the
+# old code as the reference (V6: tests/test_lean_svf1.cpp).
+add_executable(spky_lean_tests
+    tests/test_main.cpp
+    tests/test_lean_svf1.cpp
+    engine/synth/voice.cpp
+    engine/synth/wt_bank.cpp
+)
+target_compile_definitions(spky_lean_tests PRIVATE SPKY_LEAN_SVF1=1)
+target_link_libraries(spky_lean_tests PRIVATE spky_engine doctest)
+add_test(NAME spky_lean_tests COMMAND spky_lean_tests)
+
 # --- render host CLI ---
 add_executable(render
     host/render/main.cpp
@@ -803,11 +820,11 @@ add_test(NAME shell_math_guard
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_math_guards.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
 
-# The build-switch writers (reverb_half, fast_math, remote, remote_measure) run
-# while the Makefile is parsed and the Makefile ignores their exit status: a
-# refusal or crash that left the old header / stamp / linker script behind
-# would build on a stale value. This holds that each deletes its output on
-# any failure.
+# The build-switch writers (reverb_half, fast_math, remote, remote_measure,
+# engine_lean) run while the Makefile is parsed and the Makefile ignores their
+# exit status: a refusal or crash that left the old header / stamp / linker
+# script behind would build on a stale value. This holds that each deletes its
+# output on any failure.
 add_test(NAME shell_writer_refusals
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_writer_refusals.py
@@ -818,9 +835,10 @@ add_test(NAME shell_writer_refusals
 # listener and measurement images (which must not link the save path:
 # arm-none-eabi-nm on the ELF, with the play image as the canary), the listener
 # with both class-2 savings switched back, the measurement image with both
-# reverb tanks, and a full -ffast-math build that must be REFUSED by the math
-# guard (the list is IMAGES in shell/check_images_build.py, ten entries at the
-# time of writing). Each is a clean ARM build in its own directory under the
+# reverb tanks, the listener with every lean switch (SHELL_LEAN_*) on, and a
+# full -ffast-math build that must be REFUSED by the math guard (the list is
+# IMAGES in shell/check_images_build.py, eleven entries at the time of
+# writing). Each is a clean ARM build in its own directory under the
 # build tree (shell/build is not touched), with SRAM_EXEC use in the output.
 # Nothing else in ctest compiles shell/, which is how the Rev A play image
 # stayed broken behind a green suite on 2026-10-09 (450eed36). Skipped, not

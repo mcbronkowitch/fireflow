@@ -641,6 +641,33 @@ ifeq ($(SHELL_REVERB_HALF),1)
 C_DEFS += -DSPKY_REVERB_HALF_ONLY=1
 endif
 
+# The lean switches: class-2 candidates of CPU round 2 (spec
+# 2026-10-30-cpu-engine-kernels-design.md section 4), each a saving that
+# changes the output. Default 0 until Bastian has listened to it; 1 compiles
+# the engine with SPKY_LEAN_<NAME>=1. With every switch at 0 the engine is the
+# code it was, instruction for instruction. The measurement image ignores them
+# for its candidates: it holds both paths and a toggle bit picks
+# (engine/util/probe_toggles.h). VCV and the desktop render never see them.
+# All of them go through one stamp, build/shell_engine_lean.h, written at parse
+# time by write_shell_engine_lean.py, which deletes every object when any of
+# them changes (a switch can change an engine class's layout, and shell
+# objects embed engine types).
+#
+# SHELL_LEAN_SVF1 (candidate V6): the SYNTH and WAVE voices' low-pass runs one
+# pass per sample instead of two (SvfLp::ProcessSingle, engine/util/svf_lp.h:
+# the two passes folded into one step, the same response up to rounding).
+# Toggle bit 19 in the measurement image. The sampler's and FEED's filters
+# stay two-pass either way.
+SHELL_LEAN_SVF1 ?= 0
+
+ifneq ($(words $(SHELL_LEAN_SVF1))-$(filter $(SHELL_LEAN_SVF1),0 1),1-$(SHELL_LEAN_SVF1))
+$(error SHELL_LEAN_SVF1 must be 0 or 1)
+endif
+
+ifeq ($(SHELL_LEAN_SVF1),1)
+C_DEFS += -DSPKY_LEAN_SVF1=1
+endif
+
 ENGINE_OBJECTS := $(addprefix $(BUILD_DIR)/,$(patsubst %.cpp,%.o,$(notdir $(filter ../engine/%,$(CPP_SOURCES)))))
 
 ifeq ($(SHELL_FAST_MATH),1)
@@ -714,6 +741,7 @@ SWITCH_HEADERS := \
   $(shell python write_shell_remote.py $(BUILD_DIR)/shell_remote.h $(SHELL_REMOTE) $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o) \
   $(shell python write_shell_remote_measure.py $(BUILD_DIR)/shell_remote_measure.h $(SHELL_REMOTE_MEASURE) $(BUILD_DIR)) \
   $(shell python write_shell_fast_math.py $(BUILD_DIR)/shell_fast_math.h $(SHELL_FAST_MATH) $(ENGINE_OBJECTS)) \
+  $(shell python write_shell_engine_lean.py $(BUILD_DIR)/shell_engine_lean.h SVF1=$(SHELL_LEAN_SVF1) -- $(BUILD_DIR)) \
   $(shell python write_shell_reverb_half.py itcm_hot.ld $(BUILD_DIR)/itcm_hot.ld $(BUILD_DIR)/shell_reverb_half.state $(SHELL_REVERB_HALF) $(SHELL_REMOTE_MEASURE) $(BUILD_DIR)) \
   $(shell python write_shell_link_stamp.py $(BUILD_DIR)/shell_link_stamp.h $(BUILD_DIR)/itcm_load.o) \
   $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/pot_report.o $(BUILD_DIR)/scan_check.o $(BUILD_DIR)/remote_listen.o)
@@ -737,6 +765,9 @@ $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o: $(BUI
 # anyway (the probe defines reach the engine), so this edge is the ordering.
 $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_remote_measure.h
 $(ENGINE_OBJECTS): $(BUILD_DIR)/shell_fast_math.h
+# The lean stamp: the writer deletes every object on a change; this edge is
+# the ordering for the objects that read the defines it stands for.
+$(ENGINE_OBJECTS): $(BUILD_DIR)/shell_engine_lean.h
 $(BUILD_DIR)/scan_check.o: $(BUILD_DIR)/shell_scan_check.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_keys_nc.h $(BUILD_DIR)/shell_raw_spread.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h
 $(BUILD_DIR)/control_tick.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h

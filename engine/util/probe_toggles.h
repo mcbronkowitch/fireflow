@@ -117,7 +117,14 @@
 //                                                        fast_sin_wrapped, no
 //                                                        second floor wrap, bit-
 //                                                        identical)
-//   19-29 (free: candidates; bits 0-18 are never reused)
+//   19   LEAN_SVF1            engine/util/svf_lp.h,      candidate V6 (round 2,
+//                             engine/synth/voice.cpp     class 2): SYNTH and
+//                                                        WAVE voices filter in
+//                                                        one pass
+//                                                        (SvfLp::ProcessSingle);
+//                                                        the firmware switch is
+//                                                        SHELL_LEAN_SVF1
+//   20-29 (free: candidates; bits 0-19 are never reused)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE
 //                                                        burn on every block
 //   31   SHELL_GUARD_OFF      shell/panel_scan.cpp       the overrun guard is
@@ -134,6 +141,7 @@ namespace probe {
 
 // The candidates' bits (above).
 inline constexpr int kBitReverbHalf = 9;
+inline constexpr int kBitLeanSvf1   = 19;
 
 // The shell's two bits (above).
 inline constexpr int kBitShellLateRepeat = 30;

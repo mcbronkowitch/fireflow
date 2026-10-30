@@ -4,11 +4,14 @@
 // as the measurement image is; the default build has neither, so these cases
 // could not fail there. The stamp clock is test_probe_marks.cpp's
 // (spky::probe_clock); these cases count, they do not time.
+// Also the toggle bits' plumbing for the round's candidates (bit 19 on), whose
+// two paths can only both be compiled here.
 #include <doctest/doctest.h>
 #include <cmath>
 #include <cstdint>
 #include <vector>
 #include "sampler/sampler_engine.h"
+#include "synth/synth_engine.h"
 
 namespace {
 
@@ -50,4 +53,90 @@ TEST_CASE("sampler probe counts grain-samples") {
     // The cloud stood: grains were active, so the equality below is not 0 == 0.
     CHECK(want > 9600u);
     CHECK(static_cast<uint64_t>(g.e.probe_eng().gsamp - before) == want);
+}
+
+namespace {
+
+// A SYNTH or WAVE deck at the lanes' noon with full LEVEL, one control tick at
+// a time.
+template <class E>
+struct DeckRig {
+    E e;
+    explicit DeckRig(uint32_t seed = 99) {
+        e.set_seed(seed);
+        e.init(48000.f);
+        const float t[spky::LANE_COUNT] = { 0.5f, 1.f, 0.5f, 0.f, 1.f };
+        e.set_targets(t, 0.5f);
+    }
+    double tick(std::vector<float>* out = nullptr) {
+        double sum = 0.0;
+        for (int i = 0; i < 96; ++i) {
+            float l = 0.f, r = 0.f;
+            e.process(l, r);
+            sum += double(l) * l + double(r) * r;
+            if (out) { out->push_back(l); out->push_back(r); }
+        }
+        return sum;
+    }
+};
+
+template <class E>
+void check_svf1_reaches_voices() {
+    DeckRig<E> g;
+    g.tick();
+    for (int v = 0; v < E::kVoices; ++v)
+        CHECK_FALSE(g.e.probe_voice(v).svf_single_pass());
+    g.e.set_probe_word(1u << spky::probe::kBitLeanSvf1);
+    g.tick();
+    for (int v = 0; v < E::kVoices; ++v)
+        CHECK(g.e.probe_voice(v).svf_single_pass());
+    g.e.set_probe_word(~(1u << spky::probe::kBitLeanSvf1));   // every other bit
+    g.tick();
+    for (int v = 0; v < E::kVoices; ++v)
+        CHECK_FALSE(g.e.probe_voice(v).svf_single_pass());
+}
+
+} // namespace
+
+TEST_CASE("V6 bit 19 reaches every SYNTH and WAVE voice's filter on the next control tick") {
+    check_svf1_reaches_voices<spky::SynthEngine>();
+    check_svf1_reaches_voices<spky::WaveEngine>();
+}
+
+TEST_CASE("V6 bit 19: a SYNTH deck through the one-pass filter stays within rounding of the two-pass one") {
+    // A FLOW drone at resonance 0.9, its FILTER lane swept over the whole
+    // range and back once per 2 s; one deck with bit 19 set from the first
+    // tick, one without. The one-pass step is the two-pass filter's two steps
+    // folded into one, on the same state (util/svf_lp.h), so what remains is
+    // float rounding -- also under the sweep. The bound is loose against that
+    // and tight against any real change of the response.
+    DeckRig<spky::SynthEngine> two, one;
+    for (auto* g : { &two, &one }) {
+        g->e.set_flow(true);
+        g->e.set_resonance(0.9f);
+    }
+    one.e.set_probe_word(1u << spky::probe::kBitLeanSvf1);
+    std::vector<float> a, b;
+    for (int t = 0; t < 1000; ++t) {
+        const float filt = 0.5f + 0.5f * std::sin(6.2831853f * t / 1000.f);
+        const float tg[spky::LANE_COUNT] = { 0.5f, filt, 0.5f, 0.f, 1.f };
+        two.e.set_targets(tg, 0.5f);
+        one.e.set_targets(tg, 0.5f);
+        two.tick(&a);
+        one.tick(&b);
+    }
+    REQUIRE(a.size() == b.size());
+    double sig = 0.0, diff = 0.0;
+    bool finite = true;
+    for (size_t i = 0; i < a.size(); ++i) {
+        sig += double(a[i]) * a[i];
+        diff += (double(a[i]) - b[i]) * (double(a[i]) - b[i]);
+        finite = finite && std::isfinite(b[i]);
+    }
+    CHECK(finite);
+    CHECK(sig > 1.0);        // the deck sounded
+    CHECK(diff > 0.0);       // the bit switched the arithmetic
+    CAPTURE(sig);
+    CAPTURE(diff);
+    CHECK(diff < 1e-8 * sig);   // below -80 dB
 }

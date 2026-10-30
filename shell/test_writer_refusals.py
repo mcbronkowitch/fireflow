@@ -4,9 +4,9 @@ The Makefile runs these writers while it is parsed and ignores their exit
 status, so a refusal that left the previous build's header, stamp or linker
 script in place would let the build carry on with a stale value (and the
 guards behind it read the stale file and pass). Each writer therefore deletes
-its output on ANY failure. This runs the four writers that carry that rule
-(reverb_half, fast_math, remote, remote_measure) in a temp directory with an
-old output already in place and checks, per writer:
+its output on ANY failure. This runs the five writers that carry that rule
+(reverb_half, fast_math, remote, remote_measure, engine_lean) in a temp
+directory with an old output already in place and checks, per writer:
 
   - a refusal (bad value / bad marker count)       -> non-zero exit, output gone
   - an OSError after the output was written        -> non-zero exit, output gone
@@ -121,5 +121,48 @@ with tempfile.TemporaryDirectory() as tmp:
     ld3, st3 = d3 / "out.ld", d3 / "out.state"
     check("%s: good run writes script and state" % script,
           run(script, good_src, ld3, st3, "1", "0", d3) == 0 and ld3.is_file() and st3.is_file())
+
+    # --- engine_lean: OUTPUT NAME=V... -- STALE... (a STALE directory: every *.o)
+    script = "write_shell_engine_lean.py"
+    d = tmp / "el"
+    d.mkdir()
+    out = d / "lean.h"
+    for label, args in (("bad value", ["SVF1=2", "--"]),
+                        ("lower-case name", ["svf1=1", "--"]),
+                        ("no '='", ["SVF1", "--"]),
+                        ("a name twice", ["SVF1=0", "SVF1=1", "--"]),
+                        ("no '--'", ["SVF1=1"]),
+                        ("no switch", ["--"])):
+        out.write_text("#define OLD 0\n")
+        check("%s: %s refused" % (script, label), run(script, out, *args) != 0)
+        check("%s: %s leaves no output" % (script, label), not out.exists())
+
+    out.write_text("#define OLD 0\n")
+    sweep = d / "objs"
+    sweep.mkdir()
+    trap_dir(sweep, "x.o")                       # the *.o sweep cannot unlink it
+    rc = run(script, out, "SVF1=1", "--", sweep)
+    check("%s: OSError during the sweep is non-zero" % script, rc != 0)
+    check("%s: OSError during the sweep leaves no output" % script, not out.exists())
+
+    # Control, so the refusals above are not vacuous: a good run writes the
+    # stamp, a changed value sweeps the directory and deletes a named object,
+    # an unchanged one keeps both.
+    d4 = tmp / "el4"
+    d4.mkdir()
+    out4, objs, named = d4 / "lean.h", d4 / "objs", d4 / "named.o"
+    objs.mkdir()
+    check("%s: good run writes the stamp" % script,
+          run(script, out4, "SVF1=0", "--", objs, named) == 0
+          and out4.read_text() == "#define SHELL_LEAN_SVF1 0\n")
+    (objs / "a.o").write_text("x")
+    named.write_text("x")
+    check("%s: unchanged value keeps the objects" % script,
+          run(script, out4, "SVF1=0", "--", objs, named) == 0
+          and (objs / "a.o").exists() and named.exists())
+    check("%s: changed value deletes the objects" % script,
+          run(script, out4, "SVF1=1", "--", objs, named) == 0
+          and not (objs / "a.o").exists() and not named.exists()
+          and out4.read_text() == "#define SHELL_LEAN_SVF1 1\n")
 
 sys.exit(1 if FAILS else 0)

@@ -21,6 +21,9 @@ void VoiceT<OscT>::init(float sample_rate, uint32_t seed) {
     _filt.Init(sample_rate);
     _filt.SetFreq(2000.f);
     _filt.SetRes(0.15f);   // no SetDrive: SvfLp has no drive term (svf_lp.h)
+#if !defined(SPKY_PROBE_TOGGLES) && SPKY_LEAN_SVF1
+    _filt.SetSinglePass(true);   // SHELL_LEAN_SVF1=1: one pass (process())
+#endif
 
     Rng rng;                               // used ONCE at init: deterministic
     rng.seed(seed);                        // per-voice drift character
@@ -134,7 +137,17 @@ void VoiceT<OscT>::process(float& accL, float& accR) {
     // identity; fast_sin_wrapped returns the same bits (CPU round 2, V3).
     s += _sub_level * fast_sin_wrapped(_sub_phase);
 
+#if defined(SPKY_PROBE_TOGGLES)
+    // CPU round 2, candidate V6 (toggle bit 19, util/probe_toggles.h): the
+    // filter's flag, set on the control tick (set_probe_word), picks the pass.
+    if (_filt.single_pass()) _filt.ProcessSingle(s);
+    else                     _filt.Process(s);
+#elif SPKY_LEAN_SVF1
+    // SHELL_LEAN_SVF1=1 (class 2): one pass per sample (util/svf_lp.h).
+    _filt.ProcessSingle(s);
+#else
     _filt.Process(s);
+#endif
     s = _filt.Low() * _env.process() * _vel;
 
     accL += s * _gain_l;
