@@ -291,7 +291,26 @@ class FxEngine {
   };
 
   inline void SetLFOFrequency(LFOIndex index, float frequency) {
+    lfo_f_[index] = frequency;
     lfo_[index].Init(frequency * 32.0f);
+  }
+
+  // Half-rate tank (toggle bit 9): the engine is stepped `div` times less
+  // often per second, so the LFO raster shrinks to `decim` calls (the same
+  // number of raster ticks per second) and the per-call frequency grows by
+  // `div`. (32, 1) is the original behaviour. Restarts both LFOs.
+  inline void SetLFORaster(int decim, int div) {
+    lfo_mask_ = decim - 1;
+    for (int i = 0; i < 2; ++i)
+      lfo_[i].Init(lfo_f_[i] * static_cast<float>(div) * static_cast<float>(decim));
+  }
+
+  // Zero the part of the buffer a tank of `span` floats uses from the next
+  // Start() on (plus a margin for the interpolators' reach), and nothing else.
+  inline void ClearWindow(int span) {
+    const int begin = write_ptr_ - 4;
+    const int count = span + 8;
+    for (int i = 0; i < count; ++i) buffer_[(begin + i) & MASK] = 0;
   }
 
   inline void Start(Context* c) {
@@ -303,7 +322,7 @@ class FxEngine {
     c->previous_read_ = 0.0f;
     c->buffer_ = buffer_;
     c->write_ptr_ = write_ptr_;
-    if ((write_ptr_ & 31) == 0) {
+    if ((write_ptr_ & lfo_mask_) == 0) {
       c->lfo_value_[0] = lfo_[0].Next();
       c->lfo_value_[1] = lfo_[1].Next();
     } else {
@@ -320,6 +339,8 @@ class FxEngine {
   int32_t write_ptr_;
   T* buffer_;
   stmlib::CosineOscillator lfo_[2];
+  float lfo_f_[2] = { 0.0f, 0.0f };   // per-sample frequency at the full rate
+  int32_t lfo_mask_ = 31;             // raster: (write_ptr & mask) == 0
 
   DISALLOW_COPY_AND_ASSIGN(FxEngine);
 };

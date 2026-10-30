@@ -447,3 +447,138 @@ TEST_CASE("mix memos: a re-init (other sample rate, other PAN) matches the from-
         CHECK(count_diff(ref, memo) == 0);
     }
 }
+
+// ---- candidate 10: the reverb tank at half rate (toggle bit 9, class 2) ----
+//
+// Not a bit-identity test: the output is allowed to change. What must hold is
+// that the room is still the same room -- finite, about as loud, and decaying
+// as long.
+
+#include "fx/reverb.h"
+#include "fx/halfband.h"
+
+namespace {
+AmbientReverb g_rev_full, g_rev_half;
+
+// Wet-only left output: 0.5 s of noise (0.3 peak) into the room, then silence.
+std::vector<float> reverb_render(AmbientReverb& rv, bool half, float decay, float size,
+                                 int seconds, int switch_every = 0) {
+    rv.init(48000.f);
+    rv.set_decay(decay);
+    rv.set_size(size);
+    rv.set_tone(0.5f);
+    rv.set_half_rate(half);
+    Noise n;
+    std::vector<float> out;
+    out.reserve(48000 * seconds);
+    for (int i = 0; i < 48000 * seconds; ++i) {
+        if (switch_every > 0 && i > 0 && i % switch_every == 0) rv.set_half_rate(!rv.half_rate());
+        const float x = i < 24000 ? 0.3f * n.next() : 0.f;
+        float l, r;
+        rv.process(x, x, l, r);
+        out.push_back(l);
+    }
+    return out;
+}
+
+double rms_of(const std::vector<float>& v, size_t a, size_t b) {
+    double s = 0.0;
+    for (size_t i = a; i < b; ++i) s += (double)v[i] * v[i];
+    return std::sqrt(s / (double)(b - a));
+}
+
+// RT60 from the wet tail: the 20 ms RMS envelope in dB, a least-squares line
+// through the windows between 10 and 40 dB below the loudest one (after it),
+// extrapolated to 60 dB. A line over 30 dB of the decay, not the first
+// crossing of one level, so a stochastic bump does not move it.
+double decay_rt60(const std::vector<float>& v) {
+    const size_t W = 960;
+    double peak = 0.0;
+    size_t pk = 0;
+    for (size_t i = 0; i + W <= v.size(); i += W) {
+        const double e = rms_of(v, i, i + W);
+        if (e > peak) { peak = e; pk = i; }
+    }
+    double sx = 0, sy = 0, sxx = 0, sxy = 0;
+    int n = 0;
+    for (size_t i = pk; i + W <= v.size(); i += W) {
+        const double db = 20.0 * std::log10(rms_of(v, i, i + W) / peak + 1e-12);
+        if (db > -10.0 || db < -40.0) continue;
+        const double t = (double)(i - pk) / 48000.0;
+        sx += t; sy += db; sxx += t * t; sxy += t * db; ++n;
+    }
+    if (n < 5) return -1.0;
+    const double slope = ((double)n * sxy - sx * sy) / ((double)n * sxx - sx * sx);   // dB per s
+    return slope < 0.0 ? -60.0 / slope : -1.0;
+}
+} // namespace
+
+TEST_CASE("reverb half rate: same loudness and decay as the full-rate room") {
+    for (float decay : {0.55f, 0.7f}) {
+        for (float size : {0.6f, 0.9f}) {
+            INFO("decay " << decay << " size " << size);
+            const auto full = reverb_render(g_rev_full, false, decay, size, 10);
+            const auto half = reverb_render(g_rev_half, true, decay, size, 10);
+            bool finite = true;
+            double ef = 0.0, eh = 0.0;
+            for (size_t i = 0; i < full.size(); ++i) {
+                if (!std::isfinite(half[i])) finite = false;
+                ef += (double)full[i] * full[i];
+                eh += (double)half[i] * half[i];
+            }
+            CHECK(finite);
+            CHECK(ef > 1e-6);
+            const double db = 10.0 * std::log10(eh / ef);
+            const double tf = decay_rt60(full), th = decay_rt60(half);
+            CAPTURE(db);
+            CAPTURE(tf);
+            CAPTURE(th);
+            CHECK(std::fabs(db) < 3.0);
+            REQUIRE(tf > 0.0);
+            REQUIRE(th > 0.0);
+            CHECK(std::fabs(th / tf - 1.0) < 0.10);
+        }
+    }
+}
+
+TEST_CASE("reverb half rate: switching the mode mid-run stays finite and bounded") {
+    const auto sw = reverb_render(g_rev_half, false, 0.7f, 0.6f, 6, 12000);
+    bool finite = true;
+    float peak = 0.f;
+    for (float v : sw) { if (!std::isfinite(v)) finite = false; peak = std::max(peak, std::fabs(v)); }
+    CHECK(finite);
+    CHECK(peak < 1.5f);
+    CHECK(peak > 0.001f);
+}
+
+TEST_CASE("halfband converters: unity DC gain, passband flat, stopband down >= 60 dB") {
+    // Sine of f Hz through down then up: the round trip gain (after settling).
+    auto gain_db = [](float f) {
+        HalfbandDown dn; HalfbandUp up;
+        double acc_in = 0.0, acc_out = 0.0;
+        const int total = 48000;
+        float pend = 0.f;
+        float a = 0.f;
+        for (int i = 0; i < total; ++i) {
+            const float x = (float)std::sin(6.283185307179586 * (double)f * (double)i / 48000.0);
+            float y;
+            if ((i & 1) == 0) { a = x; y = pend; }
+            else {
+                float first, second;
+                up.process(dn.process(a, x), first, second);
+                y = first; pend = second;
+            }
+            if (i > 4000) { acc_in += (double)x * x; acc_out += (double)y * y; }
+        }
+        return 10.0 * std::log10(acc_out / acc_in + 1e-30);
+    };
+    for (float f : {100.f, 1000.f, 5000.f, 8000.f, 10000.f}) {
+        INFO("passband " << f << " Hz");
+        // down + up: the filter is applied twice, so +-0.015 dB.
+        CHECK(std::fabs(gain_db(f)) < 0.05);
+    }
+    for (float f : {14500.f, 16000.f, 20000.f, 23000.f}) {
+        INFO("stopband " << f << " Hz");
+        CHECK(gain_db(f) < -60.0);
+    }
+}

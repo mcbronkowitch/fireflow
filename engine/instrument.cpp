@@ -257,6 +257,8 @@ void Instrument::process(const float* inL, const float* inR,
     // The candidate toggles, once per block and never inside the loop below
     // (util/probe_toggles.h; shell/test_remote_wiring.py holds the place).
     _probe_tog = probe::toggles();
+    // Class-2 candidate, once per block: the reverb tank at half rate.
+    if (_reverb) _reverb->set_half_rate(probe::on(_probe_tog, probe::kBitReverbHalf));
 #endif
     SPKY_PROBE_DECL;
     for (size_t i = 0; i < n; ++i) {

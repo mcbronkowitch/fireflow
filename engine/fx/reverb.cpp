@@ -69,8 +69,12 @@ void AmbientReverb::init(float sample_rate) {
     _lim_down = 1.f - std::exp(-1.f / (kLimDownS * _sr));
     _lim_up   = 1.f - std::exp(-1.f / (kLimUpS * _sr));
     _verb.Init(_buffer, kRngSeed);
+    _half = false;
+    _second = false;
+    _in_a = _pend_l = _pend_r = 0.f;
+    _dn.reset(); _upl.reset(); _upr.reset();
     _verb.set_input_gain(kInputGain);
-    _verb.set_hp(kHpPin);
+    apply_hp();
     _verb.set_mod_rate(kModRate);
     set_size(0.6f);     // boot defaults (spec: audible, nothing screams,
     set_decay(0.55f);   // nothing self-oscillates)
@@ -148,10 +152,36 @@ void AmbientReverb::set_decay(float norm) {
 }
 
 void AmbientReverb::set_tone(float norm) {
-    float fc = daisysp::fmap(clampf(norm, 0.f, 1.f), 500.f, 16000.f,
+    _tone_norm = norm;
+    apply_tone();
+}
+
+// The tank's own sample rate: the engine's, or half of it in half-rate mode.
+// Both loop one-poles are defined by the cutoff / time they should have, so
+// each is re-derived for the rate the tank runs at.
+void AmbientReverb::apply_tone() {
+    float fc = daisysp::fmap(clampf(_tone_norm, 0.f, 1.f), 500.f, 16000.f,
                              daisysp::Mapping::LOG);
+    const float tank_sr = _half ? 0.5f * _sr : _sr;
     // exact one-pole coefficient for that cutoff (control-rate libm is fine)
-    _verb.set_lp(1.f - std::exp(-TWO_PI * fc / _sr));
+    _verb.set_lp(1.f - std::exp(-TWO_PI * fc / tank_sr));
+}
+
+void AmbientReverb::apply_hp() {
+    // kHpPin is the coefficient per 48 kHz sample; the same time constant at
+    // the doubled period is 1 - (1 - c)^2.
+    _verb.set_hp(_half ? clouds::Oliverb::coef_for_half_rate(kHpPin) : kHpPin);
+}
+
+void AmbientReverb::set_half_rate(bool on) {
+    if (on == _half) return;
+    _half = on;
+    _second = false;
+    _in_a = _pend_l = _pend_r = 0.f;
+    _dn.reset(); _upl.reset(); _upr.reset();
+    _verb.SetHalfRate(on);   // empties the new layout's part of the buffer
+    apply_tone();
+    apply_hp();
 }
 
 void AmbientReverb::set_diffusion(float norm) {
@@ -185,9 +215,27 @@ void AmbientReverb::process(float in_l, float in_r, float& out_l, float& out_r) 
         _ctrl = kCtrlInterval;
     }
     --_ctrl;
-    out_l = in_l;
-    out_r = in_r;
-    _verb.Process(&out_l, &out_r);
+    if (!_half) {
+        out_l = in_l;
+        out_r = in_r;
+        _verb.Process(&out_l, &out_r);
+    } else if (!_second) {
+        // First of a pair of input samples: keep the mono sum (the core adds
+        // L + R anyway) and hand out the second sample of the previous
+        // upsampled pair.
+        _in_a = in_l + in_r;
+        _second = true;
+        out_l = _pend_l;
+        out_r = _pend_r;
+    } else {
+        // Second of the pair: one 24 kHz sample into the tank, two 48 kHz
+        // samples out of the interpolators; the first goes out now.
+        float l = _dn.process(_in_a, in_l + in_r), r = 0.f;
+        _verb.Process(&l, &r);
+        _upl.process(l, out_l, _pend_l);
+        _upr.process(r, out_r, _pend_r);
+        _second = false;
+    }
     out_l *= kWetGain;
     out_r *= kWetGain;
 

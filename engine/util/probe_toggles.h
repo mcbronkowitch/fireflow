@@ -59,7 +59,12 @@
 //                                                        limiter-knee part cost
 //                                                        3.3 k more and was
 //                                                        dropped
-//   9-29 (free: candidates; bits 0-8 are never reused)
+//   9    REVERB_HALF          engine/fx/reverb.cpp,      CLASS 2 (the output
+//                             third_party/oliverb        changes): the reverb
+//                                                        tank runs at 24 kHz
+//                                                        between halfband
+//                                                        converters
+//   10-29 (free: candidates; bits 0-9 are never reused)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE
 //                                                        burn on every block
 //   31   SHELL_GUARD_OFF      shell/panel_scan.cpp       the overrun guard is
@@ -73,6 +78,9 @@
 
 namespace spky {
 namespace probe {
+
+// The candidates' bits (above).
+inline constexpr int kBitReverbHalf = 9;
 
 // The shell's two bits (above).
 inline constexpr int kBitShellLateRepeat = 30;

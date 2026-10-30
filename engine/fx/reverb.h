@@ -1,5 +1,6 @@
 #pragma once
 #include "oliverb/oliverb.h"
+#include "fx/halfband.h"
 
 namespace spky {
 
@@ -44,6 +45,14 @@ public:
     void set_diffuser_mod_depth(float norm); // ap1..ap4 LFO smear depth (wash), independent
     void set_mod_depth(float norm);       // tail-delay LFO wobble depth, independent
     void process(float in_l, float in_r, float& out_l, float& out_r);
+    // Toggle bit 9 (util/probe_toggles.h, REVERB_HALF; class 2 -- the output
+    // changes): run the tank at 24 kHz between two halfband converters
+    // (fx/halfband.h). Every time constant keeps its meaning in seconds / Hz
+    // (see reverb.cpp). Switching empties the part of the room the new layout
+    // uses, so the tail restarts from silence at the switch; set once per
+    // block by Instrument::process, off by default.
+    void set_half_rate(bool on);
+    bool half_rate() const { return _half; }
     // The return limiter's ride, for tests: exactly 1.0 while it is idle. From
     // outside, a ride is indistinguishable from a quieter room, so this is the
     // only way to check that quiet material is passed through untouched.
@@ -62,7 +71,19 @@ public:
     float mod_depth_for_test() const { return _mod_norm; }
 
 private:
+    void apply_tone();
+    void apply_hp();
+
     clouds::Oliverb _verb;
+    // Half-rate path (set_half_rate): the converters, the second output of the
+    // last upsampled pair, and which half of the input pair comes next.
+    bool _half = false;
+    bool _second = false;
+    float _in_a = 0.f;
+    float _pend_l = 0.f, _pend_r = 0.f;
+    HalfbandDown _dn;
+    HalfbandUp _upl, _upr;
+    float _tone_norm = 0.5f;
     float _sr = 48000.f;
     int _ctrl = 0;   // control-rate divider for the LFO slope refresh
     // Return limiter: a ceiling on the wet-only return, so the room can never

@@ -42,7 +42,8 @@ SECTIONS
 
     /* Tier 1: every sample. */
     *(.text._ZN4spky10Instrument7processEPKfS2_PfS3_j)                /* 7560 */
-    *(.text._ZN6clouds7Oliverb7ProcessEPfS1_)                          /* 2798 */
+    *(.text._ZN6clouds7Oliverb11ProcessImplILi1EEEvPfS2_)              /* 2796 */
+    *(.text._ZN6clouds7Oliverb11ProcessImplILi2EEEvPfS2_)              /* 2794: the half-rate tank, toggle bit 9 */
     *(.text._ZN4spky6VoiceTINS_8MorphOscEE7processERfS3_)              /* 2008 */
     *(.text._ZN4spky9BbdEngine7processERfS1_)                          /* 1980 */
     *(.text._ZN4spky10FeedEngine7processERfS1_)                        /* 1792 */

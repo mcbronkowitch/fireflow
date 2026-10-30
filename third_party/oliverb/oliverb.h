@@ -70,6 +70,10 @@ class Oliverb {
     engine_.Init(buffer);
     engine_.SetLFOFrequency(LFO_1, 0.5f / 48000.0f);
     engine_.SetLFOFrequency(LFO_2, 0.3f / 48000.0f);
+    half_ = false;
+    lfo_decim_ = kLfoDecimFull;
+    smooth_coef_ = kSmoothCoefFull;
+    engine_.SetLFORaster(kLfoDecimFull, 1);
     rng_.seed(seed ? seed : 1u);
     diffusion_ = 0.625f;
     size_ = 0.5f;
@@ -96,7 +100,7 @@ class Oliverb {
     slope *= slope * slope;
     slope /= 300.0f;   // upstream /200 at 32 kHz; x1.5 more ticks per second
     // x kLfoDecim: Next() runs 1-in-32 samples now, same modulation speed
-    for (int i = 0; i < 9; ++i) lfo_[i].set_slope(slope * (float)kLfoDecim);
+    for (int i = 0; i < 9; ++i) lfo_[i].set_slope(slope * (float)lfo_decim_);
   }
 
   // Spotykach port addition: empty the room without touching parameters —
@@ -117,19 +121,60 @@ class Oliverb {
   }
 
   void Process(float* left, float* right) {
+    if (half_) ProcessImpl<2>(left, right);
+    else       ProcessImpl<1>(left, right);
+  }
+
+  // Half-rate tank (toggle bit 9, class 2): the same room stepped at
+  // 24 kHz. Every length in samples is halved (rounded to nearest), every
+  // modulation depth in samples is halved, every per-sample coefficient is
+  // re-derived for the doubled sample period, and the LFO raster shrinks
+  // from 32 to 16 calls so the modulation keeps its speed in Hz. The caller
+  // owns the sample-rate conversion around it (fx/halfband.h). Switching
+  // zeroes the part of the buffer the new layout uses and the loop-filter
+  // state: the old layout's contents would play as noise.
+  void SetHalfRate(bool half) {
+    if (half == half_) return;
+    half_ = half;
+    const int div = half ? 2 : 1;
+    engine_.SetLFORaster(kLfoDecimFull / div, div);
+    lfo_decim_ = kLfoDecimFull / div;
+    // ONE_POLE(smooth_size_, size_, c): same time constant at the doubled period.
+    smooth_coef_ = half ? 1.0f - (1.0f - kSmoothCoefFull) * (1.0f - kSmoothCoefFull)
+                        : kSmoothCoefFull;
+    engine_.ClearWindow(half ? kSpanHalf : kSpanFull);
+    lp_decay_1_ = lp_decay_2_ = 0.0f;
+    hp_decay_1_ = hp_decay_2_ = 0.0f;
+    lfo_tick_ = 0;
+    Prepare();
+  }
+  bool half_rate() const { return half_; }
+  // The in-loop one-pole coefficient with the same time constant at the other
+  // rate: 1 - (1 - c)^2 for the doubled period (and the inverse back).
+  static float coef_for_half_rate(float c) { return 1.0f - (1.0f - c) * (1.0f - c); }
+
+ private:
+  template<int Div>
+  void ProcessImpl(float* left, float* right) {
     // Griesinger topology per the Dattorro paper: 4 AP input diffusers,
     // then a loop of 2x (2 AP + 1 long delay). All lengths are the
-    // parasites 32 kHz values x1.5.
-    typedef E::Reserve<170,      /* ap1    (113)  */
-      E::Reserve<243,            /* ap2    (162)  */
-      E::Reserve<362,            /* ap3    (241)  */
-      E::Reserve<599,            /* ap4    (399)  */
-      E::Reserve<1880,           /* dap1a  (1253) */
-      E::Reserve<2607,           /* dap1b  (1738) */
-      E::Reserve<5117,           /* del1   (3411) */
-      E::Reserve<2270,           /* dap2a  (1513) */
-      E::Reserve<2045,           /* dap2b  (1363) */
-      E::Reserve<7173> > > > > > > > > > Memory;  /* del2 (4782) */
+    // parasites 32 kHz values x1.5 (Div 1), halved and rounded to nearest at
+    // Div 2.
+#define OLIVERB_LEN(n) (((n) + Div / 2) / Div)
+    typedef E::Reserve<OLIVERB_LEN(170),      /* ap1    (113)  */
+      E::Reserve<OLIVERB_LEN(243),            /* ap2    (162)  */
+      E::Reserve<OLIVERB_LEN(362),            /* ap3    (241)  */
+      E::Reserve<OLIVERB_LEN(599),            /* ap4    (399)  */
+      E::Reserve<OLIVERB_LEN(1880),           /* dap1a  (1253) */
+      E::Reserve<OLIVERB_LEN(2607),           /* dap1b  (1738) */
+      E::Reserve<OLIVERB_LEN(5117),           /* del1   (3411) */
+      E::Reserve<OLIVERB_LEN(2270),           /* dap2a  (1513) */
+      E::Reserve<OLIVERB_LEN(2045),           /* dap2b  (1363) */
+      E::Reserve<OLIVERB_LEN(7173)> > > > > > > > > > Memory;  /* del2 (4782) */
+#undef OLIVERB_LEN
+    STATIC_ASSERT((E::DelayLine<Memory, 9>::base + E::DelayLine<Memory, 9>::length
+                       <= (Div == 1 ? kSpanFull : kSpanHalf)),
+                  tank_span_constant);
     E::DelayLine<Memory, 0> ap1;
     E::DelayLine<Memory, 1> ap2;
     E::DelayLine<Memory, 2> ap3;
@@ -152,7 +197,12 @@ class Oliverb {
     engine_.Start(&c);
 
     // Smooth size to avoid delay glitches; slow on purpose (Doppler ride).
-    ONE_POLE(smooth_size_, size_, 0.0002f);
+    ONE_POLE(smooth_size_, size_, smooth_coef_);
+
+    // Modulation depths are in samples of the full rate; at Div 2 one sample is
+    // twice as long. (x 1.0f at Div 1.)
+    const float mod_amt  = mod_amount_ * (1.0f / (float)Div);
+    const float dmod_amt = diffuser_mod_amount_ * (1.0f / (float)Div);
 
     // Random line LFOs on the /32 raster (the engine's cosine LFOs already
     // decimate this way in Start()); slopes carry the x32 in Prepare().
@@ -166,9 +216,9 @@ class Oliverb {
     // its next raster value instead (one add per LFO per sample; the fast_sin
     // still runs 1-in-32, which is where the CPU cut actually was). Value-
     // continuous by construction: 32 increments land exactly on Next().
-    if ((lfo_tick_ & (kLfoDecim - 1)) == 0)
+    if ((lfo_tick_ & (lfo_decim_ - 1)) == 0)
       for (int i = 1; i < 9; ++i)
-        lfo_inc_[i] = (lfo_[i].Next() - lfo_val_[i]) * (1.0f / (float)kLfoDecim);
+        lfo_inc_[i] = (lfo_[i].Next() - lfo_val_[i]) * (1.0f / (float)lfo_decim_);
     for (int i = 1; i < 9; ++i) lfo_val_[i] += lfo_inc_[i];
     ++lfo_tick_;
 
@@ -199,29 +249,29 @@ class Oliverb {
     }
 
     // Smear AP1 inside the loop.
-    c.Interpolate(ap1, 15.0f, LFO_1, 90.0f, 1.0f);
-    c.Write(ap1, 150, 0.0f);
+    c.Interpolate(ap1, 15.0f / (float)Div, LFO_1, 90.0f / (float)Div, 1.0f);
+    c.Write(ap1, (150 + Div / 2) / Div, 0.0f);
 
     c.Read(*left + *right, input_gain_);
     // Diffuse through 4 allpasses.
-    OLIVERB_INTERPOLATE_LFO_LIN(ap1, lfo_val_[1], kap, diffuser_mod_amount_);
+    OLIVERB_INTERPOLATE_LFO_LIN(ap1, lfo_val_[1], kap, dmod_amt);
     c.WriteAllPass(ap1, -kap);
-    OLIVERB_INTERPOLATE_LFO_LIN(ap2, lfo_val_[2], kap, diffuser_mod_amount_);
+    OLIVERB_INTERPOLATE_LFO_LIN(ap2, lfo_val_[2], kap, dmod_amt);
     c.WriteAllPass(ap2, -kap);
-    OLIVERB_INTERPOLATE_LFO_LIN(ap3, lfo_val_[3], kap, diffuser_mod_amount_);
+    OLIVERB_INTERPOLATE_LFO_LIN(ap3, lfo_val_[3], kap, dmod_amt);
     c.WriteAllPass(ap3, -kap);
-    OLIVERB_INTERPOLATE_LFO_LIN(ap4, lfo_val_[4], kap, diffuser_mod_amount_);
+    OLIVERB_INTERPOLATE_LFO_LIN(ap4, lfo_val_[4], kap, dmod_amt);
     c.WriteAllPass(ap4, -kap);
 
     float apout;
     c.Write(apout);
 
     // Main reverb loop, branch 1.
-    OLIVERB_INTERPOLATE_LFO(del2, lfo_val_[5], decay_, mod_amount_);
+    OLIVERB_INTERPOLATE_LFO(del2, lfo_val_[5], decay_, mod_amt);
     c.Lp(lp_1, lp_);
     c.Hp(hp_1, hp_);
     c.SoftLimit();
-    OLIVERB_INTERPOLATE_LFO(dap1a, lfo_val_[6], -kap, mod_amount_);
+    OLIVERB_INTERPOLATE_LFO(dap1a, lfo_val_[6], -kap, mod_amt);
     c.WriteAllPass(dap1a, kap);
     OLIVERB_INTERPOLATE(dap1b, kap);
     c.WriteAllPass(dap1b, -kap);
@@ -231,11 +281,11 @@ class Oliverb {
     c.Load(apout);
 
     // Main reverb loop, branch 2.
-    OLIVERB_INTERPOLATE_LFO(del1, lfo_val_[7], decay_, mod_amount_);
+    OLIVERB_INTERPOLATE_LFO(del1, lfo_val_[7], decay_, mod_amt);
     c.Lp(lp_2, lp_);
     c.Hp(hp_2, hp_);
     c.SoftLimit();
-    OLIVERB_INTERPOLATE_LFO(dap2a, lfo_val_[8], kap, mod_amount_);
+    OLIVERB_INTERPOLATE_LFO(dap2a, lfo_val_[8], kap, mod_amt);
     c.WriteAllPass(dap2a, -kap);
     OLIVERB_INTERPOLATE(dap2b, -kap);
     c.WriteAllPass(dap2b, kap);
@@ -252,6 +302,7 @@ class Oliverb {
     hp_decay_2_ = hp_2;
   }
 
+ public:
   inline void set_input_gain(float input_gain) { input_gain_ = input_gain; }
   inline void set_decay(float decay) { decay_ = decay; }
   inline void set_diffusion(float diffusion) { diffusion_ = diffusion; }
@@ -266,7 +317,14 @@ class Oliverb {
   inline void set_mod_rate(float mod_rate) { mod_rate_ = mod_rate; }
 
  private:
-  enum { kLfoDecim = 32 };   // random-LFO raster, matches FxEngine::Start()
+  enum { kLfoDecimFull = 32 };   // random-LFO raster, matches FxEngine::Start()
+  static constexpr float kSmoothCoefFull = 0.0002f;
+  // Floats of the buffer each layout spans (last line's base + length, plus
+  // the one-sample gaps), rounded up; ProcessImpl static-asserts them.
+  enum { kSpanFull = 22500, kSpanHalf = 11300 };
+  bool  half_ = false;
+  int32_t lfo_decim_ = kLfoDecimFull;   // 32 samples per raster tick, 16 at half rate
+  float smooth_coef_ = kSmoothCoefFull;
 
   typedef FxEngine<kBufferSize, FORMAT_32_BIT> E;
   E engine_;
