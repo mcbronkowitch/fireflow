@@ -331,3 +331,52 @@ Even the upper estimates of the class-1 rows 1, 2 and 5-10 add up to about
 engine work (row 11), whose size is open. Task 10 starts with row 1, the
 only row with a measured section and a known mechanism. Row 2 gets its
 probe before anything is built.
+
+## 5. The candidate loop (plan Task 10), 2026-10-30
+
+### How a verdict is reached here
+
+The plan's verdict compares `frame_max` p99 / max of interleaved base and
+candidate runs against the A/A floor. On the static workloads of §4 that
+statistic does not hold still over 60 s. Two base runs of the same
+workload, a minute apart on the same image, differ by up to 135 k
+(BBD_SYNTH_rnd4: 844 182 / 980 921). One candidate run of WAVE_SYNTH_rnd19
+reads 947 599 and the next 828 179. SAMPLER_SAMPLER_rnd17 trips 5 times in
+one minute and 38 in the next. The workloads' modulation keeps moving, so
+the worst minute is not the same minute twice. The §2 floors (2-3 k, from
+300 s of `bastian` and corner 14) do not transfer to them.
+
+**Ruling:** a class-1 candidate whose output is bit-identical (proven by a
+test against the old code) is judged on its own section's window means.
+That means the same measurement image, base and candidate interleaved on
+several workloads it applies to. Such a candidate cannot cost: the path
+strictly does less for the same result. Its saving is the section delta.
+Whether the worst cases then reach 880 000 is checked on the listener once
+the class-1 rows are in, not per candidate. Cost if wrong: a section saving
+that never reaches a worst block gets counted.
+
+### Candidate 1: GRIT REDUCE, the discarded Decimator step — adopted
+
+`GritDecimator` (`engine/fx/grit.h`) replaces `daisysp::Decimator` with the
+same arithmetic. `step()` is the state alone; `process()` is the state and
+the bitcrush. `GritReduce::process` used to run the full Decimator twice
+per frame and throw away the first result. It now calls `step()` and then
+`process()`. Tests: `GritDecimator` equals `daisysp::Decimator` bit for bit
+(5 intensities, 3 crush factors). `GritReduce` equals an inline reference
+built from daisysp parts as the old code was, bit for bit, at 5
+intensity/mix settings; RED shown by skipping one `step()` (3 583
+mismatches). Desktop `ctest -E "^reva_"` 43/43 (controller-run). Commits
+b564e7c9 (behind toggle bit 0), eb439537 (the only path; bit 0 retired).
+
+| run (measurement image) | GRIT stage 1 per REDUCE deck | GRIT total per REDUCE deck |
+|---|---|---|
+| base, 843baa3 bit 0 off (w313, w169, w117, w304, w282) | 21.7-22.1 k | 58.1-58.7 k |
+| toggle, 843baa3 bit 0 on (same five) | 13.7-14.4 k | 50.5-50.9 k |
+| final, eb43953 (w313, w304) | 7.1-7.3 k | 43.0-43.4 k |
+
+**−15.2 k per REDUCE deck per block.** The worst workloads have one or two
+REDUCE decks (§4), so −15 k to −30 k. The toggle build measured half of
+that. There the decimator stayed out of line in ITCM, called from
+`GritReduce::process` in SRAM_EXEC through a veneer. In the final build
+the step and the bitcrush inline into `GritReduce::process`, and the
+decimator's ITCM entry is gone (the in-build guard requires that).
