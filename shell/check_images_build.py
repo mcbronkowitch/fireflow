@@ -53,6 +53,9 @@ IMAGES = [
     # LATE and the candidate toggles, with the probe stamps on.
     ("reva_remote_measure", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
                              "SHELL_REMOTE_MEASURE=1"]),
+    # The class-2 half-rate reverb as a build (listener image, always half).
+    ("reva_remote_reverb_half", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
+                                 "SHELL_REVERB_HALF=1"]),
     # The class-2 build switch (CPU hunt): -ffast-math on engine/ only.
     ("reva_remote_measure_fm1", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
                                  "SHELL_REMOTE_MEASURE=1", "SHELL_FAST_MATH=1"]),

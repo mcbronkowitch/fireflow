@@ -22,6 +22,7 @@
 //
 // See http://creativecommons.org/licenses/MIT/ for more information.
 //
+// (Half-rate gate macros, CPU hunt class 2, 2026-10-30: see below.)
 // Minimal stand-in for the stmlib headers used by the vendored Oliverb code
 // (fx_engine.h / oliverb.h / random_oscillator.h). SoftLimit and
 // CosineOscillator are ported from stmlib — Copyright 2012-2014 Emilie Gillet,
@@ -31,6 +32,27 @@
 // uninitialized until Init).
 #pragma once
 #include <cstdint>
+
+// Half-rate tank (toggle bit 9, class 2), compile-time gate. The half-rate
+// path -- Oliverb::ProcessImpl<2>, its mode switch and the converters around it
+// (engine/fx/halfband.h) -- exists only where it can be used:
+//  - SPKY_PROBE_TOGGLES (the measurement image: bit 9 switches it live) or
+//    SPKY_TESTING (the desktop tests): both rates are compiled, a runtime flag
+//    picks;
+//  - SPKY_REVERB_HALF_ONLY (shell build switch SHELL_REVERB_HALF=1): only the
+//    half-rate tank is compiled and it always runs.
+// Everywhere else (desktop hosts, VCV, every other firmware image) the reverb
+// is the full-rate code and nothing else.
+#if defined(SPKY_REVERB_HALF_ONLY)
+#define OLIVERB_HALF_PATH 1
+#define OLIVERB_HALF_ONLY 1
+#elif defined(SPKY_PROBE_TOGGLES) || defined(SPKY_TESTING)
+#define OLIVERB_HALF_PATH 1
+#define OLIVERB_HALF_ONLY 0
+#else
+#define OLIVERB_HALF_PATH 0
+#define OLIVERB_HALF_ONLY 0
+#endif
 
 #define ONE_POLE(out, in, coefficient) out += (coefficient) * ((in) - out);
 #define CONSTRAIN(var, min, max)                        \

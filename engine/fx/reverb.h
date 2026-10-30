@@ -1,6 +1,8 @@
 #pragma once
 #include "oliverb/oliverb.h"
+#if OLIVERB_HALF_PATH
 #include "fx/halfband.h"
+#endif
 
 namespace spky {
 
@@ -45,14 +47,20 @@ public:
     void set_diffuser_mod_depth(float norm); // ap1..ap4 LFO smear depth (wash), independent
     void set_mod_depth(float norm);       // tail-delay LFO wobble depth, independent
     void process(float in_l, float in_r, float& out_l, float& out_r);
+#if OLIVERB_HALF_PATH
     // Toggle bit 9 (util/probe_toggles.h, REVERB_HALF; class 2 -- the output
     // changes): run the tank at 24 kHz between two halfband converters
     // (fx/halfband.h). Every time constant keeps its meaning in seconds / Hz
-    // (see reverb.cpp). Switching empties the part of the room the new layout
-    // uses, so the tail restarts from silence at the switch; set once per
-    // block by Instrument::process, off by default.
+    // (see reverb.cpp). Switching CUTS the running tail to silence in one
+    // sample (it empties the part of the room the new layout uses and resets
+    // the converters): a click on a loud tail, so a flip belongs in the
+    // measurement image only. Set once per block by Instrument::process, off
+    // by default. Exists only where the half-rate path is compiled
+    // (third_party/oliverb/stmlib_shim.h: SPKY_PROBE_TOGGLES, SPKY_TESTING or
+    // the SHELL_REVERB_HALF=1 build, where it is on from init()).
     void set_half_rate(bool on);
     bool half_rate() const { return _half; }
+#endif
 #ifdef SPKY_TESTING
     float lfo_for_test(int i) const { return _verb.lfo_val_for_test(i); }
     float cos_lfo_for_test(int i) const { return _verb.cos_lfo_for_test(i); }
@@ -75,10 +83,13 @@ public:
     float mod_depth_for_test() const { return _mod_norm; }
 
 private:
+#if OLIVERB_HALF_PATH
     void apply_tone();
     void apply_hp();
+#endif
 
     clouds::Oliverb _verb;
+#if OLIVERB_HALF_PATH
     // Half-rate path (set_half_rate): the converters, the second output of the
     // last upsampled pair, and which half of the input pair comes next.
     bool _half = false;
@@ -88,6 +99,7 @@ private:
     HalfbandDown _dn;
     HalfbandUp _upl, _upr;
     float _tone_norm = 0.5f;
+#endif
     float _sr = 48000.f;
     int _ctrl = 0;   // control-rate divider for the LFO slope refresh
     // Return limiter: a ceiling on the wet-only return, so the room can never

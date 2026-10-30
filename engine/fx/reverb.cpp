@@ -69,12 +69,18 @@ void AmbientReverb::init(float sample_rate) {
     _lim_down = 1.f - std::exp(-1.f / (kLimDownS * _sr));
     _lim_up   = 1.f - std::exp(-1.f / (kLimUpS * _sr));
     _verb.Init(_buffer, kRngSeed);
+#if OLIVERB_HALF_PATH
     _half = false;
     _second = false;
     _in_a = _pend_l = _pend_r = 0.f;
     _dn.reset(); _upl.reset(); _upr.reset();
+#endif
     _verb.set_input_gain(kInputGain);
+#if OLIVERB_HALF_PATH
     apply_hp();
+#else
+    _verb.set_hp(kHpPin);
+#endif
     _verb.set_mod_rate(kModRate);
     set_size(0.6f);     // boot defaults (spec: audible, nothing screams,
     set_decay(0.55f);   // nothing self-oscillates)
@@ -82,6 +88,9 @@ void AmbientReverb::init(float sample_rate) {
     set_diffusion(0.7f);          // coeff 0.63 ~= the old stock 0.625 room
     set_diffuser_mod_depth(0.5f); // wash smear default (~56)
     set_mod_depth(0.2f);          // gentle tail wobble default (~the calm 22.5)
+#if OLIVERB_HALF_ONLY
+    set_half_rate(true);          // SHELL_REVERB_HALF=1: the tank always runs at 24 kHz
+#endif
     _wet_peak = 0.f;
     _lim_gain = 1.f;   // boot wide open; nothing has overshot yet
     _lim_target = 1.f;
@@ -151,6 +160,14 @@ void AmbientReverb::set_decay(float norm) {
     _verb.set_decay(decay_loop_gain(norm));
 }
 
+#if !OLIVERB_HALF_PATH
+void AmbientReverb::set_tone(float norm) {
+    float fc = daisysp::fmap(clampf(norm, 0.f, 1.f), 500.f, 16000.f,
+                             daisysp::Mapping::LOG);
+    // exact one-pole coefficient for that cutoff (control-rate libm is fine)
+    _verb.set_lp(1.f - std::exp(-TWO_PI * fc / _sr));
+}
+#else
 void AmbientReverb::set_tone(float norm) {
     _tone_norm = norm;
     apply_tone();
@@ -183,6 +200,7 @@ void AmbientReverb::set_half_rate(bool on) {
     apply_tone();
     apply_hp();
 }
+#endif
 
 void AmbientReverb::set_diffusion(float norm) {
     norm = clampf(norm, 0.f, 1.f);
@@ -215,11 +233,19 @@ void AmbientReverb::process(float in_l, float in_r, float& out_l, float& out_r) 
         _ctrl = kCtrlInterval;
     }
     --_ctrl;
+#if !OLIVERB_HALF_PATH
+    out_l = in_l;
+    out_r = in_r;
+    _verb.Process(&out_l, &out_r);
+#else
+#if !OLIVERB_HALF_ONLY
     if (!_half) {
         out_l = in_l;
         out_r = in_r;
         _verb.Process(&out_l, &out_r);
-    } else if (!_second) {
+    } else
+#endif
+    if (!_second) {
         // First of a pair of input samples: keep the mono sum (the core adds
         // L + R anyway) and hand out the second sample of the previous
         // upsampled pair.
@@ -236,6 +262,7 @@ void AmbientReverb::process(float in_l, float in_r, float& out_l, float& out_r) 
         _upr.process(r, out_r, _pend_r);
         _second = false;
     }
+#endif
     out_l *= kWetGain;
     out_r *= kWetGain;
 

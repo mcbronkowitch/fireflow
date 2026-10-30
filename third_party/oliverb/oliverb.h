@@ -49,6 +49,13 @@
 //    between ticks, so the delay read offsets it drives moved in steps -- an
 //    inharmonic 1500 Hz comb that grew with SMEAR. They now glide linearly
 //    between raster values; the fast_sin stays 1-in-32, so the CPU cut holds
+//  - Half-rate tank (2026-10-30, CPU hunt class 2, toggle bit 9): Process()
+//    dispatches to ProcessImpl<Div>; at Div 2 every delay length, smear and
+//    modulation depth in samples is halved, the LFO raster is 16 steps (the
+//    random LFOs' step per tick stays), the size smoother takes the doubled-
+//    period coefficient. SetHalfRate() switches and empties the buffer window.
+//    Compiled only under SPKY_PROBE_TOGGLES / SPKY_TESTING / SPKY_REVERB_HALF_ONLY
+//    (stmlib_shim.h); otherwise the code is the full-rate tank above.
 #ifndef CLOUDS_DSP_FX_OLIVERB_H_
 #define CLOUDS_DSP_FX_OLIVERB_H_
 
@@ -70,10 +77,10 @@ class Oliverb {
     engine_.Init(buffer);
     engine_.SetLFOFrequency(LFO_1, 0.5f / 48000.0f);
     engine_.SetLFOFrequency(LFO_2, 0.3f / 48000.0f);
+#if OLIVERB_HALF_PATH
     half_ = false;
-    lfo_decim_ = kLfoDecimFull;
-    smooth_coef_ = kSmoothCoefFull;
     engine_.SetLFORaster(kLfoDecimFull, 1);
+#endif
     rng_.seed(seed ? seed : 1u);
     diffusion_ = 0.625f;
     size_ = 0.5f;
@@ -124,10 +131,17 @@ class Oliverb {
   }
 
   void Process(float* left, float* right) {
+#if OLIVERB_HALF_ONLY
+    ProcessImpl<2>(left, right);
+#elif OLIVERB_HALF_PATH
     if (half_) ProcessImpl<2>(left, right);
     else       ProcessImpl<1>(left, right);
+#else
+    ProcessImpl<1>(left, right);
+#endif
   }
 
+#if OLIVERB_HALF_PATH
   // Half-rate tank (toggle bit 9, class 2): the same room stepped at
   // 24 kHz. Every length in samples is halved (rounded to nearest), every
   // modulation depth in samples is halved, every per-sample coefficient is
@@ -141,10 +155,6 @@ class Oliverb {
     half_ = half;
     const int div = half ? 2 : 1;
     engine_.SetLFORaster(kLfoDecimFull / div, div);
-    lfo_decim_ = kLfoDecimFull / div;
-    // ONE_POLE(smooth_size_, size_, c): same time constant at the doubled period.
-    smooth_coef_ = half ? 1.0f - (1.0f - kSmoothCoefFull) * (1.0f - kSmoothCoefFull)
-                        : kSmoothCoefFull;
     engine_.ClearWindow(half ? kSpanHalf : kSpanFull);
     lp_decay_1_ = lp_decay_2_ = 0.0f;
     hp_decay_1_ = hp_decay_2_ = 0.0f;
@@ -152,15 +162,16 @@ class Oliverb {
     Prepare();
   }
   bool half_rate() const { return half_; }
+  // The in-loop one-pole coefficient with the same time constant at the other
+  // rate: 1 - (1 - c)^2 for the doubled period (and the inverse back).
+  static float coef_for_half_rate(float c) { return 1.0f - (1.0f - c) * (1.0f - c); }
+#endif
 #ifdef SPKY_TESTING
   // Tests only: the glided random line LFO i (1..8) and the engine's cosine
   // LFO i (0..1), to measure their rate in Hz in both modes.
   float lfo_val_for_test(int i) const { return lfo_val_[i]; }
   float cos_lfo_for_test(int i) const { return engine_.lfo_value_for_test(i); }
 #endif
-  // The in-loop one-pole coefficient with the same time constant at the other
-  // rate: 1 - (1 - c)^2 for the doubled period (and the inverse back).
-  static float coef_for_half_rate(float c) { return 1.0f - (1.0f - c) * (1.0f - c); }
 
  private:
   template<int Div>
@@ -203,15 +214,24 @@ class Oliverb {
     float hp_1 = hp_decay_1_;
     float hp_2 = hp_decay_2_;
 
-    engine_.Start(&c);
+    // Per-instance constants: the LFO raster in tank steps (the same 1500
+    // ticks a second at either rate) and the size smoother's coefficient (the
+    // same time constant at the doubled period: 1 - (1 - c)^2).
+    constexpr int kDecim = kLfoDecimFull / Div;
+    constexpr float kSmooth = Div == 1
+        ? kSmoothCoefFull
+        : 1.0f - (1.0f - kSmoothCoefFull) * (1.0f - kSmoothCoefFull);
+
+    engine_.template Start<kDecim>(&c);
 
     // Smooth size to avoid delay glitches; slow on purpose (Doppler ride).
-    ONE_POLE(smooth_size_, size_, smooth_coef_);
+    ONE_POLE(smooth_size_, size_, kSmooth);
 
     // Modulation depths are in samples of the full rate; at Div 2 one sample is
-    // twice as long. (x 1.0f at Div 1.)
-    const float mod_amt  = mod_amount_ * (1.0f / (float)Div);
-    const float dmod_amt = diffuser_mod_amount_ * (1.0f / (float)Div);
+    // twice as long. Macros, not locals, so that at Div 1 the member is read
+    // where it is used, exactly as in the full-rate-only tank.
+#define mod_amt  (Div == 1 ? mod_amount_ : mod_amount_ * 0.5f)
+#define dmod_amt (Div == 1 ? diffuser_mod_amount_ : diffuser_mod_amount_ * 0.5f)
 
     // Random line LFOs on the /32 raster (the engine's cosine LFOs already
     // decimate this way in Start()); slopes carry the x32 in Prepare().
@@ -225,9 +245,9 @@ class Oliverb {
     // its next raster value instead (one add per LFO per sample; the fast_sin
     // still runs 1-in-32, which is where the CPU cut actually was). Value-
     // continuous by construction: 32 increments land exactly on Next().
-    if ((lfo_tick_ & (lfo_decim_ - 1)) == 0)
+    if ((lfo_tick_ & (kDecim - 1)) == 0)
       for (int i = 1; i < 9; ++i)
-        lfo_inc_[i] = (lfo_[i].Next() - lfo_val_[i]) * (1.0f / (float)lfo_decim_);
+        lfo_inc_[i] = (lfo_[i].Next() - lfo_val_[i]) * (1.0f / (float)kDecim);
     for (int i = 1; i < 9; ++i) lfo_val_[i] += lfo_inc_[i];
     ++lfo_tick_;
 
@@ -304,6 +324,8 @@ class Oliverb {
 #undef OLIVERB_INTERPOLATE_LFO
 #undef OLIVERB_INTERPOLATE_LFO_LIN
 #undef OLIVERB_INTERPOLATE
+#undef mod_amt
+#undef dmod_amt
 
     lp_decay_1_ = lp_1;
     lp_decay_2_ = lp_2;
@@ -331,9 +353,9 @@ class Oliverb {
   // Floats of the buffer each layout spans (last line's base + length, plus
   // the one-sample gaps), rounded up; ProcessImpl static-asserts them.
   enum { kSpanFull = 22500, kSpanHalf = 11300 };
+#if OLIVERB_HALF_PATH
   bool  half_ = false;
-  int32_t lfo_decim_ = kLfoDecimFull;   // 32 samples per raster tick, 16 at half rate
-  float smooth_coef_ = kSmoothCoefFull;
+#endif
 
   typedef FxEngine<kBufferSize, FORMAT_32_BIT> E;
   E engine_;

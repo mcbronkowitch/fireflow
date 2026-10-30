@@ -606,8 +606,33 @@ $(BUILD_DIR)/control_tick.o: override OPT := -O2
 # are explicit compares and are not affected; nothing sets FPSCR.FZ either way.
 SHELL_FAST_MATH ?= 0
 
-ifneq ($(filter $(SHELL_FAST_MATH),0 1 2),$(SHELL_FAST_MATH))
+ifneq ($(words $(SHELL_FAST_MATH))-$(filter $(SHELL_FAST_MATH),0 1 2),1-$(SHELL_FAST_MATH))
 $(error SHELL_FAST_MATH must be 0, 1 or 2)
+endif
+
+# The class-2 reverb A/B (toggle bit 9 in the measurement image; here as a
+# build, so the pair can be recorded on listener images by reflash):
+# SHELL_REVERB_HALF=1 compiles ONLY the half-rate tank (24 kHz between the
+# halfband converters, engine/fx/halfband.h) and it always runs. 0 compiles the
+# full-rate tank only -- exactly the code of 2ac8ee07, no half-rate path in the
+# image (third_party/oliverb/stmlib_shim.h). The measurement image
+# (SHELL_REMOTE_MEASURE=1) has both and switches with bit 9, so the two
+# switches exclude each other. build/itcm_hot.ld, written at parse time by
+# write_shell_reverb_half.py, is the linker script with the tank's hot-list
+# entries for this build; the writer also deletes every object when the state
+# changes.
+SHELL_REVERB_HALF ?= 0
+
+ifneq ($(words $(SHELL_REVERB_HALF))-$(filter $(SHELL_REVERB_HALF),0 1),1-$(SHELL_REVERB_HALF))
+$(error SHELL_REVERB_HALF must be 0 or 1)
+endif
+
+ifeq ($(SHELL_REVERB_HALF),1)
+ifeq ($(SHELL_REMOTE_MEASURE),1)
+$(error SHELL_REVERB_HALF=1 with SHELL_REMOTE_MEASURE=1: the measurement image \
+switches the tank with toggle bit 9)
+endif
+C_DEFS += -DSPKY_REVERB_HALF_ONLY=1
 endif
 
 ENGINE_OBJECTS := $(addprefix $(BUILD_DIR)/,$(patsubst %.cpp,%.o,$(notdir $(filter ../engine/%,$(CPP_SOURCES)))))
@@ -629,8 +654,8 @@ $(BUILD_DIR)/$(TARGET).elf: qspi_cold.ld
 # The ITCM hot set, read after qspi_cold.ld: its load address lies in the
 # QSPI_COLD region that script declares.
 ifeq ($(SHELL_ITCM),1)
-LDFLAGS += -Wl,-T,itcm_hot.ld
-$(BUILD_DIR)/$(TARGET).elf: itcm_hot.ld
+LDFLAGS += -Wl,-T,$(BUILD_DIR)/itcm_hot.ld
+$(BUILD_DIR)/$(TARGET).elf: $(BUILD_DIR)/itcm_hot.ld
 endif
 NM := $(CP:objcopy=nm)
 OBJDUMP := $(CP:objcopy=objdump)
@@ -683,6 +708,7 @@ SWITCH_HEADERS := \
   $(shell python write_shell_remote.py $(BUILD_DIR)/shell_remote.h $(SHELL_REMOTE) $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o) \
   $(shell python write_shell_remote_measure.py $(BUILD_DIR)/shell_remote_measure.h $(SHELL_REMOTE_MEASURE) $(BUILD_DIR)) \
   $(shell python write_shell_fast_math.py $(BUILD_DIR)/shell_fast_math.h $(SHELL_FAST_MATH) $(ENGINE_OBJECTS)) \
+  $(shell python write_shell_reverb_half.py itcm_hot.ld $(BUILD_DIR)/itcm_hot.ld $(BUILD_DIR)/shell_reverb_half.state $(SHELL_REVERB_HALF) $(SHELL_REMOTE_MEASURE) $(BUILD_DIR)) \
   $(shell python write_shell_link_stamp.py $(BUILD_DIR)/shell_link_stamp.h $(BUILD_DIR)/itcm_load.o) \
   $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/pot_report.o $(BUILD_DIR)/scan_check.o $(BUILD_DIR)/remote_listen.o)
 
@@ -765,7 +791,7 @@ images: $(BUILD_DIR)/$(TARGET)-sram.bin $(BUILD_DIR)/$(TARGET)-qspi.bin
 # The ITCM placement guard (itcm_placement.py) joins the same chain when the
 # hot set is linked: it reads the undemangled nm, because itcm_hot.ld names
 # its functions mangled.
-ITCM_GUARD = $(if $(filter 1,$(SHELL_ITCM)),&& $(NM) -S $< > $(BUILD_DIR)/$(TARGET).rawnm && python itcm_placement.py $(BUILD_DIR)/$(TARGET).rawnm $(BUILD_DIR)/$(TARGET).dis itcm_hot.ld)
+ITCM_GUARD = $(if $(filter 1,$(SHELL_ITCM)),&& $(NM) -S $< > $(BUILD_DIR)/$(TARGET).rawnm && python itcm_placement.py $(BUILD_DIR)/$(TARGET).rawnm $(BUILD_DIR)/$(TARGET).dis $(BUILD_DIR)/itcm_hot.ld)
 $(BUILD_DIR)/$(TARGET).nm: $(BUILD_DIR)/$(TARGET).elf FORCE
 	( $(NM) -C -S $< > $@ && $(OBJDUMP) -d -C --no-show-raw-insn $< > $(BUILD_DIR)/$(TARGET).dis && python qspi_placement.py $@ $(BUILD_DIR)/$(TARGET).dis $< $(ITCM_GUARD) ) || (rm -f $@ $(BUILD_DIR)/$(TARGET).dis $(BUILD_DIR)/$(TARGET)-sram.bin $(BUILD_DIR)/$(TARGET)-qspi.bin && exit 1)
 

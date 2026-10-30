@@ -27,6 +27,10 @@
 //  - trimmed to the float path: FORMAT_12_BIT / FORMAT_16_BIT DataType
 //    specializations removed (they need stmlib::Clip16 / ARM ssat)
 //  - CosineOscillator::Init<mode> template call -> plain Init()
+//  - Half-rate tank (2026-10-30, CPU hunt class 2): Start<Decim>() takes the
+//    cosine LFOs' raster as a template argument (32 by default), and under
+//    OLIVERB_HALF_PATH (stmlib_shim.h) SetLFORaster() and ClearWindow() exist
+//    for the mode switch.
 #ifndef CLOUDS_DSP_FX_FX_ENGINE_H_
 #define CLOUDS_DSP_FX_FX_ENGINE_H_
 
@@ -291,24 +295,29 @@ class FxEngine {
   };
 
   inline void SetLFOFrequency(LFOIndex index, float frequency) {
+#if OLIVERB_HALF_PATH
     lfo_f_[index] = frequency;
+#endif
     lfo_[index].Init(frequency * 32.0f);
   }
 
+#if OLIVERB_HALF_PATH
   // Half-rate tank (toggle bit 9): the engine is stepped `div` times less
   // often per second, so the LFO raster shrinks to `decim` calls (the same
   // number of raster ticks per second) and the per-call frequency grows by
-  // `div`. (32, 1) is the original behaviour. Restarts both LFOs.
+  // `div`. (32, 1) is the original behaviour. Restarts both LFOs. Start<>
+  // must be given the same `decim`.
   inline void SetLFORaster(int decim, int div) {
-    lfo_mask_ = decim - 1;
     for (int i = 0; i < 2; ++i)
       lfo_[i].Init(lfo_f_[i] * static_cast<float>(div) * static_cast<float>(decim));
   }
+#endif
 
 #ifdef SPKY_TESTING
   float lfo_value_for_test(int i) const { return lfo_[i].value(); }
 #endif
 
+#if OLIVERB_HALF_PATH
   // Zero the part of the buffer a tank of `span` floats uses from the next
   // Start() on (plus a margin for the interpolators' reach), and nothing else.
   inline void ClearWindow(int span) {
@@ -316,7 +325,10 @@ class FxEngine {
     const int count = span + 8;
     for (int i = 0; i < count; ++i) buffer_[(begin + i) & MASK] = 0;
   }
+#endif
 
+  // `Decim`: the cosine LFOs' raster in engine steps (32 at the full rate).
+  template<int Decim = 32>
   inline void Start(Context* c) {
     --write_ptr_;
     if (write_ptr_ < 0) {
@@ -326,7 +338,7 @@ class FxEngine {
     c->previous_read_ = 0.0f;
     c->buffer_ = buffer_;
     c->write_ptr_ = write_ptr_;
-    if ((write_ptr_ & lfo_mask_) == 0) {
+    if ((write_ptr_ & (Decim - 1)) == 0) {
       c->lfo_value_[0] = lfo_[0].Next();
       c->lfo_value_[1] = lfo_[1].Next();
     } else {
@@ -343,8 +355,9 @@ class FxEngine {
   int32_t write_ptr_;
   T* buffer_;
   stmlib::CosineOscillator lfo_[2];
+#if OLIVERB_HALF_PATH
   float lfo_f_[2] = { 0.0f, 0.0f };   // per-sample frequency at the full rate
-  int32_t lfo_mask_ = 31;             // raster: (write_ptr & mask) == 0
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(FxEngine);
 };
