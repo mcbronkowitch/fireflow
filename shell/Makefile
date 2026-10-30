@@ -34,14 +34,18 @@ LDSCRIPT = ../alt_sram.lds
 # ../src/ ist fuer genau einen Header drauf: hw/board.h -- derselbe, den die
 # Bench einbindet, und der einzige geteilte Code zwischen beiden Baeumen.
 C_INCLUDES = -I. -I../ -I../src/ -I../engine/ -I../third_party/ -I../lib/DaisySP/Source/
-# No -ffast-math / -funroll-loops. A line `C_USR_FLAGS = -ffast-math
-# -funroll-loops` stood here from the start, but libDaisy reads C_USER_FLAGS,
-# so it never reached the compiler; the 2026-07-30 -O3 round found that and
-# kept it that way (spec 2026-07-30-o3-lto-benchmark-design.md section 2), and
-# every CPU figure in docs/bench/ is measured without the two flags. Turning
+# No -ffast-math / -funroll-loops on the libDaisy / shell side. A line
+# `C_USR_FLAGS = -ffast-math -funroll-loops` stood here from the start, but
+# libDaisy reads C_USER_FLAGS, so it never reached the compiler; the
+# 2026-07-30 -O3 round found that and kept it that way (spec
+# 2026-07-30-o3-lto-benchmark-design.md section 2), and every CPU figure in
+# docs/bench/ older than 2026-10-30 is measured without the two flags. Turning
 # them on is a measured round of its own: -ffinite-math-only can fold away the
 # engine's isfinite/NaN guards. That round exists now as the SHELL_FAST_MATH
-# switch below (default 0 = this text still holds).
+# switch below, which is ON by default since 2026-10-30 (class 2, nobody heard
+# a difference): the shipping firmware compiles engine/ with
+# -ffast-math -fno-finite-math-only, and math_guards.py checks the linked
+# image. SHELL_FAST_MATH=0 gives back the plain flags this text describes.
 
 # Dieses Board und nur dieses. Ein blankes -D ist hier zulaessig, obwohl die
 # Bench fuer denselben Schalter einen generierten Header baut: dort ist
@@ -436,7 +440,7 @@ endif
 # image's report loop, so it needs SHELL_PANEL_SCAN=1. 0 builds none of it.
 SHELL_REMOTE ?= 0
 
-ifneq ($(filter $(SHELL_REMOTE),0 1),$(SHELL_REMOTE))
+ifneq ($(words $(SHELL_REMOTE))-$(filter $(SHELL_REMOTE),0 1),1-$(SHELL_REMOTE))
 $(error SHELL_REMOTE must be 0 or 1)
 endif
 

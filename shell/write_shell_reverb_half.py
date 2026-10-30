@@ -24,8 +24,8 @@ layout of AmbientReverb changes with it), so when STATE_FILE changes this
 deletes EVERY object of BUILD_DIR, as write_shell_remote_measure.py does; a
 first write counts as a change.
 
-A refusal (wrong arguments, a marker count other than one) deletes OUTPUT_LD
-and STATE_FILE before it exits.
+Any failure (wrong arguments, a marker count other than one, an unreadable
+SOURCE_LD, a write error) deletes OUTPUT_LD and STATE_FILE before it exits.
 """
 import sys
 from pathlib import Path
@@ -70,8 +70,8 @@ def run() -> int:
 def main() -> int:
     try:
         return run()
-    except SystemExit:
-        # A refused run must not leave the previous build's linker script
+    except BaseException:
+        # A refused or crashed run must not leave the previous build's linker script
         # (and state) in place: the Makefile ignores this script's exit status,
         # and the link and the placement guard would read the stale file and
         # pass. With the file gone the link fails on the missing script.

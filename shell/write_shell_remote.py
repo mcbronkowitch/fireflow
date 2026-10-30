@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 
-def main() -> int:
+def run() -> int:
     if len(sys.argv) < 3 or sys.argv[2] not in {"0", "1"}:
         raise SystemExit(
             "usage: write_shell_remote.py OUTPUT {0|1} [STALE_OBJECT...]")
@@ -35,6 +35,19 @@ def main() -> int:
         for stale in sys.argv[3:]:
             Path(stale).unlink(missing_ok=True)
     return 0
+
+
+def main() -> int:
+    try:
+        return run()
+    except BaseException:
+        # A refused or crashed run must not leave the previous build's header
+        # in place: the Makefile ignores this script's exit status, and the
+        # compile would read the stale value. With the file gone it fails on
+        # the missing include instead.
+        if len(sys.argv) > 1:
+            Path(sys.argv[1]).unlink(missing_ok=True)
+        raise
 
 
 if __name__ == "__main__":

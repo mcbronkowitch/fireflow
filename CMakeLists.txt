@@ -768,6 +768,16 @@ add_test(NAME shell_math_guard
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_math_guards.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
 
+# The build-switch writers (reverb_half, fast_math, remote, remote_measure) run
+# while the Makefile is parsed and the Makefile ignores their exit status: a
+# refusal or crash that left the old header / stamp / linker script behind
+# would build on a stale value. This holds that each deletes its output on
+# any failure.
+add_test(NAME shell_writer_refusals
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_writer_refusals.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
+
 # The shell images actually build: default, Rev A play (with and without
 # SHELL_PERSIST, and its stress image), coupon play, the remote CPU hunt's
 # listener and measurement images (which must not link the save path:

@@ -33,9 +33,9 @@ def run() -> int:
 def main() -> int:
     try:
         return run()
-    except SystemExit:
-        # A refused run must not leave the previous stamp in place (the
-        # Makefile ignores this script's exit status).
+    except BaseException:
+        # A refused or crashed run must not leave the previous stamp in place
+        # (the Makefile ignores this script's exit status).
         if len(sys.argv) > 1:
             Path(sys.argv[1]).unlink(missing_ok=True)
         raise

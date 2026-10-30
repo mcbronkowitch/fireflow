@@ -58,4 +58,30 @@ check("literal without vabs: refused", g.refusals(image({n0: WORD_ONLY})) != [])
 other = image({n0: FOLDED})
 check("a neighbour's literal does not save a folded guard", g.refusals(other) != [])
 
+# The command line: the Makefile's link chain depends on the exit code alone.
+import subprocess, tempfile
+def cli(*args):
+    r = subprocess.run([sys.executable, os.path.join(here, "math_guards.py")] + list(args),
+                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    return r.returncode, r.stdout
+
+with tempfile.TemporaryDirectory() as tmp:
+    def dis(name, text):
+        path = os.path.join(tmp, name)
+        with open(path, "w", encoding="utf-8", newline="") as f:
+            f.write(text)
+        return path
+    rc, out = cli(dis("good.dis", image()))
+    check("CLI: guarding image exits 0 with no output", rc == 0 and out == "")
+    rc, out = cli(dis("folded.dis", image({NAMES[0]: FOLDED})))
+    check("CLI: folded guard exits 1 and names the function",
+          rc == 1 and "math guard: isfinite guard folded away in " + NAMES[0] in out)
+    rc, out = cli(dis("empty.dis", ""))
+    check("CLI: empty listing exits 1 (every required function missing)",
+          rc == 1 and "guarded function missing" in out)
+    rc, _ = cli(os.path.join(tmp, "absent.dis"))
+    check("CLI: unreadable file exits non-zero", rc != 0)
+    rc, _ = cli()
+    check("CLI: no argument exits non-zero", rc != 0)
+
 sys.exit(1 if FAILS else 0)

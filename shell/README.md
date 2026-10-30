@@ -86,13 +86,16 @@ lesen und den Posten benennen, der überläuft. Die Bench kennt dasselbe
 Problem und hat es dokumentiert.
 
 The ctest entry `shell_images_build_guard` (`check_images_build.py`) builds
-five images from scratch — default, the Rev A play image
+ten images from scratch — default, the Rev A play image
 (`SHELL_PANEL_SCAN=1 SHELL_KEYS_NC=1`, persisting), the same with
 `SHELL_PERSIST=0` (the init-patch boot), the same with
-`SHELL_PERSIST_STRESS=1` (the persistence probe image) and the coupon play
-image
-(`SHELL_PANEL_SCAN=1 SHELL_COUPON_PROBE=1`) — each into its own emptied
-directory under `build/shell_images/`, with the env.sh variables scrubbed, and
+`SHELL_PERSIST_STRESS=1` (the persistence probe image), the coupon play
+image (`SHELL_PANEL_SCAN=1 SHELL_COUPON_PROBE=1`), the remote CPU hunt's
+listener (`SHELL_REMOTE=1` on top of the play flags), its measurement image
+(`SHELL_REMOTE_MEASURE=1`), the listener with both class-2 savings switched
+back, the measurement image with both reverb tanks (`SHELL_REVERB_HALF=0`) and
+a `SHELL_FAST_MATH=2` build that must be refused by the math guard — each into
+its own emptied directory under `build/shell_images/`, with the env.sh variables scrubbed, and
 prints each image's SRAM_EXEC use. It never touches `shell/build`, and it is
 skipped (exit 77) without the DaisyToolchain or the built libraries. A new
 image that gets flashed belongs in its `IMAGES` list.
@@ -101,13 +104,23 @@ image that gets flashed belongs in its `IMAGES` list.
 
 Two savings of the CPU hunt change the sound slightly (class 2) and are ON in
 every shell image, because a blind A/B listen heard no difference. Each is a
-`make` switch, so either can be turned back with one word on the command line
-(no `make clean` needed: the Makefile deletes the stale objects itself):
+`make` switch, so either can be turned back with one word added to the
+command line you already build that image with (no `make clean` needed: the
+Makefile deletes the stale objects itself). The Rev A play image, for one, is
+`make -j8 images SHELL_PANEL_SCAN=1 SHELL_KEYS_NC=1`, so with the reverb
+turned back it is
+`make -j8 images SHELL_PANEL_SCAN=1 SHELL_KEYS_NC=1 SHELL_REVERB_HALF=0`;
+the listener adds `SHELL_REMOTE=1` to both. A bare `make images SHELL_REVERB_HALF=0`
+builds the default image, which is the wrong firmware on the board. Either
+switch changes BOTH bins, so flash both, QSPI first (see Flashen below): an
+SRAM image over the other build's QSPI image stays dark. Use `images`, not
+`all`: only the `images` target runs `math_guards.py` after the link, and
+`all` would build a fast-math engine without the check.
 
 | Switch | Default | What it does | Turn it back |
 |---|---|---|---|
-| `SHELL_REVERB_HALF` | `1` | the reverb's tank runs at 24 kHz between two halfband filters (a cheaper reverb; a duller top above ~4 kHz, same decay, size and wobble) | `make images SHELL_REVERB_HALF=0` -- the full-rate reverb, exactly the code it was before |
-| `SHELL_FAST_MATH` | `1` | the engine (only `engine/`, not libDaisy or the shell) is compiled with `-ffast-math -fno-finite-math-only` | `make images SHELL_FAST_MATH=0` |
+| `SHELL_REVERB_HALF` | `1` | the reverb's tank runs at 24 kHz between two halfband filters (a cheaper reverb; a duller top above ~4 kHz, same decay, size and wobble) | `SHELL_REVERB_HALF=0` added to the image's flags -- the full-rate reverb, exactly the code it was before |
+| `SHELL_FAST_MATH` | `1` | the engine (only `engine/`, not libDaisy or the shell) is compiled with `-ffast-math -fno-finite-math-only` | `SHELL_FAST_MATH=0` added to the image's flags |
 
 `SHELL_FAST_MATH=2` (full `-ffast-math`) exists only to prove the guard check:
 it folds the engine's `isfinite` tests away and the build refuses it
