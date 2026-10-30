@@ -125,25 +125,8 @@ public:
     void SetFeedback(float feedback) { _feedback = feedback; }
     float Feedback() const { return _feedback; }
 
-#if defined(SPKY_PROBE_TOGGLES)
-    // Probe only (util/probe_toggles.h bit 2, measurement image): the line is
-    // read and written as usual but the band-pass and the tanh are skipped.
-    void set_probe_no_filter(bool on) { _probe_no_filter = on; }
-#endif
-
     float Process(float in, float delay_samples) {
         _line.SetDelay(delay_samples);
-#if defined(SPKY_PROBE_TOGGLES)
-        if (_probe_no_filter) {
-            // Feedback can reach 1.2 and there is no tanh here: clamp the
-            // line's output to [-1, 1] so the loop cannot blow up (a clamp
-            // costs less than the tanh it replaces).
-            float o = _line.Read();
-            o = o > 1.f ? 1.f : (o < -1.f ? -1.f : o);
-            _line.Write(o * _feedback + in);
-            return o;
-        }
-#endif
         float out = _bpf.Process(_line.Read());
         out = fast_tanh(out);
         _line.Write(out * _feedback + in);
@@ -152,9 +135,6 @@ public:
 
 private:
     float _feedback = 0.f;
-#if defined(SPKY_PROBE_TOGGLES)
-    bool _probe_no_filter = false;
-#endif
     InjectedDelayLine<float, MaxSize> _line;
     TapeBpf _bpf;
 };
