@@ -148,13 +148,6 @@ public:
     }
 #endif
 
-#if defined(SPKY_PROBE_TOGGLES)
-    // Forced inline, here and in process_on(): with the two line variants the
-    // compiler otherwise makes this an out-of-line weak function in
-    // SRAM_EXEC, and Flux::process (ITCM) would call out of ITCM -- a code
-    // placement change the probe must not bring.
-    __attribute__((always_inline)) inline
-#endif
     float Process(float in, float delay_samples) {
 #if defined(SPKY_PROBE_TOGGLES)
         if (_probe_dtcm) return process_on(_probe_line, in, delay_samples);
@@ -164,9 +157,6 @@ public:
 
 private:
     template <class Line>
-#if defined(SPKY_PROBE_TOGGLES)
-    __attribute__((always_inline)) inline
-#endif
     float process_on(Line& line, float in, float delay_samples) {
         line.SetDelay(delay_samples);
 #if defined(SPKY_PROBE_TOGGLES)
