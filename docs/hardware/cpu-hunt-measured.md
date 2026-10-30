@@ -488,3 +488,64 @@ nine workloads against the c53f1fa base rounds:
   engine saving cannot be resolved in two runs.
 
 Board left on listener d7aaafe.
+
+### Candidates 7-9: Center, COMP and mix memos
+
+All three reuse the last result while its inputs repeat. Toggle bits 6, 7
+and 8 (7f038320, 6254953c, d53498be); measurement image d53498b. On w313,
+w143, w132, `bastian` and w169, base and the three toggles ran in
+rotation, 3 rounds x 30 s each. Window means:
+
+| candidate | memoised | measured | verdict |
+|---|---|---|---|
+| 7 `CENTER_IDLE` | `Center::update`'s cos/sin/pow while MORPH and drift repeat (desktop probe: 4-5 pow, 2-3 sin, 1 cos per control tick) | pre-stage `ap`/`bp` and law unchanged (±0.5 k) | reverted, d17e8386 |
+| 8 `COMP_CURVE` | `compute_gain`'s pow(10, x) for a repeated x (repeats on 40-94 % of calls; the glided amount changes on 5.9 % of ticks) | `ac`/`bc` unchanged (±1 k) | reverted, e5fc4dd4 |
+| 9 `MIX_BLOCK` | PAN gains read once per control tick | `xd` 17.3 → 10.5 k | adopted, b8470e24 |
+| | CHOKE duck chain while the depth repeats | the priority deck's pre-stage −3.5 to −6 k (w169 `bp` 31.3 → 24.9) | adopted |
+| | limiter drive and knee while their inputs repeat | `xl` 18.4 → 21.7 k: **dearer** on all five | dropped; limiter unchanged |
+
+The limiter memo's key compare and branch run every sample, and the key
+moves often enough that they cost more than the libm work saved. The
+observers, the blend products and the reverb smoothers take per-sample
+inputs, so they have no bit-identical block-rate form. §4's 5-15 k row
+estimate assumed they had. `Center::_apply_rate` must refresh the slews,
+so skipping it on an unchanged rate scale would save about ten compares.
+It was not built.
+
+Final image b8470e2 (C9 the only path), 2 x 30 s on the same five, against
+the d53498b base rounds:
+
+- The mix section went from 154.5 to 143.3 k (−11.2 k). PAN `xd` is −7.3 k.
+  `xl` reads −1.5 k and `xo` −1.1 k, although their code is unchanged:
+  that is placement.
+- The duck chain is −3 to −8 k on the priority deck: w169 `bp` 31.3 → 23.4,
+  `bastian` `ap` 18.4 → 14.9.
+- Together that is about −14 to −19 k per block.
+
+Section §4 row 10 (`mux_plan` at -O3) was not built: -O3 on `control_tick`,
+the same lever, measured nothing.
+
+### Where the worst cases stand after the class-1 rows
+
+Listener b8470e2 (candidates 1, 4, 5 and 9 adopted), the §4 listener
+top 20 again, 60 s each, against the same 20 on listener 117c6ac:
+
+| | before (117c6ac) | after (b8470e2) |
+|---|---|---|
+| runs with `frame_max` ≥ 945 000 | 20 of 20 | 10 of 20 |
+| worst `frame_max` | 1 057 583 (SYNTH_WAVE_top1) | 1 037 715 (WAVE_SYNTH_top2) |
+| median change per workload | | −40 k (−92 k to +34 k) |
+| runs that tripped the guard | 12 | 6 (four of them once) |
+
+The worst five after: WAVE_SYNTH_top2 1 037 715, SAMPLER_SYNTH_top2
+1 015 228 (59 trips; it was 981 725 before, which is the 60 s statistic's
+±135 k spread of §5's ruling, not a regression), SYNTH_WAVE_top1 989 491,
+SAMPLER_WAVE_top1 985 845, SAMPLER_SYNTH_top3 980 272 (30 trips).
+
+The section savings add up to about 40-60 k per block: GRIT 15-30 k,
+FLUX ~8 k, mix and duck 14-19 k, and the BBD guard on BBD decks. The
+median worst-case drop of 40 k agrees with that. The 880 000 stop
+criterion is still 100-160 k away on the worst five. As §4 predicted, the
+class-1 rows cannot close that gap. What is left is class 2 (reverb at
+half rate, `-ffast-math`), which needs a listening decision, and the
+engines (§4 row 11), whose size is open.
