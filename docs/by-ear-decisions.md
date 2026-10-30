@@ -577,3 +577,30 @@ and D2 without a floor; 24 was not picked.
 What A9 asked, on the init patch: RANGE swept from 0 to full. Noon should play a
 melody, and no deck should sit on one note above RANGE 0.3. Passed on the board
 on 2026-10-27; do not move D1 or D2 without a new listening pass.
+
+## Board reverb at half rate and `-ffast-math` (2026-10-30) — heard blind and accepted
+
+The CPU hunt's two class-2 savings, `docs/hardware/cpu-hunt-measured.md` §5-§6.
+Bastian heard eight blind pairs from Rev A #1 through the Twin (listener images,
+swapped by reflash; four patches; odd pairs reverb, even pairs fast-math) and
+answered: *"hm, ich würde sagen kein unterschied. aber kannst du die änderungen
+am reverb als schalter einbauen falls ich später merke das doch was komisch
+ist?"* Both are therefore on by default in the firmware, each behind its own
+build switch:
+
+- **`SHELL_REVERB_HALF=1`**: the reverb tank runs at 24 kHz between two 47-tap
+  halfband converters. Measured against full rate on the desktop: RT60 ratio
+  0.976-1.036, wet −0.8 to −1 dB, the 4-8 kHz band 6-14 dB lower relative to
+  100-1000 Hz, 12-14 kHz folding into 10-12 kHz at −6 to −19 dB, about 1 ms more
+  wet latency. `SHELL_REVERB_HALF=0` restores the full-rate code instruction for
+  instruction.
+- **`SHELL_FAST_MATH=1`**: `-ffast-math -fno-finite-math-only` on the engine's
+  objects. `=0` restores the plain flags; `=2` (full `-ffast-math`) folds the
+  engine's NaN guards and every image build refuses it (`shell/math_guards.py`).
+
+**The board's reverb is now darker than VCV's.** Both switches are
+firmware-only; VCV and the desktop render keep the full-rate reverb and plain
+math. A tail that sounds brighter in Rack than on the board is this decision,
+not a bug. The command to turn either back is in `shell/README.md` ("Turning a
+CPU saving back"). Do not drop the switches, and do not carry the half-rate
+tank into VCV, without a new listening pass.

@@ -477,6 +477,24 @@ invisible from reading the scripts, and each cost real time.
 
 ## Daisy Patch Submodule (the board itself, not the generators)
 
+- **`bench/` prices a reverb and a math the board no longer ships.** Since
+  2026-10-30 `shell/` builds the reverb tank at half rate and the engine with
+  `-ffast-math -fno-finite-math-only` (`SHELL_REVERB_HALF=1`,
+  `SHELL_FAST_MATH=1`, both default on; `docs/by-ear-decisions.md`). `bench/`
+  and every desktop host build neither, so a bench row overstates the shipping
+  block by roughly 60-75 k cycles (`proc`, measured on three workloads,
+  `docs/hardware/cpu-hunt-measured.md` §5). Compare board numbers only against
+  board numbers from the same switch set. `SHELL_FAST_MATH=2` folds the engine's
+  NaN guards and the image build refuses it on purpose.
+
+- **One 60 s `frame_max` is not a verdict.** The worst block of the same
+  workload on the same image moved by ±135 k between runs (measured
+  2026-10-30, `cpu-hunt-measured.md` §5). Judge a code change by its section
+  window means on interleaved runs of one image; read `frame_max` only across a
+  20-workload batch. And `SHELL_SEC` is the per-run split of the *worst block*,
+  not a mean: one candidate was first called dearer from it and turned out to
+  be neutral.
+
 - **`System::GetNow()` runs about 25 % slow while audio plays.** It is HAL's
   SysTick count; why it loses time is not measured (ticks swallowed while the
   audio callback holds the core is the likely reading, not a proven one).

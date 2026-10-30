@@ -37,7 +37,11 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-10-28 (**Rev A boots as it was switched off** —
+- **Last updated:** 2026-10-30 (**the CPU hunt on Rev A brought every worst
+  case under the click line** — five class-1 savings plus the half-rate reverb
+  and `-ffast-math` in the firmware, merged into main `47f3901b`; see the M6
+  entry of that date and `docs/hardware/cpu-hunt-measured.md`. Earlier,
+  2026-10-28: **Rev A boots as it was switched off** —
   panel-state persistence built, measured and merged, see the M6 entry and
   `docs/hardware/persist-measured.md`. Earlier, 2026-10-13: **the 2 mm correction cut arrived and passed
   the grip test; the panel is frozen and the Rev A boards are ordered at
@@ -1355,8 +1359,10 @@ Seed at 480 MHz, 48 kHz, block 96 (`docs/bench/2026-07-19-6e38090.md`):
   never seen those intermediate values, since it reads at its own 96-sample
   control tick; what remained was fire timing, answered with an event refresh
   rather than a finer raster; reverb composition-coupling investigation (≈4 % already paid,
-  mechanism unexplained) plus a speculative, unmeasured half-rate-reverb
-  hypothesis (order ≈10 %, needs its own ablation before it's trusted); fast
+  mechanism unexplained) plus a half-rate-reverb hypothesis (order ≈10 %) —
+  **measured and shipped in the firmware 2026-10-30**: −21 k cycles per block
+  (≈2 %) on Rev A, heard blind and accepted, behind `SHELL_REVERB_HALF`
+  (`docs/hardware/cpu-hunt-measured.md` §5-§6); fast
   tanh in `EchoDelay` — **SPENT 2026-07-19** (`87f3538`, spec
   `2026-07-19-fast-tanh-design.md`): measured **5.8 %** against a ceiling of
   ≈8 %, the echo kernel itself more than halving (`echo_short_sram` 21 154 →
@@ -4191,6 +4197,32 @@ the coupon has nothing else open.
 **Next:** part 2 — the 70-pot table, the four keys on the 165 and the 19
 LEDs on the 595 — waits for the control PCB's pin map, which should give one
 spare channel to AGND and one to the rail (spec §8).
+
+**2026-10-30 — CPU hunt on Rev A: every worst case under the click line ✅ measured, merged.**
+Plan `docs/superpowers/plans/2026-10-29-cpu-hunt-remote.md`; branch
+`feat/cpu-hunt-remote`, fast-forwarded into main 2026-10-30 (`47f3901b`).
+Every number is in `docs/hardware/cpu-hunt-measured.md`, measured by Claude
+over USB on Rev A #1 (remote measurement and listener images).
+- **Why.** Bastian's own patch clicked on Rev A (callback ~900 k, single
+  blocks over the 960 000-cycle budget). Of 325 static workloads, half
+  overran somewhere; the 20 worst listener runs all crossed ~945 000.
+- **Class 1, bit-identical** (proven by tests against the old code, judged on
+  section window means): GRIT's discarded Decimator step (−15 k per REDUCE
+  deck), FLUX's stereo tape-line bookkeeping (~−8 k), a BBD `set_flow`
+  redundancy guard and a FLUX pace guard, PAN gains per control tick and the
+  CHOKE duck chain memoised (−14 to −19 k). Rejected on measurement: SDRAM
+  write-allocate, `control_tick` at -O3, the Center and COMP memos.
+- **Class 2, heard blind and accepted** (`docs/by-ear-decisions.md`): the
+  reverb tank at 24 kHz (−21 k) and `-ffast-math -fno-finite-math-only` on
+  the engine (−35 to −45 k), firmware-only and each behind a build switch
+  (`SHELL_REVERB_HALF`, `SHELL_FAST_MATH`); the image build refuses folded
+  NaN guards.
+- **Result.** The 20 worst listener workloads: 0 of 20 at or above 945 000
+  (was 20 of 20), worst 944 258 (was 1 057 583), median 878 505 (was
+  984 707), no guard trips (was 12 runs).
+- **Not reached:** the 880 000 stop criterion; 9 of 20 are still above it,
+  the worst three within 7 k of the click line. The remaining lever is
+  per-engine kernel work (SYNTH, WAVE, SAMPLER; §4 row 11), its own round.
 
 **2026-10-28 — panel-state persistence: Rev A wakes up as it was switched off ✅ built, measured on Rev A #1, merged.**
 Spec `docs/superpowers/specs/2026-10-28-panel-state-persistence-design.md`,

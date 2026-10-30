@@ -1821,3 +1821,32 @@ from the source and were measured by a throwaway probe (48 kHz, plain
   period of `delay_time()`), because `_repeat_phase_samples` advances only while
   THIN is thinning (LINK > 0 with a valid rhythm) and would leave the FTIME lamp
   dark at the factory LINK = 0.
+
+## Where a board block goes (2026-10-30)
+
+Measured on Rev A #1 during the CPU hunt, `docs/hardware/cpu-hunt-measured.md`
+§4-§6 (window means over 325 static workloads, measurement image 117c6ac,
+before any saving; budget 960 000 cycles per 96-sample block, clicks from
+~945 000). Read it before guessing where a cycle goes:
+
+- **About 600 k of a ~900 k block does not depend on the engine**: FX chain
+  ~148 k per deck (FLUX 64-68 k, GRIT 57 k, tap + mix + COMP 24-26 k, send law
+  8.6 k), modulation + control ~69 k per deck (lanes 32-33 k), mix 152 k
+  (reverb 102 k, limiter 17 k, blend + duck 17 k, observers 12 k). The
+  engines themselves: SYNTH ~188 k, WAVE ~179 k (max 291 k), SAMPLER 124 k p50
+  (max 385 k) per deck in the hottest block.
+- **FLUX's cost is the two tape echoes, not SDRAM.** Of ~47 k per deck, ~21 k
+  is band-pass + `fast_tanh` and ~26.5 k the line; moving the line into DTCM
+  saves only 9-13 k of it. The rest is per-sample arithmetic in
+  `SetDelay`/`Read`/`Write`.
+- **What lifts a block over the mean** is the control law (12 k mean, 44 k p50
+  in a run's hottest block, 72 k max) and sample 0: 60 % of hot blocks have
+  their slowest sample at index 0, the control-rate work.
+- **Shipped savings** (main `47f3901b`): GRIT's discarded Decimator step −15 k
+  per REDUCE deck, FLUX stereo line bookkeeping ~−8 k, PAN/duck memos −14 to
+  −19 k, BBD `set_flow` redundancy guard; then, firmware-only, the half-rate
+  reverb tank −21 k and `-ffast-math -fno-finite-math-only` −35 to −45 k
+  (`docs/by-ear-decisions.md`). After all of them the 20 worst listener
+  workloads sit at 878 k median and 944 k worst, 9 of 20 still above 880 k.
+  The open lever is per-engine kernel work (§4 row 11); bench/ and the desktop
+  hosts do not build the two firmware-only savings (`docs/gotchas.md`).
