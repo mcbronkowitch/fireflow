@@ -99,8 +99,11 @@ class Oliverb {
     float slope = mod_rate_ * mod_rate_;
     slope *= slope * slope;
     slope /= 300.0f;   // upstream /200 at 32 kHz; x1.5 more ticks per second
-    // x kLfoDecim: Next() runs 1-in-32 samples now, same modulation speed
-    for (int i = 0; i < 9; ++i) lfo_[i].set_slope(slope * (float)lfo_decim_);
+    // x kLfoDecimFull: Next() runs on a raster of 32 full-rate samples, and a
+    // half-rate tank keeps the same raster in seconds (16 of its own steps),
+    // so the step per tick is the same in both modes -- NOT slope * the live
+    // decimation (that halved the LFO speed at half rate).
+    for (int i = 0; i < 9; ++i) lfo_[i].set_slope(slope * (float)kLfoDecimFull);
   }
 
   // Spotykach port addition: empty the room without touching parameters —
@@ -149,6 +152,12 @@ class Oliverb {
     Prepare();
   }
   bool half_rate() const { return half_; }
+#ifdef SPKY_TESTING
+  // Tests only: the glided random line LFO i (1..8) and the engine's cosine
+  // LFO i (0..1), to measure their rate in Hz in both modes.
+  float lfo_val_for_test(int i) const { return lfo_val_[i]; }
+  float cos_lfo_for_test(int i) const { return engine_.lfo_value_for_test(i); }
+#endif
   // The in-loop one-pole coefficient with the same time constant at the other
   // rate: 1 - (1 - c)^2 for the doubled period (and the inverse back).
   static float coef_for_half_rate(float c) { return 1.0f - (1.0f - c) * (1.0f - c); }

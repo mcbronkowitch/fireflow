@@ -582,3 +582,130 @@ TEST_CASE("halfband converters: unity DC gain, passband flat, stopband down >= 6
         CHECK(gain_db(f) < -60.0);
     }
 }
+
+// ---- candidate 10, fix round: modulation rate and tail tone -----------------
+//
+// The energy / RT60 bounds above cannot see a wrong LFO speed or a wrong tone
+// filter. These two can.
+
+namespace {
+// Reversals of the sampled value's direction per second, over `seconds` of
+// silence into the room (SMEAR and WOBL at their defaults).
+struct LfoRates { double random_per_s; double cosine_crossings_per_s; };
+LfoRates lfo_rates(AmbientReverb& rv, bool half, int seconds) {
+    rv.init(48000.f);
+    rv.set_half_rate(half);
+    int reversals = 0, crossings = 0;
+    float prev = rv.lfo_for_test(5), prev_dir = 0.f;
+    float cprev = rv.cos_lfo_for_test(0) - 0.5f;
+    for (int i = 0; i < 48000 * seconds; ++i) {
+        float l, r;
+        rv.process(0.f, 0.f, l, r);
+        const float v = rv.lfo_for_test(5);
+        const float d = v - prev;
+        if (d != 0.f) {
+            if (prev_dir != 0.f && ((d > 0.f) != (prev_dir > 0.f))) ++reversals;
+            prev_dir = d;
+        }
+        prev = v;
+        const float c = rv.cos_lfo_for_test(0) - 0.5f;
+        if ((c > 0.f) != (cprev > 0.f)) ++crossings;
+        cprev = c;
+    }
+    return { reversals / (double)seconds, crossings / (double)seconds };
+}
+
+// Power spectrum averaged over Hann frames (N = 4096) of v[from, to).
+void band_powers(const std::vector<float>& v, size_t from, size_t to,
+                 double& low, double& high) {
+    const int N = 4096;
+    std::vector<double> acc(N / 2, 0.0);
+    int frames = 0;
+    for (size_t s = from; s + N <= to; s += N / 2, ++frames) {
+        std::vector<double> re(N), im(N, 0.0);
+        for (int i = 0; i < N; ++i)
+            re[i] = v[s + i] * (0.5 - 0.5 * std::cos(2.0 * 3.14159265358979 * i / N));
+        for (int i = 1, j = 0; i < N; ++i) {          // bit reversal
+            int bit = N >> 1;
+            for (; j & bit; bit >>= 1) j ^= bit;
+            j ^= bit;
+            if (i < j) std::swap(re[i], re[j]);
+        }
+        for (int len = 2; len <= N; len <<= 1) {
+            const double ang = -2.0 * 3.14159265358979 / len;
+            for (int i = 0; i < N; i += len)
+                for (int k = 0; k < len / 2; ++k) {
+                    const double wr = std::cos(ang * k), wi = std::sin(ang * k);
+                    const double ur = re[i + k], ui = im[i + k];
+                    const double xr = re[i + k + len / 2] * wr - im[i + k + len / 2] * wi;
+                    const double xi = re[i + k + len / 2] * wi + im[i + k + len / 2] * wr;
+                    re[i + k] = ur + xr;           im[i + k] = ui + xi;
+                    re[i + k + len / 2] = ur - xr; im[i + k + len / 2] = ui - xi;
+                }
+        }
+        for (int k = 0; k < N / 2; ++k) acc[k] += re[k] * re[k] + im[k] * im[k];
+    }
+    low = high = 0.0;
+    for (int k = 0; k < N / 2; ++k) {
+        const double f = k * 48000.0 / N;
+        if (f >= 100.0 && f < 1000.0) low += acc[k];
+        if (f >= 4000.0 && f < 8000.0) high += acc[k];
+    }
+}
+
+// Tail (1 s .. 5 s) of the wet left output, TONE `tone`.
+double tail_balance_db(AmbientReverb& rv, bool half, float tone) {
+    rv.init(48000.f);
+    rv.set_decay(0.7f);
+    rv.set_size(0.6f);
+    rv.set_tone(tone);
+    rv.set_half_rate(half);
+    Noise n;
+    std::vector<float> out;
+    for (int i = 0; i < 48000 * 6; ++i) {
+        const float x = i < 24000 ? 0.3f * n.next() : 0.f;
+        float l, r;
+        rv.process(x, x, l, r);
+        out.push_back(l);
+    }
+    double low, high;
+    band_powers(out, 48000, 48000 * 5, low, high);
+    return 10.0 * std::log10(high / low);
+}
+} // namespace
+
+TEST_CASE("reverb half rate: the LFOs run at the same speed in Hz") {
+    const LfoRates full = lfo_rates(g_rev_full, false, 20);
+    const LfoRates half = lfo_rates(g_rev_half, true, 20);
+    CAPTURE(full.random_per_s);
+    CAPTURE(half.random_per_s);
+    CAPTURE(full.cosine_crossings_per_s);
+    CAPTURE(half.cosine_crossings_per_s);
+    REQUIRE(full.random_per_s > 1.0);
+    REQUIRE(full.cosine_crossings_per_s > 0.5);
+    CHECK(std::fabs(half.random_per_s / full.random_per_s - 1.0) < 0.10);
+    CHECK(std::fabs(half.cosine_crossings_per_s / full.cosine_crossings_per_s - 1.0) < 0.10);
+}
+
+TEST_CASE("reverb half rate: the tail keeps its tone balance") {
+    // Energy of the tail in 4-8 kHz against 100-1000 Hz, half against full.
+    // The half-rate room IS darker at the top, by design of the rate: every
+    // fixed-fraction linear read inside the loop (dap1b / dap2b, the four
+    // input diffusers) is a lowpass of |cos(pi f / fs)| per pass and fs halved
+    // (measured: 4-8 kHz down 6.2 dB at TONE 0.5 and 9.3 dB at TONE 1.0, size
+    // 0.6; 8-12 kHz down 21 / 28 dB), a little offset by the pole-matched TONE
+    // one-pole being slightly brighter near fs / 4. So this is a PIN of the
+    // measured shift (+-2.5 dB), not a "no change" bound: a tone filter derived
+    // for the wrong rate (the 48 kHz coefficient at 24 kHz doubles the cutoff)
+    // moves it by several dB, up or down.
+    struct Case { float tone; double expect_db; };
+    for (Case c : {Case{0.5f, -6.2}, Case{1.0f, -9.3}}) {
+        INFO("TONE " << c.tone);
+        const double full = tail_balance_db(g_rev_full, false, c.tone);
+        const double half = tail_balance_db(g_rev_half, true, c.tone);
+        CAPTURE(full);
+        CAPTURE(half);
+        CAPTURE(half - full);
+        CHECK(std::fabs((half - full) - c.expect_db) < 2.5);
+    }
+}

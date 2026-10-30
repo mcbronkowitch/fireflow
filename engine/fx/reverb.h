@@ -53,6 +53,10 @@ public:
     // block by Instrument::process, off by default.
     void set_half_rate(bool on);
     bool half_rate() const { return _half; }
+#ifdef SPKY_TESTING
+    float lfo_for_test(int i) const { return _verb.lfo_val_for_test(i); }
+    float cos_lfo_for_test(int i) const { return _verb.cos_lfo_for_test(i); }
+#endif
     // The return limiter's ride, for tests: exactly 1.0 while it is idle. From
     // outside, a ride is indistinguishable from a quieter room, so this is the
     // only way to check that quiet material is passed through untouched.

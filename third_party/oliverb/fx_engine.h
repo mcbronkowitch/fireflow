@@ -305,6 +305,10 @@ class FxEngine {
       lfo_[i].Init(lfo_f_[i] * static_cast<float>(div) * static_cast<float>(decim));
   }
 
+#ifdef SPKY_TESTING
+  float lfo_value_for_test(int i) const { return lfo_[i].value(); }
+#endif
+
   // Zero the part of the buffer a tank of `span` floats uses from the next
   // Start() on (plus a margin for the interpolators' reach), and nothing else.
   inline void ClearWindow(int span) {
