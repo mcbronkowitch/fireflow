@@ -549,3 +549,66 @@ criterion is still 100-160 k away on the worst five. As §4 predicted, the
 class-1 rows cannot close that gap. What is left is class 2 (reverb at
 half rate, `-ffast-math`), which needs a listening decision, and the
 engines (§4 row 11), whose size is open.
+
+### Class 2: reverb at half rate and `-ffast-math`
+
+| candidate | what it does | measured (window means) |
+|---|---|---|
+| 10 `REVERB_HALF` (bit 9) | the reverb tank runs at 24 kHz between two 47-tap halfband converters; every delay, LFO and filter keeps its value in seconds / Hz (48ca308e, LFO fix 74182231) | reverb `xr` 105 → 84 k (−21 k), on all six workloads |
+| 11 `SHELL_FAST_MATH=1` | `-ffast-math -fno-finite-math-only` on the engine's objects only; the NaN/isfinite guards stay (32c118f1) | engine per deck −12 to −26 k, `proc` −37 to −45 k on w313, w117 and w127 |
+| both | | `proc` −60 to −75 k (w313 903.6 → 842.7, w117 903 → 834, w127 897 → 830) |
+| `SHELL_FAST_MATH=2` (full `-ffast-math`) | folds four engine guards (`Instrument::_apply_tempo`, `set_tempo_bpm`, `set_pace`, `BbdEngine::process`) | not a candidate |
+
+What the half-rate tank changes, measured on the desktop (wet tail,
+half against full):
+
+- RT60 ratio 0.976 to 1.036.
+- Wet energy −0.8 to −1.05 dB.
+- The 4-8 kHz band is 6 to 14 dB lower relative to 100-1000 Hz. The tank's
+  fixed-fraction linear reads lowpass harder at 24 kHz.
+- 12-14 kHz folds into 10-12 kHz at −6 to −19 dB.
+
+## 6. Bastian's decisions
+
+### 2026-10-30: the class-2 listening batch
+
+Eight blind pairs on listener images (full, half-rate reverb, fast-math 1;
+c043685), swapped by reflash. Four patches: `bastian`, FEED_SYNTH_top2,
+BBD_SYNTH_rnd15, BBD_SYNTH_rnd5. Each pair is 30 s, aligned and
+level-matched, with A and B assigned at random. Odd pairs tested the
+reverb, even pairs fast-math.
+
+*Bastian:* "hm, ich würde sagen kein unterschied. aber kannst du die
+änderungen am reverb als schalter einbauen falls ich später merke das doch
+was komisch ist?"
+
+Both are accepted. They are firmware-only, so VCV and the desktop render
+keep today's code. Each is a build switch that is on by default (e6e9e829,
+097be805):
+
+- `SHELL_REVERB_HALF=0` gives back the full-rate reverb, with the code
+  identical instruction for instruction.
+- `SHELL_FAST_MATH=0` gives back the plain flags.
+
+`shell/README.md` ("Turning a CPU saving back") has the command. Every
+image build checks the linked ELF and refuses an image whose engine
+guards were folded (`shell/math_guards.py`; RED with
+`SHELL_FAST_MATH=2`).
+
+### Where the worst cases stand after class 2
+
+Listener dbb1b7e (class 1 and both class-2 savings in), the same top 20,
+60 s each:
+
+| | 117c6ac (§4) | b8470e2 (class 1) | dbb1b7e (class 1 + 2) |
+|---|---|---|---|
+| `frame_max` ≥ 945 000 | 20 of 20 | 10 of 20 | **0 of 20** |
+| `frame_max` > 880 000 | 20 of 20 | 20 of 20 | 9 of 20 |
+| worst | 1 057 583 | 1 037 715 | 944 258 (SAMPLER_SYNTH_top1) |
+| median | 984 707 | 951 032 | 878 505 |
+| runs that tripped the guard | 12 | 6 | 0 |
+
+Against b8470e2 the median workload dropped by a further 64 k (−177 k to
++7 k). The worst block of every one of the 20 now sits under the ~945 000
+click line. But the worst three (944 258, 942 907, 937 971) are within
+7 k of it. The 880 000 stop criterion is met by 11 of 20.
