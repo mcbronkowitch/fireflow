@@ -585,7 +585,22 @@ $(BUILD_DIR)/mux_plan.o: override OPT := -Os
 # 11 800 cycles per tick against 15 800 at -Os, for about 1 KB of SRAM_EXEC
 # (Rev A 16 928 B free). It runs once per block, not per sample, and
 # SHELL_PLAY_LAW reports its cycles.
+#
+# SHELL_CTL_O3=1 compiles that one unit at -O3 instead (the CPU hunt's test of
+# what the 14.3 KB buys). The value is resolved at parse time and stamped into
+# build/shell_ctl_o3.h (write_shell_ctl_o3.py, which deletes control_tick.o on
+# a flip), so the two positions cannot yield the same image.
+SHELL_CTL_O3 ?= 0
+
+ifneq ($(filter $(SHELL_CTL_O3),0 1),$(SHELL_CTL_O3))
+$(error SHELL_CTL_O3 must be 0 or 1)
+endif
+
+ifeq ($(SHELL_CTL_O3),1)
+$(BUILD_DIR)/control_tick.o: override OPT := -O3
+else
 $(BUILD_DIR)/control_tick.o: override OPT := -O2
+endif
 
 # Boot-only code executes in place from QSPI (spec 2026-10-09-rev-a-p6b1
 # section 5); the list and the rules for what may go on it are in
@@ -651,6 +666,7 @@ SWITCH_HEADERS := \
   $(shell python write_shell_itcm.py $(BUILD_DIR)/shell_itcm.h $(SHELL_ITCM) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_remote.py $(BUILD_DIR)/shell_remote.h $(SHELL_REMOTE) $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o) \
   $(shell python write_shell_remote_measure.py $(BUILD_DIR)/shell_remote_measure.h $(SHELL_REMOTE_MEASURE) $(BUILD_DIR)) \
+  $(shell python write_shell_ctl_o3.py $(BUILD_DIR)/shell_ctl_o3.h $(SHELL_CTL_O3) $(BUILD_DIR)/control_tick.o) \
   $(shell python write_shell_link_stamp.py $(BUILD_DIR)/shell_link_stamp.h $(BUILD_DIR)/itcm_load.o) \
   $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/pot_report.o $(BUILD_DIR)/scan_check.o $(BUILD_DIR)/remote_listen.o)
 
@@ -674,7 +690,7 @@ $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o: $(BUI
 $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_remote_measure.h
 $(BUILD_DIR)/scan_check.o: $(BUILD_DIR)/shell_scan_check.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_keys_nc.h $(BUILD_DIR)/shell_raw_spread.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h
-$(BUILD_DIR)/control_tick.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h
+$(BUILD_DIR)/control_tick.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h $(BUILD_DIR)/shell_ctl_o3.h
 # persist_flash.h folds all four into SHELL_PERSIST_ON and
 # SHELL_PERSIST_STRESS_ON; every object that includes it reads them.
 $(BUILD_DIR)/persist_flash.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h
