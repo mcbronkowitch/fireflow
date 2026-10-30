@@ -67,7 +67,6 @@ SECTIONS
     *(.text._ZN4spky4Flux4initEfPfS1_)
     *(.text._ZN4spky4Comp4initEf)
     *(.text._ZN7daisysp9Overdrive4InitEv)
-    *(.text._ZN7daisysp9Decimator4InitEv)
     *(.text._ZN7daisysp17SampleRateReducer7SetFreqEf)
     *(.text._ZN7daisysp17SampleRateReducer4InitEv)
 

@@ -2,6 +2,10 @@
 #include <algorithm>
 #include <cmath>
 #include <vector>
+#include <cstdint>
+#include <cstring>
+#include "Effects/decimator.h"
+#include "Utility/dsp.h"
 #include "fx/grit.h"
 using namespace spky;
 
@@ -171,4 +175,109 @@ TEST_CASE("GRIT Reduce: per-channel state keeps the inherited crush rate") {
     }
     CHECK(events > 3201 * 0.9);
     CHECK(events < 3201 * 1.1);
+}
+
+// ---- GRIT_DECIM_STEP (probe toggle bit 0): the discarded Decimator step ----
+
+namespace {
+// xorshift32, mixed before use (small seeds start biased).
+struct Noise {
+    uint32_t s = 2463534242u;
+    float next() {
+        s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+        return (float)(int32_t)s * (1.f / 2147483648.f);   // -1..1
+    }
+};
+// What GritReduce::apply() feeds its decimators.
+float crush_for(float intensity) {
+    return daisysp::fmap(1.f - intensity, 0.5f, 0.7f, daisysp::Mapping::EXP);
+}
+uint32_t bits_of(float f) { uint32_t u; std::memcpy(&u, &f, 4); return u; }
+} // namespace
+
+TEST_CASE("GritDecimator: process() equals daisysp::Decimator::Process bit for bit") {
+    for (float inten : {0.f, 0.3f, 0.55f, 0.8f, 1.f}) {
+        for (float crush : {crush_for(inten), 0.f, 0.5f, 1.f}) {
+            INFO("intensity " << inten << " crush " << crush);
+            daisysp::Decimator ref;
+            ref.Init();
+            ref.SetBitsToCrush(16);
+            ref.SetDownsampleFactor(inten);
+            ref.SetBitcrushFactor(crush);
+            GritDecimator mine;
+            mine.init();
+            mine.set_downsample_factor(inten);
+            mine.set_bitcrush_factor(crush);
+            Noise n;
+            int mismatches = 0;
+            for (int i = 0; i < 5000; ++i) {
+                const float x = n.next();
+                if (bits_of(ref.Process(x)) != bits_of(mine.process(x))) ++mismatches;
+            }
+            CHECK(mismatches == 0);
+        }
+    }
+}
+
+TEST_CASE("GritDecimator: step() + process() equals two daisysp Process() calls") {
+    for (float inten : {0.f, 0.3f, 0.55f, 0.8f, 1.f}) {
+        INFO("intensity " << inten);
+        const float crush = crush_for(inten);
+        daisysp::Decimator ref;
+        ref.Init();
+        ref.SetBitsToCrush(16);
+        ref.SetDownsampleFactor(inten);
+        ref.SetBitcrushFactor(crush);
+        GritDecimator mine;
+        mine.init();
+        mine.set_downsample_factor(inten);
+        mine.set_bitcrush_factor(crush);
+        Noise n;
+        int mismatches = 0;
+        for (int i = 0; i < 5000; ++i) {
+            const float x = n.next();
+            ref.Process(x);
+            const float want = ref.Process(x);
+            mine.step(x);
+            if (bits_of(want) != bits_of(mine.process(x))) ++mismatches;
+        }
+        CHECK(mismatches == 0);
+    }
+}
+
+TEST_CASE("GritReduce: fast on, off and flipped mid-stream render the same bits") {
+    struct Setting { float intensity, mix; };
+    for (Setting st : {Setting{0.f, 1.f}, Setting{0.3f, 0.7f}, Setting{0.55f, 1.f},
+                       Setting{0.8f, 0.5f}, Setting{1.f, 1.f}}) {
+        INFO("intensity " << st.intensity << " mix " << st.mix);
+        auto render = [&](int mode /*0 off, 1 on, 2 flip every 37 frames*/) {
+            GritReduce g;
+            g.init(48000.f);
+            g.set_intensity(st.intensity);
+            g.set_mix(st.mix);
+            Noise n;
+            std::vector<float> out;
+            for (int i = 0; i < 6000; ++i) {
+                if (mode == 1) g.set_fast(true);
+                if (mode == 2) g.set_fast(((i / 37) & 1) != 0);
+                float l = n.next(), r = n.next();
+                g.process(l, r);
+                out.push_back(l);
+                out.push_back(r);
+            }
+            return out;
+        };
+        const auto off = render(0), on = render(1), flip = render(2);
+        int d_on = 0, d_flip = 0;
+        for (size_t i = 0; i < off.size(); ++i) {
+            if (bits_of(off[i]) != bits_of(on[i])) ++d_on;
+            if (bits_of(off[i]) != bits_of(flip[i])) ++d_flip;
+        }
+        CHECK(d_on == 0);
+        CHECK(d_flip == 0);
+        // The render is not silence: a test on zeros proves nothing.
+        double acc = 0.0;
+        for (float v : off) acc += (double)v * v;
+        CHECK(acc > 1.0);
+    }
 }

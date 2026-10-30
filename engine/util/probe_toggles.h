@@ -25,7 +25,9 @@
 //
 //   bit  name                 file                       what it switches
 //   ---  -------------------  -------------------------  -----------------
-//   0-29 (free: candidates)
+//   0    GRIT_DECIM_STEP      engine/fx/grit.cpp         the discarded Decimator
+//                                                        step does state only
+//   1-29 (free: candidates)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE
 //                                                        burn on every block
 //   31   SHELL_GUARD_OFF      shell/panel_scan.cpp       the overrun guard is
@@ -39,6 +41,9 @@
 
 namespace spky {
 namespace probe {
+
+// The candidates' bits (above).
+inline constexpr int kBitGritDecimStep = 0;
 
 // The shell's two bits (above).
 inline constexpr int kBitShellLateRepeat = 30;

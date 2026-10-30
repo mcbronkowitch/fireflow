@@ -43,8 +43,7 @@ void GritDrive::process(float& l, float& r SPKY_PROBE_PART_PARAMS) {
 
 void GritReduce::init(float /*sample_rate*/) {
     for (int c = 0; c < 2; ++c) {
-        _decimator[c].Init();
-        _decimator[c].SetBitsToCrush(16);
+        _decimator[c].init();
         _reducer[c].Init();
         _reducer[c].SetFreq(0.6f);
     }
@@ -61,8 +60,8 @@ void GritReduce::apply() {
     const float crush =
         daisysp::fmap(1.f - _intensity, 0.5f, 0.7f, daisysp::Mapping::EXP);
     for (int c = 0; c < 2; ++c) {
-        _decimator[c].SetDownsampleFactor(_intensity);
-        _decimator[c].SetBitcrushFactor(crush);
+        _decimator[c].set_downsample_factor(_intensity);
+        _decimator[c].set_bitcrush_factor(crush);
     }
 }
 
@@ -72,14 +71,18 @@ void GritReduce::process(float& l, float& r SPKY_PROBE_PART_PARAMS) {
     // pair ran at, so the crush keeps its inherited speed. Split into
     // statements only so the callback profile can stamp stage 1 (the
     // Decimator) and stage 2 (the SampleRateReducer).
-    _decimator[0].Process(l);
-    const float c0 = _decimator[0].Process(l);
+    //
+    // The first Decimator call's return value is discarded, and the second
+    // call overwrites the bitcrush it computed: with _fast it does the state
+    // step only. Same state, same output (tests/test_grit.cpp).
+    if (_fast) _decimator[0].step(l); else _decimator[0].process(l);
+    const float c0 = _decimator[0].process(l);
     SPKY_PROBE_PART_MARK(17);
     _reducer[0].Process(c0);
     float r0 = _reducer[0].Process(c0);
     SPKY_PROBE_PART_MARK(18);
-    _decimator[1].Process(r);
-    const float c1 = _decimator[1].Process(r);
+    if (_fast) _decimator[1].step(r); else _decimator[1].process(r);
+    const float c1 = _decimator[1].process(r);
     SPKY_PROBE_PART_MARK(19);
     _reducer[1].Process(c1);
     float r1 = _reducer[1].Process(c1);
