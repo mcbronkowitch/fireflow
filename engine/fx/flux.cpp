@@ -208,8 +208,16 @@ void Flux::process(float& l, float& r) {
     // The line always hears the live input; the RAMP rides the return —
     // the signal that is actually audible (GRIT's pattern, grit.cpp:99).
     // The old form gated the send, i.e. audio already in the past.
+#if defined(SPKY_PROBE_TOGGLES)
+    float wet_l = 0.f, wet_r = 0.f;   // probe bit 1 leaves them silent
+    if (!_probe_no_echo) {
+        wet_l = _echo_l.Process(l, samples);
+        wet_r = _echo_r.Process(r, samples);
+    }
+#else
     float wet_l = _echo_l.Process(l, samples);
     float wet_r = _echo_r.Process(r, samples);
+#endif
     _line_dirty = true;
     if (thinning || _gate != 1.f) {
         daisysp::fonepole(_gate, _gate_target, _gate_coef);

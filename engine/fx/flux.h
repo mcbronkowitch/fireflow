@@ -59,6 +59,17 @@ public:
     void set_rhythm_pace(float p) { _rhythm_pace = p; update_thin_pattern(); }
     void process(float& l, float& r);
 
+#if defined(SPKY_PROBE_TOGGLES)
+    // Probe only (util/probe_toggles.h bits 1 and 2, measurement image):
+    // skip the two echo lines altogether / keep them but skip their band-pass
+    // and tanh. Handed down once per block by Instrument::process.
+    void set_probe(bool no_echo, bool no_filter) {
+        _probe_no_echo = no_echo;
+        _echo_l.set_probe_no_filter(no_filter);
+        _echo_r.set_probe_no_filter(no_filter);
+    }
+#endif
+
     float delay_target_for_test() const { return _dt_target; }
     float delay_current_for_test() const { return _dt_current; }
     float gate_for_test() const { return _gate; }
@@ -78,6 +89,9 @@ private:
 
     TapeEcho<kTapeSamples> _echo_l;
     TapeEcho<kTapeSamples> _echo_r;
+#if defined(SPKY_PROBE_TOGGLES)
+    bool _probe_no_echo = false;
+#endif
     SoftSwitch _sw;
     float _mix_lin = 0.f;
     bool _buf_ok = false;

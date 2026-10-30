@@ -253,6 +253,10 @@ void Instrument::process(const float* inL, const float* inR,
     // The candidate toggles, once per block and never inside the loop below
     // (util/probe_toggles.h; shell/test_remote_wiring.py holds the place).
     _probe_tog = probe::toggles();
+    // The FLUX probe bits, handed down once per block, before the loop.
+    for (auto& p : _parts)
+        p.fx().flux().set_probe(probe::on(_probe_tog, probe::kBitFluxProbeNoEcho),
+                                probe::on(_probe_tog, probe::kBitFluxProbeNoFilter));
 #endif
     SPKY_PROBE_DECL;
     for (size_t i = 0; i < n; ++i) {

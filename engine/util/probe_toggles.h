@@ -29,7 +29,16 @@
 //                                                        only path now (the
 //                                                        discarded Decimator
 //                                                        step does state only)
-//   1-29 (free: candidates; bit 0 is never reused)
+//   1    FLUX_PROBE_NO_ECHO   engine/fx/flux.cpp         PROBE (measurement only,
+//                                                        never adopted): Flux
+//                                                        skips both echo lines,
+//                                                        wet = 0
+//   2    FLUX_PROBE_NO_FILTER engine/fx/tape_echo.h      PROBE (measurement only,
+//                                                        never adopted): the echo
+//                                                        line keeps its read and
+//                                                        write, skips band-pass
+//                                                        and tanh (clamped)
+//   3-29 (free: candidates; bits 0-2 are never reused)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE
 //                                                        burn on every block
 //   31   SHELL_GUARD_OFF      shell/panel_scan.cpp       the overrun guard is
@@ -43,6 +52,10 @@
 
 namespace spky {
 namespace probe {
+
+// The FLUX probe bits (above): measurement only, never adopted.
+inline constexpr int kBitFluxProbeNoEcho   = 1;
+inline constexpr int kBitFluxProbeNoFilter = 2;
 
 // The shell's two bits (above).
 inline constexpr int kBitShellLateRepeat = 30;
