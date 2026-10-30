@@ -1,0 +1,68 @@
+{
+  "frames": 657,
+  "skipped": 4,
+  "void": false,
+  "tripped": false,
+  "gen": 2,
+  "reconnects": 0,
+  "tog": [
+    "00000000"
+  ],
+  "gest_done": false,
+  "build": "5b6f281",
+  "measure": 0,
+  "name": "bastian",
+  "expect_tog": "00000000",
+  "error": null,
+  "cb_last": {
+    "n": 657,
+    "p50": 886751,
+    "p99": 907640,
+    "p999": 912849,
+    "max": 912849,
+    "over_930k": 0
+  },
+  "frame_max": {
+    "n": 657,
+    "p50": 905397,
+    "p99": 924763,
+    "p999": 931098,
+    "max": 931098,
+    "over_930k": 1
+  },
+  "cb_max_final": 931098,
+  "gap_max": 960724,
+  "over_total": 1,
+  "trips": 0,
+  "tripped_frames": 0,
+  "untripped": {
+    "frames": 657,
+    "cb_last": {
+      "n": 657,
+      "p50": 886751,
+      "p99": 907640,
+      "p999": 912849,
+      "max": 912849,
+      "over_930k": 0
+    },
+    "frame_max": {
+      "n": 657,
+      "p50": 905397,
+      "p99": 924763,
+      "p999": 931098,
+      "max": 931098,
+      "over_930k": 1
+    },
+    "cb_max_final": 931098,
+    "gap_max": 960724,
+    "over_total": 1
+  },
+  "record": {
+    "requested": true,
+    "exit": 0,
+    "wav_exists": true,
+    "note": null,
+    "aborted": false,
+    "ok": true
+  }
+}

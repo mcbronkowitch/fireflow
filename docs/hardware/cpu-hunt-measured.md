@@ -420,3 +420,25 @@ buffer is in D2). Board, A-B-A-B by reflash, w313 / w143 / w99 / `bastian`,
 Reverted (75020e86). The engines' per-run spread of ±10-18 k on a static
 workload also bounds what a section-mean verdict can resolve for engine-side
 candidates: those need more than 2 x 30 s.
+
+### `bastian` after candidate 1: no clicks in 10 minutes
+
+Listener 5b6f281 (candidate 1 in, probes and the write-allocate switch
+out), `bastian`, 600 s recorded through the Twin (inputs 1/2), the same
+detector settings as §3 (second difference, k = 12). Files:
+`captures/cpu-hunt-2026-10-30-bastian-600-after-c1.json`,
+`…-clicks-after-c1-ch0.txt` / `-ch1.txt`.
+
+| | §2/§3 baseline (50250a0) | after candidate 1 (5b6f281) |
+|---|---|---|
+| `frame_max` p50 / p99 / max | 923 741 / 943 269 / 951 197 | 905 397 / 924 763 / 931 098 |
+| `cb_last` p50 / p99 / max | 904 427 / 924 413 / 929 583 | 886 751 / 907 640 / 912 849 |
+| frames ≥ 945 000 | 4 of 640 | 0 of 657 |
+| detector hits above score 16 | 5 (scores 1 145 - 4 638) | 3, on channel 1 only, all 16.9 |
+| trips | 0 | 0 |
+
+The three 16.9 hits sit at the material's own floor (§3: ≤ 16; a late block
+scored 94 and more in the calibration). None is on both channels, and the
+§3 clicks were on both. So in these ten minutes `bastian` did not click. Its
+worst block is now ~14 k under the ~945 000 line. That is above the A/A
+floor, but not a guarantee: the margin is one 10-minute sample.
