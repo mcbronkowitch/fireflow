@@ -88,8 +88,6 @@ SECTIONS
     *(.text._ZN4spky7ModLane6followElff)                               /* 1800 */
     *(.text._ZN4spky6VoiceTINS_5WtOscEE11_apply_freqEv)                /* 1794 */
     *(.text._ZN4spky12SynthEngineTINS_6VoiceTINS_5WtOscEEEE15_update_controlEv) /* 1416 */
-    *(.text._ZN4spky12SynthEngineTINS_6VoiceTINS_8MorphOscEEEE15_update_controlEv) /* 1460 */
-    *(.text._ZN4spky6VoiceTINS_8MorphOscEE11_apply_freqEv)             /*  500 */
     *(.text._ZN4spky10FeedEngine13_control_tickEv)                     /* 1272 */
 
     /* The link stamp (itcm_load.cpp): this build's copy, carried to ITCM in
