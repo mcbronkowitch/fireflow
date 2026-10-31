@@ -165,9 +165,12 @@ and `tools/`, `tools/remote_run.py` for the board.
   20 frames, the sequence {0, 8, 2, 4, 4, 2, 8, 0} repeating.
 - `bool rgrain_cap_on(uint32_t frame);` — B2: phases of 60 frames, off
   first, then alternating.
-- `uint8_t rgrain_grant(uint32_t last_cb, bool last_silenced, uint32_t budget, uint32_t per_grain, uint8_t max);`
-  — `0` if `last_silenced` or `last_cb >= budget`, else
-  `min(max, (budget - last_cb) / per_grain)`.
+- `uint8_t rgrain_grant(uint32_t last_cb, uint8_t last_granted, bool last_silenced, uint32_t budget, uint32_t per_grain, uint8_t max);`
+  — works from the previous block's cost without the layer, so the grant
+  does not feed back on itself (review, 2026-10-31):
+  `base = last_cb - last_granted * per_grain` (clamped at 0); `0` if
+  `last_silenced` or `base >= budget`, else
+  `min(max, (budget - base) / per_grain)`.
 
 - [ ] **Step 1: Failing tests** in `tests/test_sd_schedule.cpp`:
   - `burst_phase`: w 0-9 idle; w 10 → on, 83, tail 0; w 50 → on, 83,
@@ -177,8 +180,12 @@ and `tools/`, `tools/remote_run.py` for the board.
     countdown restarts it.
   - `rgrain_n`: frame 0 → 0, 20 → 8, 60 → 4, 80 → 4, 159 → 0, 160 → 0.
   - `rgrain_cap_on`: 0 → false, 60 → true, 119 → true, 120 → false.
-  - `rgrain_grant`: (900 000, false, 920 000, 18 000, 8) → 1;
-    (700 000, …) → 8 (capped); (930 000, …) → 0; (500 000, true, …) → 0.
+  - `rgrain_grant` (args: last_cb, last_granted, last_silenced, budget,
+    per_grain, max): (900 000, 0, false, 920 000, 18 000, 8) → 1;
+    (900 000, 4, false, 920 000, 18 000, 8) → 5 (base 828 000);
+    (700 000, 0, …) → 8 (capped); (930 000, 0, …) → 0;
+    (50 000, 8, false, …) → 8 (base clamps at 0, not wrapped);
+    (500 000, 0, true, …) → 0.
 - [ ] **Step 2: Run, expect FAIL** (does not compile:
   `shell/sd_schedule.h` missing).
 - [ ] **Step 3: Implement** the five in `sd_schedule.{h,cpp}`; no hardware
@@ -357,10 +364,12 @@ Announce to the moderator first; ~2 h board time.
   processed.
 - `panel_scan.cpp` under `#if SHELL_RGRAIN`: before `Instrument::process`,
   n = `rgrain_n(frame)` (1) or `cap_on ? rgrain_grant(last_dc,
-  last_silenced, 920000, kRgrainCycles, 8) : 0` (2); the frame counter is
-  the `SHELL_PLAY_WIN` frame count. Line per frame, right after
-  `SHELL_PLAY_WIN`: `SHELL_RGRAIN mode=<1|2> n=<fixed n or -1> cap=<0|1> granted_sum= blocks= rms_x1e6=`
-  (rms of the layer's output over the frame).
+  last_granted, last_silenced, 920000, kRgrainCycles, 8) : 0` (2); the
+  frame counter is the `SHELL_PLAY_WIN` frame count. Line per frame, right
+  after `SHELL_PLAY_WIN`: `SHELL_RGRAIN mode=<1|2> n=<fixed n or -1> cap=<0|1> granted_sum= blocks= swing= rms_x1e6=`
+  (swing: the largest |grant − previous block's grant| in the frame, so
+  B2 shows whether the cap oscillates; rms of the layer's output over the
+  frame).
 - `kRgrainCycles`: a constant in `rgrain.h`, 17 900 until Task 10 writes
   B1's measured slope into it.
 - `read_rgrain.py`: B1 — frames grouped by n, mean of `sum/n` per n, a
@@ -409,7 +418,8 @@ Announce first; ~5 h board time, may be split.
   `feat(shell): kRgrainCycles from B1's board slope`.
 - [ ] **Step 4: B2.** Flash `SHELL_RGRAIN=2` from that commit. For 90,
   99, 127, 117, 145: `run --load <id> --seconds 1200`. `read_rgrain.py`;
-  record the verdict per workload and the granted distribution; name it
+  record the verdict per workload, the granted distribution and the
+  swing (a swing near 8 every frame is oscillation, not headroom); name it
   if the previous-block grant missed a block's own spike (a `win` over the
   off-run's worst + slope in a cap phase).
 - [ ] **Step 5:** Board back to the moderator's image; commit results
@@ -420,16 +430,31 @@ Announce first; ~5 h board time, may be split.
 **Files:**
 - Modify: `shell/sd_probe.cpp`, `shell/wt_bank_d2.cpp`, `shell/panel_scan.cpp`,
   `shell/read_sd.py`, `shell/test_read_sd.py`, `shell/README.md`
+- Modify: `engine/synth/wt_bank.h` (the `set_bank` comment)
+- Create: `tests/test_wt_bank_swap.cpp` (into the host test list)
 
 **Interfaces:**
 - `bank`: a second slot `g_bank_d2b[spky::wt::kTotalSamples]` in
   `.d2_bss` (`shell::wt_bank_slot(int) -> int16_t*`); once, the factory
   bank is written raw (int16 LE, `kBankSamples` layout) to `FFBANK.WTB`;
   then phases of 10 s alternate idle and loading: every 2 s the file is
-  read into the inactive slot, compared with `kBankSamples`, and
-  `g_bank_pending` set; the callback calls `spky::wt::set_bank(pending)`
-  at the top of the next block and clears it. Line per load:
-  `SHELL_SD_K load_us= worst_us= cmp=<ok|bad> held= fr= slot=`.
+  read into the slot that is neither the active one nor a pending one,
+  compared with `kBankSamples`, and `g_bank_pending` set; the callback
+  calls `spky::wt::set_bank(pending)` at the top of the next block and
+  clears it. A load does not start while a swap is pending. Line per
+  load: `SHELL_SD_K load_us= worst_us= cmp=<ok|bad> held= fr= slot=`.
+- **The swap rule (review, 2026-10-31).** Read at planning time:
+  `WtOsc::_read_frame` (`engine/synth/wt_osc.h:181`) calls `wt::table()`
+  on every sample read, and nothing else in `engine/`, `shell/` or `host/`
+  takes a bank pointer (`wt_bank.cpp`, `wt_bank.h`, `wt_osc.h`,
+  `shell/wt_bank_d2.cpp` are the only users). So no pointer into a slot
+  survives a block, and a swap at block top is safe for the next block.
+  The builder re-checks this before Step 3 and stops if a cache has
+  appeared. `set_bank`'s comment becomes: "Call before anything plays,
+  or from the audio thread at the top of a block. The bank is read through
+  `bank()` per sample and never cached across blocks
+  (test_wt_bank_swap.cpp holds that). The SD probe (`shell/sd_probe.cpp`,
+  `SHELL_SD_PROBE=bank`) is the only caller that swaps while playing."
 - `buffer`: a scratch `spky::SampleBuffer::Frame` array of `kSamplerFrames`
   in `.sdram_bss` (16.1 MB; 29 MiB are free). Cycle: fill with the pattern
   (word index hash, as float bits), save as `FFBUF.F32` (raw frames), clear,
@@ -445,7 +470,15 @@ Announce first; ~5 h board time, may be split.
 - `read_sd.py`: `bank_stats`, `buffer_stats`, `patch_stats`, each with an
   error case.
 
-- [ ] **Step 1: Failing tests:** `test_bank_cmp_bad_fails`,
+- [ ] **Step 1: Failing tests:** `tests/test_wt_bank_swap.cpp`,
+  `bank swap takes effect on the next read`: a `WtOsc` renders 64 samples
+  on the factory bank; `set_bank()` to a copy with every sample negated;
+  the next sample equals the negation of what a second, identical `WtOsc`
+  left on the factory bank produces for its 65th sample (± 1e-6); then
+  `set_bank(nullptr)` restores. Goes red if any pointer into the old bank
+  is held across the swap (prove it once by caching
+  `wt::table(frame, mip)` in a member for a moment). Then
+  `test_bank_cmp_bad_fails`,
   `test_buffer_times_and_cmp` (f32 save 2 000 ms, load 1 300 ms, cmp ok →
   pass; an `s16` cmp=bad → fail with its offset),
   `test_patch_100_of_100` (99 ok + 1 bad → fail).
