@@ -2,6 +2,7 @@
 
 #include <cstdio>
 
+#include "cycles.h"
 #include "per/sdmmc.h"
 #include "sys/fatfs.h"
 
@@ -20,6 +21,11 @@ constexpr uint32_t kReportEvery = 10;   // passes between the SHELL_SD lines
 // is Speed::STANDARD (25 MHz); kMhz is only what the line prints.
 constexpr daisy::SdmmcHandler::Speed kSpeed = daisy::SdmmcHandler::Speed::FAST;
 constexpr int                        kMhz   = 50;
+// The bus clock stops while no transfer runs (SDMMC CLKCR.PWRSAV). With it
+// running (libDaisy's default), the first board run (ef52d8b, 2026-10-31)
+// measured SENSE_2/3's idle raw spread at ~95 counts, against 14 on
+// 2026-10-24 before the card was fitted.
+constexpr bool kClockPowerSave = true;
 
 const char kName[] = "FFSDTEST.BIN";
 
@@ -92,7 +98,10 @@ int32_t first_bad(uint32_t word0)
 
 void account(Step& s, uint32_t t0, UINT n)
 {
-    const uint32_t dt = daisy::System::GetUs() - t0;   // wraps every ~21 s, a call is far shorter
+    // DWT cycles, not System::GetUs(): GetUs() wraps at ~21.47 s, not at
+    // 2^32, so a call across its wrap came out as ~4.3e9 us (2026-10-31).
+    // CYCCNT wraps at 2^32 (8.9 s), far longer than a call.
+    const uint32_t dt = (cycles_now() - t0) / kCoreMhz;
     s.us += dt;
     s.bytes += n;
     if(dt > s.worst_us)
@@ -107,7 +116,7 @@ Check read_verify(Step& s, uint32_t& bad_off)
     for(uint32_t off = 0; off < kFileBytes; off += kChunk)
     {
         UINT           br = 0;
-        const uint32_t t0 = daisy::System::GetUs();
+        const uint32_t t0 = cycles_now();
         s.fr              = f_read(&g_fs.file, g_buf, kChunk, &br);
         account(s, t0, br);
         if(s.fr != FR_OK || br != kChunk)
@@ -149,7 +158,8 @@ void sd_bringup_run()
 {
     daisy::SdmmcHandler::Config cfg;
     cfg.Defaults();
-    cfg.speed = kSpeed;
+    cfg.speed           = kSpeed;
+    cfg.clock_powersave = kClockPowerSave;
     g_sdmmc.Init(cfg);
     g_fs.fsi.Init(daisy::FatFSInterface::Config::MEDIA_SD);
 
@@ -204,13 +214,13 @@ void sd_bringup_run()
         for(uint32_t i = 0; i < kChunk / 4; ++i)
             g_buf[i] = pattern(off / 4 + i);
         UINT           bw = 0;
-        const uint32_t t0 = daisy::System::GetUs();
+        const uint32_t t0 = cycles_now();
         g_res.write.fr    = f_write(&g_fs.file, g_buf, kChunk, &bw);
         account(g_res.write, t0, bw);
         if(g_res.write.fr != FR_OK || bw != kChunk)
             break;
     }
-    const uint32_t t0 = daisy::System::GetUs();
+    const uint32_t t0 = cycles_now();
     const FRESULT  cr = f_close(&g_fs.file);
     account(g_res.write, t0, 0);
     if(g_res.write.fr == FR_OK)
@@ -234,9 +244,9 @@ void sd_report(bench::Board& hw, uint32_t pass)
         return;
     // Each line inside libDaisy's 128-byte log buffer: the longest, the
     // verify line with every field at ten digits, is 107 bytes.
-    hw.PrintLine("SHELL_SD mount=%d fs=%d total_mib=%u free_mib=%u bus=4 mhz=%d",
+    hw.PrintLine("SHELL_SD mount=%d fs=%d total_mib=%u free_mib=%u bus=4 mhz=%d ps=%d",
                  g_res.mount_fr, g_res.fs_type, static_cast<unsigned>(g_res.total_mib),
-                 static_cast<unsigned>(g_res.free_mib), kMhz);
+                 static_cast<unsigned>(g_res.free_mib), kMhz, kClockPowerSave ? 1 : 0);
     hw.PrintLine("SHELL_SD prev=%s fr=%d off=%u", check_name(g_res.prev),
                  g_res.prev_read.fr, static_cast<unsigned>(g_res.prev_off));
     hw.PrintLine("SHELL_SD write kib=%u us=%u kib_s=%u worst_us=%u fr=%d",
@@ -271,10 +281,10 @@ void sd_stream_pass(bench::Board& hw, const volatile uint32_t& win)
                 fr = f_lseek(&g_fs.file, 0);
             const uint32_t word0 = static_cast<uint32_t>(f_tell(&g_fs.file) / 4u);
             UINT           br    = 0;
-            const uint32_t u0    = daisy::System::GetUs();
+            const uint32_t u0    = cycles_now();
             if(fr == FR_OK)
                 fr = f_read(&g_fs.file, g_buf, kChunk, &br);
-            const uint32_t dt = daisy::System::GetUs() - u0;
+            const uint32_t dt = (cycles_now() - u0) / kCoreMhz;
             if(fr != FR_OK || br != kChunk)
             {
                 // Stops the stream for good; the line keeps saying why.
