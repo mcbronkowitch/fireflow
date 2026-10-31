@@ -1,6 +1,7 @@
 #include "sd_probe.h"
 
 #include <cstdio>
+#include <cstring>
 
 #include "cycles.h"
 #include "per/sdmmc.h"
@@ -27,7 +28,14 @@ constexpr int                        kMhz   = 50;
 // 2026-10-24 before the card was fitted.
 constexpr bool kClockPowerSave = true;
 
-const char kName[] = "FFSDTEST.BIN";
+// .DAT, not .BIN: the Daisy bootloader scans the card's root for a .bin to
+// start, and an 8 MiB pattern file is one it must never find. The name an
+// earlier bring-up image used, FFSDTEST.BIN, is deleted on mount.
+const char kName[]    = "FFSDTEST.DAT";
+const char kOldName[] = "FFSDTEST.BIN";
+// The root line's names list: whole 8.3 names while they fit, so the line
+// stays inside the 128-byte log buffer (prefix 46 + names 72 at worst).
+constexpr size_t kRootNamesMax = 72;
 
 // The FatFs objects in one 32-byte-aligned block in AXI SRAM (.bss). FATFS's
 // sector window and FIL's sector buffer are DMA targets, and sd_diskio.c
@@ -62,6 +70,10 @@ struct Result
     int      fs_type   = 0;   // FS_FAT12 1, FS_FAT16 2, FS_FAT32 3, FS_EXFAT 4
     uint32_t total_mib = 0;
     uint32_t free_mib  = 0;
+    bool     root_seen = false;   // the listing ran
+    uint32_t root_n    = 0;       // entries in the root
+    uint32_t root_bin  = 0;       // files there ending in .bin, any case
+    char     root_names[kRootNamesMax + 1] = "";
     Check    prev      = kSkip;
     Step     prev_read;
     uint32_t prev_off  = 0;   // first bad byte, or the file's size if it is wrong
@@ -152,6 +164,51 @@ const char* check_name(Check c)
     }
 }
 
+// True when `name` ends in ".bin", any case.
+bool ends_bin(const char* name)
+{
+    const size_t n = strlen(name);
+    return n >= 4 && name[n - 4] == '.' && (name[n - 3] | 0x20) == 'b'
+           && (name[n - 2] | 0x20) == 'i' && (name[n - 1] | 0x20) == 'n';
+}
+
+// Lists the card's root into g_res: every entry counted, the first whole 8.3
+// names (the short name when the entry has a long one) kept for the line.
+void list_root(const char* root)
+{
+    DIR     dir;
+    FILINFO fno;
+    if(f_opendir(&dir, root) != FR_OK)
+        return;
+    g_res.root_seen = true;
+    size_t used     = 0;
+    bool   full     = false;
+    for(;;)
+    {
+        if(f_readdir(&dir, &fno) != FR_OK || fno.fname[0] == '\0')
+            break;
+        ++g_res.root_n;
+        if(!(fno.fattrib & AM_DIR) && ends_bin(fno.fname))
+            ++g_res.root_bin;
+        if(g_res.root_n > 8 || full)
+            continue;
+        const char*  nm  = fno.altname[0] ? fno.altname : fno.fname;
+        const size_t len = strlen(nm);
+        const size_t add = len + (used ? 1 : 0);
+        if(used + add > kRootNamesMax)
+        {
+            full = true;   // a later, shorter name must not jump the queue
+            continue;
+        }
+        if(used)
+            g_res.root_names[used++] = ',';
+        memcpy(g_res.root_names + used, nm, len);
+        used += len;
+        g_res.root_names[used] = '\0';
+    }
+    f_closedir(&dir);
+}
+
 } // namespace
 
 void sd_bringup_run()
@@ -180,6 +237,14 @@ void sd_bringup_run()
         g_res.total_mib = static_cast<uint32_t>((fsp->n_fatent - 2) * fsp->csize / 2048u);
         g_res.free_mib  = static_cast<uint32_t>(free_clusters * fsp->csize / 2048u);
     }
+
+    // 1b: the old .bin test file goes (FR_NO_FILE is the normal case, nothing
+    // to say), then the root is listed: the report line says whether any .bin
+    // is left for the bootloader to find.
+    char old_path[24];
+    snprintf(old_path, sizeof old_path, "%s%s", root, kOldName);
+    f_unlink(old_path);
+    list_root(root);
 
     // 2: the file an earlier boot left, if any: bytes that survived a power
     // cycle.
@@ -243,10 +308,14 @@ void sd_report(bench::Board& hw, uint32_t pass)
     if(pass % kReportEvery != 0)
         return;
     // Each line inside libDaisy's 128-byte log buffer: the longest, the
-    // verify line with every field at ten digits, is 107 bytes.
+    // verify line with every field at ten digits, is 107 bytes; the root line
+    // is 46 plus its names, which list_root cuts to 72: 118.
     hw.PrintLine("SHELL_SD mount=%d fs=%d total_mib=%u free_mib=%u bus=4 mhz=%d ps=%d",
                  g_res.mount_fr, g_res.fs_type, static_cast<unsigned>(g_res.total_mib),
                  static_cast<unsigned>(g_res.free_mib), kMhz, kClockPowerSave ? 1 : 0);
+    if(g_res.root_seen)
+        hw.PrintLine("SHELL_SD root=%u bin=%u names=%s", static_cast<unsigned>(g_res.root_n),
+                     static_cast<unsigned>(g_res.root_bin), g_res.root_names);
     hw.PrintLine("SHELL_SD prev=%s fr=%d off=%u", check_name(g_res.prev),
                  g_res.prev_read.fr, static_cast<unsigned>(g_res.prev_off));
     hw.PrintLine("SHELL_SD write kib=%u us=%u kib_s=%u worst_us=%u fr=%d",

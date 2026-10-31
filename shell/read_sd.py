@@ -6,7 +6,8 @@ Record with read_play.py (it writes every line), then:
     python read_sd.py capture.txt
 
 1. The card test: the last of each SHELL_SD line (mount, prev, write,
-   verify), judged -- mount=0, verify=ok with fr=0 and the full 8 MiB.
+   verify), judged -- mount=0, verify=ok with fr=0 and the full 8 MiB, and no
+   .bin file in the card root (the root line; the bootloader would start it).
 2. The stream: every SHELL_SD_S line with on=1 -- KiB read, the read rate
    over the streaming passes, the worst single f_read, bad chunks, the
    sticky error.
@@ -31,6 +32,7 @@ FILE_KIB = 8192      # sd_probe.cpp kFileBytes
 
 _SD = re.compile(r"^SHELL_SD (mount=|prev=|write |verify=)(.*)$")
 _SD_S = re.compile(r"^SHELL_SD_S (.*)$")
+_ROOT = re.compile(r"^SHELL_SD root=(\d+) bin=(\d+) names=(.*)$")
 
 
 def _kv(text):
@@ -51,6 +53,23 @@ def parse_sd(lines):
         else:
             key = head[:-1]
             out[key] = _kv(key + "=" + rest)
+    root = parse_root(lines)
+    if root is not None:
+        out["root"] = root
+    return out
+
+
+def parse_root(lines):
+    """The last `SHELL_SD root=<n> bin=<k> names=<A,B,...>` line as
+    {"n": int, "bin": int, "names": [str]}, or None. names is the first few
+    root entries only (the firmware cuts the list to fit its log line), so
+    `bin` is the count, not len() of the .BIN names."""
+    out = None
+    for raw in lines:
+        m = _ROOT.match(raw.strip())
+        if m:
+            out = {"n": int(m.group(1)), "bin": int(m.group(2)),
+                   "names": [n for n in m.group(3).split(",") if n]}
     return out
 
 
@@ -84,6 +103,13 @@ def card_verdict(sd):
     w = sd.get("write")
     if w is None or w.get("fr") != "0" or w.get("kib") != str(FILE_KIB):
         why.append("write %s" % (w,))
+    # The bootloader scans the root for a .bin to start; one there (the test
+    # file used to be FFSDTEST.BIN) fails the card. No root line: older image.
+    root = sd.get("root")
+    if root is not None and root["bin"] > 0:
+        bins = [n for n in root["names"] if n.upper().endswith(".BIN")]
+        why.append("%d .bin file(s) in the card root: %s"
+                   % (root["bin"], ",".join(bins) or "see names"))
     return not why, why
 
 
@@ -137,6 +163,10 @@ def report(lines, out=None):
         if key in sd:
             print("%-6s %s" % (key, " ".join("%s=%s" % kv for kv in sd[key].items())),
                   file=out)
+    if "root" in sd:
+        r = sd["root"]
+        print("root   n=%d bin=%d names=%s" % (r["n"], r["bin"], ",".join(r["names"])),
+              file=out)
     print("card test: %s" % ("PASS" if ok else "FAIL (" + "; ".join(why) + ")"), file=out)
 
     stream = parse_stream(lines)

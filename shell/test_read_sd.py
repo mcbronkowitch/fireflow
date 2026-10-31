@@ -110,6 +110,30 @@ for name, card in (
     check("%s exits 1" % name, code == 1)
     check("%s says FAIL" % name, "card test: FAIL" in text)
 
+# --- the root line: no .bin file may sit beside the test file ---------------
+# The bootloader scans the card's root for a .bin to start; the test file is
+# FFSDTEST.DAT so it never looks like one (test_root_line_parsed,
+# test_bin_in_root_fails_card).
+ROOT_OK = "SHELL_SD root=2 bin=0 names=FFSDTEST.DAT,SYSTEM~1"
+root = read_sd.parse_root(CARD + [ROOT_OK])
+check("test_root_line_parsed: bin", root is not None and root["bin"] == 0)
+check("test_root_line_parsed: n", root is not None and root["n"] == 2)
+check("test_root_line_parsed: names",
+      root is not None and root["names"] == ["FFSDTEST.DAT", "SYSTEM~1"])
+check("no root line parses to None", read_sd.parse_root(CARD) is None)
+check("a root line without .bin keeps the card PASS",
+      read_sd.card_verdict(read_sd.parse_sd(CARD + [ROOT_OK]))[0])
+
+ROOT_BIN = "SHELL_SD root=2 bin=1 names=FFSDTEST.BIN,SYSTEM~1"
+ok, why = read_sd.card_verdict(read_sd.parse_sd(CARD + [ROOT_BIN]))
+check("test_bin_in_root_fails_card: verdict false", not ok)
+check("test_bin_in_root_fails_card: the reason names the file",
+      any("FFSDTEST.BIN" in w for w in why))
+code, text = run(capture(card=CARD + [ROOT_BIN]))
+check("a .bin in the root exits 1", code == 1)
+check("a .bin in the root says FAIL and names the file",
+      "card test: FAIL" in text and "FFSDTEST.BIN" in text)
+
 # --- a stream that never ran ---------------------------------------------
 code, text = run(capture(on_override=lambda c, on: False))
 check("no streaming window exits 1", code == 1)
