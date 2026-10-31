@@ -219,6 +219,7 @@ TEST_CASE("V6: single-pass stable under control-rate cutoff modulation") {
     one.SetSinglePass(true);
     uint32_t s = 0x9e3779b9u, m = 0x7f4a7c15u;
     double max_two = 0.0, max_one = 0.0;
+    double sig = 0.0, diff = 0.0;   // energies of the two-pass output and of the gap
     bool finite = true;
     for (int i = 0; i < 20 * 48000; ++i) {
         if (i % 96 == 0) {
@@ -234,11 +235,21 @@ TEST_CASE("V6: single-pass stable under control-rate cutoff modulation") {
         finite = finite && std::isfinite(one.Low());
         max_two = std::max(max_two, (double)std::fabs(two.Low()));
         max_one = std::max(max_one, (double)std::fabs(one.Low()));
+        const double a = two.Low(), b = one.Low();
+        sig += a * a;
+        diff += (a - b) * (a - b);
     }
     CHECK(finite);
     CAPTURE(max_two);
     CAPTURE(max_one);
     CHECK(max_one <= 1.5 * max_two);
+    // The one-pass step is the two-pass filter's own recurrence on the same
+    // state, so under modulation too only rounding separates them: the
+    // difference stays below -80 dB of the signal.
+    CAPTURE(sig);
+    CAPTURE(diff);
+    CHECK(sig > 1.0);
+    CHECK(diff < 1e-8 * sig);
     // Parked in that degenerate corner (res 0, 14 kHz) and fed silence, it
     // must not hold a value: whatever it carried decays away.
     one.SetFreq(14000.f);
