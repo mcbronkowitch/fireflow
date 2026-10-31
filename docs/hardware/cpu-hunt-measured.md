@@ -814,3 +814,18 @@ cycles per grain-sample (96 × = 18.8 k per block for one grain), and about
 186 (17.9 k) with G2 if the listening batch accepts it. These are deltas
 from separate A/B runs, added; the end-of-round batch measures them
 together.
+
+## 8. Bastian's decisions, round 2
+
+2026-10-31, on the three class-2 candidates queued for listening (V6, G2,
+V5), each of which differs from the old code only by rounding (V6 about
+−100 dB against the two-pass filter, G2's window by at most 3e-7, V5's
+detune ratio by at most 7.2e-8 relative), asked whether they still need the
+blind A/B on the Twin: **"Accept without listening"**.
+
+So `SHELL_LEAN_SVF1`, `SHELL_LEAN_GRAIN_WIN` and `SHELL_LEAN_EXP2` default to
+1 in every shell image; `shell/README.md` "Turning a CPU saving back" says
+how to turn each one back. No blind A/B was recorded for round 2. The
+measurement image still holds both paths of each, with the old path at
+toggle bit 0, so a measurement run measures the old arithmetic for these
+three unless their bits are set.

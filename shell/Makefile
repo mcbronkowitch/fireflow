@@ -643,9 +643,10 @@ endif
 
 # The lean switches: class-2 candidates of CPU round 2 (spec
 # 2026-10-30-cpu-engine-kernels-design.md section 4), each a saving that
-# changes the output. Default 0 until Bastian has listened to it; 1 compiles
-# the engine with SPKY_LEAN_<NAME>=1. With every switch at 0 the engine is the
-# code it was, instruction for instruction. The measurement image ignores them
+# changes the output. A new one defaults to 0 until Bastian has accepted it;
+# 1 compiles the engine with SPKY_LEAN_<NAME>=1. With every switch at 0 the
+# engine is the code it was, instruction for instruction. The three below are
+# accepted and default to 1 (2026-10-31). The measurement image ignores them
 # for its candidates: it holds both paths and a toggle bit picks
 # (engine/util/probe_toggles.h). VCV and the desktop render never see them.
 # All of them go through one stamp, build/shell_engine_lean.h, written at parse
@@ -657,8 +658,9 @@ endif
 # pass per sample instead of two (SvfLp::ProcessSingle, engine/util/svf_lp.h:
 # the two passes folded into one step, the same response up to rounding).
 # Toggle bit 19 in the measurement image. The sampler's and FEED's filters
-# stay two-pass either way.
-SHELL_LEAN_SVF1 ?= 0
+# stay two-pass either way. On (1) since 2026-10-31: Bastian accepted it
+# without a listen, the difference being rounding (about -100 dB).
+SHELL_LEAN_SVF1 ?= 1
 
 ifneq ($(words $(SHELL_LEAN_SVF1))-$(filter $(SHELL_LEAN_SVF1),0 1),1-$(SHELL_LEAN_SVF1))
 $(error SHELL_LEAN_SVF1 must be 0 or 1)
@@ -671,8 +673,9 @@ endif
 # SHELL_LEAN_GRAIN_WIN (candidate G2): a sampler grain's Hann window multiplies
 # by 1/atk, 1/dec and 1/fade length, latched at spawn and when a fade is armed
 # (engine/sampler/grain.h), instead of dividing on every sample (the same
-# window up to rounding). Toggle bit 22 in the measurement image.
-SHELL_LEAN_GRAIN_WIN ?= 0
+# window up to rounding). Toggle bit 22 in the measurement image. On (1) since
+# 2026-10-31, accepted without a listen (the window moves by at most 3e-7).
+SHELL_LEAN_GRAIN_WIN ?= 1
 
 ifneq ($(words $(SHELL_LEAN_GRAIN_WIN))-$(filter $(SHELL_LEAN_GRAIN_WIN),0 1),1-$(SHELL_LEAN_GRAIN_WIN))
 $(error SHELL_LEAN_GRAIN_WIN must be 0 or 1)
@@ -685,8 +688,9 @@ endif
 # SHELL_LEAN_EXP2 (candidate V5): the detune ratio 2^(ct / 1200) of the SYNTH
 # and WAVE voices' oscillators comes from a fourth-order polynomial
 # (engine/util/fast_exp2.h) instead of std::pow (the same ratio to within
-# 0.01 ct). Toggle bit 25 in the measurement image.
-SHELL_LEAN_EXP2 ?= 0
+# 0.01 ct). Toggle bit 25 in the measurement image. On (1) since 2026-10-31,
+# accepted without a listen (the ratio moves by at most 7.2e-8).
+SHELL_LEAN_EXP2 ?= 1
 
 ifneq ($(words $(SHELL_LEAN_EXP2))-$(filter $(SHELL_LEAN_EXP2),0 1),1-$(SHELL_LEAN_EXP2))
 $(error SHELL_LEAN_EXP2 must be 0 or 1)

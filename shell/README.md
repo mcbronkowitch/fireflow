@@ -131,18 +131,22 @@ half-rate reverb always, and toggle bit 9 selects nothing; with
 them. The VCV module and the desktop render never had either saving -- they
 build the engine as before.
 
-The next round's class-2 candidates come the other way round: each is a
-`SHELL_LEAN_<NAME>` switch that is **0** (off) until it has been listened to,
-and `SHELL_LEAN_<NAME>=1` added to the image's flags turns it on. With every
+The second round's class-2 savings are `SHELL_LEAN_<NAME>` switches. A new
+one starts at **0** (off) until Bastian accepts it; the three below were
+accepted on 2026-10-31 without a listen, because each differs from the old
+code only by rounding, and are **1** (on) in every shell image. Each is
+turned back with `SHELL_LEAN_<NAME>=0` added to the image's flags; with every
 lean switch at 0 the engine is compiled as it was. One stamp
 (`build/shell_engine_lean.h`, `write_shell_engine_lean.py`) holds them all and
 deletes the objects when one changes, so no `make clean` is needed here either.
+The measurement image (`SHELL_REMOTE_MEASURE=1`) ignores them: it holds both
+paths and its toggle bit picks, with the old path at bit 0.
 
-| Switch | Default | What it does |
-|---|---|---|
-| `SHELL_LEAN_SVF1` | `0` | the SYNTH and WAVE voices' low-pass runs one pass per sample instead of two (the same response up to rounding); toggle bit 19 in the measurement image |
-| `SHELL_LEAN_GRAIN_WIN` | `0` | a sampler grain's Hann window multiplies by reciprocals latched at spawn and when a fade is armed instead of dividing on every sample (the same window up to rounding); toggle bit 22 in the measurement image |
-| `SHELL_LEAN_EXP2` | `0` | the SYNTH and WAVE oscillators' detune ratio 2^(cents/1200) comes from a fourth-order polynomial (`engine/util/fast_exp2.h`) instead of `std::pow` (the same ratio to within 0.01 ct); toggle bit 25 in the measurement image |
+| Switch | Default | What it does | Turn it back |
+|---|---|---|---|
+| `SHELL_LEAN_SVF1` | `1` | the SYNTH and WAVE voices' low-pass runs one pass per sample instead of two (the same response up to rounding, about −100 dB); toggle bit 19 in the measurement image | `SHELL_LEAN_SVF1=0` |
+| `SHELL_LEAN_GRAIN_WIN` | `1` | a sampler grain's Hann window multiplies by reciprocals latched at spawn and when a fade is armed instead of dividing on every sample (the window moves by at most 3e-7); toggle bit 22 in the measurement image | `SHELL_LEAN_GRAIN_WIN=0` |
+| `SHELL_LEAN_EXP2` | `1` | the SYNTH and WAVE oscillators' detune ratio 2^(cents/1200) comes from a fourth-order polynomial (`engine/util/fast_exp2.h`) instead of `std::pow` (the ratio moves by at most 7.2e-8); toggle bit 25 in the measurement image | `SHELL_LEAN_EXP2=0` |
 
 ## Flashen
 
