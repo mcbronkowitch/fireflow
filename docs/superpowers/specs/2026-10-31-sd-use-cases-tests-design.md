@@ -1,8 +1,10 @@
 # SD card use cases: what to measure before building any of them
 
-Date: 2026-10-31. Status: draft for review by the CPU-hunt session, which
-Bastian made moderator of this plan ("du darfst die specs und pläne
-freigeben"). Hardware changes, the Twin and anything audible stay his.
+Date: 2026-10-31. Status: approved 2026-10-31 by the CPU-hunt session,
+which Bastian made moderator of this plan ("du darfst die specs und pläne
+freigeben"), with three fixes made (means on interleaved runs for A3/B1,
+B2 against a no-grain baseline, the round-2 grain price). Hardware
+changes, the Twin and anything audible stay his.
 
 ## 1. Why
 
@@ -37,7 +39,9 @@ All on Rev A #1, card fitted, 2026-10-31, unless stated.
 | Pot noise while streaming back to back | every pot over its band; SENSE_2/3 worst 514 / 415 counts, ~30× idle | row 11.2, fault R5 |
 | Pot noise idle with the SDMMC clock stopped | the no-SD floor | row 11.2 |
 | The pot-takeover threshold `kPotTouch` | 144 counts | `shell/pot_owner.h` |
-| One grain of the sampler, per 96-sample block | 21.3 k cycles at 221 per grain-sample, before round 2's G2/G3 | `cpu-hunt-measured.md` §7 |
+| One grain of the sampler, per 96-sample block | 21.3 k cycles at 221 per grain-sample before round 2; about 17.9 k at about 186 after G1, G2 and G3 (their separate A/B deltas added, not measured together). B1 replaces both | `cpu-hunt-measured.md` §7, "the three numbers" |
+| Noise of the worst block | one 60 s `frame_max` moved by ±135 k between runs of the same image and workload; a change is judged by window means on interleaved runs | `docs/gotchas.md` |
+| Worst blocks with no grains at all | w127 ~963 k on main and on the round-2 branch; w90 929 k on main | `cpu-hunt-measured.md` §7 |
 | Callback, Bastian's patch on main's play image, 10 min | p50 510 k, p99 727 k, max 739 k | `cpu-hunt-measured.md` §8 |
 | Worst top-20 workload / click line | 938 701 / ~945 000 cycles | §7, §3 |
 | The 192-sample block | +1-3 grains, not taken | §9 |
@@ -173,13 +177,16 @@ H1. A1 failing is a result for R5, not a stop.
 - **Question:** does SDMMC IDMA into SDRAM, which the sampler, echo and BBD
   read from, raise the callback's cycle count?
 - **Image:** `SHELL_SD=1` on fixed workloads through the listener (145
-  `bastian`, 90, 99, 127, 108), stream phases alternating with idle phases
+  `bastian`, 90, 99, 127, 108), stream phases interleaved with idle phases
   as in 11.2; the transfer buffer once in SDRAM, once in AXI SRAM.
-- **Measured:** the per-window worst callback (`g_win_cb_max`) and its
-  p50/p99, stream against idle, per workload and buffer location.
-- **Pass:** stream-phase worst callback within 1 % of the idle phase's
-  (9.6 k cycles, under half a grain), and never over the click line.
-  A miss is a result, not a stop: it prices the traffic.
+- **Measured:** the per-window callback mean and the per-window worst
+  (`g_win_cb_max`), stream against idle, per workload and buffer location;
+  p99 and the worst block recorded.
+- **Pass:** the mean over stream windows within 1 % of the mean over idle
+  windows (9.6 k cycles, about half a grain), on interleaved phases; and
+  no window over the click line. The worst block alone is not the basis
+  (it moves ±135 k between runs). A miss is a result, not a stop: it
+  prices the traffic.
 - **Board time:** 60 min.
 
 ### C1. Read latency tail and seeks
@@ -215,27 +222,39 @@ H1. A1 failing is a result for R5, not a stop.
   throwaway grain layer behind a probe switch: N fixed grains (0, 2, 4, 8)
   reading a generated sample from SDRAM with the sampler's kernel (Hann
   window, linear read), mono, summed into the reverb input.
-- **Measured:** the remote runner's frame_max (the per-window worst block)
-  on the workloads of A3 at each N; the slope per grain fitted against N.
-  Not the §7 CBP section split: the slope of the whole block is what a cap
+- **Measured:** the per-window callback mean on the workloads of A3 at each
+  N, with N interleaved per round (0-8-2-4, then 4-2-8-0, …) over at least
+  three rounds; the slope per grain fitted to the window means against N.
+  frame_max (the per-window worst) and p99 are recorded, not fitted. Not
+  the §7 CBP section split: the slope of the whole block is what a cap
   needs.
-- **Pass:** two runs give slopes within 10 %. The result row states the
-  slope, and the room per workload in grains at p99 and at max.
-- **Board time:** 60 min.
+- **Pass:** the slopes of two halves of the rounds agree within 10 %. The
+  result row states the slope, and the room per workload in grains at the
+  mean, at p99 and at the worst block.
+- **Board time:** 90 min (5 workloads × 4 N × 3 rounds × 60 s, plus
+  flashing).
 
 ### B2. A load-dependent grain cap
 
 - **Question:** with grains granted per block from the previous blocks'
-  cycle count, does the worst callback stay under the click line on the
-  worst workloads?
+  cycle count, does the worst callback stay within one grain of what the
+  same workload reaches with no grains, on the worst workloads?
 - **Image:** B1's layer plus a cap: grains granted =
   floor((budget − last callback) / slope), budget a constant.
-- **Measured:** callback max, overrun-guard trips, the distribution of
-  granted grains per workload, over 10 min each on 90, 99 and 145.
-- **Pass:** 0 overrun-guard trips and callback max ≤ 920 k on each.
-  How the grains coming and going sounds is Bastian's, by ear, later and
-  only if he asks; it is not part of this pass.
-- **Board time:** 60 min.
+- **Known risk:** a grant from the previous block cannot see the block's
+  own spike (the control tick, sample 0; `cpu-hunt-measured.md` §4). B2
+  measures whether that matters; it does not assume it doesn't.
+- **Measured:** per workload, runs with grains off and with the cap,
+  interleaved: callback worst and window means, overrun-guard trips, the
+  distribution of granted grains; on 90, 99, 127, 117 and 145, 10 min per
+  run.
+- **Pass:** with the cap, the worst callback ≤ the no-grain run's worst +
+  one grain's slope (B1), and overrun trips no more than the no-grain
+  run's, on each workload. A fixed ceiling cannot be the criterion: w127
+  reaches ~963 k with no grains. How the grains coming and going sounds is
+  Bastian's, by ear, later and only if he asks; it is not part of this
+  pass.
+- **Board time:** 2 hours (5 workloads × 2 runs × 10 min, plus flashing).
 
 ### D1. Wavetable bank reload
 
@@ -343,10 +362,10 @@ in `reva-bring-up.md` get A1's and H1's results.
   block's worst against N, not the §7 section split.
 - D5 only probes the bootloader with the files we already ship; a packer
   for one combined file is a follow-up.
-- A3's 1 % bound (9.6 k cycles, under half a grain) and B2's 920 k ceiling
-  (25 k under the click line) are mine.
+- A3's 1 % bound on window means (9.6 k cycles, about half a grain) and
+  B2's "no-grain worst + one grain" margin are mine (B2's after review).
 - A1 drops readings rather than holding the scan, so a held pot keeps its
   last value. Holding the whole scan would also be possible.
 - Bank swaps and grain dropout are not judged by ear here.
 - D5 is last and needs Bastian's OK at the time.
-- Board time, all tests: about 8 hours, not counting H1's soldering.
+- Board time, all tests: about 9.5 hours, not counting H1's soldering.
