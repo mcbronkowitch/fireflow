@@ -39,6 +39,7 @@ CARD = [
     "SHELL_SD write kib=8192 us=1600000 kib_s=5120 worst_us=40000 fr=0",
     "SHELL_SD verify=ok kib=8192 us=800000 kib_s=10240 worst_us=9000 fr=0 off=0",
 ]
+ROOT_OK = "SHELL_SD root=2 bin=0 names=FFSDTEST.DAT,SYSTEM~1"
 NARROW, WIDE = 6, 40
 COUNTERS = 41          # counter values 0..40 -> windows 1..41
 
@@ -98,6 +99,25 @@ check("stream: 40 streaming passes", st["passes"] == 40)
 check("stream: KiB/s from the summed passes", st["kib_s"] == 3200 * 1000 // 490)
 check("stream: worst f_read", st["worst_us"] == 12000)
 
+# --- remote_run.py's capture: every line carries a host time ---------------
+plain = capture(card=CARD + [ROOT_OK])
+stamped = ["1000.701 " + l for l in plain]
+check("test_runner_prefix_stripped: strip_host_time",
+      read_sd.strip_host_time(stamped) == plain)
+check("a line without a prefix is left as it is",
+      read_sd.strip_host_time(["SHELL_SD mount=0", "12 apples"]) == ["SHELL_SD mount=0", "12 apples"])
+check("test_runner_prefix_stripped: same card verdict",
+      read_sd.card_verdict(read_sd.parse_sd(stamped)) == read_sd.card_verdict(read_sd.parse_sd(plain))
+      and read_sd.card_verdict(read_sd.parse_sd(stamped))[0])
+check("test_runner_prefix_stripped: same root line",
+      read_sd.parse_root(stamped) == read_sd.parse_root(plain) and read_sd.parse_root(stamped) is not None)
+check("test_runner_prefix_stripped: same stream stats",
+      read_sd.stream_stats(read_sd.parse_stream(stamped))
+      == read_sd.stream_stats(read_sd.parse_stream(plain))
+      and read_sd.stream_stats(read_sd.parse_stream(stamped))["passes"] == 40)
+check("test_runner_prefix_stripped: same report",
+      run(stamped) == run(plain) and run(stamped)[0] == 0)
+
 # --- the card verdict's failures -----------------------------------------
 for name, card in (
         ("mount error", [CARD[0].replace("mount=0", "mount=3")] + CARD[1:]),
@@ -114,7 +134,6 @@ for name, card in (
 # The bootloader scans the card's root for a .bin to start; the test file is
 # FFSDTEST.DAT so it never looks like one (test_root_line_parsed,
 # test_bin_in_root_fails_card).
-ROOT_OK = "SHELL_SD root=2 bin=0 names=FFSDTEST.DAT,SYSTEM~1"
 root = read_sd.parse_root(CARD + [ROOT_OK])
 check("test_root_line_parsed: bin", root is not None and root["bin"] == 0)
 check("test_root_line_parsed: n", root is not None and root["n"] == 2)

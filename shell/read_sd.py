@@ -32,6 +32,7 @@ FILE_KIB = 8192      # sd_probe.cpp kFileBytes
 
 _SD = re.compile(r"^SHELL_SD (mount=|prev=|write |verify=)(.*)$")
 _SD_S = re.compile(r"^SHELL_SD_S (.*)$")
+_HOST_TIME = re.compile(r"^\d+\.\d+ ")
 _ROOT = re.compile(r"^SHELL_SD root=(\d+) bin=(\d+) names=(.*)$")
 
 
@@ -39,9 +40,16 @@ def _kv(text):
     return dict(p.split("=", 1) for p in text.split() if "=" in p)
 
 
+def strip_host_time(lines):
+    """Drops the leading `<float> ` remote_run.py puts on every line it
+    captures; other lines stay as they are."""
+    return [_HOST_TIME.sub("", raw, count=1) for raw in lines]
+
+
 def parse_sd(lines):
     """The last SHELL_SD line of each kind: {"mount", "prev", "write", "verify"}
     -> field dict (the leading word's value under its own key)."""
+    lines = strip_host_time(lines)
     out = {}
     for raw in lines:
         m = _SD.match(raw.strip())
@@ -65,7 +73,7 @@ def parse_root(lines):
     root entries only (the firmware cuts the list to fit its log line), so
     `bin` is the count, not len() of the .BIN names."""
     out = None
-    for raw in lines:
+    for raw in strip_host_time(lines):
         m = _ROOT.match(raw.strip())
         if m:
             out = {"n": int(m.group(1)), "bin": int(m.group(2)),
@@ -76,7 +84,7 @@ def parse_root(lines):
 def parse_stream(lines):
     """Every SHELL_SD_S line, in order, as an int field dict."""
     out = []
-    for raw in lines:
+    for raw in strip_host_time(lines):
         m = _SD_S.match(raw.strip())
         if m:
             out.append({k: int(v) for k, v in _kv(m.group(1)).items()})
@@ -157,6 +165,7 @@ def stream_stats(stream):
 
 def report(lines, out=None):
     out = out or sys.stdout
+    lines = strip_host_time(lines)   # read_play's parsers do not know the prefix
     sd = parse_sd(lines)
     ok, why = card_verdict(sd)
     for key in ("mount", "prev", "write", "verify"):
