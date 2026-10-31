@@ -788,8 +788,26 @@ max − min of the three base run means.
 |---|---|---|---|---|---|---|
 | V1 MorphOsc invariants | 1 | 17 | `4a6d0bc` | 108, 117, 127, 10 | SYNTH deck voices −10.7 to −17.5 k per block (108 A −17.5, B −10.7; 117 A −11.2; 127 B −17.0; 10 B −10.8), base spread 0.02-6.7 k. Engine section: 10 −10.4, 108 −28.3, 117 −10.2, 127 −16.9 k | adopted, `4a20c34e` |
 | V3 sub and sine segment without the wrap | 1 | 18 | `816eda9` | 108, 117, 313, 127 | engine section 108 −6.7 (spread 6.4), 117 −6.4 (2.8), 127 −4.4 (2.3), 313 −3.3 (1.1) k; 1.5-4.9 k per deck | adopted, `b080ad07` |
+| V6 single-pass voice `SvfLp` (the two Chamberlin steps folded into one step on the same state; output equals the old filter up to rounding, about −100 dB) | 2 | 19 | `f945d88` | 108, 117, 127, 313 | engine section 108 −12.1 (spread 2.9), 117 −12.6 (8.5), 127 −13.5 (1.7), 313 −13.7 (1.0) k; voices −5.3 to −7.0 k per deck | queued for listening behind `SHELL_LEAN_SVF1`, `f9824957` |
+| G1 fold fast path in `read_linear`, rev 1: (0, fsz) skips the fold | 1 | 20 | `62ea08a` | 81, 82, 90 | grain-sample 81 **+9.0** (worse in 5 of 6 round pairs), 82 −25.1, 90 −28.1 | revised: on 81, 42 % of reads sit in [fsz, 2fsz) and alternate with in-range reads call by call (desktop count), so the new branch mispredicts |
+| G1 rev 2: (0, 2·fsz) skips the fold, the subtract of fsz as a conditional move | 1 | 20 | `17305ed` | 81, 82, 90 | grain-sample 81 −7.7, 82 −11.8, 90 −22.6; pooled −10.2 | adopted, `edbb6dd6` |
+| G4 int16 sampler buffer | 2 | 21 | `eb6cd82` | 81, 82, 90 | grain-sample 81 −8.2, 82 −9.3, 90 −1.1; pooled −9.0 (~4 % of the grain price) | reverted, `bbb67e05`: int16 clips the overdub at full scale, where the float buffer settles up to 10× the input below `kFbSatKnee` and blooms to ~1.3 above it; not a slight change for 4 % |
+| G2 Hann window without per-sample divisions | 2 | 22 | `ed24372` | 81, 82, 90 | grain-sample 81 −7.2, 82 −18.1, 90 +4.3 (inside 90's per-run spread of ~36); pooled −10.0; the window moves by at most 3e-7 | queued for listening behind `SHELL_LEAN_GRAIN_WIN`, `22f59feb` |
+| G3 `read_linear` inlined into the grain loop | 1 | 23 | `1aa9d3e` | 81, 82, 90 | grain-sample 81 −13.9, 82 −18.3, 90 −22.3; pooled −14.6 | adopted, `3720c6ae` |
 
 V1's saving differs between the SYNTH decks of one workload (108: −17.5 k on
 deck A, −10.7 k on deck B). The morph position decides which segment's
 arithmetic was being recomputed per sample; the sizes are what was measured,
 not a per-segment model.
+
+The grain candidates (G1-G4) ran 6 rounds on 81, 82 and 90 and are judged
+by the fitted slope of `sg` against `sn` (cycles per active grain-sample,
+with intercept), base against candidate, as in Phase A; 99 gives no clean
+grain windows in its base runs. Single-run slopes scatter by 10-40 cycles
+on these workloads, so a candidate counts when its pooled slope moves by
+several standard errors and no workload moves the other way beyond its own
+scatter. After G1 and G3 the grain price is about 221 − 10 − 15 ≈ 196
+cycles per grain-sample (96 × = 18.8 k per block for one grain), and about
+186 (17.9 k) with G2 if the listening batch accepts it. These are deltas
+from separate A/B runs, added; the end-of-round batch measures them
+together.
