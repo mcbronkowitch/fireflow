@@ -682,20 +682,6 @@ ifeq ($(SHELL_LEAN_GRAIN_WIN),1)
 C_DEFS += -DSPKY_LEAN_GRAIN_WIN=1
 endif
 
-# SHELL_LEAN_XFADE_QUIET (candidate V7): a WAVE strike from an envelope below
-# -60 dB starts no mip crossfade (WtOsc::set_freq snaps to the new mip,
-# engine/synth/wt_osc.h, voice.cpp). A steal from a sounding voice crossfades as
-# before; SYNTH has no crossfade. Toggle bit 24 in the measurement image.
-SHELL_LEAN_XFADE_QUIET ?= 0
-
-ifneq ($(words $(SHELL_LEAN_XFADE_QUIET))-$(filter $(SHELL_LEAN_XFADE_QUIET),0 1),1-$(SHELL_LEAN_XFADE_QUIET))
-$(error SHELL_LEAN_XFADE_QUIET must be 0 or 1)
-endif
-
-ifeq ($(SHELL_LEAN_XFADE_QUIET),1)
-C_DEFS += -DSPKY_LEAN_XFADE_QUIET=1
-endif
-
 ENGINE_OBJECTS := $(addprefix $(BUILD_DIR)/,$(patsubst %.cpp,%.o,$(notdir $(filter ../engine/%,$(CPP_SOURCES)))))
 
 ifeq ($(SHELL_FAST_MATH),1)
@@ -769,7 +755,7 @@ SWITCH_HEADERS := \
   $(shell python write_shell_remote.py $(BUILD_DIR)/shell_remote.h $(SHELL_REMOTE) $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o) \
   $(shell python write_shell_remote_measure.py $(BUILD_DIR)/shell_remote_measure.h $(SHELL_REMOTE_MEASURE) $(BUILD_DIR)) \
   $(shell python write_shell_fast_math.py $(BUILD_DIR)/shell_fast_math.h $(SHELL_FAST_MATH) $(ENGINE_OBJECTS)) \
-  $(shell python write_shell_engine_lean.py $(BUILD_DIR)/shell_engine_lean.h SVF1=$(SHELL_LEAN_SVF1) GRAIN_WIN=$(SHELL_LEAN_GRAIN_WIN) XFADE_QUIET=$(SHELL_LEAN_XFADE_QUIET) -- $(BUILD_DIR)) \
+  $(shell python write_shell_engine_lean.py $(BUILD_DIR)/shell_engine_lean.h SVF1=$(SHELL_LEAN_SVF1) GRAIN_WIN=$(SHELL_LEAN_GRAIN_WIN) -- $(BUILD_DIR)) \
   $(shell python write_shell_reverb_half.py itcm_hot.ld $(BUILD_DIR)/itcm_hot.ld $(BUILD_DIR)/shell_reverb_half.state $(SHELL_REVERB_HALF) $(SHELL_REMOTE_MEASURE) $(BUILD_DIR)) \
   $(shell python write_shell_link_stamp.py $(BUILD_DIR)/shell_link_stamp.h $(BUILD_DIR)/itcm_load.o) \
   $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/pot_report.o $(BUILD_DIR)/scan_check.o $(BUILD_DIR)/remote_listen.o)

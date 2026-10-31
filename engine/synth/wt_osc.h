@@ -41,33 +41,13 @@ public:
         _set_mip_source(_mip);
     }
 
-#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_XFADE_QUIET
-    // CPU round 2, candidate V7 (class 2): `quiet` marks a call whose output
-    // cannot be heard (VoiceT<WtOsc>::trigger, a strike from an envelope below
-    // -60 dB), so a mip change snaps to the new mip, whatever fade was
-    // running, instead of starting the 96-sample crossfade. Compiled only in
-    // the measurement image (SPKY_PROBE_TOGGLES, toggle bit 24) and with
-    // SHELL_LEAN_XFADE_QUIET=1; every other build has the one-argument
-    // set_freq below.
-    void set_freq(float hz, bool quiet = false) {
-#else
     void set_freq(float hz) {
-#endif
         const float max_hz = 0.45f * _sr;
         _freq = clampf(hz, 0.f, max_hz);
         const float actual_hz = clampf(_freq * _ratio, 0.f, max_hz);
         _inc = actual_hz / _sr;
 
         const int next_mip = _select_mip(actual_hz);
-#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_XFADE_QUIET
-        if (quiet && next_mip != _mip) {
-            _set_mip_source(next_mip);
-            _old_mip = next_mip;
-            _mip = next_mip;
-            _mip_xfade_remaining = 0;
-            return;
-        }
-#endif
         if (next_mip != _mip) {
             if (_mip_xfade_remaining > 0) {
                 const float completed = static_cast<float>(kRampSamples - _mip_xfade_remaining)

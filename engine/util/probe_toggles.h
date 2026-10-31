@@ -154,16 +154,17 @@
 //                                                        G3: read_linear is
 //                                                        inline in the grain
 //                                                        loop, bit-identical)
-//   24   LEAN_XFADE_QUIET     engine/synth/wt_osc.h,     candidate V7 (round 2,
-//                             engine/synth/voice.cpp     class 2): a WAVE
-//                                                        strike from an
-//                                                        envelope below -60 dB
-//                                                        skips the oscs' mip
-//                                                        crossfade (WtOsc::
-//                                                        set_freq snaps to the
-//                                                        new mip); the firmware
-//                                                        switch is
-//                                                        SHELL_LEAN_XFADE_QUIET
+//   24   LEAN_XFADE_QUIET     engine/synth/wt_osc.h,     USED, reverted: round 2
+//                             engine/synth/voice.cpp     V7, a WAVE strike from
+//                                                        an envelope below
+//                                                        -60 dB snapped to the
+//                                                        new mip instead of
+//                                                        crossfading (c20ded2a);
+//                                                        engine section within
+//                                                        the spread on 127, 135,
+//                                                        313, 314 (most
+//                                                        crossfades are not
+//                                                        strikes from silence)
 //   25-29 (free: candidates; bits 0-24 are never reused)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE
 //                                                        burn on every block
@@ -183,7 +184,6 @@ namespace probe {
 inline constexpr int kBitReverbHalf = 9;
 inline constexpr int kBitLeanSvf1   = 19;
 inline constexpr int kBitLeanGrainWin = 22;
-inline constexpr int kBitLeanXfadeQuiet = 24;
 // The shell's two bits (above).
 inline constexpr int kBitShellLateRepeat = 30;
 inline constexpr int kBitShellGuardOff   = 31;

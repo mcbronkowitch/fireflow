@@ -142,7 +142,6 @@ deletes the objects when one changes, so no `make clean` is needed here either.
 |---|---|---|
 | `SHELL_LEAN_SVF1` | `0` | the SYNTH and WAVE voices' low-pass runs one pass per sample instead of two (the same response up to rounding); toggle bit 19 in the measurement image |
 | `SHELL_LEAN_GRAIN_WIN` | `0` | a sampler grain's Hann window multiplies by reciprocals latched at spawn and when a fade is armed instead of dividing on every sample (the same window up to rounding); toggle bit 22 in the measurement image |
-| `SHELL_LEAN_XFADE_QUIET` | `0` | a WAVE note struck from an envelope below -60 dB (a voice that was silent) starts no 96-sample mip crossfade: the oscillators snap to the new mip, and the attack hides the join (a steal from a sounding voice crossfades as before; SYNTH has none); toggle bit 24 in the measurement image |
 
 ## Flashen
 

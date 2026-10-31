@@ -10,11 +10,6 @@ using namespace spky;
 namespace {
 constexpr float kDriftDetuneCt = 3.f;     // micro-detune drift ceiling (spec: +/-3 ct)
 constexpr float kDriftPanAmt   = 0.25f;   // pan drift ceiling around the fan slot
-#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_XFADE_QUIET
-// A strike from an envelope below this (-60 dB) skips the WAVE mip crossfade
-// (candidate V7, trigger()).
-constexpr float kXfadeQuiet    = 1e-3f;
-#endif
 } // namespace
 
 template <class OscT>
@@ -45,27 +40,6 @@ void VoiceT<OscT>::init(float sample_rate, uint32_t seed) {
 
 template <class OscT>
 void VoiceT<OscT>::trigger(float freq_hz) {
-#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_XFADE_QUIET
-    // CPU round 2, candidate V7 (class 2; toggle bit 24, util/probe_toggles.h;
-    // SHELL_LEAN_XFADE_QUIET): a WAVE strike from an envelope below -60 dB
-    // starts no mip crossfade. The oscs snap to the new mip (WtOsc::set_freq,
-    // quiet) and the attack hides the join. A steal from a sounding voice
-    // takes the path below. MorphOsc has no crossfade: SYNTH is untouched.
-    if constexpr (std::is_same_v<OscT, WtOsc>) {
-#if defined(SPKY_PROBE_TOGGLES)
-        const bool on = _xfade_quiet;
-#else
-        const bool on = true;
-#endif
-        if (on && _env.value() < kXfadeQuiet) {
-            _freq = freq_hz < 0.f ? 0.f : freq_hz;     // set_pitch_hz(), quiet
-            _sub_inc = 0.5f * _freq / _sr;
-            _apply_freq_quiet();
-            _env.trigger();
-            return;
-        }
-    }
-#endif
     set_pitch_hz(freq_hz);                 // applies to the oscs immediately
     _env.trigger();                        // from current level: click-free steal
 }
@@ -131,29 +105,6 @@ void VoiceT<OscT>::_apply_freq() {                // control-rate (std::pow insi
     _osc_a.set_freq(_freq);
     _osc_b.set_freq(_freq);
 }
-
-#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_XFADE_QUIET
-template <class OscT>
-void VoiceT<OscT>::_apply_freq_quiet() {          // _apply_freq(), the oscs told it is quiet
-    if constexpr (std::is_same_v<OscT, WtOsc>) {
-        const float half = _detune_ct * 0.5f;
-        _osc_a.set_detune_cents(half + _drift_ct_cur);
-        _osc_b.set_detune_cents(-half - _drift_ct_cur);
-        _osc_a.set_freq(_freq, true);
-        _osc_b.set_freq(_freq, true);
-    } else {
-        _apply_freq();                            // MorphOsc: no crossfade to skip
-    }
-}
-
-template <class OscT>
-bool VoiceT<OscT>::osc_crossfading() const {
-    if constexpr (std::is_same_v<OscT, WtOsc>)
-        return _osc_a.mip_crossfading() || _osc_b.mip_crossfading();
-    else
-        return false;
-}
-#endif
 
 template <class OscT>
 void VoiceT<OscT>::update_control(float dt_s) {
