@@ -117,6 +117,8 @@ add_executable(spky_tests
     tests/test_scan_value.cpp
     shell/pot_owner.cpp
     tests/test_pot_owner.cpp
+    shell/sd_schedule.cpp
+    tests/test_sd_schedule.cpp
     shell/panel_step.cpp
     tests/test_panel_step.cpp
     shell/boot_take.cpp
