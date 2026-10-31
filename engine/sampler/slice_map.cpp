@@ -34,6 +34,18 @@ void SliceMap::scan(const SampleBuffer::Frame* buf, size_t frames) {
     _last_frame = SIZE_MAX;   // a following live take re-aims cleanly
 }
 
+#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_SAMPLER_I16
+void SliceMap::scan(const SampleBuffer& buf, size_t frames) {
+    clear();
+    for (size_t i = 0; i < frames; ++i) {
+        float l, r;
+        buf.frame_at(i, l, r);
+        _detect(i, l, r);
+    }
+    _last_frame = SIZE_MAX;   // a following live take re-aims cleanly
+}
+#endif
+
 void SliceMap::_detect(size_t frame, float l, float r) {
     const float x = 0.5f * std::fabs(l) + 0.5f * std::fabs(r);
     _env_fast += _cf_fast * (x - _env_fast);

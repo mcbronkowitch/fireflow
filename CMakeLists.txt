@@ -328,14 +328,20 @@ add_test(NAME reverb_full_rate_variants
 # firmware only: VCV, the render host and spky_tests build the old code, so the
 # render hashes do not move. This target compiles each candidate's property
 # tests with its lean define on, as a SHELL_LEAN_*=1 image does, against the
-# old code as the reference (V6: tests/test_lean_svf1.cpp).
+# old code as the reference (V6: tests/test_lean_svf1.cpp; G4:
+# tests/test_lean_sampler_i16.cpp, the sampler's three files compiled here
+# with the int16 buffer).
 add_executable(spky_lean_tests
     tests/test_main.cpp
     tests/test_lean_svf1.cpp
+    tests/test_lean_sampler_i16.cpp
     engine/synth/voice.cpp
     engine/synth/wt_bank.cpp
+    engine/sampler/sample_buffer.cpp
+    engine/sampler/sampler_engine.cpp
+    engine/sampler/slice_map.cpp
 )
-target_compile_definitions(spky_lean_tests PRIVATE SPKY_LEAN_SVF1=1)
+target_compile_definitions(spky_lean_tests PRIVATE SPKY_LEAN_SVF1=1 SPKY_LEAN_SAMPLER_I16=1)
 target_link_libraries(spky_lean_tests PRIVATE spky_engine doctest)
 add_test(NAME spky_lean_tests COMMAND spky_lean_tests)
 

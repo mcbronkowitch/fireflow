@@ -132,7 +132,15 @@
 //                                                        (0, 2 size), a select
 //                                                        for the second period,
 //                                                        bit-identical)
-//   21-29 (free: candidates; bits 0-20 are never reused)
+//   21   LEAN_SAMPLER_I16     engine/sampler/            candidate G4 (round 2,
+//                             sample_buffer.h/.cpp       class 2): the sampler's
+//                                                        record buffer stores
+//                                                        int16 frames, converted
+//                                                        in place when the bit
+//                                                        flips; the firmware
+//                                                        switch is
+//                                                        SHELL_LEAN_SAMPLER_I16
+//   22-29 (free: candidates; bits 0-21 are never reused)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE
 //                                                        burn on every block
 //   31   SHELL_GUARD_OFF      shell/panel_scan.cpp       the overrun guard is
@@ -150,6 +158,7 @@ namespace probe {
 // The candidates' bits (above).
 inline constexpr int kBitReverbHalf = 9;
 inline constexpr int kBitLeanSvf1   = 19;
+inline constexpr int kBitLeanSamplerI16 = 21;
 // The shell's two bits (above).
 inline constexpr int kBitShellLateRepeat = 30;
 inline constexpr int kBitShellGuardOff   = 31;

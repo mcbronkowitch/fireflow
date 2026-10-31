@@ -171,8 +171,15 @@ void SamplerEngine::process_in(float inL, float inR) {
     // Detect on what actually LANDED (post overdub mix), not on the input --
     // read back the frame the head just covered.
     if (_buf.valid() && _buf.write_head() != head) {
+#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_SAMPLER_I16
+        // G4 (sample_buffer.h): the landed frame through the storage.
+        float l, r;
+        _buf.frame_at(head, l, r);
+        _slices.on_write(head, l, r);
+#else
         const SampleBuffer::Frame& f = _buf.raw()[head];
         _slices.on_write(head, f.l, f.r);
+#endif
     }
 }
 
@@ -183,6 +190,14 @@ void SamplerEngine::load_sample(const float* l, const float* r, size_t frames) {
     _kill_all();
     _buf.clear();
     const size_t n = frames > _buf.capacity() ? _buf.capacity() : frames;
+#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_SAMPLER_I16
+    // G4 (sample_buffer.h): through the storage's converter, and the slices
+    // scanned from what was stored.
+    for (size_t i = 0; i < n; ++i)
+        _buf.set_frame(i, l[i], r ? r[i] : l[i]);    // mono normals to both channels
+    _buf.set_rec_size(n);
+    _slices.scan(_buf, n);
+#else
     SampleBuffer::Frame* dst = _buf.raw();
     for (size_t i = 0; i < n; ++i) {
         dst[i].l = l[i];
@@ -190,6 +205,7 @@ void SamplerEngine::load_sample(const float* l, const float* r, size_t frames) {
     }
     _buf.set_rec_size(n);
     _slices.scan(dst, n);
+#endif
 }
 
 void SamplerEngine::trigger(float pitch_norm) {

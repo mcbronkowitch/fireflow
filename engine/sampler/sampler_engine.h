@@ -147,6 +147,11 @@ public:
     // zero at startup (e.g. Daisy SDRAM), where the overdub read-before-
     // write path would otherwise read uninitialised garbage.
     const SampleBuffer::Frame* sample_data() const { return _buf.raw(); }
+#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_SAMPLER_I16
+    // G4 (sample_buffer.h): with the int16 buffer sample_data() is the arena,
+    // not the content; frame i of the content, for i < rec_size().
+    void sample_frame(size_t i, float& l, float& r) const { _buf.frame_at(i, l, r); }
+#endif
 
     // --- edit layer ---
     void set_tape_mode(bool tape) { _tape = tape; }
@@ -315,7 +320,8 @@ public:
     // Measurement image only (util/probe_toggles.h, bits from 17): the toggle
     // word, handed down once per block by Instrument::process. A candidate
     // tests its bit on this member, never on the global.
-    void set_probe_word(uint32_t w) { _probe_word = w; }
+    // The buffer takes bit 21 (G4) from it, converting on a flip.
+    void set_probe_word(uint32_t w) { _probe_word = w; _buf.set_probe_word(w); }
 #endif
 
 private:

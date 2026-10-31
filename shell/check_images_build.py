@@ -65,7 +65,7 @@ IMAGES = [
     # SHELL_LEAN_*) default to 0; the listener image with every one of them
     # at 1, so a candidate's firmware-only path compiles and links.
     ("reva_remote_lean", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
-                          "SHELL_LEAN_SVF1=1"]),
+                          "SHELL_LEAN_SVF1=1", "SHELL_LEAN_SAMPLER_I16=1"]),
     # Full -ffast-math folds the engine's isfinite guards: the image build must
     # REFUSE it (math_guards.py on the linked ELF). Expected to fail; passing
     # this entry means the guard check can still go red.
