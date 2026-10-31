@@ -75,7 +75,15 @@ alignas(32) uint32_t DSY_SDRAM_BSS g_buf[kChunk / 4];
 constexpr uint32_t kChunkAxi = 16u * 1024u;
 alignas(32) uint32_t g_buf_axi[kChunkAxi / 4];
 static_assert(sizeof(g_buf_axi) % 32 == 0, "the invalidate rounds out to 32-byte lines");
-static_assert(kFileBytes % kChunkAxi == 0, "the file wraps on a chunk boundary");
+#endif
+// Both chunks divide the file, so a pass that starts on a chunk boundary of its
+// own size wraps exactly at the end. The positions the two arms leave behind
+// differ (an axi phase can stop at an odd multiple of 16 KB, which is not a
+// 32 KB boundary): stream_pass() rounds the position down to its chunk at the
+// start of every pass.
+static_assert(kFileBytes % kChunk == 0, "the sdram chunk divides the file");
+#if SHELL_SD_PROBE_STREAM
+static_assert(kFileBytes % kChunkAxi == 0, "the axi chunk divides the file");
 #endif
 
 struct Step
@@ -533,10 +541,26 @@ static void stream_pass(bench::Board& hw, const volatile uint32_t& win)
     uint32_t       bytes = 0, worst = 0, bad = 0, ms = 0;
     if(on)
     {
+        // The previous on-phase may have used the other chunk size and left the
+        // position on a boundary of that one only (16 KB steps can stop at an
+        // odd multiple, where a 32 KB read would come back short and end the
+        // stream). Round down to this pass's own chunk; the words a repeated
+        // read covers are checked again, and word0 below comes from f_tell.
+        const FSIZE_t pos = f_tell(&g_fs.file);
+        if(pos % chunk != 0)
+        {
+            const FRESULT sr = f_lseek(&g_fs.file, pos - pos % chunk);
+            if(sr != FR_OK)
+            {
+                g_res.stream_fr = static_cast<int>(sr);
+                g_res.ready     = false;
+            }
+        }
         // Until the 500 ms are up or the window counter leaves the phase; at
         // most one chunk (a few ms) spills into the next phase's first window,
         // which read_sd.py does not judge.
-        while(daisy::System::GetNow() - t0 < kPassMs && ((win / kPhaseWin) & 1u) != 0)
+        while(g_res.ready && daisy::System::GetNow() - t0 < kPassMs
+              && ((win / kPhaseWin) & 1u) != 0)
         {
             FRESULT fr = FR_OK;
             if(f_tell(&g_fs.file) >= kFileBytes)

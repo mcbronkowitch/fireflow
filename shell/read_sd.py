@@ -326,6 +326,12 @@ def cb_by_phase(lines):
     sum=0 n=0 when its torn-read retry gave up) says nothing about the callback
     and is skipped whole, not counted as a zero.
 
+    Print order assumed (shell/panel_scan.cpp, the report loop): each
+    iteration prints its SHELL_PLAY_WIN first and runs the stream pass after
+    it, whose SHELL_SD_S line comes last. So a frame follows the SHELL_SD_S of
+    the pass whose 500 ms it measured (the window since the previous frame),
+    and "the latest line before it" is that pass.
+
     The first frame after every phase change (idle to stream or back, or one
     buffer to the other) is dropped: it holds the last chunk of the phase
     before, as the raw windows' first window of a phase does (classify())."""
