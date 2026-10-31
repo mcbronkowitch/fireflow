@@ -142,6 +142,7 @@ deletes the objects when one changes, so no `make clean` is needed here either.
 |---|---|---|
 | `SHELL_LEAN_SVF1` | `0` | the SYNTH and WAVE voices' low-pass runs one pass per sample instead of two (the same response up to rounding); toggle bit 19 in the measurement image |
 | `SHELL_LEAN_GRAIN_WIN` | `0` | a sampler grain's Hann window multiplies by reciprocals latched at spawn and when a fade is armed instead of dividing on every sample (the same window up to rounding); toggle bit 22 in the measurement image |
+| `SHELL_LEAN_EXP2` | `0` | the SYNTH and WAVE oscillators' detune ratio 2^(cents/1200) comes from a fourth-order polynomial (`engine/util/fast_exp2.h`) instead of `std::pow` (the same ratio to within 0.01 ct); toggle bit 25 in the measurement image |
 
 ## Flashen
 

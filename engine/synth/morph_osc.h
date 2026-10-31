@@ -1,5 +1,6 @@
 #pragma once
 #include <cmath>
+#include "util/fast_exp2.h"
 #include "util/fast_sin.h"
 #include "util/math.h"
 
@@ -53,10 +54,27 @@ public:
         // approximation: the ratio has to be bit-identical either way.
         if (ct == _ct) return;
         _ct = ct;
+#if defined(SPKY_PROBE_TOGGLES)
+        // CPU round 2, candidate V5 (toggle bit 25, util/probe_toggles.h): the
+        // voice's set_probe_word sets the flag on the control tick.
+        _ratio = _fast_exp2 ? fast_exp2(ct * (1.f / 1200.f))
+                            : std::pow(2.f, ct * (1.f / 1200.f));
+#elif SPKY_LEAN_EXP2
+        // SHELL_LEAN_EXP2=1 (class 2): util/fast_exp2.h.
+        _ratio = fast_exp2(ct * (1.f / 1200.f));
+#else
         _ratio = std::pow(2.f, ct * (1.f / 1200.f));
+#endif
         _inc = _freq * _ratio / _sr;
         _set_dt();
     }
+
+#if defined(SPKY_PROBE_TOGGLES)
+    // Measurement image only: bit 25 (LEAN_EXP2, candidate V5), pushed by
+    // VoiceT::set_probe_word. set_detune_cents reads it; process() does not.
+    void set_fast_exp2(bool on) { _fast_exp2 = on; }
+    bool fast_exp2_on() const { return _fast_exp2; }
+#endif
 
     // The segment (0 sine->tri, 1 tri->saw, 2 saw->pulse) and its weight are
     // fixed here, not per sample (CPU round 2, V1): the same float operations
@@ -138,6 +156,9 @@ private:
     float _dt = 1e-6f;           // _inc floored (_set_dt)
     float _seg_t = 0.f;          // the segment's lerp weight (set_morph)
     int   _seg_idx = 0;          // 0, 1 or 2 (set_morph)
+#if defined(SPKY_PROBE_TOGGLES)
+    bool  _fast_exp2 = false;    // bit 25, set by set_fast_exp2
+#endif
 };
 
 } // namespace spky

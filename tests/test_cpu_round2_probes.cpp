@@ -9,6 +9,8 @@
 #include <doctest/doctest.h>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <vector>
 #include "sampler/sampler_engine.h"
 #include "synth/synth_engine.h"
@@ -101,6 +103,88 @@ void check_svf1_reaches_voices() {
 TEST_CASE("V6 bit 19 reaches every SYNTH and WAVE voice's filter on the next control tick") {
     check_svf1_reaches_voices<spky::SynthEngine>();
     check_svf1_reaches_voices<spky::WaveEngine>();
+}
+
+namespace {
+
+template <class E>
+void check_exp2_reaches_voices() {
+    DeckRig<E> g;
+    g.tick();
+    for (int v = 0; v < E::kVoices; ++v)
+        CHECK_FALSE(g.e.probe_voice(v).fast_exp2_on());
+    g.e.set_probe_word(1u << spky::probe::kBitLeanExp2);
+    g.tick();
+    for (int v = 0; v < E::kVoices; ++v)
+        CHECK(g.e.probe_voice(v).fast_exp2_on());
+    g.e.set_probe_word(~(1u << spky::probe::kBitLeanExp2));   // every other bit
+    g.tick();
+    for (int v = 0; v < E::kVoices; ++v)
+        CHECK_FALSE(g.e.probe_voice(v).fast_exp2_on());
+}
+
+// A FLOW drone at a DETUNE of `detune` with MOTION at full (the per-voice drift
+// LFO running, so the oscillators' ratio is recomputed every tick), 1 s,
+// with or without bit 25: the left channel, and its rising zero crossings.
+template <class E>
+std::vector<float> render_detuned(float detune, uint32_t word) {
+    DeckRig<E> g;
+    g.e.set_probe_word(word);
+    g.e.set_flow(true);
+    g.e.set_detune(detune);
+    const float tg[spky::LANE_COUNT] = { 0.5f, 1.f, 0.5f, 1.f, 1.f };
+    g.e.set_targets(tg, 0.5f);
+    std::vector<float> both, left;
+    for (int t = 0; t < 500; ++t) g.tick(&both);
+    for (size_t i = 0; i < both.size(); i += 2) left.push_back(both[i]);
+    return left;
+}
+
+int rising_crossings(const std::vector<float>& x) {
+    int n = 0;
+    for (size_t i = 1; i < x.size(); ++i)
+        if (x[i - 1] <= 0.f && x[i] > 0.f) ++n;
+    return n;
+}
+
+template <class E>
+void check_exp2_pitch_stable(const char* name) {
+    for (float detune : { 0.f, 0.3f, 0.7f, 1.f }) {
+        const std::vector<float> off = render_detuned<E>(detune, 0u);
+        const std::vector<float> on  = render_detuned<E>(detune, 1u << spky::probe::kBitLeanExp2);
+        REQUIRE(off.size() == on.size());
+        double sig = 0.0, worst = 0.0;
+        bool finite = true;
+        for (size_t i = 0; i < off.size(); ++i) {
+            sig += double(on[i]) * on[i];
+            worst = std::fmax(worst, std::fabs(double(on[i]) - off[i]));
+            finite = finite && std::isfinite(on[i]);
+        }
+        const int n_off = rising_crossings(off), n_on = rising_crossings(on);
+        if (std::getenv("SPKY_V5_PRINT"))
+            std::printf("V5 %s detune %.1f: crossings off %d on %d, worst sample diff %.3g\n",
+                        name, double(detune), n_off, n_on, worst);
+        CAPTURE(name);
+        CAPTURE(detune);
+        CHECK(finite);
+        CHECK(sig > 1.0);          // the deck sounded
+        CHECK(n_off > 100);        // and was a pitched tone, so the count is not 0 == 0
+        if (detune > 0.f) CHECK(worst > 0.0);   // the bit reached the ratio (at 0 both round alike)
+        CHECK(n_on == n_off);      // the same pitch, crossing for crossing
+        CHECK(worst < 1e-2);       // a rounding-sized change of the ratio, nothing audible
+    }
+}
+
+} // namespace
+
+TEST_CASE("V5 bit 25 reaches every SYNTH and WAVE voice's oscillators on the next control tick") {
+    check_exp2_reaches_voices<spky::SynthEngine>();
+    check_exp2_reaches_voices<spky::WaveEngine>();
+}
+
+TEST_CASE("V5 bit 25: SYNTH and WAVE decks keep their pitch at several detunes, drift running") {
+    check_exp2_pitch_stable<spky::SynthEngine>("SYNTH");
+    check_exp2_pitch_stable<spky::WaveEngine>("WAVE");
 }
 
 TEST_CASE("G2 bit 22 reaches the grains, and the deck plays either way") {

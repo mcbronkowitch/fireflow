@@ -165,7 +165,16 @@
 //                                                        313, 314 (most
 //                                                        crossfades are not
 //                                                        strikes from silence)
-//   25-29 (free: candidates; bits 0-24 are never reused)
+//   25   LEAN_EXP2            engine/synth/morph_osc.h,  candidate V5 (round 2,
+//                             engine/synth/wt_osc.h      class 2): the detune
+//                                                        ratio 2^(ct / 1200) of
+//                                                        a SYNTH or WAVE voice's
+//                                                        oscillators from
+//                                                        util/fast_exp2.h, not
+//                                                        std::pow; the firmware
+//                                                        switch is
+//                                                        SHELL_LEAN_EXP2
+//   26-29 (free: candidates; bits 0-25 are never reused)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE
 //                                                        burn on every block
 //   31   SHELL_GUARD_OFF      shell/panel_scan.cpp       the overrun guard is
@@ -184,6 +193,7 @@ namespace probe {
 inline constexpr int kBitReverbHalf = 9;
 inline constexpr int kBitLeanSvf1   = 19;
 inline constexpr int kBitLeanGrainWin = 22;
+inline constexpr int kBitLeanExp2 = 25;
 // The shell's two bits (above).
 inline constexpr int kBitShellLateRepeat = 30;
 inline constexpr int kBitShellGuardOff   = 31;
