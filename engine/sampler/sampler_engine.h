@@ -315,7 +315,7 @@ public:
     // Measurement image only (util/probe_toggles.h, bits from 17): the toggle
     // word, handed down once per block by Instrument::process. A candidate
     // tests its bit on this member, never on the global.
-    void set_probe_word(uint32_t w) { _probe_word = w; }
+    void set_probe_word(uint32_t w) { _probe_word = w; _buf.set_probe_word(w); }
 #endif
 
 private:

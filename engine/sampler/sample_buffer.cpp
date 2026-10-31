@@ -265,16 +265,30 @@ void SampleBuffer::read_linear(float frame, float& out0, float& out1) const {
     // std::floor is a single instruction on both targets -- roundsd on x86,
     // VRINTM on the Daisy's Cortex-M7 FPv5 -- not a libm call, and cheaper
     // than the loop even in the common case.
-    frame -= fsz * std::floor(frame / fsz);
-    // BEIDE Kanten hier, vor i0 und frac, und nicht nur i0 spaeter: bei
-    // grossem fsz rundet fsz - epsilon in float32 auf exakt fsz, was ein
-    // knapp negatives frame genau hierher bringt. Wurde nur i0 korrigiert,
-    // blieb frac = fsz stehen und die Interpolation lief mit dem Faktor der
-    // Puffergroesse -- an einem Puffer mit nur +-0.3 Inhalt gemessene
-    // Ausgaenge von 14 400 (24 000 Frames) bis 1 209 600 (2 016 000 Frames).
-    // Erreichbar ueber REVERSE-Grains, sobald _start + _off unter 0 laeuft
-    // (grain.h:111). frame und i0 muessen dieselbe Zahl beschreiben.
-    if (!(frame >= 0.f) || frame >= fsz) frame = 0.f;
+    //
+    // A frame already inside (0, fsz) skips the fold altogether (G1, round 2,
+    // bit-identical): there frame / fsz is correctly rounded and monotone, and
+    // even the float below fsz divides to at most 1 - 2^-24, so floor() is 0
+    // and the fold would hand back the same frame. Zero is left to the fold
+    // on purpose: -0.f comes out of it as +0.f, and a bare >= 0 test would
+    // pass -0.f on with its sign, which flips the sign of a zero in frac.
+#if defined(SPKY_PROBE_TOGGLES)
+    const bool inside = _fold_fast && frame > 0.f && frame < fsz;
+#else
+    const bool inside = frame > 0.f && frame < fsz;
+#endif
+    if (!inside) {
+        frame -= fsz * std::floor(frame / fsz);
+        // BEIDE Kanten hier, vor i0 und frac, und nicht nur i0 spaeter: bei
+        // grossem fsz rundet fsz - epsilon in float32 auf exakt fsz, was ein
+        // knapp negatives frame genau hierher bringt. Wurde nur i0 korrigiert,
+        // blieb frac = fsz stehen und die Interpolation lief mit dem Faktor der
+        // Puffergroesse -- an einem Puffer mit nur +-0.3 Inhalt gemessene
+        // Ausgaenge von 14 400 (24 000 Frames) bis 1 209 600 (2 016 000 Frames).
+        // Erreichbar ueber REVERSE-Grains, sobald _start + _off unter 0 laeuft
+        // (grain.h:111). frame und i0 muessen dieselbe Zahl beschreiben.
+        if (!(frame >= 0.f) || frame >= fsz) frame = 0.f;
+    }
 
     size_t i0 = static_cast<size_t>(frame);
     if (i0 >= _size) i0 = 0;                     // Guertel zum Hosentraeger

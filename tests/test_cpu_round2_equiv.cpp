@@ -7,6 +7,9 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <limits>
+#include <vector>
+#include "sampler/sample_buffer.h"
 #include "synth/morph_osc.h"
 #include "util/fast_sin.h"
 #include "util/math.h"
@@ -233,4 +236,124 @@ TEST_CASE("V3: the sub oscillator's wrapped phase gives the same bits") {
         }
     }
     CHECK(bad == 0);
+}
+
+// ---- G1: read_linear without the fold for an in-range frame ---------------
+
+namespace {
+
+// SampleBuffer::read_linear as it was before G1: the fold on every read.
+void read_linear_ref(const SampleBuffer& b, float frame, float& out0, float& out1) {
+    const size_t size = b.rec_size();
+    const SampleBuffer::Frame* buf = b.raw();
+    if (size == 0 || buf == nullptr) { out0 = 0.f; out1 = 0.f; return; }
+    if (!(frame > -1e9f && frame < 1e9f)) { out0 = 0.f; out1 = 0.f; return; }
+
+    const float fsz = static_cast<float>(size);
+    frame -= fsz * std::floor(frame / fsz);
+    if (!(frame >= 0.f) || frame >= fsz) frame = 0.f;
+
+    size_t i0 = static_cast<size_t>(frame);
+    if (i0 >= size) i0 = 0;
+    size_t i1 = i0 + 1;
+    if (i1 >= size) i1 = 0;
+
+    const float frac = frame - static_cast<float>(i0);
+    const SampleBuffer::Frame a = buf[i0];
+    const SampleBuffer::Frame c = buf[i1];
+    out0 = a.l + frac * (c.l - a.l);
+    out1 = a.r + frac * (c.r - a.r);
+}
+
+// A buffer filled with noise, with zeros of both signs at its start and in
+// the middle (a -0 in frame i0 is the one place a -0 frac could show).
+struct G1Buf {
+    std::vector<SampleBuffer::Frame> mem;
+    SampleBuffer buf;
+    explicit G1Buf(size_t n) : mem(n) {
+        Noise nz;
+        for (auto& f : mem) { f.l = nz.next(); f.r = nz.next(); }
+        mem[0].l = -0.f;  mem[0].r = 0.f;
+        if (n > 1) { mem[1].l = 0.f;   mem[1].r = -0.f; }
+        mem[n / 2].l = -0.f;  mem[n / 2].r = -0.f;
+        mem[n - 1].l = -0.f;  mem[n - 1].r = -0.f;
+        buf.init(mem.data(), n, 48000.f);
+        buf.set_rec_size(n);
+    }
+};
+
+int g1_mismatch(const SampleBuffer& b, float frame) {
+    float n0 = 7.f, n1 = 7.f, o0 = 9.f, o1 = 9.f;
+    b.read_linear(frame, n0, n1);
+    read_linear_ref(b, frame, o0, o1);
+    return (bits_of(n0) != bits_of(o0)) + (bits_of(n1) != bits_of(o1));
+}
+
+} // namespace
+
+TEST_CASE("G1: read_linear bit-identical") {
+    G1Buf g(24000);
+    const float fsz = 24000.f;
+    int bad = 0;
+    long n = 0;
+    // frame over [-2 fsz, 3 fsz] in 0.37-frame steps.
+    for (long i = 0;; ++i) {
+        const float frame = -2.f * fsz + 0.37f * (float)i;
+        if (frame > 3.f * fsz) break;
+        bad += g1_mismatch(g.buf, frame);
+        ++n;
+    }
+    CHECK(n > 300000);
+    CHECK(bad == 0);
+
+    // The edges, on this size and on others (a power of two, the largest odd
+    // size below it, a short one, a long one): the float just below size,
+    // size, the zeros, a hair under zero, the smallest denormals, the integer
+    // frames either side of the seam, and the guard's own cases.
+    const float inf = std::numeric_limits<float>::infinity();
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const size_t sizes[] = { 24000, 1000, 16384, 32767, 3, 1, 2016000 };
+    for (size_t sz : sizes) {
+        G1Buf e(sz);
+        const float f = (float)sz;
+        const float edges[] = {
+            std::nextafter(f, 0.f), f, std::nextafter(f, inf), f - 1.f, f + 1.f,
+            -0.f, 0.f, -1e-7f, 1e-7f, std::nextafter(0.f, -1.f), std::nextafter(0.f, 1.f),
+            std::nextafter(0.f, 1.f) * 4.f, 1.f, 0.5f, -1.f, -f, std::nextafter(-f, 0.f),
+            std::nextafter(-f, -inf), 2.f * f, std::nextafter(2.f * f, 0.f),
+            1e9f, -1e9f, 1e8f, -1e8f, inf, -inf, nan };
+        for (float x : edges) {
+            CAPTURE(sz);
+            CAPTURE(x);
+            CHECK(g1_mismatch(e.buf, x) == 0);
+        }
+        // Every float within 64 ulps of size, of 0 and of both ends of the
+        // fold's first period.
+        const float centres[] = { f, 0.f, -f, 0.5f * f };
+        for (float c : centres) {
+            float up = c, dn = c;
+            for (int k = 0; k < 64; ++k) {
+                CHECK(g1_mismatch(e.buf, up) == 0);
+                CHECK(g1_mismatch(e.buf, dn) == 0);
+                up = std::nextafter(up, inf);
+                dn = std::nextafter(dn, -inf);
+            }
+        }
+    }
+
+    // set_rec_size shrinks the content under positions latched against the
+    // old length: frames up to 30 000 and down to -30 000 against 1 000.
+    G1Buf s(24000);
+    s.buf.set_rec_size(1000);
+    REQUIRE(s.buf.rec_size() == 1000);
+    int bad_shrink = 0;
+    for (float frame = -30000.f; frame < 30000.f; frame += 0.37f)
+        bad_shrink += g1_mismatch(s.buf, frame);
+    for (float frame : { 999.f, std::nextafter(1000.f, 0.f), 1000.f, 1001.f, 23999.5f, -0.f })
+        bad_shrink += g1_mismatch(s.buf, frame);
+    CHECK(bad_shrink == 0);
+
+    // An empty buffer stays silent on both paths.
+    SampleBuffer empty;
+    CHECK(g1_mismatch(empty, 5.f) == 0);
 }
