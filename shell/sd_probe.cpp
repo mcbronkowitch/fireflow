@@ -9,6 +9,22 @@
 #include "shell_sd_probe.h"
 #include "sys/fatfs.h"
 
+// The two latency-tail modes (spec 2026-10-31-sd-use-cases-tests-design.md
+// section 5, C1 rtail and C2 wtail) share one pass and one set of constants.
+#if SHELL_SD_PROBE_RTAIL || SHELL_SD_PROBE_WTAIL
+#define SD_PROBE_TAIL 1
+#else
+#define SD_PROBE_TAIL 0
+#endif
+// The modes that mark their transfers for the pot hold (g_sd_busy; the
+// callback side, sd_hold_block()). In the tail modes the hold runs only when
+// kTailBurst says the transfers are A1's bursts.
+#if SHELL_SD_PROBE_BURST || SD_PROBE_TAIL
+#define SD_PROBE_HOLD 1
+#else
+#define SD_PROBE_HOLD 0
+#endif
+
 namespace shell {
 
 // The foreground's mark on every card transfer (sd_probe.h). Outside the
@@ -125,7 +141,23 @@ char g_path[24];
 // the current phase's tail (sd_hold_tail()). Null until the first pass: no
 // phase, no tail.
 const volatile uint32_t* g_win = nullptr;
+#endif
 
+#if SD_PROBE_TAIL
+// ---- Build constants of the tail modes. The board session sets these from
+// A1's result row, in one commit, before the C1 / C2 run (spec section 5: C
+// runs after A, in the transfer pattern A settles on). A1 has not run yet:
+// until it has, the transfers are back to back and the hold is off.
+//
+// true: the transfers are A1's bursts -- one 32 KB transfer per
+// kTailBurstMs (the 41 ms phases, ~799 KB/s), the pot hold on with
+// kTailHoldTail blocks of tail. false: back to back, no hold.
+constexpr bool     kTailBurst    = false;
+constexpr uint8_t  kTailHoldTail = 1;    // A1's smallest passing tail; unused while !kTailBurst
+constexpr uint32_t kTailBurstMs  = 41;
+#endif
+
+#if SD_PROBE_HOLD
 // Set around the f_read call itself. g_sd_seen alone would not cover a
 // transfer longer than one block: the callback clears it at the first block
 // boundary inside the call, and the blocks after that would take their pot
@@ -399,6 +431,8 @@ uint8_t sd_hold_tail()
         return 0;
     const BurstPhase p = burst_phase(*w);
     return p.on ? p.tail : 0;
+#elif SD_PROBE_TAIL
+    return kTailBurst ? kTailHoldTail : 0;
 #else
     return 0;
 #endif
@@ -406,7 +440,11 @@ uint8_t sd_hold_tail()
 
 bool sd_hold_block()
 {
-#if SHELL_SD_PROBE_BURST
+#if SD_PROBE_HOLD
+#if SD_PROBE_TAIL
+    if(!kTailBurst)
+        return false;   // back to back: no hold, every block's readings stay
+#endif
     const uint32_t epoch = g_pass_epoch;
     if(epoch != g_cb_epoch)
     {
@@ -525,6 +563,484 @@ static void burst_pass(bench::Board& hw, const volatile uint32_t& win)
 }
 #endif // SHELL_SD_PROBE_BURST
 
+#if SD_PROBE_TAIL
+// Spec 2026-10-31-sd-use-cases-tests-design.md section 5, C1 (rtail) and C2
+// (wtail): how long can one f_read / f_write take, over minutes, so the
+// ring buffers of the streaming and recording features can be sized.
+//
+// rtail makes sure FFSDBIG.DAT (512 MiB, the bring-up's pattern) exists, then
+// reads 32 KB for 10 min each, `seq` sequentially, `rand` at random 32 KB-aligned
+// offsets, `randfs` the same with FatFs's fast seek (a CLMT). wtail writes
+// FFSDW.DAT, truncated at the start, 32 KB at a time: `w16` at 192 KB/s
+// (16-bit stereo), `w24` at 288 KB/s (24-bit), `wmax` as fast as the card
+// takes them (kTailBurst: every kTailBurstMs). One pass is the usual 500 ms; the
+// phase and the 10 s lines count wall time (System::GetNow), the latencies
+// DWT cycles.
+//
+// One line per 10 s and kind, in three prints with one seq (read_sd.py joins
+// them; the 16 counts and the other fields do not fit one 128-byte line):
+//   SHELL_SD_H kind=<k> seq=<n> n= worst_us= seek_worst_us= fr= bad= pat=<burst|b2b>
+//   SHELL_SD_H kind=<k> seq=<n> b0=<8 counts>     buckets 0-7
+//   SHELL_SD_H kind=<k> seq=<n> b1=<8 counts>     buckets 8-15
+// The counts are of this interval only (not since boot). Bucket i counts the
+// transfers that took [2^i, 2^(i+1)) x 64 us, bucket 0 everything under
+// 128 us, bucket 15 everything from 2.1 s on. worst_us is the worst f_read /
+// f_write; seek_worst_us the worst f_lseek (rand / randfs; seq's is the
+// wrap-around back to 0; wtail's the wrap at the FAT32 file size limit).
+// fr is the first failure, sticky (a FRESULT, -2 a short transfer, -3 no
+// card test file to start from); once it is set nothing is transferred any
+// more and the lines keep saying why. bad counts 32 KB reads that did not
+// match the pattern (rtail).
+namespace {
+
+constexpr uint32_t kTailPhaseMs = 10u * 60u * 1000u;   // per kind
+constexpr uint32_t kTailLineMs  = 10u * 1000u;
+constexpr uint32_t kTailBuckets = 16;
+constexpr uint32_t kTailBucketUs = 64;
+
+#if SHELL_SD_PROBE_RTAIL
+constexpr int         kTailPhases = 3;
+const char* const     kTailKind[kTailPhases] = {"seq", "rand", "randfs"};
+const char            kTailName[] = "FFSDBIG.DAT";
+constexpr uint32_t    kBigBytes   = 512u * 1024u * 1024u;
+constexpr uint32_t    kBigChunks  = kBigBytes / kChunk;   // 16384
+static_assert(kBigChunks == (1u << 14), "the random offset is 14 bits of the xorshift");
+constexpr uint32_t    kFillStep   = 64u * 1024u * 1024u;  // progress every 64 MiB
+// The file is written in sequence, not pre-allocated with f_expand: libDaisy's
+// ffconf.h has _USE_EXPAND 0 (a submodule, not changed here), so f_expand is not
+// linked. FatFs allocates the clusters one after the next, so on a card with
+// room the file is contiguous or nearly; the CLMT below does not need it to be.
+// FatFs's fast seek: tbl[0] is the table's size in DWORDs, 2 + 2 per fragment of
+// the file (ff.c f_lseek). 256 DWORDs (1 KB, in AXI .bss) hold 127 fragments;
+// a sequentially written 512 MiB file on a card with room is one or a few.
+// f_lseek(CREATE_LINKMAP) leaves the used size in tbl[0] -- the clmt line
+// prints it -- and fails with FR_NOT_ENOUGH_CORE if it did not fit.
+constexpr uint32_t    kClmtDwords = 256;
+DWORD                 g_clmt[kClmtDwords];
+#else
+constexpr int         kTailPhases = 3;
+const char* const     kTailKind[kTailPhases] = {"w16", "w24", "wmax"};
+const char            kTailName[] = "FFSDW.DAT";
+// FAT32 files end at 4 GiB - 1. wmax at the card's best would pass that inside
+// its 10 min, so the position wraps to 0 before the last 32 KB chunk that fits
+// and the rest of the run overwrites the file's start.
+constexpr uint32_t    kWrapBytes  = 0xFFFFFFFFu - (0xFFFFFFFFu % kChunk);
+#endif
+
+struct TailInterval
+{
+    uint32_t b[kTailBuckets];
+    uint32_t n;
+    uint32_t worst_us;
+    uint32_t seek_worst_us;
+    uint32_t bad;
+};
+
+struct TailRun
+{
+    bool         begun       = false;   // the first pass has set the run up
+    bool         file_open   = false;   // g_fs.file is the tail file
+    int          phase       = -1;      // -1: preparing, 0..2 a kind, 3 finished
+    int          fr          = 0;       // the first failure, sticky
+    bool         force_line  = false;   // print at the pass's end, the 10 s not up
+    uint32_t     phase_t0    = 0;       // System::GetNow() at the phase's start
+    uint32_t     line_t0     = 0;       // ... at the last line
+    uint32_t     seq         = 0;
+    uint32_t     next        = 0;       // cycles_now() when the next transfer is due
+    uint32_t     period_cyc  = 0;       // 0: back to back
+    uint32_t     pos         = 0;       // the byte the next sequential transfer starts at
+    uint32_t     rng         = 1;
+    uint32_t     fill_off    = 0;       // rtail: bytes of the file written so far
+    uint32_t     fill_t0     = 0;
+    bool         filling     = false;
+    TailInterval iv          = {};
+};
+TailRun g_t;
+
+inline uint32_t xorshift32(uint32_t& x)
+{
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    return x;
+}
+
+// [2^i, 2^(i+1)) x 64 us; below 128 us is bucket 0, the last bucket is open.
+inline uint32_t tail_bucket(uint32_t us)
+{
+    const uint32_t q = us / kTailBucketUs;
+    if(q < 2)
+        return 0;
+    const uint32_t i = 31u - static_cast<uint32_t>(__builtin_clz(q));
+    return i < kTailBuckets - 1 ? i : kTailBuckets - 1;
+}
+
+void tail_fail(int fr)
+{
+    if(g_t.fr == 0)
+    {
+        g_t.fr         = fr;
+        g_t.force_line = true;
+    }
+}
+
+// A transfer is marked for the pot hold the way the burst pass marks its reads:
+// busy for the whole call, seen again when it returns (sd_probe.h).
+inline void tail_mark_begin()
+{
+    g_sd_seen = true;
+    g_sd_busy = true;
+}
+inline void tail_mark_end()
+{
+    g_sd_seen = true;
+    g_sd_busy = false;
+}
+
+// f_lseek, timed; `us` gets the call's time.
+FRESULT tail_seek(FSIZE_t ofs, uint32_t& us)
+{
+    const uint32_t u0 = cycles_now();
+    const FRESULT  fr = f_lseek(&g_fs.file, ofs);
+    us                = (cycles_now() - u0) / kCoreMhz;
+    return fr;
+}
+
+void tail_record(uint32_t us)
+{
+    TailInterval& iv = g_t.iv;
+    ++iv.n;
+    ++iv.b[tail_bucket(us)];
+    if(us > iv.worst_us)
+        iv.worst_us = us;
+}
+
+void tail_close_file()
+{
+    if(g_t.file_open)
+    {
+        const FRESULT fr = f_close(&g_fs.file);
+        g_t.file_open    = false;
+        if(fr != FR_OK)
+            tail_fail(static_cast<int>(fr));
+    }
+}
+
+// Starts kind `p`: the interval and the schedule start over, and the file is
+// opened the way the kind needs it.
+void tail_begin_phase(bench::Board& hw, int p)
+{
+    TailRun& s = g_t;
+    s.phase    = p;
+    s.phase_t0 = daisy::System::GetNow();
+    s.line_t0  = s.phase_t0;
+    s.iv       = {};
+    s.pos      = 0;
+    s.next     = cycles_now();
+    if(p >= kTailPhases)
+    {
+        tail_close_file();   // wtail: the f_close that writes the directory entry
+        return;
+    }
+#if SHELL_SD_PROBE_RTAIL
+    s.period_cyc = kTailBurst ? kTailBurstMs * 1000u * kCoreMhz : 0u;
+    tail_close_file();   // every kind opens the file afresh: that also nulls cltbl
+    char path[24];
+    snprintf(path, sizeof path, "%s%s", g_fs.fsi.GetSDPath(), kTailName);
+    const FRESULT fr = f_open(&g_fs.file, path, FA_READ);
+    if(fr != FR_OK)
+    {
+        tail_fail(static_cast<int>(fr));
+        return;
+    }
+    s.file_open = true;
+    // From the cycle counter, as the brief says; a few draws first so the
+    // low-entropy start of a xorshift does not show (memory: probe seeds
+    // must be mixed).
+    s.rng = cycles_now() | 1u;
+    for(int i = 0; i < 16; ++i)
+        xorshift32(s.rng);
+    if(p == 2)
+    {
+        g_clmt[0]             = kClmtDwords;
+        g_fs.file.cltbl       = g_clmt;
+        const FRESULT lr      = f_lseek(&g_fs.file, CREATE_LINKMAP);
+        hw.PrintLine("SHELL_SD_H clmt dwords=%u cap=%u fr=%d", static_cast<unsigned>(g_clmt[0]),
+                     static_cast<unsigned>(kClmtDwords), static_cast<int>(lr));
+        if(lr != FR_OK)
+            tail_fail(static_cast<int>(lr));
+    }
+#else
+    (void)hw;
+    // 192 KB/s and 288 KB/s: one 32 KB write every 32 KiB / rate.
+    const uint32_t rate_kib_s = p == 0 ? 192u : 288u;
+    if(p < 2)
+        s.period_cyc = static_cast<uint32_t>(32000ull * 1000u * kCoreMhz / rate_kib_s);
+    else
+        s.period_cyc = kTailBurst ? kTailBurstMs * 1000u * kCoreMhz : 0u;
+    if(p == 0)
+    {
+        // Truncated here, once; the other kinds go on in the same file.
+        char path[24];
+        snprintf(path, sizeof path, "%s%s", g_fs.fsi.GetSDPath(), kTailName);
+        for(uint32_t i = 0; i < kChunk / 4; ++i)
+            g_buf[i] = pattern(i);   // the data is not verified: any bytes will do
+        const FRESULT fr = f_open(&g_fs.file, path, FA_CREATE_ALWAYS | FA_WRITE);
+        if(fr != FR_OK)
+        {
+            tail_fail(static_cast<int>(fr));
+            return;
+        }
+        s.file_open = true;
+    }
+#endif
+}
+
+#if SHELL_SD_PROBE_RTAIL
+// FFSDBIG.DAT is as long as it should be and its last chunk matches the
+// pattern. FatFs writes the directory entry's size at f_sync / f_close only, so
+// a file whose fill was cut off by a reset has the size of the last sync
+// (kFillStep), not 512 MiB; the last chunk is a second look at the same thing.
+bool big_file_ok(const char* path)
+{
+    FILINFO fno;
+    if(f_stat(path, &fno) != FR_OK || fno.fsize != kBigBytes)
+        return false;
+    if(f_open(&g_fs.file, path, FA_READ) != FR_OK)
+        return false;
+    const FSIZE_t last = kBigBytes - kChunk;
+    UINT          br   = 0;
+    bool          ok   = f_lseek(&g_fs.file, last) == FR_OK
+                         && f_read(&g_fs.file, g_buf, kChunk, &br) == FR_OK && br == kChunk
+                         && first_bad(g_buf, kChunk / 4, last / 4) < 0;
+    f_close(&g_fs.file);
+    return ok;
+}
+
+// One chunk of the fill (phase -1). The fill is spread over the passes, so the
+// report loop keeps printing while ~70 s of writing go by.
+void tail_fill_step(bench::Board& hw)
+{
+    TailRun& s = g_t;
+    if(!s.begun)
+    {
+        s.begun = true;
+        f_close(&g_fs.file);   // the bring-up's test file, open for the stream
+        g_res.ready = false;
+        char path[24];
+        snprintf(path, sizeof path, "%s%s", g_fs.fsi.GetSDPath(), kTailName);
+        if(big_file_ok(path))
+        {
+            hw.PrintLine("SHELL_SD_H fill have=1 mib=%u", static_cast<unsigned>(kBigBytes >> 20));
+            tail_begin_phase(hw, 0);
+            return;
+        }
+        const FRESULT fr = f_open(&g_fs.file, path, FA_CREATE_ALWAYS | FA_WRITE);
+        if(fr != FR_OK)
+        {
+            tail_fail(static_cast<int>(fr));
+            return;
+        }
+        s.file_open = true;
+        s.filling   = true;
+        s.fill_off  = 0;
+        s.fill_t0   = daisy::System::GetNow();
+        hw.PrintLine("SHELL_SD_H fill have=0 mib=0");
+        return;
+    }
+    for(uint32_t i = 0; i < kChunk / 4; ++i)
+        g_buf[i] = pattern(s.fill_off / 4 + i);
+    UINT           bw = 0;
+    tail_mark_begin();
+    const FRESULT  fr = f_write(&g_fs.file, g_buf, kChunk, &bw);
+    tail_mark_end();
+    if(fr != FR_OK || bw != kChunk)
+    {
+        tail_fail(fr != FR_OK ? static_cast<int>(fr) : -2);
+        return;
+    }
+    s.fill_off += kChunk;
+    if(s.fill_off % kFillStep == 0)
+    {
+        // f_sync writes the size, so a reset from here on leaves a file of
+        // at least this many bytes -- which big_file_ok() still calls short.
+        const FRESULT sr = s.fill_off == kBigBytes ? f_close(&g_fs.file) : f_sync(&g_fs.file);
+        if(s.fill_off == kBigBytes)
+            s.file_open = false;
+        hw.PrintLine("SHELL_SD_H fill mib=%u ms=%u fr=%d", static_cast<unsigned>(s.fill_off >> 20),
+                     static_cast<unsigned>(daisy::System::GetNow() - s.fill_t0),
+                     static_cast<int>(sr));
+        if(sr != FR_OK)
+        {
+            tail_fail(static_cast<int>(sr));
+            return;
+        }
+        if(s.fill_off == kBigBytes)
+        {
+            s.filling = false;
+            tail_begin_phase(hw, 0);
+        }
+    }
+}
+#endif // SHELL_SD_PROBE_RTAIL
+
+// One transfer of the current kind, timed into the interval.
+void tail_transfer()
+{
+    TailRun&  s = g_t;
+    FRESULT   fr = FR_OK;
+    UINT      n = 0;
+    uint32_t  seek_us = 0, dt = 0;
+    tail_mark_begin();
+#if SHELL_SD_PROBE_RTAIL
+    if(s.phase == 0)
+    {
+        if(s.pos >= kBigBytes)   // one pass of the file: back to the start
+        {
+            s.pos = 0;
+            fr    = tail_seek(0, seek_us);
+        }
+    }
+    else
+    {
+        s.pos = (xorshift32(s.rng) >> 18) * kChunk;
+        fr    = tail_seek(s.pos, seek_us);   // randfs: the CLMT makes this a table walk
+    }
+    if(fr == FR_OK)
+    {
+        const uint32_t u0 = cycles_now();
+        fr                = f_read(&g_fs.file, g_buf, kChunk, &n);
+        dt                = (cycles_now() - u0) / kCoreMhz;
+    }
+#else
+    if(f_tell(&g_fs.file) >= kWrapBytes)
+        fr = tail_seek(0, seek_us);
+    if(fr == FR_OK)
+    {
+        const uint32_t u0 = cycles_now();
+        fr                = f_write(&g_fs.file, g_buf, kChunk, &n);
+        dt                = (cycles_now() - u0) / kCoreMhz;
+    }
+#endif
+    tail_mark_end();
+    if(seek_us > s.iv.seek_worst_us)
+        s.iv.seek_worst_us = seek_us;
+    if(fr != FR_OK || n != kChunk)
+    {
+        tail_fail(fr != FR_OK ? static_cast<int>(fr) : -2);
+        return;
+    }
+    tail_record(dt);
+#if SHELL_SD_PROBE_RTAIL
+    if(first_bad(g_buf, kChunk / 4, s.pos / 4) >= 0)
+        ++s.iv.bad;
+    s.pos += kChunk;
+#endif
+}
+
+// The interval's three prints, then the interval starts over.
+void tail_emit(bench::Board& hw)
+{
+    TailRun&           s    = g_t;
+    const int          k    = s.phase < 0 ? 0 : s.phase >= kTailPhases ? kTailPhases - 1 : s.phase;
+    const char* const  kind = kTailKind[k];
+    const TailInterval& iv  = s.iv;
+    const unsigned     sq   = static_cast<unsigned>(s.seq);
+    // Longest stats line: seq 4 digits, n 4 (a 25 MB/s card does at most 763
+    // transfers a second), worst_us and seek_worst_us 7, fr 2, bad 4: 100 of the
+    // 128 bytes. The bucket lines are 35 + 8 counts of 4 digits and 7 commas: 82.
+    hw.PrintLine("SHELL_SD_H kind=%s seq=%u n=%u worst_us=%u seek_worst_us=%u fr=%d bad=%u pat=%s",
+                 kind, sq, static_cast<unsigned>(iv.n), static_cast<unsigned>(iv.worst_us),
+                 static_cast<unsigned>(iv.seek_worst_us), s.fr, static_cast<unsigned>(iv.bad),
+                 kTailBurst ? "burst" : "b2b");
+    hw.PrintLine("SHELL_SD_H kind=%s seq=%u b0=%u,%u,%u,%u,%u,%u,%u,%u", kind, sq,
+                 static_cast<unsigned>(iv.b[0]), static_cast<unsigned>(iv.b[1]),
+                 static_cast<unsigned>(iv.b[2]), static_cast<unsigned>(iv.b[3]),
+                 static_cast<unsigned>(iv.b[4]), static_cast<unsigned>(iv.b[5]),
+                 static_cast<unsigned>(iv.b[6]), static_cast<unsigned>(iv.b[7]));
+    hw.PrintLine("SHELL_SD_H kind=%s seq=%u b1=%u,%u,%u,%u,%u,%u,%u,%u", kind, sq,
+                 static_cast<unsigned>(iv.b[8]), static_cast<unsigned>(iv.b[9]),
+                 static_cast<unsigned>(iv.b[10]), static_cast<unsigned>(iv.b[11]),
+                 static_cast<unsigned>(iv.b[12]), static_cast<unsigned>(iv.b[13]),
+                 static_cast<unsigned>(iv.b[14]), static_cast<unsigned>(iv.b[15]));
+    s.iv         = {};
+    ++s.seq;
+    s.line_t0    = daisy::System::GetNow();
+    s.force_line = false;
+}
+
+} // namespace
+
+static void tail_pass(bench::Board& hw, const volatile uint32_t& /*win*/)
+{
+    TailRun&       s  = g_t;
+    const uint32_t t0 = daisy::System::GetNow();
+    if(!s.begun && s.phase == -1 && s.fr == 0)
+    {
+        if(!g_res.ready)
+            tail_fail(-3);   // the card test did not leave its file open
+#if SHELL_SD_PROBE_WTAIL
+        else
+        {
+            s.begun = true;
+            f_close(&g_fs.file);   // the bring-up's test file, open for the stream
+            g_res.ready = false;
+            tail_begin_phase(hw, 0);
+        }
+#endif
+    }
+    while(s.fr == 0 && s.phase < kTailPhases && daisy::System::GetNow() - t0 < kPassMs)
+    {
+#if SHELL_SD_PROBE_RTAIL
+        if(s.phase < 0)
+        {
+            tail_fill_step(hw);
+            continue;
+        }
+#endif
+        if(daisy::System::GetNow() - s.phase_t0 >= kTailPhaseMs)
+        {
+            tail_emit(hw);   // the phase's last, shorter interval
+            tail_begin_phase(hw, s.phase + 1);
+            continue;
+        }
+        if(s.period_cyc != 0 && static_cast<int32_t>(cycles_now() - s.next) < 0)
+        {
+            daisy::System::Delay(1);
+            continue;
+        }
+        const uint32_t start = cycles_now();
+        tail_transfer();
+        if(s.period_cyc != 0)
+        {
+            // The period runs from the transfer's start; one that took longer
+            // than the period does not queue a second behind it.
+            s.next = start + s.period_cyc;
+            if(static_cast<int32_t>(cycles_now() - s.next) > 0)
+                s.next = cycles_now();
+        }
+    }
+    // The pass stays 500 ms long either way, so the frame rate does not
+    // change with the phase.
+    const uint32_t spent = daisy::System::GetNow() - t0;
+    if(spent < kPassMs)
+        hw.Delay(kPassMs - spent);
+    if(s.phase >= kTailPhases && s.fr == 0)
+    {
+        if(daisy::System::GetNow() - s.line_t0 >= kTailLineMs)
+        {
+            s.line_t0 = daisy::System::GetNow();
+            hw.PrintLine("SHELL_SD_H done phases=%d", kTailPhases);
+        }
+        return;
+    }
+    // No prints while the rtail fill runs: it has its own progress lines.
+    const bool preparing = s.phase < 0 && s.fr == 0;
+    if(!preparing && (s.force_line || daisy::System::GetNow() - s.line_t0 >= kTailLineMs))
+        tail_emit(hw);
+}
+#endif // SD_PROBE_TAIL
+
 #if SHELL_SD_PROBE_STREAM
 static void stream_pass(bench::Board& hw, const volatile uint32_t& win)
 {
@@ -611,6 +1127,8 @@ void sd_stream_pass(bench::Board& hw, const volatile uint32_t& win)
 {
 #if SHELL_SD_PROBE_BURST
     burst_pass(hw, win);
+#elif SD_PROBE_TAIL
+    tail_pass(hw, win);
 #elif SHELL_SD_PROBE_STREAM
     stream_pass(hw, win);
 #else

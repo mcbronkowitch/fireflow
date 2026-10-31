@@ -42,6 +42,14 @@ reported as `error`, not averaged. Exit 0 when the card test passed, no
 class has an error, and the idle class and a transferring class have a
 judged window.
 
+A capture of the tail modes (SHELL_SD_PROBE=rtail or wtail, spec section 5, C1
+and C2) is told by its `SHELL_SD_H kind=` lines. tails() merges the 10 s
+intervals of each kind into a histogram (buckets [2^i, 2^(i+1)) x 64 us), the
+worst call, p99.9 and the ring buffer the worst implies (2 x worst x rate, 384
+KB/s reads, 288 KB/s writes, rounded up to 32 KB). An interval that carries an
+error (fr, bad) is reported per kind, not merged. Exit 0 when the card test
+passed, every kind of the mode has merged intervals and none has an error.
+
 Exit 0 when the card test passed and both classes have a judged window;
 1 otherwise (stream mode). The spread is reported, not judged: the row's verdict needs the
 numbers beside the pin's band and Bastian's reading of them.
@@ -57,6 +65,7 @@ BLOCKS_PER_PASS = 250   # a 500 ms pass (kPassMs) of 2 ms blocks: the base of th
 
 _SD = re.compile(r"^SHELL_SD (mount=|prev=|write |verify=)(.*)$")
 _SD_S = re.compile(r"^SHELL_SD_S (.*)$")
+_SD_H = re.compile(r"^SHELL_SD_H (.*)$")
 _HOST_TIME = re.compile(r"^\d+\.\d+ ")
 _PLAY_WIN = re.compile(r"^SHELL_PLAY_WIN (.*)$")
 _INT_KV = re.compile(r"(\w+)=(-?\d+)")
@@ -314,6 +323,168 @@ def burst_report(lines, stream, out, card_ok):
     return 0 if card_ok and not failed and has_idle and has_burst else 1
 
 
+TAIL_BUCKETS = 16
+TAIL_BUCKET_US = 64          # sd_probe.cpp: bucket i is [2^i, 2^(i+1)) x 64 us, 0 from 0, 15 open
+READ_KINDS = ("seq", "rand", "randfs")    # rtail's phases
+WRITE_KINDS = ("w16", "w24", "wmax")      # wtail's phases
+RING_RATE_KIB_S = {"read": 384, "write": 288}   # float stereo / 24-bit stereo, spec C1 / C2
+RING_STEP_KIB = 32           # one transfer
+
+
+def ring_kib(worst_us, rate_kib_s):
+    """The ring buffer a worst call implies: 2 x worst x rate, rounded up to a
+    multiple of 32 KB (spec C1: 2 x worst latency x 384 KB/s). Integer math: no
+    float fuzz at an exact step."""
+    need = 2 * worst_us * rate_kib_s            # us x KiB/s; / 1e6 is KiB
+    return -(-need // (1000000 * RING_STEP_KIB)) * RING_STEP_KIB
+
+
+def parse_tail_groups(lines):
+    """SHELL_SD_H lines (rtail / wtail) joined into intervals. The board prints
+    one interval as a stats line (kind seq n worst_us seek_worst_us fr bad pat)
+    and two bucket lines, b0= (buckets 0-7) and b1= (8-15), all with the same
+    kind and seq; a line with b= and 16 counts is read the same way. Lines
+    without a seq each stand alone. Returns [(kind, seq or None, fields)] in
+    order of first appearance; fields["b"] is {first bucket index: [counts]}.
+    `SHELL_SD_H fill ...` and `SHELL_SD_H done` have no kind= and are skipped."""
+    groups = {}
+    order = []
+    for raw in strip_host_time(lines):
+        m = _SD_H.match(raw.strip())
+        if not m:
+            continue
+        kv = _kv(m.group(1))
+        kind = kv.get("kind")
+        if kind is None:
+            continue
+        key = (kind, kv["seq"]) if "seq" in kv else (kind, len(order))
+        g = groups.get(key)
+        if g is None:
+            g = groups[key] = {"b": {}}
+            order.append(key)
+        for k, v in kv.items():
+            if k in ("b", "b0", "b1"):
+                g["b"][{"b": 0, "b0": 0, "b1": 8}[k]] = [int(x) for x in v.split(",")]
+            elif k not in ("kind", "seq", "pat"):
+                g[k] = int(v)
+            elif k == "pat":
+                g[k] = v
+        g["seq"] = kv.get("seq")
+    return [(key[0], groups[key]["seq"], groups[key]) for key in order]
+
+
+def _group_buckets(g):
+    """The 16 counts of a group, or None when a bucket line is missing or
+    their sum is not the group's n."""
+    out = [None] * TAIL_BUCKETS
+    for first, counts in g["b"].items():
+        for i, c in enumerate(counts):
+            if first + i < TAIL_BUCKETS:
+                out[first + i] = c
+    if any(c is None for c in out):
+        return None
+    return out if sum(out) == g.get("n", -1) else None
+
+
+def _p999_us(buckets, worst):
+    """The upper edge of the bucket the 99.9th-percentile call falls in, cut at
+    the worst call (so it never reads above it); None without calls."""
+    total = sum(buckets)
+    if not total:
+        return None
+    rank = -(-total * 999 // 1000)
+    run = 0
+    for i, c in enumerate(buckets):
+        run += c
+        if run >= rank:
+            if i == TAIL_BUCKETS - 1:
+                return worst
+            return min(worst, (2 ** (i + 1)) * TAIL_BUCKET_US)
+    return worst
+
+
+def tails(lines):
+    """C1 / C2, the latency tails: {kind: {"n", "buckets" (16), "worst_us",
+    "seek_worst_us", "p999_us", "ring_kib", "intervals", "incomplete", "error",
+    "bad", "pat"}} for every kind in the SHELL_SD_H lines.
+
+    Intervals are merged: buckets and n add up, worst is the max. An interval
+    whose line says fr != 0 or bad != 0 is an error of its kind and is NOT
+    merged; the first one is named in `error` (fr is sticky on the board and
+    repeats, those lines say nothing new). An interval whose bucket lines are
+    lost, or whose buckets do not add up to its n, is `incomplete`: its worst
+    still counts (it can only raise the ring) but its buckets and n do not.
+    `ring_kib` is ring_kib() of the merged worst at the kind's rate. `pat` is
+    the transfer pattern the board said it used (burst or b2b), "mixed" if the
+    capture has both."""
+    out = {}
+    for kind, seq, g in parse_tail_groups(lines):
+        t = out.setdefault(kind, {"n": 0, "buckets": [0] * TAIL_BUCKETS, "worst_us": 0,
+                                  "seek_worst_us": 0, "intervals": 0, "incomplete": 0,
+                                  "error": None, "bad": 0, "pat": None})
+        pat = g.get("pat")
+        if pat is not None:
+            t["pat"] = pat if t["pat"] in (None, pat) else "mixed"
+        fr, bad = g.get("fr", 0), g.get("bad", 0)
+        if fr != 0 or bad != 0:
+            if t["error"] is None:
+                t["error"] = "%s at seq=%s" % (
+                    ("fr=%d" % fr) if fr != 0 else ("bad=%d" % bad), seq)
+            t["bad"] += bad
+            continue
+        b = _group_buckets(g)
+        t["worst_us"] = max(t["worst_us"], g.get("worst_us", 0))
+        t["seek_worst_us"] = max(t["seek_worst_us"], g.get("seek_worst_us", 0))
+        if b is None:
+            t["incomplete"] += 1
+            continue
+        t["intervals"] += 1
+        t["n"] += g["n"]
+        t["buckets"] = [x + y for x, y in zip(t["buckets"], b)]
+    for kind, t in out.items():
+        t["p999_us"] = _p999_us(t["buckets"], t["worst_us"])
+        t["ring_kib"] = ring_kib(t["worst_us"],
+                                 RING_RATE_KIB_S["write" if kind in WRITE_KINDS else "read"])
+    return out
+
+
+def tail_report(lines, out, card_ok):
+    """The report of an rtail / wtail capture. Exit code: 0 when the card test
+    passed, every kind of the mode has merged intervals and none has an error.
+    The mode is the family (READ_KINDS or WRITE_KINDS) the kinds in the
+    capture belong to. The pass criterion of C1 / C2 -- two runs agree within
+    2x on the worst call -- compares two captures, so it is not judged here."""
+    t = tails(lines)
+    family = WRITE_KINDS if any(k in WRITE_KINDS for k in t) else READ_KINDS
+    print("latency tails (%s; buckets [2^i, 2^(i+1)) x %d us, bucket 0 from 0, bucket %d open):"
+          % ("writes" if family is WRITE_KINDS else "reads", TAIL_BUCKET_US, TAIL_BUCKETS - 1),
+          file=out)
+    failed = False
+    for kind in family:
+        s = t.get(kind)
+        if s is None:
+            print("  %s: missing (no SHELL_SD_H line)" % kind, file=out)
+            failed = True
+            continue
+        if s["error"]:
+            print("  %s: error (%s), %d intervals merged before it" % (kind, s["error"], s["intervals"]),
+                  file=out)
+            failed = True
+            continue
+        if not s["intervals"]:
+            print("  %s: missing (no complete interval)" % kind, file=out)
+            failed = True
+            continue
+        print("  %s: %d calls in %d intervals, worst %d us, p99.9 %d us, seek worst %d us, "
+              "ring %d KB at %d KB/s, pattern %s%s"
+              % (kind, s["n"], s["intervals"], s["worst_us"], s["p999_us"], s["seek_worst_us"],
+                 s["ring_kib"], RING_RATE_KIB_S["write" if kind in WRITE_KINDS else "read"],
+                 s["pat"], (", %d incomplete" % s["incomplete"]) if s["incomplete"] else ""),
+              file=out)
+        print("      buckets %s" % ",".join(str(c) for c in s["buckets"]), file=out)
+    return 0 if card_ok and not failed else 1
+
+
 def cb_by_phase(lines):
     """Test A3: the audio callback priced by transfer phase. {"idle", "sdram",
     "axi"} -> {"means": [...], "win": [...]}: per SHELL_PLAY_WIN frame its mean
@@ -444,6 +615,9 @@ def report(lines, out=None):
         print("root   n=%d bin=%d names=%s" % (r["n"], r["bin"], ",".join(r["names"])),
               file=out)
     print("card test: %s" % ("PASS" if ok else "FAIL (" + "; ".join(why) + ")"), file=out)
+
+    if any(_SD_H.match(l.strip()) for l in lines):
+        return tail_report(lines, out, ok)
 
     stream = parse_stream(lines)
     st = stream_stats(stream)

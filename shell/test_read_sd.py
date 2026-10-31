@@ -372,5 +372,140 @@ def test_cb_by_phase():
 
 test_cb_by_phase()
 
+
+# --- the latency tails (SHELL_SD_PROBE=rtail / wtail, spec section 5, C1 / C2) --
+def h_stats(kind, seq, n, worst, seek=0, fr=0, bad=0, pat="b2b"):
+    return ("SHELL_SD_H kind=%s seq=%d n=%d worst_us=%d seek_worst_us=%d fr=%d bad=%d pat=%s"
+            % (kind, seq, n, worst, seek, fr, bad, pat))
+
+
+def h_buckets(kind, seq, counts):
+    """The two bucket lines the board prints for one interval: b0= is buckets
+    0-7, b1= buckets 8-15."""
+    assert len(counts) == 16
+    return ["SHELL_SD_H kind=%s seq=%d b0=%s" % (kind, seq, ",".join(map(str, counts[:8]))),
+            "SHELL_SD_H kind=%s seq=%d b1=%s" % (kind, seq, ",".join(map(str, counts[8:])))]
+
+
+def h_interval(kind, seq, counts, worst, seek=0, fr=0, bad=0):
+    return [h_stats(kind, seq, sum(counts), worst, seek, fr, bad)] + h_buckets(kind, seq, counts)
+
+
+def counts_at(*pairs):
+    c = [0] * 16
+    for i, k in pairs:
+        c[i] = k
+    return c
+
+
+def test_tails_merge():
+    a = counts_at((0, 90), (1, 9), (3, 1))        # worst in bucket 3: [512, 1024) us
+    b = counts_at((0, 95), (2, 4), (9, 1))        # worst in bucket 9: [32768, 65536) us
+    lines = (h_interval("seq", 1, a, 900, seek=10) + h_interval("seq", 2, b, 40000, seek=700)
+             + h_interval("rand", 1, a, 800, seek=3000))
+    t = read_sd.tails(lines)
+    check("tails: one entry per kind", sorted(t) == ["rand", "seq"])
+    s = t["seq"]
+    check("tails: two lines of one kind merge their buckets",
+          s["buckets"] == [x + y for x, y in zip(a, b)] and s["n"] == 200)
+    check("tails: worst is the max, not the sum", s["worst_us"] == 40000)
+    check("tails: seek_worst is the max", s["seek_worst_us"] == 700)
+    check("tails: kinds do not mix", t["rand"]["buckets"] == a and t["rand"]["worst_us"] == 800)
+    # 200 calls, rank ceil(0.999 * 200) = 200: the last non-empty bucket, 9,
+    # whose upper edge 65 536 us is cut to the worst call.
+    check("tails: p99.9 is the bucket edge, cut at the worst", s["p999_us"] == 40000)
+    # 2000 calls: rank 1998. The slowest 0.1 % (two calls) are out of it ...
+    tight = h_interval("seq", 1, counts_at((0, 1998), (4, 1), (5, 1)), 5000)
+    check("tails: p99.9 leaves out the slowest 0.1 %",
+          read_sd.tails(tight)["seq"]["p999_us"] == 128)
+    # ... and three calls are one too many: bucket 4 ends at 32 * 64 = 2048 us.
+    wide = h_interval("seq", 1, counts_at((0, 1997), (4, 1), (5, 2)), 5000)
+    check("tails: p99.9 reaches the bucket of the 1998th call",
+          read_sd.tails(wide)["seq"]["p999_us"] == 2048)
+    check("tails: a clean capture has no error", s["error"] is None and s["incomplete"] == 0)
+
+    # The brief's single-line form (b= with all 16 counts) reads the same.
+    one = ("SHELL_SD_H kind=wmax n=%d worst_us=1500 seek_worst_us=0 b=%s"
+           % (sum(a), ",".join(map(str, a))))
+    check("tails: a single line with b= is one interval",
+          read_sd.tails([one])["wmax"]["buckets"] == a)
+    # Host-time prefixes, and lines that are not histogram lines.
+    noise = ["12.5 SHELL_SD_H fill mib=64 ms=7000 fr=0", "SHELL_SD_H done", "SHELL_SD_S w=1 on=0"]
+    stamped = ["%d.250 %s" % (i, l) for i, l in enumerate(h_interval("seq", 1, a, 900))]
+    check("tails: host-time prefixes are stripped, other lines ignored",
+          read_sd.tails(noise + stamped) == read_sd.tails(h_interval("seq", 1, a, 900)))
+    check("tails: no histogram lines, no kinds", read_sd.tails(CARD) == {})
+
+
+def test_tail_ring_size():
+    # 2 x 20 ms x 384 KB/s = 15.36 KB: rounded up to 32 KB.
+    check("ring: 20 000 us at 384 KB/s is 32 KB", read_sd.ring_kib(20000, 384) == 32)
+    check("ring: exactly one 32 KB step stays", read_sd.ring_kib(41666, 384) == 32)   # 31.99998 KB
+    check("ring: a hair over goes to the next step", read_sd.ring_kib(41700, 384) == 64)
+    check("ring: 100 ms at 288 KB/s (writes) is 64 KB", read_sd.ring_kib(100000, 288) == 64)
+    check("ring: no call, no ring", read_sd.ring_kib(0, 384) == 0)
+    t = read_sd.tails(h_interval("rand", 1, counts_at((0, 99), (8, 1)), 20000)
+                      + h_interval("w16", 1, counts_at((0, 99), (8, 1)), 100000))
+    check("ring: tails() uses 384 KB/s for reads", t["rand"]["ring_kib"] == 32)
+    check("ring: tails() uses 288 KB/s for writes", t["w16"]["ring_kib"] == 64)
+
+
+def test_tail_errors():
+    a = counts_at((0, 100))
+    good = h_interval("seq", 1, a, 900)
+    bad_fr = h_interval("rand", 1, counts_at((0, 40)), 99000, fr=1)   # FR_DISK_ERR
+    again = h_interval("rand", 2, [0] * 16, 0, fr=1)                  # sticky: repeated
+    fine = h_interval("rand", 0, a, 800)
+    t = read_sd.tails(fine + bad_fr + again + good)
+    check("tails: fr != 0 is an error of that kind", "fr=1" in t["rand"]["error"] and "seq=1" in t["rand"]["error"])
+    check("tails: and not merged into the histogram",
+          t["rand"]["buckets"] == a and t["rand"]["n"] == 100 and t["rand"]["worst_us"] == 800)
+    check("tails: the other kinds are untouched", t["seq"]["error"] is None)
+    t = read_sd.tails(h_interval("seq", 1, a, 900, bad=2))
+    check("tails: bad chunks are an error too", "bad=2" in t["seq"]["error"] and t["seq"]["n"] == 0)
+
+    # A lost bucket line: the stats say 100 calls, the buckets 50. The worst
+    # still counts (it can only raise the ring), the buckets and n do not.
+    lost = [h_stats("seq", 5, 100, 70000)] + h_buckets("seq", 5, counts_at((0, 50)))[:1]
+    t = read_sd.tails(good + lost)["seq"]
+    check("tails: a group with lost bucket lines is counted incomplete",
+          t["incomplete"] == 1 and t["error"] is None)
+    check("tails: its worst counts, its buckets do not",
+          t["worst_us"] == 70000 and t["buckets"] == a and t["n"] == 100)
+
+
+def tail_capture(kinds, fr=None):
+    lines = list(CARD)
+    seq = 0
+    for k in kinds:
+        for _ in range(3):
+            seq += 1
+            lines += h_interval(k, seq, counts_at((0, 90), (2, 10)), 1500,
+                                fr=(fr or {}).get(k, 0))
+    return [l + "\n" for l in lines]
+
+
+def test_tail_report():
+    code, text = run(tail_capture(["seq", "rand", "randfs"]))
+    check("tail report: a full read capture passes", code == 0 and "card test: PASS" in text)
+    check("tail report: one row per kind with worst, p99.9 and the ring",
+          all(("%s:" % k) in text for k in ("seq", "rand", "randfs"))
+          and "worst 1500 us" in text and "ring 32 KB" in text)
+    code, text = run(tail_capture(["w16", "w24", "wmax"]))
+    check("tail report: a full write capture passes", code == 0)
+    code, text = run(tail_capture(["seq", "rand"]))
+    check("tail report: a missing kind fails and is named",
+          code == 1 and "randfs" in text and "missing" in text)
+    code, text = run(tail_capture(["seq", "rand", "randfs"], fr={"rand": 1}))
+    check("tail report: an error fails and is named", code == 1 and "rand" in text and "error" in text)
+    code, _ = run([l for l in tail_capture(["seq", "rand", "randfs"]) if "SHELL_SD verify" not in l])
+    check("tail report: a failed card test fails", code == 1)
+
+
+test_tails_merge()
+test_tail_ring_size()
+test_tail_errors()
+test_tail_report()
+
 print("%d failed" % len(FAILS))
 sys.exit(1 if FAILS else 0)
