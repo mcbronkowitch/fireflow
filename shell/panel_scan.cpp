@@ -249,11 +249,37 @@ volatile uint32_t g_win_gap_max    = 0;
 volatile uint32_t g_win_cb_max     = 0;
 volatile uint32_t g_win_over       = 0;
 volatile uint32_t g_win_blocks     = 0;
+// The window's callback cycles, summed over its g_win_blocks: the host's mean
+// block is sum / n. A 500 ms window of ~250 blocks stays far inside uint32.
+volatile uint32_t g_win_cb_sum     = 0;
 volatile bool     g_win_reset      = false;
 uint32_t          g_win_prev_entry = 0;
 // A block above this counts in g_win_over: the low end of the measured
 // deadline band (docs/gotchas.md, ~930-960 k).
 constexpr uint32_t kWinOverCycles  = 930000;
+
+// The window's block count and cycle sum as one pair. The callback cannot be
+// interrupted by the foreground, so it never shows a half-written block; the
+// only tear is a block it adds between the two reads. n, sum, n again: the
+// pair holds when both n agree. After three tries the pair prints as 0 / 0,
+// which the host reads as "no mean for this frame" (a mean off by a block
+// would pass for a measurement).
+[[maybe_unused]] void read_win_pair(uint32_t& n, uint32_t& sum)   // not on the stress image
+{
+    for(int i = 0; i < 3; ++i)
+    {
+        const uint32_t n0 = g_win_blocks;
+        const uint32_t s  = g_win_cb_sum;
+        if(g_win_blocks == n0)
+        {
+            n   = n0;
+            sum = s;
+            return;
+        }
+    }
+    n   = 0;
+    sum = 0;
+}
 #endif
 
 #if SHELL_REMOTE
@@ -1178,6 +1204,7 @@ void panel_scan_block_end(uint32_t c0)
         g_win_cb_max  = 0;
         g_win_over    = 0;
         g_win_blocks  = 0;
+        g_win_cb_sum  = 0;
         g_win_reset   = false;
 #if SHELL_REMOTE_MEASURE
         sec_reset();   // SHELL_SEC / SHELL_SECMAX share the window
@@ -1189,6 +1216,7 @@ void panel_scan_block_end(uint32_t c0)
     if(dc > g_win_cb_max) g_win_cb_max = dc;
     if(dc > kWinOverCycles) g_win_over = g_win_over + 1u;
     g_win_blocks = g_win_blocks + 1u;
+    g_win_cb_sum = g_win_cb_sum + dc;
 #endif
 #if SHELL_REMOTE_MEASURE
     sec_block(dc, processed);
@@ -1470,7 +1498,9 @@ void run_panel_scan_report(bench::Board& hw)
             const uint32_t cb_last = g_cb_cycles_last, cb_max = g_cb_cycles_max;
 #if !SHELL_PERSIST_STRESS_ON
             const uint32_t win = g_win_cb_max, gap = g_win_gap_max;
-            const uint32_t over = g_win_over, n = g_win_blocks;
+            const uint32_t over = g_win_over;
+            uint32_t       n = 0, sum = 0;
+            read_win_pair(n, sum);
 #if SHELL_REMOTE_MEASURE
             const SecSnap sec = read_sec();   // the same window, reset with it
 #endif
@@ -1498,9 +1528,10 @@ void run_panel_scan_report(bench::Board& hw)
                          static_cast<int>(led_last), static_cast<int>(led_max),
                          static_cast<int>(cb_last), static_cast<int>(cb_max));
 #if !SHELL_PERSIST_STRESS_ON
-            hw.PrintLine("SHELL_PLAY_WIN win=%u gap=%u over=%u n=%u",
+            hw.PrintLine("SHELL_PLAY_WIN win=%u gap=%u over=%u n=%u sum=%u",
                          static_cast<unsigned>(win), static_cast<unsigned>(gap),
-                         static_cast<unsigned>(over), static_cast<unsigned>(n));
+                         static_cast<unsigned>(over), static_cast<unsigned>(n),
+                         static_cast<unsigned>(sum));
 #if SHELL_REMOTE_MEASURE
             // The window's worst block and its own sections (they add up to
             // worst less the unsectioned rest, see SEC_COUNT), then each
@@ -1563,11 +1594,14 @@ void run_panel_scan_report(bench::Board& hw)
         // kWinOverCycles, and how many blocks the window held.
         {
             const uint32_t win = g_win_cb_max, gap = g_win_gap_max;
-            const uint32_t over = g_win_over, n = g_win_blocks;
+            const uint32_t over = g_win_over;
+            uint32_t       n = 0, sum = 0;
+            read_win_pair(n, sum);
             g_win_reset = true;
-            hw.PrintLine("SHELL_PLAY_WIN win=%u gap=%u over=%u n=%u",
+            hw.PrintLine("SHELL_PLAY_WIN win=%u gap=%u over=%u n=%u sum=%u",
                          static_cast<unsigned>(win), static_cast<unsigned>(gap),
-                         static_cast<unsigned>(over), static_cast<unsigned>(n));
+                         static_cast<unsigned>(over), static_cast<unsigned>(n),
+                         static_cast<unsigned>(sum));
         }
 #endif
 #endif // SHELL_REMOTE

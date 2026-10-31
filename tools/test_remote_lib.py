@@ -247,6 +247,46 @@ check("summarize_run: totals, reconnects, unknown lines ignored",
 check("summarize_run: a run without WIN lines still summarizes",
       rs.summarize_run(serial_txt[:4])["frame_max"] is None)
 
+# ---- the window mean (SHELL_PLAY_WIN's sum=) ---------------------------------
+# sum= is the window's callback cycles over its n blocks; the summary's `mean`
+# is p50/p99/mean of the frames' sum/n, over the counted frames.
+def test_win_mean_from_sum():
+    txt = [
+        "1000.700 SHELL_PLAY_LAW cyc_last=1 cyc_max=2 led_last=3 led_max=4 cb_last=900000 cb_max=910000",
+        "1000.701 SHELL_PLAY_WIN win=912000 gap=960100 over=2 n=250 sum=225000000",
+        "1001.700 SHELL_PLAY_LAW cyc_last=1 cyc_max=2 led_last=3 led_max=4 cb_last=905000 cb_max=966806",
+        "1001.701 SHELL_PLAY_WIN win=966806 gap=960150 over=5 n=250 sum=230000000",
+    ]
+    sm = rs.summarize_run(txt)
+    ok = ("mean" in sm and sm["mean"]["mean"] == 910000 and sm["mean"]["n"] == 2
+          and sm["mean"]["p50"] == 900000 and sm["mean"]["p99"] == 920000)
+    # The same frames, but only the second has sum=; the older image's frame
+    # (no sum=) and a sum=0 n=0 frame (a torn read the board gave up on)
+    # contribute nothing. The mean is of the 920000 frame alone.
+    mixed = [txt[0], "1000.701 SHELL_PLAY_WIN win=912000 gap=960100 over=2 n=250",
+             txt[2], txt[3],
+             "1002.700 SHELL_PLAY_LAW cyc_last=1 cyc_max=2 led_last=3 led_max=4 cb_last=1 cb_max=2",
+             "1002.701 SHELL_PLAY_WIN win=1 gap=1 over=0 n=0 sum=0"]
+    sm2 = rs.summarize_run(mixed)
+    ok = ok and sm2["mean"]["n"] == 1 and sm2["mean"]["mean"] == 920000
+    # No frame has sum=: `mean` is absent, not 0 (the untripped repeat too).
+    sm3 = rs.summarize_run(serial_txt)
+    ok = ok and "mean" not in sm3 and "mean" not in sm3["untripped"]
+    # A tripped frame is in the top-level mean and out of the untripped one.
+    law = "SHELL_PLAY_LAW cyc_last=1 cyc_max=2 led_last=3 led_max=4 cb_last=900000 cb_max=910000"
+    trip = ["SHELL_REMOTE load id=3 gen=7 gest=-1 name=x input=noise settle=500 excite=1,1 rec=0,0",
+            "SHELL_REMOTE run id=3 gen=7 counting=1 void=0 tripped=1 gest=-1", law,
+            "SHELL_PLAY_WIN win=1 gap=1 over=0 n=250 sum=225000000",
+            "SHELL_REMOTE run id=3 gen=7 counting=1 void=0 tripped=0 gest=-1", law,
+            "SHELL_PLAY_WIN win=1 gap=1 over=0 n=250 sum=230000000"]
+    sm4 = rs.summarize_run(trip, load_id=3)
+    ok = (ok and sm4["mean"]["n"] == 2 and sm4["mean"]["mean"] == 910000
+          and sm4["untripped"]["mean"]["n"] == 1
+          and sm4["untripped"]["mean"]["mean"] == 920000)
+    return ok
+check("win mean: sum/n per frame, p50/p99/mean over counted frames; "
+      "no sum= leaves mean absent", test_win_mean_from_sum())
+
 # ---- remote_run.cmd_run: failure paths keep what was measured -------------
 import argparse, contextlib, io, json, subprocess
 

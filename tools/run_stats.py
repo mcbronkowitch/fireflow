@@ -5,7 +5,7 @@ floor, and the verdict of a candidate against a baseline.
 The board prints, once per 500 ms frame (shell/panel_scan.cpp):
 
     SHELL_PLAY_LAW cyc_last=.. cyc_max=.. led_last=.. led_max=.. cb_last=.. cb_max=..
-    SHELL_PLAY_WIN win=.. gap=.. over=.. n=..        (SHELL_CB_WINDOW, SHELL_REMOTE)
+    SHELL_PLAY_WIN win=.. gap=.. over=.. n=.. sum=.. (SHELL_CB_WINDOW, SHELL_REMOTE)
 
 and SHELL_REMOTE images, right before the LAW line,
 
@@ -75,6 +75,15 @@ def summarize(cb: Sequence[int]) -> dict:
         "max": s[-1],
         "over_930k": sum(1 for v in s if v > OVER_CYCLES),
     }
+
+
+def summarize_means(means: Sequence[float]) -> dict:
+    """p50 / p99 / mean over the frames' mean block (sum / n of each WIN line)."""
+    if len(means) == 0:
+        raise ValueError("summarize_means: no samples")
+    s = sorted(float(v) for v in means)
+    return {"n": len(s), "p50": _rank(s, 0.50), "p99": _rank(s, 0.99),
+            "mean": sum(s) / len(s)}
 
 
 def aa_floor(a: dict, b: dict) -> dict:
@@ -167,6 +176,7 @@ def parse_frames(lines: Iterable[str], load_id: Optional[int] = None,
     one); `name`: the ack's name= (the gesture's for a gesture run).
     Without either id, every frame counts (captures from before the filter)."""
     out = {"cb_last": [], "cb_max": [], "win": [], "gap": [], "over": [],
+           "mean": [], "mean_u": [],
            "reconnects": 0, "skipped": 0, "void": False, "tripped": False,
            "gen": None, "tog": set(), "probe": False, "tog_missing": 0,
            "gest_done": False, "build": None, "measure": None, "name": None,
@@ -215,7 +225,8 @@ def parse_frames(lines: Iterable[str], load_id: Optional[int] = None,
             if "gen" in kv and kv["gen"] != out["gen"]:
                 out["skipped"] += len(out["cb_last"])
                 for key in ("cb_last", "cb_max", "win", "gap", "over", "cb_last_u",
-                            "cb_max_u", "win_u", "gap_u", "over_u"):
+                            "cb_max_u", "win_u", "gap_u", "over_u", "mean",
+                            "mean_u"):
                     out[key] = []
                 out["tripped_frames"] = 0
                 out["tog"], out["probe"] = set(), False
@@ -270,6 +281,13 @@ def parse_frames(lines: Iterable[str], load_id: Optional[int] = None,
                     out[name].append(kv[name])
                     if not frame_tripped:
                         out[name + "_u"].append(kv[name])
+            # The window's mean block, sum / n. An older image prints no sum=,
+            # and the board prints sum=0 n=0 when it could not read the pair
+            # consistently: neither says anything about the mean.
+            if kv.get("sum") is not None and kv.get("n", 0) > 0:
+                out["mean"].append(kv["sum"] / kv["n"])
+                if not frame_tripped:
+                    out["mean_u"].append(kv["sum"] / kv["n"])
             if filtered:
                 take = False   # the frame ends here; the next run line decides
     return out
@@ -336,6 +354,12 @@ def summarize_run(lines: Iterable[str], load_id: Optional[int] = None,
         "gap_max": max(f["gap_u"]) if f["gap_u"] else None,
         "over_total": sum(f["over_u"]) if f["over_u"] else None,
     }
+    # `mean`: only when some frame carried sum= (images from before it, and
+    # frames the board could not read, leave it out rather than say 0).
+    if f["mean"]:
+        res["mean"] = summarize_means(f["mean"])
+    if f["mean_u"]:
+        res["untripped"]["mean"] = summarize_means(f["mean_u"])
     return res
 
 
