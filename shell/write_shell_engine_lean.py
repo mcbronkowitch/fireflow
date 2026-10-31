@@ -8,8 +8,9 @@ usage: write_shell_engine_lean.py OUTPUT NAME=V... -- STALE...
 
 The lean switches are the class-2 candidates of CPU round 2 (spec
 2026-10-30-cpu-engine-kernels-design.md section 4): firmware-only savings that
-change the output. A new switch starts OFF until Bastian has accepted it; the
-round-2 three (SVF1, GRAIN_WIN, EXP2) are accepted and ON. Same shape and
+change the output. A new switch starts OFF until Bastian has accepted it; of
+the round-2 three, GRAIN_WIN and EXP2 are ON and SVF1 is OFF (accepted, but
+the board measured no saving -- shell/Makefile). Same shape and
 same reason as write_shell_fast_math.py: no C++ file reads this header. Each
 switch sets -DSPKY_LEAN_<NAME>=1 (shell/Makefile), which a bare make variable
 cannot express to the dependency graph -- an existing build/ would reuse the

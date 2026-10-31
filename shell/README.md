@@ -134,8 +134,10 @@ build the engine as before.
 The second round's class-2 savings are `SHELL_LEAN_<NAME>` switches. A new
 one starts at **0** (off) until Bastian accepts it; the three below were
 accepted on 2026-10-31 without a listen, because each differs from the old
-code only by rounding, and are **1** (on) in every shell image. Each is
-turned back with `SHELL_LEAN_<NAME>=0` added to the image's flags; with every
+code only by rounding. Two are **1** (on) in every shell image;
+`SHELL_LEAN_SVF1` went back to **0** the same day, because on the board's
+listener images it cost more cycles than it saved. Each is
+switched with `SHELL_LEAN_<NAME>=0` or `=1` added to the image's flags; with every
 lean switch at 0 the engine is compiled as it was. One stamp
 (`build/shell_engine_lean.h`, `write_shell_engine_lean.py`) holds them all and
 deletes the objects when one changes, so no `make clean` is needed here either.
@@ -144,7 +146,7 @@ paths and its toggle bit picks, with the old path at bit 0.
 
 | Switch | Default | What it does | Turn it back |
 |---|---|---|---|
-| `SHELL_LEAN_SVF1` | `1` | the SYNTH and WAVE voices' low-pass runs one pass per sample instead of two (the same response up to rounding, about −100 dB); toggle bit 19 in the measurement image | `SHELL_LEAN_SVF1=0` |
+| `SHELL_LEAN_SVF1` | `0` | the SYNTH and WAVE voices' low-pass runs one pass per sample instead of two (the same response up to rounding, about −100 dB); toggle bit 19 in the measurement image. Off: on Rev A's listener images it cost about 15 k cycles a block on workloads 90, 226 and 314 and saved 7 k at most elsewhere | already off; `SHELL_LEAN_SVF1=1` turns it on |
 | `SHELL_LEAN_GRAIN_WIN` | `1` | a sampler grain's Hann window multiplies by reciprocals latched at spawn and when a fade is armed instead of dividing on every sample (the window moves by at most 3e-7); toggle bit 22 in the measurement image | `SHELL_LEAN_GRAIN_WIN=0` |
 | `SHELL_LEAN_EXP2` | `1` | the SYNTH and WAVE oscillators' detune ratio 2^(cents/1200) comes from a fourth-order polynomial (`engine/util/fast_exp2.h`) instead of `std::pow` (the ratio moves by at most 7.2e-8); toggle bit 25 in the measurement image | `SHELL_LEAN_EXP2=0` |
 

@@ -645,8 +645,9 @@ endif
 # 2026-10-30-cpu-engine-kernels-design.md section 4), each a saving that
 # changes the output. A new one defaults to 0 until Bastian has accepted it;
 # 1 compiles the engine with SPKY_LEAN_<NAME>=1. With every switch at 0 the
-# engine is the code it was, instruction for instruction. The three below are
-# accepted and default to 1 (2026-10-31). The measurement image ignores them
+# engine is the code it was, instruction for instruction. The three below were
+# accepted on 2026-10-31; GRAIN_WIN and EXP2 default to 1, SVF1 went back to 0
+# the same day (its comment says why). The measurement image ignores them
 # for its candidates: it holds both paths and a toggle bit picks
 # (engine/util/probe_toggles.h). VCV and the desktop render never see them.
 # All of them go through one stamp, build/shell_engine_lean.h, written at parse
@@ -658,9 +659,14 @@ endif
 # pass per sample instead of two (SvfLp::ProcessSingle, engine/util/svf_lp.h:
 # the two passes folded into one step, the same response up to rounding).
 # Toggle bit 19 in the measurement image. The sampler's and FEED's filters
-# stay two-pass either way. On (1) since 2026-10-31: Bastian accepted it
-# without a listen, the difference being rounding (about -100 dB).
-SHELL_LEAN_SVF1 ?= 1
+# stay two-pass either way. Off (0): Bastian accepted it without a listen on
+# 2026-10-31 (the difference is rounding, about -100 dB), but the listener
+# images on Rev A the same day showed no saving to take. With it on, the frame
+# maximum's median went UP by about 15 k cycles on workloads 90, 226 and 314
+# (90 a sampler deck whose filters never take the one-pass path) and down by
+# only 7 k on 127 and 4 k on 313 (docs/hardware/cpu-hunt-measured.md, section
+# 7). The measurement image's -13.7 k on 313 did not carry over.
+SHELL_LEAN_SVF1 ?= 0
 
 ifneq ($(words $(SHELL_LEAN_SVF1))-$(filter $(SHELL_LEAN_SVF1),0 1),1-$(SHELL_LEAN_SVF1))
 $(error SHELL_LEAN_SVF1 must be 0 or 1)

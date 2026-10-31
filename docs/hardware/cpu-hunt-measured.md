@@ -788,7 +788,7 @@ max − min of the three base run means.
 |---|---|---|---|---|---|---|
 | V1 MorphOsc invariants | 1 | 17 | `4a6d0bc` | 108, 117, 127, 10 | SYNTH deck voices −10.7 to −17.5 k per block (108 A −17.5, B −10.7; 117 A −11.2; 127 B −17.0; 10 B −10.8), base spread 0.02-6.7 k. Engine section: 10 −10.4, 108 −28.3, 117 −10.2, 127 −16.9 k | adopted, `4a20c34e` |
 | V3 sub and sine segment without the wrap | 1 | 18 | `816eda9` | 108, 117, 313, 127 | engine section 108 −6.7 (spread 6.4), 117 −6.4 (2.8), 127 −4.4 (2.3), 313 −3.3 (1.1) k; 1.5-4.9 k per deck | adopted, `b080ad07` |
-| V6 single-pass voice `SvfLp` (the two Chamberlin steps folded into one step on the same state; output equals the old filter up to rounding, about −100 dB) | 2 | 19 | `f945d88` | 108, 117, 127, 313 | engine section 108 −12.1 (spread 2.9), 117 −12.6 (8.5), 127 −13.5 (1.7), 313 −13.7 (1.0) k; voices −5.3 to −7.0 k per deck | queued for listening behind `SHELL_LEAN_SVF1`, `f9824957` |
+| V6 single-pass voice `SvfLp` (the two Chamberlin steps folded into one step on the same state; output equals the old filter up to rounding, about −100 dB) | 2 | 19 | `f945d88` | 108, 117, 127, 313 | engine section 108 −12.1 (spread 2.9), 117 −12.6 (8.5), 127 −13.5 (1.7), 313 −13.7 (1.0) k; voices −5.3 to −7.0 k per deck | queued for listening behind `SHELL_LEAN_SVF1`, `f9824957`; accepted, then **off by default**: no saving in the listener image (below) |
 | G1 fold fast path in `read_linear`, rev 1: (0, fsz) skips the fold | 1 | 20 | `62ea08a` | 81, 82, 90 | grain-sample 81 **+9.0** (worse in 5 of 6 round pairs), 82 −25.1, 90 −28.1 | revised: on 81, 42 % of reads sit in [fsz, 2fsz) and alternate with in-range reads call by call (desktop count), so the new branch mispredicts |
 | G1 rev 2: (0, 2·fsz) skips the fold, the subtract of fsz as a conditional move | 1 | 20 | `17305ed` | 81, 82, 90 | grain-sample 81 −7.7, 82 −11.8, 90 −22.6; pooled −10.2 | adopted, `edbb6dd6` |
 | G4 int16 sampler buffer | 2 | 21 | `eb6cd82` | 81, 82, 90 | grain-sample 81 −8.2, 82 −9.3, 90 −1.1; pooled −9.0 (~4 % of the grain price) | reverted, `bbb67e05`: int16 clips the overdub at full scale, where the float buffer settles up to 10× the input below `kFbSatKnee` and blooms to ~1.3 above it; not a slight change for 4 % |
@@ -815,6 +815,35 @@ cycles per grain-sample (96 × = 18.8 k per block for one grain), and about
 from separate A/B runs, added; the end-of-round batch measures them
 together.
 
+**The listener image does not inherit the measurement image's savings.**
+On 2026-10-31 the branch's listener image (`aea1499`, the lean three on) ran
+against main's (`478f8d4`) by reflash, 4 rounds of 30 s, frame maximum
+median (p50) averaged over the rounds: 90 −45 k and 127 −22 k, but 226
++19 k, 314 +16 k, 151 and 21 +5 k each, and 226's worst frame reached
+947 581 (main: 922 469). A bisect of `6a96452`'s listener image, each arm
+flashed with main's image between it and the next so that every flash
+changes the build stamp, 3 rounds of 30 s, p50 in k cycles:
+
+| workload | main | lean three off | lean three on | on, SVF1 off | on, EXP2 off |
+|---|---|---|---|---|---|
+| 226 BODY+WAVE | 842.3 | 845.4 | 860.0 | 848.3 | 859.4 |
+| 314 WAVE+WAVE | 869.4 | 868.0 | 884.3 | 869.8 | 884.9 |
+| 90 SAMPLER | 882.3 | — | 850.9 | 836.0 | — |
+| 127 SYNTH | 893.8 | — | 870.5 | 877.5 | — |
+| 313 WAVE | 881.5 | — | 875.1 | 878.9 | — |
+
+With the three lean switches off the branch equals main on 226 and 314, so
+the class-1 adoptions (V1, V3, G1, G3) and the code they moved cost
+nothing there. V5 and G2 change nothing on these two. V6 alone costs about
+15 k on 226, 314 and 90, and saves 7 k on 127 and 4 k on 313. 90 is a
+sampler deck whose filters never take the one-pass path, so the cost is
+not V6's arithmetic: switching it on enlarges `SvfLp` (six members, a
+branch in `_recalc_damp`) for every user, and the code around it grows
+(`Instrument::process` 7492 → 7892 bytes, `FeedEngine::_control_tick`
+1292 → 1474). Which cache or placement effect turns that into 15 k is not
+measured. The measurement image could not see it: it holds both paths and
+the larger `SvfLp` in both arms. `SHELL_LEAN_SVF1` defaults to 0.
+
 ## 8. Bastian's decisions, round 2
 
 2026-10-31, on the three class-2 candidates queued for listening (V6, G2,
@@ -823,9 +852,11 @@ V5), each of which differs from the old code only by rounding (V6 about
 detune ratio by at most 7.2e-8 relative), asked whether they still need the
 blind A/B on the Twin: **"Accept without listening"**.
 
-So `SHELL_LEAN_SVF1`, `SHELL_LEAN_GRAIN_WIN` and `SHELL_LEAN_EXP2` default to
-1 in every shell image; `shell/README.md` "Turning a CPU saving back" says
-how to turn each one back. No blind A/B was recorded for round 2. The
+So `SHELL_LEAN_GRAIN_WIN` and `SHELL_LEAN_EXP2` default to 1 in every
+shell image; `SHELL_LEAN_SVF1` defaulted to 1 for the same few hours and
+then went to 0, because the listener-image bisect in section 7 measured it
+as a net cost. `shell/README.md` "Turning a CPU saving back" says how to
+switch each one. No blind A/B was recorded for round 2. The
 measurement image still holds both paths of each, with the old path at
 toggle bit 0, so a measurement run measures the old arithmetic for these
 three unless their bits are set.

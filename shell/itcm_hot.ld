@@ -18,7 +18,7 @@
    samples: the block's most expensive sample, ~30 k cycles). Measured
    2026-10-18 on the coupon probe build (sizes in bytes, -O3); the per-name
    sizes below were refreshed on 2026-10-31 from the Rev A play image
-   (SHELL_PANEL_SCAN=1 SHELL_KEYS_NC=1, the lean switches at their default 1;
+   (SHELL_PANEL_SCAN=1 SHELL_KEYS_NC=1, the lean switches at their defaults;
    arm-none-eabi-nm -S). Out on
    purpose: libm and libc (log10f, sqrtf, lroundf, memmove -- archive
    members), the probe's probe_block (probe builds only), boot and event code
@@ -44,18 +44,18 @@ SECTIONS
     __itcm_hot_start__ = .;
 
     /* Tier 1: every sample. */
-    *(.text._ZN4spky10Instrument7processEPKfS2_PfS3_j)                /* 7892 */
+    *(.text._ZN4spky10Instrument7processEPKfS2_PfS3_j)                /* 7492 */
     /* @REVERB_TANK@ -- the reverb tank's instance(s), written by write_shell_reverb_half.py into build/itcm_hot.ld, which is what the link and itcm_placement.py read: SHELL_REVERB_HALF=1 (the default, every image) holds only ProcessImpl<2>, the half-rate tank (2864 B); SHELL_REVERB_HALF=0 holds only ProcessImpl<1> (2800 B), and in the measurement image <1> and <2> both (toggle bit 9 picks). Sizes from the 2026-10-30 listener images. */
-    *(.text._ZN4spky6VoiceTINS_8MorphOscEE7processERfS3_)              /* 1922 */
+    *(.text._ZN4spky6VoiceTINS_8MorphOscEE7processERfS3_)              /* 1948 */
     *(.text._ZN4spky9BbdEngine7processERfS1_)                          /* 1814 */
     *(.text._ZN4spky10FeedEngine7processERfS1_)                        /* 1670 */
-    *(.text._ZN4spky6VoiceTINS_5WtOscEE7processERfS3_)                 /* 1980 */
+    *(.text._ZN4spky6VoiceTINS_5WtOscEE7processERfS3_)                 /* 2004 */
     *(.text._ZN4spky4Flux7processERfS1_)                               /* 1660 */
     *(.text._ZN4spky7BbdLine7ProcessEf)                                /* 1520 */
     *(.text._ZN4spky9BodyVoice7processERfS1_)                          /* 1140 */
     *(.text._ZN4spky12SampleBuffer5writeEff)                           /* 1140 */
     *(.text._ZN4spky6PartFx7processERfS1_S1_S1_)                       /* 1250 */
-    *(.text._ZN4spky13SamplerEngine7processERfS1_)                     /* 1304 */
+    *(.text._ZN4spky13SamplerEngine7processERfS1_)                     /* 1300 */
     *(.text._ZN4spky7ModLane7processEv)                                /*  892 */
     *(.text._ZN4spky13AmbientReverb7processEffRfS1_)                   /* 2590 with SHELL_REVERB_HALF=1 (the default: half-rate path, converters inlined); 920 with SHELL_REVERB_HALF=0 */
     *(.text._ZN4spky8KsString7processEf)                               /*  852 */
@@ -63,7 +63,7 @@ SECTIONS
     *(.text._ZN4spky14SuperModulator7processEv)                        /*  576 */
     *(.text._ZNK4spky7ModLane12_compute_rawEv)                         /*  560 */
     *(.text._ZN4spky12SynthEngineTINS_6VoiceTINS_5WtOscEEEE7processERfS5_)    /* 580 */
-    *(.text._ZN4spky12SynthEngineTINS_6VoiceTINS_8MorphOscEEEE7processERfS5_) /* 580 */
+    *(.text._ZN4spky12SynthEngineTINS_6VoiceTINS_8MorphOscEEEE7processERfS5_) /* 576 */
     *(.text._ZN4spky12SynthEngineTINS_9BodyVoiceEE7processERfS3_)      /*  552 */
     *(.text._ZN4spky4Comp12compute_gainEv)                             /*  472 */
     *(.text._ZN4spky7ModLane12_on_boundaryEv)                          /*  336 */
@@ -91,7 +91,7 @@ SECTIONS
     *(.text._ZN4spky7ModLane6followElff)                               /* 1892 */
     *(.text._ZN4spky6VoiceTINS_5WtOscEE11_apply_freqEv)                /* 1958 */
     *(.text._ZN4spky12SynthEngineTINS_6VoiceTINS_5WtOscEEEE15_update_controlEv) /* 1340 */
-    *(.text._ZN4spky10FeedEngine13_control_tickEv)                     /* 1474 */
+    *(.text._ZN4spky10FeedEngine13_control_tickEv)                     /* 1292 */
 
     /* The link stamp (itcm_load.cpp): this build's copy, carried to ITCM in
        shell-qspi.bin and compared after the copy with the one in SRAM. */

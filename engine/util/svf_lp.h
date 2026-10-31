@@ -104,7 +104,8 @@ public:
     // 19) and with the firmware switch SHELL_LEAN_SVF1=1 (SPKY_LEAN_SVF1).
     // Every other build -- desktop, VCV, and a firmware built with
     // SHELL_LEAN_SVF1=0 -- has none of it, and Process() above is the same in
-    // all of them (the default firmware has it: the switch is on). Only the
+    // all of them (the default firmware too: the switch is off, the board
+    // measured a net cost -- shell/Makefile, SHELL_LEAN_SVF1). Only the
     // voice switches it on (synth/voice.cpp); SamplerEngine's and FeedEngine's
     // filters stay two-pass in every build.
     //

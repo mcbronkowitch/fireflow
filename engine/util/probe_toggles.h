@@ -118,8 +118,10 @@
 //                                                        second floor wrap, bit-
 //                                                        identical)
 //   19   LEAN_SVF1            engine/util/svf_lp.h,      V6 (round 2, class 2),
-//                             engine/synth/voice.cpp     accepted: on by default
-//                                                        in the firmware
+//                             engine/synth/voice.cpp     accepted, but OFF by
+//                                                        default in the firmware:
+//                                                        the listener images
+//                                                        measured a net cost
 //                                                        (2026-10-31). SYNTH and
 //                                                        WAVE voices filter in
 //                                                        one pass
