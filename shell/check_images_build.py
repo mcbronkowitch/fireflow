@@ -78,11 +78,19 @@ IMAGES = [
     # this entry means the guard check can still go red.
     ("reva_remote_fm2_refused", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
                                  "SHELL_FAST_MATH=2"]),
+    # The SD bring-up image (spec 2026-10-31-sd-bring-up-design.md): the
+    # listener with the raw readout, FatFs and the card test. Without the
+    # listener the Makefile must refuse it (a hung card would need hands).
+    ("reva_sd", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
+                 "SHELL_RAW_SPREAD=1", "SHELL_SD=1"]),
+    ("reva_sd_no_listener_refused", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1",
+                                     "SHELL_RAW_SPREAD=1", "SHELL_SD=1"]),
 ]
 
 # Images whose build must be refused, and the refusal's text (name -> text).
 EXPECT_REFUSED = {
     "reva_remote_fm2_refused": "math guard: isfinite guard folded away in",
+    "reva_sd_no_listener_refused": "SHELL_SD=1 needs SHELL_REMOTE=1",
 }
 
 # The save path, as linked symbols (nm -C): persist_write() and the QSPI
@@ -102,10 +110,17 @@ SAVE_PATH = [
     "daisy::QSPIHandle::Impl::WritePage(",
 ]
 # name -> (symbols that must be linked, symbols that must not be)
+# The SD path: FatFs and the card test link only under SHELL_SD=1, and the
+# SD image is a listener image, so it must not link the save path either.
+SD_PATH = [
+    "f_mount",
+    "shell::sd_bringup_run(",
+]
 SYMBOL_RULES = {
-    "reva_play": (SAVE_PATH, []),
-    "reva_remote": ([], SAVE_PATH),
+    "reva_play": (SAVE_PATH, SD_PATH),
+    "reva_remote": ([], SAVE_PATH + SD_PATH),
     "reva_remote_measure": ([], SAVE_PATH),
+    "reva_sd": (SD_PATH, SAVE_PATH),
 }
 
 
@@ -241,9 +256,17 @@ def main():
                 print("FAIL %s -- symbol rules: %s" % (label, "; ".join(problems)))
                 fails.append(name)
                 continue
+        # What the rules held, per path they name: "linked" when the path is
+        # among the musts, "absent" when among the must-nots.
+        held = ""
+        if rules:
+            for what, path in (("save path", SAVE_PATH), ("SD path", SD_PATH)):
+                if path[0] in rules[0]:
+                    held += ", %s linked" % what
+                elif path[0] in rules[1]:
+                    held += ", %s absent" % what
         print("ok   %s  SRAM_EXEC %d of %d B (%.2f %%), %d B free%s"
-              % (label, used, size, 100.0 * used / size, size - used,
-                 ", save path %s" % ("linked" if rules[0] else "absent") if rules else ""))
+              % (label, used, size, 100.0 * used / size, size - used, held))
 
     if fails:
         print("%d of %d images failed: %s" % (len(fails), len(IMAGES), ", ".join(fails)))
