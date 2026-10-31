@@ -900,21 +900,6 @@ bool SamplerEngine::_spawn_slice(int k, float pan) {
     return true;
 }
 
-template <bool kInline>
-__attribute__((always_inline)) inline
-uint32_t SamplerEngine::_cloud(float& l, float& r) {
-    uint32_t live = 0;                       // grains active after the loop
-    for (int i = 0; i < kGrains; ++i) {
-        if (!_grains[i].active()) continue;
-        float gl = 0.f, gr = 0.f;
-        _grains[i].process<kInline>(_buf, gl, gr);
-        live += _grains[i].active() ? 1u : 0u;
-        l += gl;
-        r += gr;
-    }
-    return live;
-}
-
 void SamplerEngine::process(float& outL, float& outR) {
 #if defined(SPKY_PROBE_MARKS)
     // Callback profile only (sampler_engine.h, ProbeEng): five stamps.
@@ -949,24 +934,25 @@ void SamplerEngine::process(float& outL, float& outR) {
 #if defined(SPKY_PROBE_MARKS)
     const uint32_t pt2 = *pclk;
     _probe_eng.sched += pt2 - pt1;
+    uint32_t plive = 0;                      // grains active after the loop
 #endif
 
     // --- the cloud ---
     float l = 0.f, r = 0.f;
-#if defined(SPKY_PROBE_TOGGLES)
-    // G3 (toggle bit 23): the loop with read_linear inlined, or the loop
-    // calling it. One test a sample on a member, outside the loop.
-    const uint32_t live = probe::on(_probe_word, probe::kBitGrainReadInline)
-                              ? _cloud<true>(l, r) : _cloud<false>(l, r);
-#else
-    const uint32_t live = _cloud<true>(l, r);
+    for (int i = 0; i < kGrains; ++i) {
+        if (!_grains[i].active()) continue;
+        float gl = 0.f, gr = 0.f;
+        _grains[i].process(_buf, gl, gr);
+#if defined(SPKY_PROBE_MARKS)
+        plive += _grains[i].active() ? 1u : 0u;
 #endif
+        l += gl;
+        r += gr;
+    }
 #if defined(SPKY_PROBE_MARKS)
     const uint32_t pt3 = *pclk;
     _probe_eng.grains += pt3 - pt2;
-    _probe_eng.gsamp += live;
-#else
-    (void)live;
+    _probe_eng.gsamp += plive;
 #endif
 
     // Overlap normalization (1/sqrt(active)): the target is recomputed once

@@ -16,9 +16,7 @@ contain (a stale name would silently undo the placement), so the list cannot
 name all of them in every build. SOURCE_LD (shell/itcm_hot.ld) carries a marker
 line in place of the tank's entries; this writes OUTPUT_LD = SOURCE_LD with the
 marker line replaced by the entries for this build. The link and the placement
-guard read OUTPUT_LD. A second marker line stands for SampleBuffer::
-read_linear_call, which only the measurement image holds (CPU round 2, G3); it
-becomes that entry there and nothing elsewhere.
+guard read OUTPUT_LD.
 
 It runs while the Makefile is parsed, before any rule has created build/. The
 other thing the state decides is which code every object holds (the member
@@ -33,12 +31,6 @@ import sys
 from pathlib import Path
 
 MARKER = "@REVERB_TANK@"
-# G3 (CPU round 2): read_linear is inline in the grain loop, so the default
-# image has no such symbol; the measurement image (SHELL_REMOTE_MEASURE=1) keeps
-# the out-of-line copy that toggle bit 23 selects, placed in ITCM as read_linear
-# was. Its marker line is dropped from every other image.
-MARKER_CALL = "@READ_LINEAR_CALL@"
-CALL = "    *(.text._ZNK4spky12SampleBuffer16read_linear_callEfRfS1_)          /*  244 */\n"
 IMPL1 = "    *(.text._ZN6clouds7Oliverb11ProcessImplILi1EEEvPfS2_)              /* 2800 */\n"
 IMPL2 = "    *(.text._ZN6clouds7Oliverb11ProcessImplILi2EEEvPfS2_)              /* 2864 */\n"
 
@@ -54,20 +46,15 @@ def run() -> int:
     lines = text.splitlines(keepends=True)
     out = []
     replaced = 0
-    replaced_call = 0
     for line in lines:
         if MARKER in line:
             out.append(entries)
             replaced += 1
-        elif MARKER_CALL in line:
-            out.append(CALL if measure else "")
-            replaced_call += 1
         else:
             out.append(line)
-    for marker, found in ((MARKER, replaced), (MARKER_CALL, replaced_call)):
-        if found != 1:
-            raise SystemExit("%s must carry exactly one %s marker line (found %d)"
-                             % (source, marker, found))
+    if replaced != 1:
+        raise SystemExit("%s must carry exactly one %s marker line (found %d)"
+                         % (source, MARKER, replaced))
     content = "".join(out)
     output.parent.mkdir(parents=True, exist_ok=True)
     if not output.is_file() or output.read_text(encoding="utf-8") != content:

@@ -243,14 +243,4 @@ void SampleBuffer::clear() {
     _cut.set_on(false, true);
 }
 
-#if defined(SPKY_PROBE_TOGGLES)
-// The old shape of read_linear, a function of its own that the grain loop
-// calls (bit 23 clear). noinline keeps the body from being folded back into
-// the caller; the body is the header's, so the two shapes cannot drift.
-__attribute__((noinline))
-void SampleBuffer::read_linear_call(float frame, float& out0, float& out1) const {
-    read_linear(frame, out0, out1);
-}
-#endif
-
 }  // namespace spky

@@ -38,12 +38,6 @@ public:
     // (synth/wt_osc.h): the one call site must not be left to the heuristics.
     __attribute__((always_inline)) inline
     void read_linear(float frame, float& out0, float& out1) const;
-#if defined(SPKY_PROBE_TOGGLES)
-    // Measurement image only (toggle bit 23): the same read behind a call,
-    // placed in ITCM as read_linear was (shell/itcm_hot.ld), so the grain loop
-    // can run either shape in one image.
-    void read_linear_call(float frame, float& out0, float& out1) const;
-#endif
 
     // --- transport ---
     void set_recording(bool on);

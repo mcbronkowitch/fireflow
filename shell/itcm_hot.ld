@@ -52,7 +52,7 @@ SECTIONS
     *(.text._ZN4spky9BodyVoice7processERfS1_)                          /* 1222 */
     *(.text._ZN4spky12SampleBuffer5writeEff)                           /* 1188 */
     *(.text._ZN4spky6PartFx7processERfS1_S1_S1_)                       /* 1142 */
-    *(.text._ZN4spky13SamplerEngine7processERfS1_)                     /* 1100 */
+    *(.text._ZN4spky13SamplerEngine7processERfS1_)                     /* 1324 */
     *(.text._ZN4spky7ModLane7processEv)                                /* 1056 */
     *(.text._ZN4spky13AmbientReverb7processEffRfS1_)                   /* 2592 with SHELL_REVERB_HALF=1 (the default: half-rate path, converters inlined); 920 with SHELL_REVERB_HALF=0 */
     *(.text._ZN4spky8KsString7processEf)                               /*  848 */
@@ -71,7 +71,6 @@ SECTIONS
     *(.text._ZN4spky7ModLane11_start_noteEi)                           /*  332 */
     *(.text._ZN4spky8SliceMap8on_writeEjff)                            /*  214 */
     *(.text._ZN7daisysp9CrossFade7ProcessERfS1_)                       /*  212 */
-    /* @READ_LINEAR_CALL@ -- read_linear is inline in the grain loop now (G3), so it is no symbol; the measurement image alone still holds SampleBuffer::read_linear_call (244 B as read_linear was, toggle bit 23 clear), written by write_shell_reverb_half.py like the tank above. */
     *(.text._ZN7daisysp17SampleRateReducer7ProcessEf)                  /*  148 */
     *(.text._ZN7daisysp9Overdrive7ProcessEf)                           /*  106 */
     *(.text._ZN4spky14TestToneEngine7processERfS1_)                    /*   96 */

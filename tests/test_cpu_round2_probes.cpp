@@ -4,12 +4,11 @@
 // as the measurement image is; the default build has neither, so these cases
 // could not fail there. The stamp clock is test_probe_marks.cpp's
 // (spky::probe_clock); these cases count, they do not time.
-// Also the toggle bits' plumbing for the round's candidates (bits 19, 22 and
-// 23 on), whose two paths can only both be compiled here.
+// Also the toggle bits' plumbing for the round's candidates (bits 19 and 22
+// on), whose two paths can only both be compiled here.
 #include <doctest/doctest.h>
 #include <cmath>
 #include <cstdint>
-#include <cstring>
 #include <vector>
 #include "sampler/sampler_engine.h"
 #include "synth/synth_engine.h"
@@ -137,34 +136,6 @@ TEST_CASE("G2 bit 22 reaches the grains, and the deck plays either way") {
     CHECK(worst > 0.0);          // the bit reached the window
     CHECK(worst < 1e-5);         // and changed it by rounding only
     CHECK(worst_other == 0.0);   // no other bit does
-}
-
-TEST_CASE("G3 bit 23: the grain loop renders the same bits inlined and through the call") {
-    // Same seed, so the same spawns; a class-1 candidate, so every sample of
-    // the cloud is bit-identical between the two shapes of the read.
-    auto render = [](uint32_t word) {
-        SamplerRig g;
-        g.e.set_probe_word(word);
-        std::vector<float> out;
-        for (int i = 0; i < 19200; ++i) {
-            float l = 0.f, r = 0.f;
-            g.e.process(l, r);
-            out.push_back(l);
-            out.push_back(r);
-        }
-        return out;
-    };
-    const std::vector<float> call   = render(0u);
-    const std::vector<float> inl    = render(1u << spky::probe::kBitGrainReadInline);
-    REQUIRE(call.size() == inl.size());
-    double sig = 0.0;
-    size_t differ = 0;
-    for (size_t i = 0; i < call.size(); ++i) {
-        sig += double(call[i]) * call[i];
-        differ += std::memcmp(&call[i], &inl[i], sizeof(float)) != 0;
-    }
-    CHECK(sig > 1.0);        // the deck sounded, through the call
-    CHECK(differ == 0);
 }
 
 TEST_CASE("V6 bit 19: a SYNTH deck through the one-pass filter stays within rounding of the two-pass one") {
