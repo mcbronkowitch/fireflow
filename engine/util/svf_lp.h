@@ -102,9 +102,10 @@ public:
     // ---- One pass per sample (CPU round 2, candidate V6; class 2) ----------
     // Compiled only in the measurement image (SPKY_PROBE_TOGGLES, toggle bit
     // 19) and with the firmware switch SHELL_LEAN_SVF1=1 (SPKY_LEAN_SVF1).
-    // Every other build -- desktop, VCV, the default firmware -- has none of
-    // it, and Process() above is the same in all of them. Only the voice
-    // switches it on (synth/voice.cpp); SamplerEngine's and FeedEngine's
+    // Every other build -- desktop, VCV, and a firmware built with
+    // SHELL_LEAN_SVF1=0 -- has none of it, and Process() above is the same in
+    // all of them (the default firmware has it: the switch is on). Only the
+    // voice switches it on (synth/voice.cpp); SamplerEngine's and FeedEngine's
     // filters stay two-pass in every build.
     //
     // It is the same filter, not a better one: Process()'s two steps folded

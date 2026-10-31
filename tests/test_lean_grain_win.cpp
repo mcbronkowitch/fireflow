@@ -9,13 +9,11 @@
 // Both play the same constant buffer at ratio 0, so a grain's output is its
 // window times its two pan gains: the cases compare outputs, which bounds the
 // window difference from above (the gains are at most 1).
-// SPKY_G2_PRINT=1 in the environment prints the measured maximum.
+// The measured maxima ride along as CAPTUREs.
 #include <doctest/doctest.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <cstdio>
-#include <cstdlib>
 #include <random>
 #include <vector>
 #include "sampler/grain.h"
@@ -123,14 +121,6 @@ struct FlatBuf {
     }
 };
 
-bool print_on() {
-    static const bool on = std::getenv("SPKY_G2_PRINT") != nullptr;
-    return on;
-}
-
-// The worst difference seen over all cases, for the report.
-float g_worst = 0.f;
-
 struct Pair {
     Grain    n;      // the candidate (SPKY_LEAN_GRAIN_WIN=1 in this target)
     OldGrain o;
@@ -156,16 +146,11 @@ struct Pair {
     }
 };
 
-void note(const char* what, const Pair& p) {
-    g_worst = std::fmax(g_worst, p.worst);
-    if (print_on()) std::printf("G2 %-24s max |new - old| = %.3g over %ld samples\n",
-                                what, double(p.worst), p.steps);
-}
-
 } // namespace
 
 TEST_CASE("G2: window within 1e-6 of the dividing window") {
     FlatBuf f;
+    double grid_dev = 0.0;      // the deviation summed over the grid
     // Every _i of a grain, for atk and dec over the whole grid; 7 samples of
     // plateau between the halves.
     for (int atk : kSizes) {
@@ -178,9 +163,14 @@ TEST_CASE("G2: window within 1e-6 of the dividing window") {
             CHECK(p.worst <= kTol);
             CHECK(p.same_active);
             CHECK_FALSE(p.n.active());          // the same lifetime
-            note("grid", p);
+            grid_dev += p.worst;
         }
     }
+    // The lean arm is the one in use: the reciprocal windows are not the
+    // dividing ones bit for bit, so across the grid some sample differs (by at
+    // most the 1e-6 above). A grain that still divided would read exactly 0.
+    CAPTURE(grid_dev);
+    CHECK(grid_dev > 0.0);
     // Spawns whose halves do not fit (scaled down at spawn), and a grain with
     // no plateau at all.
     const int odd[][3] = { {50, 30, 40}, {2, 9, 9}, {1000, 1000, 1000}, {96000, 96000, 96000},
@@ -193,7 +183,6 @@ TEST_CASE("G2: window within 1e-6 of the dividing window") {
         CHECK(p.worst <= kTol);
         CHECK(p.same_active);
         CHECK_FALSE(p.n.active());
-        note("scaled", p);
     }
 }
 
@@ -303,6 +292,8 @@ TEST_CASE("G2: releases and trims at random points stay within 1e-6 and retire t
         all.worst = std::fmax(all.worst, p.worst);
         all.steps += p.steps;
     }
-    note("releases and trims", all);
-    if (print_on()) std::printf("G2 overall max |new - old| = %.3g\n", double(g_worst));
+    // Releases and trims reach the new divisors too: the reciprocal fade also
+    // differs from the dividing one somewhere.
+    CAPTURE(all.worst);
+    CHECK(all.worst > 0.f);
 }

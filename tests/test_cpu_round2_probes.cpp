@@ -4,13 +4,11 @@
 // as the measurement image is; the default build has neither, so these cases
 // could not fail there. The stamp clock is test_probe_marks.cpp's
 // (spky::probe_clock); these cases count, they do not time.
-// Also the toggle bits' plumbing for the round's candidates (bits 19 and 22
-// on), whose two paths can only both be compiled here.
+// Also the toggle bits' plumbing for the round's candidates (bits 19, 22
+// and 25), whose two paths can only both be compiled here.
 #include <doctest/doctest.h>
 #include <cmath>
 #include <cstdint>
-#include <cstdio>
-#include <cstdlib>
 #include <vector>
 #include "sampler/sampler_engine.h"
 #include "synth/synth_engine.h"
@@ -161,11 +159,11 @@ void check_exp2_pitch_stable(const char* name) {
             finite = finite && std::isfinite(on[i]);
         }
         const int n_off = rising_crossings(off), n_on = rising_crossings(on);
-        if (std::getenv("SPKY_V5_PRINT"))
-            std::printf("V5 %s detune %.1f: crossings off %d on %d, worst sample diff %.3g\n",
-                        name, double(detune), n_off, n_on, worst);
         CAPTURE(name);
         CAPTURE(detune);
+        CAPTURE(n_off);
+        CAPTURE(n_on);
+        CAPTURE(worst);
         CHECK(finite);
         CHECK(sig > 1.0);          // the deck sounded
         CHECK(n_off > 100);        // and was a pitched tone, so the count is not 0 == 0

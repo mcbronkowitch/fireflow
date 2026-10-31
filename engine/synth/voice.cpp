@@ -98,7 +98,7 @@ template <class OscT>
 void VoiceT<OscT>::set_drift_amount(float a){ _drift_amt = clampf(a, 0.f, 1.f); }
 
 template <class OscT>
-void VoiceT<OscT>::_apply_freq() {                // control-rate (std::pow inside)
+void VoiceT<OscT>::_apply_freq() {                // control-rate (std::pow inside on desktop/VCV, fast_exp2 in the firmware)
     const float half = _detune_ct * 0.5f;
     _osc_a.set_detune_cents(half + _drift_ct_cur);
     _osc_b.set_detune_cents(-half - _drift_ct_cur);

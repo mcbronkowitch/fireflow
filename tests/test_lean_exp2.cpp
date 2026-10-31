@@ -5,12 +5,9 @@
 // SHELL_LEAN_EXP2=1 firmware is. The old path's reference here is std::pow
 // itself, called by the test; the engine-level old-against-new comparison
 // needs both paths in one binary and lives in tests/test_cpu_round2_probes.cpp
-// (toggle bit 25). SPKY_V5_PRINT=1 in the environment prints the measured
-// numbers.
+// (toggle bit 25). The measured numbers ride along as CAPTUREs.
 #include <doctest/doctest.h>
 #include <cmath>
-#include <cstdio>
-#include <cstdlib>
 #include <limits>
 #include <vector>
 #include "synth/morph_osc.h"
@@ -21,11 +18,6 @@
 namespace {
 
 constexpr float kSr = 48000.f;
-
-bool print_on() {
-    static const bool on = std::getenv("SPKY_V5_PRINT") != nullptr;
-    return on;
-}
 
 // The error of a ratio r against its reference, in cents.
 double cents_off(double r, double ref) { return 1200.0 * std::log2(r / ref); }
@@ -82,10 +74,10 @@ TEST_CASE("V5: fast_exp2 within 0.01 ct of std::pow(2, x)") {
     probe(-0.1f);
     probe(0.1f);
     for (int i = -100000; i <= 100000; ++i) probe(float(i) * 1e-6f);
-    if (print_on())
-        std::printf("V5 sweep: worst relative error %.3g (%.5f ct) at x = %g; "
-                    "against float std::pow %.5f ct\n",
-                    worst_rel, worst_ct, double(worst_at), worst_old_ct);
+    CAPTURE(worst_rel);
+    CAPTURE(worst_ct);
+    CAPTURE(worst_at);
+    CAPTURE(worst_old_ct);
     CHECK(worst_rel <= 5.8e-6);      // 0.01 ct
     CHECK(worst_ct <= 0.01);
     CHECK(worst_old_ct <= 0.01);
@@ -145,7 +137,7 @@ TEST_CASE("V5: both oscillators keep their pitch, zero-crossing count over 1 s")
             m.set_freq(f);
             const int want = reference_crossings(f, ct);
             const int got_m = rising_crossings(m);
-            if (print_on()) std::printf("V5 morph f=%g ct=%g: %d (want %d)\n", double(f), double(ct), got_m, want);
+            CAPTURE(f); CAPTURE(ct); CAPTURE(got_m); CAPTURE(want);
             CHECK(got_m == want);
 
             // WtOsc frame 0 at position 0: set_morph(0) is the default; its
@@ -155,7 +147,7 @@ TEST_CASE("V5: both oscillators keep their pitch, zero-crossing count over 1 s")
             w.set_detune_cents(ct);
             w.set_freq(f);
             const int got_w = rising_crossings(w);
-            if (print_on()) std::printf("V5 wt    f=%g ct=%g: %d (want %d)\n", double(f), double(ct), got_w, want);
+            CAPTURE(got_w);
             CHECK(got_w == want);
         }
     }

@@ -53,9 +53,10 @@ IMAGES = [
     # LATE and the candidate toggles, with the probe stamps on.
     ("reva_remote_measure", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
                              "SHELL_REMOTE_MEASURE=1"]),
-    # The two class-2 CPU savings are ON in every image above (SHELL_REVERB_HALF
-    # and SHELL_FAST_MATH default to 1; shell/README.md, "Turning a CPU saving
-    # back"). Their switches back, in the listener image:
+    # Five class-2 CPU savings are ON in every image above (SHELL_REVERB_HALF,
+    # SHELL_FAST_MATH and the three SHELL_LEAN_* switches default to 1;
+    # shell/README.md, "Turning a CPU saving back"). The first two switched
+    # back, in the listener image (the lean three have their own entry below):
     ("reva_remote_off", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
                          "SHELL_REVERB_HALF=0", "SHELL_FAST_MATH=0"]),
     # The measurement image with BOTH reverb tanks (toggle bit 9 selects).

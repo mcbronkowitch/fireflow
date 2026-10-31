@@ -119,7 +119,7 @@ SRAM image over the other build's QSPI image stays dark. Use `images`, not
 
 | Switch | Default | What it does | Turn it back |
 |---|---|---|---|
-| `SHELL_REVERB_HALF` | `1` | the reverb's tank runs at 24 kHz between two halfband filters (a cheaper reverb; a duller top above ~4 kHz, same decay, size and wobble) | `SHELL_REVERB_HALF=0` added to the image's flags -- the full-rate reverb code, as it was before. The engine is still compiled with `-ffast-math` then, so for the pre-hunt build (the build before the CPU hunt's class-2 savings) add `SHELL_FAST_MATH=0` too |
+| `SHELL_REVERB_HALF` | `1` | the reverb's tank runs at 24 kHz between two halfband filters (a cheaper reverb; a duller top above ~4 kHz, same decay, size and wobble) | `SHELL_REVERB_HALF=0` added to the image's flags -- the full-rate reverb code, as it was before. The engine is still compiled with `-ffast-math` then, so for the pre-hunt build (the build before the CPU hunt's class-2 savings) add `SHELL_FAST_MATH=0` too, and `SHELL_LEAN_SVF1=0 SHELL_LEAN_GRAIN_WIN=0 SHELL_LEAN_EXP2=0` for the second round's three lean savings (below) |
 | `SHELL_FAST_MATH` | `1` | the engine (only `engine/`, not libDaisy or the shell) is compiled with `-ffast-math -fno-finite-math-only` | `SHELL_FAST_MATH=0` added to the image's flags |
 
 `SHELL_FAST_MATH=2` (full `-ffast-math`) exists only to prove the guard check:

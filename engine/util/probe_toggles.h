@@ -117,12 +117,16 @@
 //                                                        fast_sin_wrapped, no
 //                                                        second floor wrap, bit-
 //                                                        identical)
-//   19   LEAN_SVF1            engine/util/svf_lp.h,      candidate V6 (round 2,
-//                             engine/synth/voice.cpp     class 2): SYNTH and
+//   19   LEAN_SVF1            engine/util/svf_lp.h,      V6 (round 2, class 2),
+//                             engine/synth/voice.cpp     accepted: on by default
+//                                                        in the firmware
+//                                                        (2026-10-31). SYNTH and
 //                                                        WAVE voices filter in
 //                                                        one pass
 //                                                        (SvfLp::ProcessSingle);
-//                                                        the firmware switch is
+//                                                        the old path is bit 0
+//                                                        here; the firmware
+//                                                        switch is
 //                                                        SHELL_LEAN_SVF1
 //   20   GRAIN_FOLD_FAST      engine/sampler/            RETIRED: adopted, the
 //                             sample_buffer.cpp          only path now (round 2
@@ -140,14 +144,17 @@
 //                                                        cycles per grain-sample,
 //                                                        not worth clipping the
 //                                                        overdub at full scale
-//   22   LEAN_GRAIN_WIN       engine/sampler/grain.h     candidate G2 (round 2,
-//                                                        class 2): a grain's
+//   22   LEAN_GRAIN_WIN       engine/sampler/grain.h     G2 (round 2, class 2),
+//                                                        accepted: on by default
+//                                                        in the firmware
+//                                                        (2026-10-31). A grain's
 //                                                        Hann window multiplies
 //                                                        by 1/atk, 1/dec, 1/fade
 //                                                        latched at spawn and at
 //                                                        release instead of
 //                                                        dividing per sample; the
-//                                                        firmware switch is
+//                                                        old path is bit 0 here;
+//                                                        the firmware switch is
 //                                                        SHELL_LEAN_GRAIN_WIN
 //   23   GRAIN_READ_INLINE    engine/sampler/            RETIRED: adopted, the
 //                             sample_buffer.h            only path now (round 2
@@ -165,14 +172,17 @@
 //                                                        313, 314 (most
 //                                                        crossfades are not
 //                                                        strikes from silence)
-//   25   LEAN_EXP2            engine/synth/morph_osc.h,  candidate V5 (round 2,
-//                             engine/synth/wt_osc.h      class 2): the detune
+//   25   LEAN_EXP2            engine/synth/morph_osc.h,  V5 (round 2, class 2),
+//                             engine/synth/wt_osc.h      accepted: on by default
+//                                                        in the firmware
+//                                                        (2026-10-31). The detune
 //                                                        ratio 2^(ct / 1200) of
 //                                                        a SYNTH or WAVE voice's
 //                                                        oscillators from
 //                                                        util/fast_exp2.h, not
-//                                                        std::pow; the firmware
-//                                                        switch is
+//                                                        std::pow (the old path,
+//                                                        bit 0 here); the
+//                                                        firmware switch is
 //                                                        SHELL_LEAN_EXP2
 //   26-29 (free: candidates; bits 0-25 are never reused)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE

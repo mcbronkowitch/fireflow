@@ -7,16 +7,17 @@
 //
 // The reference is the two-pass filter itself, measured here with the same
 // 8 192-sample sine sweeps as the candidate; no curve below is assumed.
-// SPKY_V6_PRINT=1 in the environment prints the measured table.
+// The measured table rides along as CAPTUREs.
 #include <doctest/doctest.h>
 #include <algorithm>
 #include <cmath>
 #include <complex>
 #include <cstdint>
-#include <cstdio>
-#include <cstdlib>
 #include <vector>
+#include "util/fast_sin.h"
 #include "util/svf_lp.h"
+#include "synth/env.h"
+#include "synth/morph_osc.h"
 #include "synth/voice.h"
 
 namespace {
@@ -29,11 +30,6 @@ constexpr double kPi    = 3.14159265358979323846;
 // near its top cutoff with some resonance it never falls 3 dB below DC. Its
 // cutoff then reads as kTop, and the candidate must read kTop too.
 constexpr double kTop   = 23900.0;
-
-bool print_on() {
-    static const bool on = std::getenv("SPKY_V6_PRINT") != nullptr;
-    return on;
-}
 
 // Gain at `hz` of a filter set to (fc, res): an 8 192-sample unit sine from
 // rest, read as one DFT bin over the last 4 096 samples under a Hann window.
@@ -126,12 +122,6 @@ const std::vector<Point>& table() {
         for (float res : kRes)
             for (float fc : kFc)
                 v.push_back({ res, fc, measure(fc, res, false), measure(fc, res, true) });
-        if (print_on())
-            for (const Point& p : v)
-                std::printf("V6 res %.2f fc %6.0f | two-pass peak %7.3f dB cut %8.1f Hz"
-                            " | one-pass peak %7.3f dB cut %8.1f Hz | dpeak %+.4f dB dcut %+.4f %%\n",
-                            p.res, p.fc, p.two.peak_db, p.two.cut_hz, p.one.peak_db, p.one.cut_hz,
-                            p.one.peak_db - p.two.peak_db, 100.0 * (p.one.cut_hz / p.two.cut_hz - 1.0));
         return v;
     }();
     return t;
@@ -288,4 +278,56 @@ TEST_CASE("V6: a SHELL_LEAN_SVF1 voice filters in one pass") {
     spky::Voice v;
     v.init(kSr, 7u);
     CHECK(v.svf_single_pass());
+}
+
+TEST_CASE("V6: a SHELL_LEAN_SVF1 voice's samples are the two-pass voice's up to rounding, and not equal to them") {
+    // The flag above says the filter is switched; this is the voice's own
+    // process() calling ProcessSingle. The reference is the voice rebuilt in
+    // the test from its public parts with the two-pass Process(): two
+    // oscillators and the sub sine at 220 Hz (the voice's init defaults, drift
+    // and detune 0), an SvfLp at the init's 2 kHz / 0.15, the envelope, the
+    // centred pan. A voice that still called Process() would match it bit for
+    // bit (diff == 0); a different one-pass algebra would miss it by far more
+    // than -80 dB.
+    constexpr float kHz = 220.f;
+    spky::Voice v;
+    v.init(kSr, 7u);
+    v.trigger(kHz);
+
+    spky::MorphOsc a, b;
+    a.init(kSr); b.init(kSr);
+    a.set_freq(kHz); b.set_freq(kHz);
+    spky::SvfLp ref;
+    ref.Init(kSr);
+    ref.SetFreq(2000.f);
+    ref.SetRes(0.15f);
+    spky::Env env;
+    env.init(kSr);
+    env.trigger();
+    const float gl = spky::fast_sin(0.125f * (0.f + 1.f) + 0.25f);   // update_control(0), pan 0
+    float sub_phase = 0.f;
+    const float sub_inc = 0.5f * kHz / kSr, sub_level = 0.3f;
+
+    double sig = 0.0, diff = 0.0, max_gap = 0.0;
+    for (int i = 0; i < 9600; ++i) {
+        float lean_l = 0.f, lean_r = 0.f;
+        v.process(lean_l, lean_r);
+
+        float s = 0.5f * (a.process() + b.process());
+        sub_phase += sub_inc;
+        if (sub_phase >= 1.f) sub_phase -= 1.f;
+        s += sub_level * spky::fast_sin_wrapped(sub_phase);
+        ref.Process(s);
+        const float ref_l = ref.Low() * env.process() * 1.f * gl;
+
+        sig += double(ref_l) * ref_l;
+        diff += (double(lean_l) - ref_l) * (double(lean_l) - ref_l);
+        max_gap = std::max(max_gap, (double)std::fabs(double(lean_l) - ref_l));
+    }
+    CAPTURE(sig);
+    CAPTURE(diff);
+    CAPTURE(max_gap);
+    CHECK(sig > 1.0);            // the voice sounded
+    CHECK(diff > 0.0);           // and it is NOT the two-pass filter's bits
+    CHECK(diff < 1e-8 * sig);    // but within -80 dB of it
 }

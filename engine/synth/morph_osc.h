@@ -16,7 +16,8 @@ namespace spky {
 // by ear, not a requirement.
 //
 // Audio path uses fast_sin only (no libm sinf - CPU budget constraint).
-// set_detune_cents uses std::pow: control-rate only, never per sample.
+// set_detune_cents uses std::pow on desktop and VCV and util/fast_exp2.h in
+// the firmware (SHELL_LEAN_EXP2): control-rate only, never per sample.
 class MorphOsc {
 public:
     void init(float sample_rate) {
