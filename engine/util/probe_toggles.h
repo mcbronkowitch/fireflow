@@ -127,7 +127,9 @@
 //   20   GRAIN_FOLD_FAST      engine/sampler/            candidate G1 (round 2,
 //                             sample_buffer.cpp          class 1): read_linear
 //                                                        skips the fold for a
-//                                                        frame inside (0, size),
+//                                                        frame inside (0, 2 size)
+//                                                        (a select for the
+//                                                        second period),
 //                                                        bit-identical
 //   21-29 (free: candidates; bits 0-20 are never reused)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE

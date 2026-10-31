@@ -273,12 +273,18 @@ struct G1Buf {
     explicit G1Buf(size_t n) : mem(n) {
         Noise nz;
         for (auto& f : mem) { f.l = nz.next(); f.r = nz.next(); }
+        // Frame 1 stays noise: with two zero frames side by side an
+        // interpolation cannot show a wrong frac.
         mem[0].l = -0.f;  mem[0].r = 0.f;
-        if (n > 1) { mem[1].l = 0.f;   mem[1].r = -0.f; }
-        mem[n / 2].l = -0.f;  mem[n / 2].r = -0.f;
-        mem[n - 1].l = -0.f;  mem[n - 1].r = -0.f;
+        if (n > 3) { mem[n / 2].l = -0.f;  mem[n / 2].r = -0.f; }
+        if (n > 2) { mem[n - 1].l = -0.f;  mem[n - 1].r = -0.f; }
         buf.init(mem.data(), n, 48000.f);
         buf.set_rec_size(n);
+#if defined(SPKY_PROBE_TOGGLES)
+        // A probe build runs the old fold until bit 20 is handed down; without
+        // this the test would compare the old path with itself.
+        buf.set_probe_word(1u << probe::kBitGrainFoldFast);
+#endif
     }
 };
 
@@ -312,7 +318,7 @@ TEST_CASE("G1: read_linear bit-identical") {
     // frames either side of the seam, and the guard's own cases.
     const float inf = std::numeric_limits<float>::infinity();
     const float nan = std::numeric_limits<float>::quiet_NaN();
-    const size_t sizes[] = { 24000, 1000, 16384, 32767, 3, 1, 2016000 };
+    const size_t sizes[] = { 24000, 1000, 16384, 32767, 3, 2, 1, 239808, 2016000 };
     for (size_t sz : sizes) {
         G1Buf e(sz);
         const float f = (float)sz;
@@ -321,6 +327,7 @@ TEST_CASE("G1: read_linear bit-identical") {
             -0.f, 0.f, -1e-7f, 1e-7f, std::nextafter(0.f, -1.f), std::nextafter(0.f, 1.f),
             std::nextafter(0.f, 1.f) * 4.f, 1.f, 0.5f, -1.f, -f, std::nextafter(-f, 0.f),
             std::nextafter(-f, -inf), 2.f * f, std::nextafter(2.f * f, 0.f),
+            std::nextafter(2.f * f, inf), 2.f * f - 1.f, 2.f * f + 1.f, 1.5f * f, 3.f * f,
             1e9f, -1e9f, 1e8f, -1e8f, inf, -inf, nan };
         for (float x : edges) {
             CAPTURE(sz);
@@ -329,7 +336,7 @@ TEST_CASE("G1: read_linear bit-identical") {
         }
         // Every float within 64 ulps of size, of 0 and of both ends of the
         // fold's first period.
-        const float centres[] = { f, 0.f, -f, 0.5f * f };
+        const float centres[] = { f, 0.f, -f, 0.5f * f, 2.f * f, 1.5f * f };
         for (float c : centres) {
             float up = c, dn = c;
             for (int k = 0; k < 64; ++k) {
@@ -339,6 +346,16 @@ TEST_CASE("G1: read_linear bit-identical") {
                 dn = std::nextafter(dn, -inf);
             }
         }
+        // The first two periods at 0.37 and at random floats: every rounding
+        // of frame - fsz in [fsz, 2 fsz) and of frame / fsz near the seams.
+        int bad_sweep = 0;
+        for (float x = 0.37f; x < 2.2f * f; x += 0.37f)
+            bad_sweep += g1_mismatch(e.buf, x);
+        Noise rn;
+        for (int i = 0; i < 200000; ++i)
+            bad_sweep += g1_mismatch(e.buf, (0.5f * rn.next() + 0.5f) * 2.5f * f);
+        CAPTURE(sz);
+        CHECK(bad_sweep == 0);
     }
 
     // set_rec_size shrinks the content under positions latched against the

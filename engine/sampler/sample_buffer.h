@@ -90,7 +90,7 @@ private:
     // no-op there.
     size_t  _fadeout_resume_head = 0;
 #if defined(SPKY_PROBE_TOGGLES)
-    bool    _fold_fast = false;   // bit 20: read_linear skips the fold inside (0, size)
+    bool    _fold_fast = false;   // bit 20: read_linear skips the fold inside (0, 2 size)
 #endif
 };
 

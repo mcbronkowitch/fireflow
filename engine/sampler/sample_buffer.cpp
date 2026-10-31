@@ -266,18 +266,29 @@ void SampleBuffer::read_linear(float frame, float& out0, float& out1) const {
     // VRINTM on the Daisy's Cortex-M7 FPv5 -- not a libm call, and cheaper
     // than the loop even in the common case.
     //
-    // A frame already inside (0, fsz) skips the fold altogether (G1, round 2,
-    // bit-identical): there frame / fsz is correctly rounded and monotone, and
-    // even the float below fsz divides to at most 1 - 2^-24, so floor() is 0
-    // and the fold would hand back the same frame. Zero is left to the fold
-    // on purpose: -0.f comes out of it as +0.f, and a bare >= 0 test would
-    // pass -0.f on with its sign, which flips the sign of a zero in frac.
+    // A frame inside (0, 2 fsz) skips the divide and the floor (G1, round 2,
+    // bit-identical). Below fsz, frame / fsz is correctly rounded and
+    // monotone, and even the float below fsz divides to at most 1 - 2^-24, so
+    // floor() is 0 and the fold would hand back the same frame. From fsz up to
+    // 2 fsz it is 1 -- the float below 2 fsz divides to at most 2 - 2^-23 --
+    // and the fold's `frame - fsz * 1.f` is frame - fsz, exact there. Past the
+    // end of the recording is where a long grain or a high pitch lands, so it
+    // has its own arm, and the choice is a select on the sign of frame - fsz,
+    // not a branch: the pattern can alternate from read to read, and a branch
+    // on frame >= fsz (written as a ?: on the subtract or on its operand) came
+    // out as a conditional branch on the Daisy toolchain, this form as a
+    // conditional move (vcmpe, it pl, vmovpl). Zero is left to the fold on purpose:
+    // -0.f comes out of it as +0.f, and a bare >= 0 test would pass -0.f on
+    // with its sign, which flips the sign of a zero in frac.
 #if defined(SPKY_PROBE_TOGGLES)
-    const bool inside = _fold_fast && frame > 0.f && frame < fsz;
+    const bool inside = _fold_fast && frame > 0.f && frame < 2.f * fsz;
 #else
-    const bool inside = frame > 0.f && frame < fsz;
+    const bool inside = frame > 0.f && frame < 2.f * fsz;
 #endif
-    if (!inside) {
+    if (inside) {
+        const float d = frame - fsz;
+        frame = std::signbit(d) ? frame : d;
+    } else {
         frame -= fsz * std::floor(frame / fsz);
         // BEIDE Kanten hier, vor i0 und frac, und nicht nur i0 spaeter: bei
         // grossem fsz rundet fsz - epsilon in float32 auf exakt fsz, was ein
