@@ -497,7 +497,19 @@ def test_tail_report():
     check("tail report: a missing kind fails and is named",
           code == 1 and "randfs" in text and "missing" in text)
     code, text = run(tail_capture(["seq", "rand", "randfs"], fr={"rand": 1}))
-    check("tail report: an error fails and is named", code == 1 and "rand" in text and "error" in text)
+    check("tail report: an error fails and is named",
+          code == 1 and "  rand: error (fr=1 at seq=" in text)
+    # A failure before the first kind has its own name, not the first kind's.
+    fill_err = tail_capture([]) + [l + "\n" for l in h_interval("fill", 0, [0] * 16, 0, fr=5)]
+    code, text = run(fill_err)
+    check("tail report: a fill error is reported as fill, not as seq",
+          code == 1 and "  fill: error (fr=5 at seq=0)" in text and "seq: error" not in text)
+    setup_err = tail_capture([]) + [l + "\n" for l in h_interval("setup", 0, [0] * 16, 0, fr=-3)]
+    code, text = run(setup_err)
+    check("tail report: no card-test file is reported as setup",
+          code == 1 and "  setup: error (fr=-3 at seq=0)" in text)
+    t = read_sd.tails(h_interval("fill", 0, [0] * 16, 0, fr=5))
+    check("tails: fill is a kind of its own", list(t) == ["fill"] and t["fill"]["error"].startswith("fr=5"))
     code, _ = run([l for l in tail_capture(["seq", "rand", "randfs"]) if "SHELL_SD verify" not in l])
     check("tail report: a failed card test fails", code == 1)
 

@@ -327,6 +327,7 @@ TAIL_BUCKETS = 16
 TAIL_BUCKET_US = 64          # sd_probe.cpp: bucket i is [2^i, 2^(i+1)) x 64 us, 0 from 0, 15 open
 READ_KINDS = ("seq", "rand", "randfs")    # rtail's phases
 WRITE_KINDS = ("w16", "w24", "wmax")      # wtail's phases
+SETUP_KINDS = ("setup", "fill")           # failures before the first phase (sd_probe.cpp tail_emit)
 RING_RATE_KIB_S = {"read": 384, "write": 288}   # float stereo / 24-bit stereo, spec C1 / C2
 RING_STEP_KIB = 32           # one transfer
 
@@ -460,6 +461,14 @@ def tail_report(lines, out, card_ok):
           % ("writes" if family is WRITE_KINDS else "reads", TAIL_BUCKET_US, TAIL_BUCKETS - 1),
           file=out)
     failed = False
+    # A failure before the first kind: the rtail fill (and its early CLMT look)
+    # prints as kind=fill, a missing card-test file (fr=-3) as kind=setup.
+    for kind in SETUP_KINDS:
+        s = t.get(kind)
+        if s is not None:
+            print("  %s: error (%s), before the first kind" % (kind, s["error"] or "no detail"),
+                  file=out)
+            failed = True
     for kind in family:
         s = t.get(kind)
         if s is None:
