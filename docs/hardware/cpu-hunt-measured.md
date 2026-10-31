@@ -774,3 +774,22 @@ ceiling; what the candidate takes from it is measured in its own A/B):
 | 9 | V5 cheaper exp2 | 2 | inside ctrl, 5.2-8.6 k per deck in all |
 | 10 | V4 SYNTH control into ITCM | 1 | SYNTH ctrl, 5.2-6.2 k per deck |
 | — | V2 idle-voice skip | 1 | **dropped**: no idle voices in the hot blocks except `bastian` deck A (~1.1 at 1-16 cycles per idle call, ≤ 2 k per block), inside every spread (spec §4) |
+
+### Phase B: the candidates
+
+Each candidate ran on its own measurement image, built from the commit that
+put it behind a toggle bit, flashed remotely as a pair (the persisted patch
+read `seq=581` after every flash). Base (bit 0) and candidate (bit 1)
+alternate per workload, 3 rounds of 30 s, clean windows only (§7). Deltas
+are the mean of the candidate's run means minus the base's; "spread" is the
+max − min of the three base run means.
+
+| candidate | class | bit | image | workloads | measured | verdict |
+|---|---|---|---|---|---|---|
+| V1 MorphOsc invariants | 1 | 17 | `4a6d0bc` | 108, 117, 127, 10 | SYNTH deck voices −10.7 to −17.5 k per block (108 A −17.5, B −10.7; 117 A −11.2; 127 B −17.0; 10 B −10.8), base spread 0.02-6.7 k. Engine section: 10 −10.4, 108 −28.3, 117 −10.2, 127 −16.9 k | adopted, `4a20c34e` |
+| V3 sub and sine segment without the wrap | 1 | 18 | `816eda9` | 108, 117, 313, 127 | engine section 108 −6.7 (spread 6.4), 117 −6.4 (2.8), 127 −4.4 (2.3), 313 −3.3 (1.1) k; 1.5-4.9 k per deck | adopted, `b080ad07` |
+
+V1's saving differs between the SYNTH decks of one workload (108: −17.5 k on
+deck A, −10.7 k on deck B). The morph position decides which segment's
+arithmetic was being recomputed per sample; the sizes are what was measured,
+not a per-segment model.
