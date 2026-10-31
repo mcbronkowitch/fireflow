@@ -61,6 +61,23 @@ daisy::SdmmcHandler g_sdmmc;
 // read to (spec 2026-10-30-cpu-engine-kernels-design.md section 1).
 alignas(32) uint32_t DSY_SDRAM_BSS g_buf[kChunk / 4];
 
+#if SHELL_SD_PROBE_STREAM
+// The second transfer buffer, in AXI SRAM (.bss), for test A3: does the same
+// traffic cost the audio callback more through SDRAM, which the sampler, echo
+// and BBD read from, or through AXI? alignas(32) and a size that is a multiple
+// of 32 keep the driver's D-cache invalidate (sd_diskio.c, over the transfer
+// rounded out to 32-byte lines) on this buffer's own lines, as for FsBlock.
+//
+// 16 KB, not the 32 KB of the SDRAM buffer: AXI SRAM had 30 088 B free in this
+// image, and a 32 KB buffer overflowed it by 2 680 B. The axi on-phases
+// therefore read 16 KB chunks, the sdram ones keep 32 KB (the 11.2 pattern);
+// the SHELL_SD_S line says which with chunk=.
+constexpr uint32_t kChunkAxi = 16u * 1024u;
+alignas(32) uint32_t g_buf_axi[kChunkAxi / 4];
+static_assert(sizeof(g_buf_axi) % 32 == 0, "the invalidate rounds out to 32-byte lines");
+static_assert(kFileBytes % kChunkAxi == 0, "the file wraps on a chunk boundary");
+#endif
+
 struct Step
 {
     int      fr       = -1;   // FRESULT, -1: not run
@@ -134,10 +151,10 @@ inline uint32_t pattern(uint32_t word)
 }
 
 // The first bad byte of the chunk at word `word0`, or -1.
-int32_t first_bad(uint32_t word0)
+int32_t first_bad(const uint32_t* buf, uint32_t words, uint32_t word0)
 {
-    for(uint32_t i = 0; i < kChunk / 4; ++i)
-        if(g_buf[i] != pattern(word0 + i))
+    for(uint32_t i = 0; i < words; ++i)
+        if(buf[i] != pattern(word0 + i))
             return static_cast<int32_t>(i * 4);
     return -1;
 }
@@ -170,7 +187,7 @@ Check read_verify(Step& s, uint32_t& bad_off)
             bad_off = off + br;
             return kBad;
         }
-        const int32_t b = first_bad(off / 4);
+        const int32_t b = first_bad(g_buf, kChunk / 4, off / 4);
         if(b >= 0)
         {
             bad_off = off + static_cast<uint32_t>(b);
@@ -468,7 +485,7 @@ static void burst_pass(bench::Board& hw, const volatile uint32_t& win)
             us += dt;
             if(dt > worst)
                 worst = dt;
-            if(first_bad(word0) >= 0)
+            if(first_bad(g_buf, kChunk / 4, word0) >= 0)
                 ++bad;
             // The period runs from the read's start; a read slower than the
             // period does not queue a second one behind it.
@@ -505,6 +522,13 @@ static void stream_pass(bench::Board& hw, const volatile uint32_t& win)
 {
     const uint32_t w0 = win;
     const bool     on = g_res.ready && ((w0 / kPhaseWin) & 1u) != 0;
+    // Test A3: the on-phases alternate the transfer buffer, SDRAM, AXI, SDRAM,
+    // ... A phase is kPhaseWin windows and on-phases are the odd ones, so
+    // w / (2 * kPhaseWin) counts them. A pass stays inside its phase (the loop
+    // below ends when the window counter leaves it), so one pass, one buffer.
+    const bool       axi = ((w0 / (2u * kPhaseWin)) & 1u) != 0;
+    uint32_t* const  buf   = axi ? g_buf_axi : g_buf;
+    const uint32_t   chunk = axi ? kChunkAxi : kChunk;   // the AXI buffer is 16 KB, see g_buf_axi
     const uint32_t t0 = daisy::System::GetNow();
     uint32_t       bytes = 0, worst = 0, bad = 0, ms = 0;
     if(on)
@@ -521,9 +545,9 @@ static void stream_pass(bench::Board& hw, const volatile uint32_t& win)
             UINT           br    = 0;
             const uint32_t u0    = cycles_now();
             if(fr == FR_OK)
-                fr = f_read(&g_fs.file, g_buf, kChunk, &br);
+                fr = f_read(&g_fs.file, buf, chunk, &br);
             const uint32_t dt = (cycles_now() - u0) / kCoreMhz;
-            if(fr != FR_OK || br != kChunk)
+            if(fr != FR_OK || br != chunk)
             {
                 // Stops the stream for good; the line keeps saying why.
                 g_res.stream_fr = fr != FR_OK ? static_cast<int>(fr) : -2;
@@ -533,7 +557,7 @@ static void stream_pass(bench::Board& hw, const volatile uint32_t& win)
             bytes += br;
             if(dt > worst)
                 worst = dt;
-            if(first_bad(word0) >= 0)
+            if(first_bad(buf, chunk / 4, word0) >= 0)
                 ++bad;
         }
         ms = daisy::System::GetNow() - t0;
@@ -543,8 +567,16 @@ static void stream_pass(bench::Board& hw, const volatile uint32_t& win)
     const uint32_t spent = daisy::System::GetNow() - t0;
     if(spent < kPassMs)
         hw.Delay(kPassMs - spent);
-    hw.PrintLine("SHELL_SD_S w=%u on=%d mode=stream kib=%u ms=%u kib_s=%u worst_us=%u bad=%u fr=%d",
-                 static_cast<unsigned>(w0), on ? 1 : 0, static_cast<unsigned>(bytes / 1024u),
+    // buf= names the buffer this pass read into and chunk= the KiB of each
+    // f_read (16 or 32); an idle pass has neither buf= nor a chunk (0).
+    // Longest line, with the fixed text 84 bytes (buf=sdram, chunk=32): w 10
+    // digits, kib 5 (the card's 25 MB/s ceiling is 12 207 KiB a pass), ms 3,
+    // kib_s 5, worst_us 7, bad 3, fr 2 -- 119 bytes of the 128.
+    hw.PrintLine("SHELL_SD_S w=%u on=%d mode=stream%s chunk=%u kib=%u ms=%u kib_s=%u worst_us=%u "
+                 "bad=%u fr=%d",
+                 static_cast<unsigned>(w0), on ? 1 : 0, !on ? "" : axi ? " buf=axi" : " buf=sdram",
+                 static_cast<unsigned>(on ? chunk / 1024u : 0u),
+                 static_cast<unsigned>(bytes / 1024u),
                  static_cast<unsigned>(ms),
                  static_cast<unsigned>(ms == 0 ? 0 : static_cast<uint64_t>(bytes) * 1000u / 1024u / ms),
                  static_cast<unsigned>(worst), static_cast<unsigned>(bad), g_res.stream_fr);

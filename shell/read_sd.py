@@ -18,6 +18,19 @@ Record with read_play.py (it writes every line), then:
    window counts only when every SHELL_SD_S line that started in it agrees
    with its phase (a stream that stopped on an error shows on=0).
 
+4. Test A3 (spec 2026-10-31-sd-use-cases-tests-design.md): the stream mode
+   alternates its transfer buffer between SDRAM and AXI SRAM (`buf=sdram|axi`
+   on its on=1 lines), and the audio callback is priced by phase from the
+   SHELL_PLAY_WIN frames (SHELL_CB_WINDOW images): each frame goes to the latest
+   SHELL_SD_S line before it (idle, sdram, axi); per class the frame count, the
+   mean of the per-frame means (sum / n), the p99 and the maximum of win. The
+   verdict is printed, not part of the exit code (a miss prices the traffic):
+   each buffer class's mean within 9 600 cycles of idle's, and no win over
+   945 000. A frame with sum=0 n=0 is skipped, and so is the first frame after
+   every phase change. The two arms read different chunks (chunk= on the line:
+   32 KiB from SDRAM, 16 KiB from the AXI buffer, which is all AXI SRAM had
+   room for).
+
 A capture of the burst mode (SHELL_SD_PROBE=burst, spec
 2026-10-31-sd-use-cases-tests-design.md section 5, A1) is told by `mode=burst`
 on its SHELL_SD_S lines. Its windows go into classes keyed by the phase the
@@ -45,6 +58,13 @@ BLOCKS_PER_PASS = 250   # a 500 ms pass (kPassMs) of 2 ms blocks: the base of th
 _SD = re.compile(r"^SHELL_SD (mount=|prev=|write |verify=)(.*)$")
 _SD_S = re.compile(r"^SHELL_SD_S (.*)$")
 _HOST_TIME = re.compile(r"^\d+\.\d+ ")
+_PLAY_WIN = re.compile(r"^SHELL_PLAY_WIN (.*)$")
+_INT_KV = re.compile(r"(\w+)=(-?\d+)")
+# Test A3 (spec 2026-10-31-sd-use-cases-tests-design.md): a stream mean within
+# 1 % of the idle mean (9.6 k cycles, about half a grain); and the click line
+# from the same spec.
+CB_TOLERANCE = 9600
+CB_CLICK = 945000
 _ROOT = re.compile(r"^SHELL_SD root=(\d+) bin=(\d+) names=(.*)$")
 
 
@@ -95,13 +115,14 @@ def parse_root(lines):
 
 def parse_stream(lines):
     """Every SHELL_SD_S line, in order, as a field dict: ints, except `mode`
-    (stream or burst), which stays text. A line from an image older than the
-    probe switch has no mode."""
+    (stream or burst) and `buf` (sdram or axi, stream mode), which stay text.
+    A line from an image older than the probe switch has no mode; one older
+    than the buffer alternation has no buf."""
     out = []
     for raw in strip_host_time(lines):
         m = _SD_S.match(raw.strip())
         if m:
-            out.append({k: (v if k == "mode" else int(v))
+            out.append({k: (v if k in ("mode", "buf") else int(v))
                         for k, v in _kv(m.group(1)).items()})
     return out
 
@@ -293,6 +314,105 @@ def burst_report(lines, stream, out, card_ok):
     return 0 if card_ok and not failed and has_idle and has_burst else 1
 
 
+def cb_by_phase(lines):
+    """Test A3: the audio callback priced by transfer phase. {"idle", "sdram",
+    "axi"} -> {"means": [...], "win": [...]}: per SHELL_PLAY_WIN frame its mean
+    block (sum / n) and its worst block (win).
+
+    A frame belongs to the latest stream-mode SHELL_SD_S line before it: on=0
+    is idle, on=1 the buffer `buf=` names (a line from before the alternation
+    has none and read into SDRAM). A frame before the first such line, or after
+    a burst-mode line, belongs to no phase. A frame with n=0 (the board prints
+    sum=0 n=0 when its torn-read retry gave up) says nothing about the callback
+    and is skipped whole, not counted as a zero.
+
+    The first frame after every phase change (idle to stream or back, or one
+    buffer to the other) is dropped: it holds the last chunk of the phase
+    before, as the raw windows' first window of a phase does (classify())."""
+    out = {k: {"means": [], "win": []} for k in ("idle", "sdram", "axi")}
+    cur = None
+    fresh = False   # the next frame is the first of a new phase
+    for raw in strip_host_time(lines):
+        raw = raw.strip()
+        m = _SD_S.match(raw)
+        if m:
+            kv = _kv(m.group(1))
+            if kv.get("mode", "stream") != "stream":
+                new = None
+            elif kv.get("on") == "0":
+                new = "idle"
+            else:
+                new = "axi" if kv.get("buf") == "axi" else "sdram"
+            if new != cur:
+                fresh = True
+            cur = new
+            continue
+        m = _PLAY_WIN.match(raw)
+        if m is None or cur is None:
+            continue
+        if fresh:
+            fresh = False
+            continue
+        kv = {k: int(v) for k, v in _INT_KV.findall(m.group(1))}
+        if kv.get("n", 0) <= 0 or "sum" not in kv or "win" not in kv:
+            continue
+        out[cur]["means"].append(kv["sum"] / kv["n"])
+        out[cur]["win"].append(kv["win"])
+    return out
+
+
+def cb_stats(cls):
+    """One class of cb_by_phase(): {"frames", "mean" (of the per-frame means),
+    "p99" (nearest rank, of win), "max" (of win)}; mean, p99 and max are None
+    for a class without frames."""
+    n = len(cls["means"])
+    if not n:
+        return {"frames": 0, "mean": None, "p99": None, "max": None}
+    wins = sorted(cls["win"])
+    return {"frames": n, "mean": sum(cls["means"]) / n,
+            "p99": wins[max(0, -(-99 * len(wins) // 100) - 1)], "max": wins[-1]}
+
+
+def cb_verdict(by):
+    """(ok, reasons): each buffer class's mean within CB_TOLERANCE cycles of
+    the idle mean, in either direction, and no window maximum in any class
+    above CB_CLICK. A class with no frames cannot be judged and fails."""
+    st = {k: cb_stats(by[k]) for k in by}
+    why = []
+    for k in ("idle", "sdram", "axi"):
+        if not st[k]["frames"]:
+            why.append("no %s frames" % k)
+    for k in ("sdram", "axi"):
+        if st[k]["frames"] and st["idle"]["frames"]:
+            d = st[k]["mean"] - st["idle"]["mean"]
+            if abs(d) > CB_TOLERANCE:
+                why.append("%s mean %+.0f cycles from idle (limit %d)" % (k, d, CB_TOLERANCE))
+    for k in ("idle", "sdram", "axi"):
+        if st[k]["frames"] and st[k]["max"] > CB_CLICK:
+            why.append("%s win %d is over the click line %d" % (k, st[k]["max"], CB_CLICK))
+    return not why, why
+
+
+def cb_report(by, out):
+    """Prints cb_by_phase()'s classes and the verdict, if any frame was found."""
+    if not any(by[k]["means"] for k in by):
+        return
+    st = {k: cb_stats(by[k]) for k in by}
+    print("callback by phase (SHELL_PLAY_WIN: mean of the per-frame sum / n; "
+          "win: the frame's worst block):", file=out)
+    for k in ("idle", "sdram", "axi"):
+        s = st[k]
+        if not s["frames"]:
+            print("  %s: no frames" % k, file=out)
+            continue
+        extra = "" if k == "idle" or not st["idle"]["frames"] else \
+            ", %+.0f from idle" % (s["mean"] - st["idle"]["mean"])
+        print("  %s: %d frames, mean %.0f cycles%s, p99 win %d, max win %d"
+              % (k, s["frames"], s["mean"], extra, s["p99"], s["max"]), file=out)
+    ok, why = cb_verdict(by)
+    print("callback verdict: %s" % ("PASS" if ok else "FAIL (" + "; ".join(why) + ")"), file=out)
+
+
 def stream_stats(stream):
     s_on = [s for s in stream if s["on"] == 1]
     kib = sum(s["kib"] for s in s_on)
@@ -326,6 +446,8 @@ def report(lines, out=None):
 
     if any(s.get("mode") == "burst" for s in stream):
         return burst_report(lines, stream, out, ok)
+
+    cb_report(cb_by_phase(lines), out)
 
     on, off = classify(rp.parse_raw_windows(lines), stream)
     print("raw windows judged: %d streaming, %d idle" % (len(on), len(off)), file=out)

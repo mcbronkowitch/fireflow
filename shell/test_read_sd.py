@@ -264,5 +264,113 @@ def test_burst_error_reported():
 test_burst_classes()
 test_burst_error_reported()
 
+
+# --- the callback by phase (SHELL_SD_PROBE=stream, test A3) ------------------
+# The stream alternates its transfer buffer between SDRAM and AXI SRAM, and
+# SHELL_PLAY_WIN prints the frame's sum / n once per 500 ms. A frame belongs to
+# the latest SHELL_SD_S line before it; a frame with sum=0 n=0 (the torn-read
+# retry gave up) says nothing and is skipped, not counted as a zero.
+def sd_s(w, on, buf=None):
+    return ("SHELL_SD_S w=%d on=%d mode=stream%s chunk=%d kib=%d ms=%d kib_s=%d worst_us=%d bad=0 fr=0"
+            % (w, on, (" buf=" + buf) if buf else "",
+               (16 if buf == "axi" else 32) if on else 0, 3200 if on else 0, 490 if on else 0,
+               6530 if on else 0, 12000 if on else 0))
+
+
+def play_win(win, n=250, mean=500000):
+    return "SHELL_PLAY_WIN win=%d gap=0 over=0 n=%d sum=%d" % (win, n, n * mean)
+
+
+SPILL_MEAN, SPILL_WIN = 800000, 1100000
+
+
+def cb_capture(idle=500000, sdram=500000, axi=500000, win=700000, extra=()):
+    """Four phases, three frames each, idle / sdram / idle / axi, with the
+    window maxima `win` in the last two. The first frame of a phase holds the
+    phase before's last chunk (SPILL_MEAN, SPILL_WIN) and is not judged."""
+    lines = list(CARD)
+    for w, (on, buf, mean) in enumerate([(0, None, idle), (1, "sdram", sdram),
+                                         (0, None, idle), (1, "axi", axi)]):
+        lines.append(sd_s(w * 10, on, buf))
+        lines.append(play_win(SPILL_WIN, mean=SPILL_MEAN))
+        lines.append(play_win(win, mean=mean))
+        lines.append(play_win(win, mean=mean))
+    lines.extend(extra)
+    return [l + "\n" for l in lines]
+
+
+def test_cb_by_phase():
+    lines = cb_capture(idle=500000, sdram=503000, axi=505000, win=700000)
+    by = read_sd.cb_by_phase(lines)
+    check("cb: three classes", sorted(by) == ["axi", "idle", "sdram"])
+    check("cb: frames go to the line before them",
+          [len(by[k]["means"]) for k in ("idle", "sdram", "axi")] == [4, 2, 2])
+    # The first frame after every phase change (on/off, or one buffer to the
+    # other) is dropped: its mean 800 000 and win 1 100 000 appear nowhere.
+    check("cb: the first frame after each phase change is dropped",
+          all(SPILL_MEAN not in by[k]["means"] and SPILL_WIN not in by[k]["win"] for k in by)
+          and sum(len(by[k]["means"]) for k in by) == 8)
+    check("cb: per-frame means are sum / n",
+          by["idle"]["means"] == [500000.0] * 4 and by["sdram"]["means"] == [503000.0] * 2
+          and by["axi"]["means"] == [505000.0] * 2)
+    check("cb: win maxima kept per class", by["axi"]["win"] == [700000, 700000])
+    st = read_sd.cb_stats(by["axi"])
+    check("cb: stats are frames, mean of means, p99 win, max win",
+          st == {"frames": 2, "mean": 505000.0, "p99": 700000, "max": 700000})
+    ok, why = read_sd.cb_verdict(by)
+    check("cb: +3000 / +5000 cycles pass", ok and not why)
+
+    # A mean 10 000 cycles up fails that class; 5 000 passes (above).
+    ok, why = read_sd.cb_verdict(read_sd.cb_by_phase(cb_capture(axi=510000)))
+    check("cb: a 10 000-cycle difference fails", not ok and any("axi" in w for w in why))
+    ok, why = read_sd.cb_verdict(read_sd.cb_by_phase(cb_capture(sdram=490000)))
+    check("cb: the difference counts in both directions", not ok and any("sdram" in w for w in why))
+    ok, why = read_sd.cb_verdict(read_sd.cb_by_phase(cb_capture(sdram=509600)))
+    check("cb: exactly 9 600 passes", ok)
+    # The click line: any window maximum above 945 000 fails, in any class.
+    ok, _ = read_sd.cb_verdict(read_sd.cb_by_phase(cb_capture(win=945000)))
+    check("cb: a win of exactly 945 000 passes", ok)
+    ok, why = read_sd.cb_verdict(read_sd.cb_by_phase(cb_capture(win=945001)))
+    check("cb: a win over 945 000 fails", not ok and any("945" in w for w in why))
+
+    # sum=0 n=0 is skipped, not a zero in the mean.
+    torn = cb_capture(extra=["SHELL_PLAY_WIN win=999999 gap=0 over=0 n=0 sum=0"])
+    by = read_sd.cb_by_phase(torn)
+    check("cb: a torn frame (n=0) is skipped, not counted",
+          len(by["axi"]["means"]) == 2 and by["axi"]["win"] == [700000, 700000])
+    check("cb: and does not drag the mean down", read_sd.cb_stats(by["axi"])["mean"] == 500000.0)
+    check("cb: nor does its win reach the maximum", read_sd.cb_stats(by["axi"])["max"] == 700000)
+
+    # Older captures: no buf= on an on=1 line means SDRAM; frames before the
+    # first SHELL_SD_S line belong to no phase.
+    old = [sd_s(10, 1), play_win(650000), play_win(650000)]   # the first is the phase's, dropped
+    by = read_sd.cb_by_phase(["SHELL_PLAY_WIN win=1 gap=0 over=0 n=2 sum=2"] + old)
+    check("cb: on=1 without buf= is sdram", len(by["sdram"]["means"]) == 1 and not by["axi"]["means"])
+    check("cb: a frame before any SHELL_SD_S line is nobody's",
+          not by["idle"]["means"] and len(by["sdram"]["means"]) == 1)
+    # strip_host_time on every line, as every other parser does.
+    stamped = ["1000.701 " + l for l in cb_capture(axi=505000)]
+    check("cb: host-time prefixes are stripped", read_sd.cb_by_phase(stamped) ==
+          read_sd.cb_by_phase(cb_capture(axi=505000)) and len(read_sd.cb_by_phase(stamped)["axi"]["means"]) == 2)
+
+    # parse_stream keeps buf as text and still reads a line without it.
+    s = read_sd.parse_stream([sd_s(10, 1, "axi"), sd_s(20, 0)])
+    check("cb: parse_stream keeps buf as text, absent stays absent",
+          s[0]["buf"] == "axi" and "buf" not in s[1])
+
+    # The report prints the section when the capture has frames, and does not
+    # change the exit code: a miss prices the traffic, it is not a stop.
+    code, text = run(cb_capture(axi=510000))
+    check("cb: the report prints each class", all(k in text for k in ("idle:", "sdram:", "axi:")))
+    check("cb: the report says the verdict", "callback verdict: FAIL" in text)
+    code_ok, text_ok = run(cb_capture())
+    check("cb: a passing capture says PASS", "callback verdict: PASS" in text_ok)
+    check("cb: the verdict does not change the exit code", code == code_ok)
+    _, text = run(capture())
+    check("cb: a capture without PLAY_WIN frames prints no callback section", "callback" not in text)
+
+
+test_cb_by_phase()
+
 print("%d failed" % len(FAILS))
 sys.exit(1 if FAILS else 0)
