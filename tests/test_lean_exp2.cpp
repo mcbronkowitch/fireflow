@@ -109,6 +109,28 @@ TEST_CASE("V5: fast_exp2 outside [-0.1, 0.1] falls back to std::pow, exactly") {
     CHECK(spky::fast_exp2(-std::numeric_limits<float>::infinity()) == 0.f);
 }
 
+TEST_CASE("V5: the lean arm is the one in use, on both oscillators") {
+    // set_detune_cents stores fast_exp2(ct / 1200) bit for bit, and across the
+    // engine's detune range some ct gives a ratio std::pow would round
+    // differently, so a build that still called std::pow could not pass.
+    int differs = 0;
+    for (int i = -150; i <= 150; ++i) {
+        const float ct = float(i) * 0.37f;
+        const float x = ct * (1.f / 1200.f);
+        spky::MorphOsc m;
+        m.init(kSr);
+        m.set_detune_cents(ct);
+        spky::WtOsc w;
+        w.init(kSr);
+        w.set_detune_cents(ct);
+        if (ct == 0.f) continue;       // the guard returns early: _ct starts at 0
+        CHECK(m.ratio() == spky::fast_exp2(x));
+        CHECK(w.ratio() == spky::fast_exp2(x));
+        if (m.ratio() != std::pow(2.f, x)) ++differs;
+    }
+    CHECK(differs > 0);
+}
+
 TEST_CASE("V5: both oscillators keep their pitch, zero-crossing count over 1 s") {
     // The lean oscillators against the crossings of a phasor with the OLD
     // path's ratio, at the detune ends the engine reaches (+-55.5 ct: half the

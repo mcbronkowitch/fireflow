@@ -88,6 +88,9 @@ public:
     // VoiceT::set_probe_word. set_detune_cents reads it; process() does not.
     void set_fast_exp2(bool on) { _fast_exp2 = on; }
     bool fast_exp2_on() const { return _fast_exp2; }
+#elif SPKY_LEAN_EXP2
+    // The detune ratio in use (tests/test_lean_exp2.cpp: the lean arm ran).
+    float ratio() const { return _ratio; }
 #endif
 
     void set_morph(float m) {
