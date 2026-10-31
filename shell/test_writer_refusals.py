@@ -88,11 +88,15 @@ with tempfile.TemporaryDirectory() as tmp:
     d = tmp / "rh"
     d.mkdir()
     good_src = d / "good.ld"
-    good_src.write_text("A\n    @REVERB_TANK@\nB\n")
+    good_src.write_text("A\n    @REVERB_TANK@\nB\n    @READ_LINEAR_CALL@\n")
     two_markers = d / "two.ld"
-    two_markers.write_text("@REVERB_TANK@\n@REVERB_TANK@\n")
+    two_markers.write_text("@REVERB_TANK@\n@REVERB_TANK@\n@READ_LINEAR_CALL@\n")
     no_marker = d / "none.ld"
     no_marker.write_text("A\nB\n")
+    no_call_marker = d / "nocall.ld"
+    no_call_marker.write_text("A\n    @REVERB_TANK@\nB\n")
+    two_call_markers = d / "twocall.ld"
+    two_call_markers.write_text("@REVERB_TANK@\n@READ_LINEAR_CALL@\n@READ_LINEAR_CALL@\n")
     ld, st = d / "out.ld", d / "out.state"
 
     def old_outputs():
@@ -101,6 +105,8 @@ with tempfile.TemporaryDirectory() as tmp:
 
     for label, src, half in (("no marker", no_marker, "1"),
                              ("two markers", two_markers, "1"),
+                             ("no read_linear_call marker", no_call_marker, "1"),
+                             ("two read_linear_call markers", two_call_markers, "1"),
                              ("unreadable source", d / "missing.ld", "1"),
                              ("bad REVERB_HALF", good_src, "2")):
         old_outputs()
@@ -121,6 +127,16 @@ with tempfile.TemporaryDirectory() as tmp:
     ld3, st3 = d3 / "out.ld", d3 / "out.state"
     check("%s: good run writes script and state" % script,
           run(script, good_src, ld3, st3, "1", "0", d3) == 0 and ld3.is_file() and st3.is_file())
+    # The read_linear_call entry (G3) exists in the measurement image alone.
+    check("%s: no read_linear_call entry outside the measurement image" % script,
+          "read_linear_call" not in ld3.read_text())
+    d4 = tmp / "rh4"
+    d4.mkdir()
+    ld4, st4 = d4 / "out.ld", d4 / "out.state"
+    check("%s: measurement run writes script and state" % script,
+          run(script, good_src, ld4, st4, "1", "1", d4) == 0 and ld4.is_file() and st4.is_file())
+    check("%s: the measurement image lists read_linear_call" % script,
+          "SampleBuffer16read_linear_callEfRfS1_" in ld4.read_text())
 
     # --- engine_lean: OUTPUT NAME=V... -- STALE... (a STALE directory: every *.o)
     script = "write_shell_engine_lean.py"

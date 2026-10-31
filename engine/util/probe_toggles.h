@@ -149,7 +149,18 @@
 //                                                        dividing per sample; the
 //                                                        firmware switch is
 //                                                        SHELL_LEAN_GRAIN_WIN
-//   23-29 (free: candidates; bits 0-22 are never reused)
+//   23   GRAIN_READ_INLINE    engine/sampler/            candidate G3 (round 2,
+//                             sample_buffer.h/.cpp,      class 1): the grain
+//                             sampler_engine.cpp         loop reads the buffer
+//                                                        with read_linear inline
+//                                                        (the default build's
+//                                                        only shape); clear, it
+//                                                        calls read_linear_call,
+//                                                        the old out-of-line
+//                                                        function, still placed
+//                                                        in ITCM. Bit-identical
+//                                                        either way
+//   24-29 (free: candidates; bits 0-23 are never reused)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE
 //                                                        burn on every block
 //   31   SHELL_GUARD_OFF      shell/panel_scan.cpp       the overrun guard is
@@ -168,6 +179,7 @@ namespace probe {
 inline constexpr int kBitReverbHalf = 9;
 inline constexpr int kBitLeanSvf1   = 19;
 inline constexpr int kBitLeanGrainWin = 22;
+inline constexpr int kBitGrainReadInline = 23;
 // The shell's two bits (above).
 inline constexpr int kBitShellLateRepeat = 30;
 inline constexpr int kBitShellGuardOff   = 31;

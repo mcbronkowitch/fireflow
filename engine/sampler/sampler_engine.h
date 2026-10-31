@@ -339,6 +339,13 @@ private:
     void  _trim_running();       // SIZE turned down: shorten what is sounding
     void  _kill_all();
     void  _release_all();
+    // process()'s grain loop: adds every active grain's output into l / r and
+    // returns how many are still active afterwards. A template so the
+    // measurement image can hold the loop twice, once per read shape (G3,
+    // toggle bit 23), and pick between them once a sample; outside it only
+    // <true> is ever instantiated, and always_inline folds it into process().
+    template <bool kInline>
+    __attribute__((always_inline)) inline uint32_t _cloud(float& l, float& r);
     float _next_ratio();         // chord round-robin + octave scatter
 
     void _fire_slice();               // STEP: one fire = one slice grain

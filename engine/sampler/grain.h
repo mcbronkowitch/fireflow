@@ -164,11 +164,21 @@ public:
     }
 #endif
 
+    // kInline is G3's choice of read, fixed at compile time so the grain loop
+    // carries no per-sample branch for it: true is read_linear inlined (the
+    // only shape outside the measurement image), false the call to
+    // read_linear_call (toggle bit 23 clear in the measurement image).
+    template <bool kInline = true>
     void process(const SampleBuffer& buf, float& outL, float& outR) {
         if (!_active) { outL = 0.f; outR = 0.f; return; }
 
         float l = 0.f, r = 0.f;
+#if defined(SPKY_PROBE_TOGGLES)
+        if constexpr (kInline) buf.read_linear(_start + _off, l, r);
+        else                   buf.read_linear_call(_start + _off, l, r);
+#else
         buf.read_linear(_start + _off, l, r);
+#endif
 
         float w;
         if (_rel_len > 0) {

@@ -329,8 +329,8 @@ add_test(NAME reverb_full_rate_variants
 # render hashes do not move. This target compiles each candidate's property
 # tests with its lean define on, as a SHELL_LEAN_*=1 image does, against the
 # old code as the reference (V6: tests/test_lean_svf1.cpp; G2:
-# tests/test_lean_grain_win.cpp, Grain is header-only and read_linear is the
-# one sampler file it links).
+# tests/test_lean_grain_win.cpp, Grain is header-only and sample_buffer.cpp is
+# the one sampler file it links, for the buffer's init and set_rec_size).
 add_executable(spky_lean_tests
     tests/test_main.cpp
     tests/test_lean_svf1.cpp
