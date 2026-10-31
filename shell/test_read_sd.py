@@ -114,6 +114,18 @@ for name, card in (
 code, text = run(capture(on_override=lambda c, on: False))
 check("no streaming window exits 1", code == 1)
 
+# --- the card test's window is not judged ----------------------------------
+# The report loop starts at counter 3; the window it names first held the
+# card test's writes and reads (wide), and only the windows after it count.
+lines = [l for l in capture() if not any(l.startswith("SHELL_SD_S w=%d " % c) for c in range(3))]
+lines = [l.replace("SHELL_PLAY_R w=4 r=", "SHELL_PLAY_R w=4 r=").replace(
+    "1000:%d" % (1000 + NARROW), "1000:%d" % (1000 + WIDE)) if l.startswith("SHELL_PLAY_R w=4 ") else l
+         for l in lines]
+on, off = read_sd.classify(rp.parse_raw_windows(lines), read_sd.parse_stream(lines))
+check("the card test's window (counter 3) is not judged", 4 not in [w["w"] for w in off])
+check("the windows after it are", 5 in [w["w"] for w in off] and len(off) == 15)
+check("so the idle windows stay narrow", all(w["hi"][0] - w["lo"][0] == NARROW for w in off))
+
 # --- a counter value whose lines disagree with its phase is not judged ---
 lines = capture(on_override=lambda c, on: False if c == 15 else on)
 on, off = read_sd.classify(rp.parse_raw_windows(lines), read_sd.parse_stream(lines))

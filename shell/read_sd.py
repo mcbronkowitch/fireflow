@@ -97,14 +97,19 @@ def classify(windows, stream):
     The callback publishes a window and THEN counts g_raw_win up, so the
     window printed as `SHELL_PLAY_R w=n` was collected while the counter --
     which SHELL_SD_S prints as w= and the stream's phase reads -- stood at
-    n - 1."""
+    n - 1.
+
+    A window counts only if the report loop already ran in the window before
+    it (c - 1 seen): the card test runs ahead of the first pass, and its 8 MiB
+    write and read land in the window the first SHELL_SD_S line names (on the
+    board, 2026-10-31: a stream-sized spread in an "idle" window)."""
     seen = {}
     for s in stream:
         seen.setdefault(s["w"], set()).add(s["on"])
     on, off = [], []
     for win in windows:
         c = win["w"] - 1
-        if c < 1 or c % PHASE_WINDOWS == 0 or c not in seen:
+        if c < 1 or c % PHASE_WINDOWS == 0 or c not in seen or c - 1 not in seen:
             continue
         want = 1 if phase_on(c) else 0
         if seen[c] != {want}:

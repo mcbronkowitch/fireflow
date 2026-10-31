@@ -100,7 +100,7 @@ measured.
 All within libDaisy's 128-byte log buffer:
 
 ```
-SHELL_SD mount=<fr> fs=<1..4> total_mib= free_mib= bus=4 mhz=50
+SHELL_SD mount=<fr> fs=<1..4> total_mib= free_mib= bus=4 mhz=50 ps=<0|1>
 SHELL_SD prev=<none|ok|bad> fr= off=
 SHELL_SD write kib= us= kib_s= worst_us= fr=
 SHELL_SD verify=<ok|bad> kib= us= kib_s= worst_us= fr= off=
@@ -136,3 +136,14 @@ call. Its guard `shell/test_read_sd.py` runs on a synthetic capture
   code (it is never on the audio path).
 - **50 MHz on a hand-soldered socket.** If the bus fails at 50 MHz the
   fallback is `Speed::STANDARD` (25 MHz), a constant in `sd_probe.cpp`.
+
+## 7. After the board run (2026-10-31)
+
+Measured on Rev A #1 (`reva-bring-up.md` 11.0, 11.2, fault R5): the card
+mounts at 50 MHz and passes; 8 MiB write at ~7 980 KiB/s, read-back at
+~13 200 KiB/s with audio running. Two changes followed (`893498a`): the
+calls are timed in DWT cycles (`System::GetUs()` wraps at ~21.47 s, not at
+2^32, and one stream call came out as 4.3e9 us), and the bus clock stops
+between transfers (`clock_powersave`): left running it raised SENSE_2/3's
+idle raw spread ~15×. `read_sd.py` skips the window the card test ran in.
+Row 11.2 fails while the card streams; C_SD2 is Bastian's call.
