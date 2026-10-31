@@ -1,5 +1,6 @@
 #pragma once
 #include <cmath>
+#include "util/fast_exp2.h"
 #include "util/fast_sin.h"
 #include "util/math.h"
 
@@ -15,7 +16,8 @@ namespace spky {
 // by ear, not a requirement.
 //
 // Audio path uses fast_sin only (no libm sinf - CPU budget constraint).
-// set_detune_cents uses std::pow: control-rate only, never per sample.
+// set_detune_cents uses std::pow on desktop and VCV and util/fast_exp2.h in
+// the firmware (SHELL_LEAN_EXP2): control-rate only, never per sample.
 class MorphOsc {
 public:
     void init(float sample_rate) {
@@ -28,6 +30,7 @@ public:
     void set_freq(float hz) {
         _freq = hz < 0.f ? 0.f : hz;
         _inc = _freq * _ratio / _sr;
+        _set_dt();
     }
 
     void set_detune_cents(float ct) {                    // control rate
@@ -52,26 +55,70 @@ public:
         // approximation: the ratio has to be bit-identical either way.
         if (ct == _ct) return;
         _ct = ct;
+#if defined(SPKY_PROBE_TOGGLES)
+        // CPU round 2, candidate V5 (toggle bit 25, util/probe_toggles.h): the
+        // voice's set_probe_word sets the flag on the control tick.
+        _ratio = _fast_exp2 ? fast_exp2(ct * (1.f / 1200.f))
+                            : std::pow(2.f, ct * (1.f / 1200.f));
+#elif SPKY_LEAN_EXP2
+        // SHELL_LEAN_EXP2=1 (class 2): util/fast_exp2.h.
+        _ratio = fast_exp2(ct * (1.f / 1200.f));
+#else
         _ratio = std::pow(2.f, ct * (1.f / 1200.f));
+#endif
         _inc = _freq * _ratio / _sr;
+        _set_dt();
     }
 
-    void set_morph(float m) { _morph = clampf(m, 0.f, 1.f); }
+#if defined(SPKY_PROBE_TOGGLES)
+    // Measurement image only: bit 25 (LEAN_EXP2, candidate V5), pushed by
+    // VoiceT::set_probe_word. set_detune_cents reads it; process() does not.
+    void set_fast_exp2(bool on) { _fast_exp2 = on; }
+    bool fast_exp2_on() const { return _fast_exp2; }
+#elif SPKY_LEAN_EXP2
+    // The detune ratio in use (tests/test_lean_exp2.cpp: the lean arm ran).
+    float ratio() const { return _ratio; }
+#endif
+
+    // The segment (0 sine->tri, 1 tri->saw, 2 saw->pulse) and its weight are
+    // fixed here, not per sample (CPU round 2, V1): the same float operations
+    // on the same _morph, so process() returns the same bits
+    // (tests/test_cpu_round2_equiv.cpp).
+    void set_morph(float m) {
+        _morph = clampf(m, 0.f, 1.f);
+        const float seg = _morph * 3.f;
+        if (seg <= 1.f)      { _seg_idx = 0; _seg_t = seg; }
+        else if (seg <= 2.f) { _seg_idx = 1; _seg_t = seg - 1.f; }
+        else                 { _seg_idx = 2; _seg_t = seg - 2.f; }
+    }
 
     void reset_phase(float ph = 0.f) { _phase = clampf(ph, 0.f, 0.999999f); }
 
+
+    // always_inline, as WtOsc::process (synth/wt_osc.h): with V1's two paths
+    // in the measurement image, arm-none-eabi-g++ -O3 stopped inlining this
+    // into VoiceT<MorphOsc>::process and `bl`-called a 1500-byte copy in
+    // SRAM, through a veneer from ITCM, twice per voice sample (read off the
+    // linked ELF, 2026-10-30). Nothing diagnoses that, so the attribute
+    // stays: shell/itcm_hot.ld lists no MorphOsc::process of its own.
+    __attribute__((always_inline)) inline
     float process() {
         _phase += _inc;
         if (_phase >= 1.f) _phase -= 1.f;
         const float t = _phase;
-        const float dt = _inc > 1e-6f ? _inc : 1e-6f;
-        const float seg = _morph * 3.f;
-        if (seg <= 1.f) return lerpf(fast_sin(t), _tri(t), seg);
-        if (seg <= 2.f) return lerpf(_tri(t), _saw(t, dt), seg - 1.f);
-        return lerpf(_saw(t, dt), _pulse(t, dt), seg - 2.f);
+        // t is in [0, 1) here: one wrap above is enough because _inc < 1 (the
+        // pitch stays below the sample rate), so fast_sin's own floor wrap
+        // would be the identity; fast_sin_wrapped returns the same bits
+        // (CPU round 2, V3; tests/test_cpu_round2_equiv.cpp).
+        if (_seg_idx == 0) return lerpf(fast_sin_wrapped(t), _tri(t), _seg_t);
+        if (_seg_idx == 1) return lerpf(_tri(t), _saw(t, _dt), _seg_t);
+        return lerpf(_saw(t, _dt), _pulse(t, _dt), _seg_t);
     }
 
 private:
+    // dt for the polyblep, floored; follows _inc (set_freq, set_detune_cents)
+    void _set_dt() { _dt = _inc > 1e-6f ? _inc : 1e-6f; }
+
     // triangle phase-aligned with the sine: peak +1 at t=0.25, -1 at t=0.75
     static float _tri(float t) {
         if (t < 0.25f) return 4.f * t;
@@ -110,6 +157,12 @@ private:
     float _ct = 0.f;             // last set_detune_cents argument (change guard)
     float _inc = 0.f;
     float _morph = 0.f;
+    float _dt = 1e-6f;           // _inc floored (_set_dt)
+    float _seg_t = 0.f;          // the segment's lerp weight (set_morph)
+    int   _seg_idx = 0;          // 0, 1 or 2 (set_morph)
+#if defined(SPKY_PROBE_TOGGLES)
+    bool  _fast_exp2 = false;    // bit 25, set by set_fast_exp2
+#endif
 };
 
 } // namespace spky

@@ -53,14 +53,26 @@ IMAGES = [
     # LATE and the candidate toggles, with the probe stamps on.
     ("reva_remote_measure", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
                              "SHELL_REMOTE_MEASURE=1"]),
-    # The two class-2 CPU savings are ON in every image above (SHELL_REVERB_HALF
-    # and SHELL_FAST_MATH default to 1; shell/README.md, "Turning a CPU saving
-    # back"). Their switches back, in the listener image:
+    # Four class-2 CPU savings are ON in every image above (SHELL_REVERB_HALF,
+    # SHELL_FAST_MATH, SHELL_LEAN_GRAIN_WIN and SHELL_LEAN_EXP2 default to 1;
+    # SHELL_LEAN_SVF1 defaults to 0;
+    # shell/README.md, "Turning a CPU saving back"). The first two switched
+    # back, in the listener image (the lean three have their own entry below):
     ("reva_remote_off", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
                          "SHELL_REVERB_HALF=0", "SHELL_FAST_MATH=0"]),
     # The measurement image with BOTH reverb tanks (toggle bit 9 selects).
     ("reva_remote_measure_dispatch", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
                                       "SHELL_REMOTE_MEASURE=1", "SHELL_REVERB_HALF=0"]),
+    # The lean switches (CPU round 2's class-2 savings, shell/Makefile,
+    # SHELL_LEAN_*): GRAIN_WIN and EXP2 default to 1, SVF1 to 0. The listener
+    # image with every one of them at 0, so the turned-back path (the engine
+    # as it was) still compiles and links; and with SVF1 at 1, so the path that
+    # is off by default still compiles and links too.
+    ("reva_remote_lean", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
+                          "SHELL_LEAN_SVF1=0", "SHELL_LEAN_GRAIN_WIN=0",
+                          "SHELL_LEAN_EXP2=0"]),
+    ("reva_remote_lean_svf1", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
+                               "SHELL_LEAN_SVF1=1"]),
     # Full -ffast-math folds the engine's isfinite guards: the image build must
     # REFUSE it (math_guards.py on the linked ELF). Expected to fail; passing
     # this entry means the guard check can still go red.

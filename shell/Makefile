@@ -674,6 +674,71 @@ ifeq ($(SHELL_REVERB_HALF),1)
 C_DEFS += -DSPKY_REVERB_HALF_ONLY=1
 endif
 
+# The lean switches: class-2 candidates of CPU round 2 (spec
+# 2026-10-30-cpu-engine-kernels-design.md section 4), each a saving that
+# changes the output. A new one defaults to 0 until Bastian has accepted it;
+# 1 compiles the engine with SPKY_LEAN_<NAME>=1. With every switch at 0 the
+# engine is the code it was, instruction for instruction. The three below were
+# accepted on 2026-10-31; GRAIN_WIN and EXP2 default to 1, SVF1 went back to 0
+# the same day (its comment says why). The measurement image ignores them
+# for its candidates: it holds both paths and a toggle bit picks
+# (engine/util/probe_toggles.h). VCV and the desktop render never see them.
+# All of them go through one stamp, build/shell_engine_lean.h, written at parse
+# time by write_shell_engine_lean.py, which deletes every object when any of
+# them changes (a switch can change an engine class's layout, and shell
+# objects embed engine types).
+#
+# SHELL_LEAN_SVF1 (candidate V6): the SYNTH and WAVE voices' low-pass runs one
+# pass per sample instead of two (SvfLp::ProcessSingle, engine/util/svf_lp.h:
+# the two passes folded into one step, the same response up to rounding).
+# Toggle bit 19 in the measurement image. The sampler's and FEED's filters
+# stay two-pass either way. Off (0): Bastian accepted it without a listen on
+# 2026-10-31 (the difference is rounding, about -100 dB), but the listener
+# images on Rev A the same day showed no saving to take. With it on, the frame
+# maximum's median went UP by about 15 k cycles on workloads 90, 226 and 314
+# (90 a sampler deck whose filters never take the one-pass path) and down by
+# only 7 k on 127 and 4 k on 313 (docs/hardware/cpu-hunt-measured.md, section
+# 7). The measurement image's -13.7 k on 313 did not carry over.
+SHELL_LEAN_SVF1 ?= 0
+
+ifneq ($(words $(SHELL_LEAN_SVF1))-$(filter $(SHELL_LEAN_SVF1),0 1),1-$(SHELL_LEAN_SVF1))
+$(error SHELL_LEAN_SVF1 must be 0 or 1)
+endif
+
+ifeq ($(SHELL_LEAN_SVF1),1)
+C_DEFS += -DSPKY_LEAN_SVF1=1
+endif
+
+# SHELL_LEAN_GRAIN_WIN (candidate G2): a sampler grain's Hann window multiplies
+# by 1/atk, 1/dec and 1/fade length, latched at spawn and when a fade is armed
+# (engine/sampler/grain.h), instead of dividing on every sample (the same
+# window up to rounding). Toggle bit 22 in the measurement image. On (1) since
+# 2026-10-31, accepted without a listen (the window moves by at most 3e-7).
+SHELL_LEAN_GRAIN_WIN ?= 1
+
+ifneq ($(words $(SHELL_LEAN_GRAIN_WIN))-$(filter $(SHELL_LEAN_GRAIN_WIN),0 1),1-$(SHELL_LEAN_GRAIN_WIN))
+$(error SHELL_LEAN_GRAIN_WIN must be 0 or 1)
+endif
+
+ifeq ($(SHELL_LEAN_GRAIN_WIN),1)
+C_DEFS += -DSPKY_LEAN_GRAIN_WIN=1
+endif
+
+# SHELL_LEAN_EXP2 (candidate V5): the detune ratio 2^(ct / 1200) of the SYNTH
+# and WAVE voices' oscillators comes from a fourth-order polynomial
+# (engine/util/fast_exp2.h) instead of std::pow (the same ratio to within
+# 0.01 ct). Toggle bit 25 in the measurement image. On (1) since 2026-10-31,
+# accepted without a listen (the ratio moves by at most 7.2e-8).
+SHELL_LEAN_EXP2 ?= 1
+
+ifneq ($(words $(SHELL_LEAN_EXP2))-$(filter $(SHELL_LEAN_EXP2),0 1),1-$(SHELL_LEAN_EXP2))
+$(error SHELL_LEAN_EXP2 must be 0 or 1)
+endif
+
+ifeq ($(SHELL_LEAN_EXP2),1)
+C_DEFS += -DSPKY_LEAN_EXP2=1
+endif
+
 ENGINE_OBJECTS := $(addprefix $(BUILD_DIR)/,$(patsubst %.cpp,%.o,$(notdir $(filter ../engine/%,$(CPP_SOURCES)))))
 
 ifeq ($(SHELL_FAST_MATH),1)
@@ -748,6 +813,7 @@ SWITCH_HEADERS := \
   $(shell python write_shell_remote_measure.py $(BUILD_DIR)/shell_remote_measure.h $(SHELL_REMOTE_MEASURE) $(BUILD_DIR)) \
   $(shell python write_shell_sd.py $(BUILD_DIR)/shell_sd.h $(SHELL_SD) $(BUILD_DIR)/panel_scan.o) \
   $(shell python write_shell_fast_math.py $(BUILD_DIR)/shell_fast_math.h $(SHELL_FAST_MATH) $(ENGINE_OBJECTS)) \
+  $(shell python write_shell_engine_lean.py $(BUILD_DIR)/shell_engine_lean.h SVF1=$(SHELL_LEAN_SVF1) GRAIN_WIN=$(SHELL_LEAN_GRAIN_WIN) EXP2=$(SHELL_LEAN_EXP2) -- $(BUILD_DIR)) \
   $(shell python write_shell_reverb_half.py itcm_hot.ld $(BUILD_DIR)/itcm_hot.ld $(BUILD_DIR)/shell_reverb_half.state $(SHELL_REVERB_HALF) $(SHELL_REMOTE_MEASURE) $(BUILD_DIR)) \
   $(shell python write_shell_link_stamp.py $(BUILD_DIR)/shell_link_stamp.h $(BUILD_DIR)/itcm_load.o) \
   $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o $(BUILD_DIR)/wait_probe.o $(BUILD_DIR)/pot_report.o $(BUILD_DIR)/scan_check.o $(BUILD_DIR)/remote_listen.o)
@@ -772,6 +838,9 @@ $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o: $(BUI
 $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_remote_measure.h
 $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_sd.h
 $(ENGINE_OBJECTS): $(BUILD_DIR)/shell_fast_math.h
+# The lean stamp: the writer deletes every object on a change; this edge is
+# the ordering for the objects that read the defines it stands for.
+$(ENGINE_OBJECTS): $(BUILD_DIR)/shell_engine_lean.h
 $(BUILD_DIR)/scan_check.o: $(BUILD_DIR)/shell_scan_check.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_keys_nc.h $(BUILD_DIR)/shell_raw_spread.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h
 $(BUILD_DIR)/control_tick.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h

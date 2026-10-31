@@ -121,8 +121,11 @@ public:
     // cb_profile.cpp, engine/util/probe_mark.h); compiled only into its image.
     const SuperModulator& probe_mod(int p) const { return _parts[p].mod(); }
     int                   probe_voices(int p) const { return _parts[p].active_voices(); }
-    // ...and onto a deck's WAVE engine split (synth_engine.h, ProbeEng).
+    // ...and onto a deck's WAVE engine split (synth_engine.h, ProbeEng), its
+    // SYNTH one (the same struct) and its SAMPLER one (sampler_engine.h).
     const WaveEngine&     probe_wave(int p) const { return _parts[p].wave(); }
+    const SynthEngine&    probe_synth(int p) const { return _parts[p].synth(); }
+    const SamplerEngine&  probe_sampler(int p) const { return _parts[p].sampler(); }
 #endif
 #ifdef SPKY_TESTING
     uint32_t song_position_for_test(int p) const {

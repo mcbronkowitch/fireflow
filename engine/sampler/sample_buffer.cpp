@@ -243,49 +243,4 @@ void SampleBuffer::clear() {
     _cut.set_on(false, true);
 }
 
-void SampleBuffer::read_linear(float frame, float& out0, float& out1) const {
-    // Empty or un-init'ed: silence. The original divides by zero on the
-    // first branch and spins forever on the second (plan Task 1, change 5).
-    if (_size == 0 || _buffer == nullptr) { out0 = 0.f; out1 = 0.f; return; }
-
-    // NaN or an absurd magnitude: silence, same contract. Two compares, and
-    // NaN fails both (every NaN comparison is false), so this closes the
-    // static_cast<size_t>(NaN) undefined behaviour below AND bounds the fold
-    // loops for any finite input. Deliberately NOT fmodf: eight grains x two
-    // parts x 48 kHz is ~768k fmodf/s, which is real CPU on the M6 hardware
-    // for a case that cannot currently occur.
-    if (!(frame > -1e9f && frame < 1e9f)) { out0 = 0.f; out1 = 0.f; return; }
-
-    const float fsz = static_cast<float>(_size);
-    // O(1) fold, replacing the original's `frame %= _size` without an
-    // integer division. NOT a subtract loop: that would be O(frame/_size),
-    // and a grain holding a position latched against a longer previous
-    // content length (set_rec_size shrinks it, or a load lands mid-cloud)
-    // would then spin hundreds of thousands of times on the audio thread.
-    // std::floor is a single instruction on both targets -- roundsd on x86,
-    // VRINTM on the Daisy's Cortex-M7 FPv5 -- not a libm call, and cheaper
-    // than the loop even in the common case.
-    frame -= fsz * std::floor(frame / fsz);
-    // BEIDE Kanten hier, vor i0 und frac, und nicht nur i0 spaeter: bei
-    // grossem fsz rundet fsz - epsilon in float32 auf exakt fsz, was ein
-    // knapp negatives frame genau hierher bringt. Wurde nur i0 korrigiert,
-    // blieb frac = fsz stehen und die Interpolation lief mit dem Faktor der
-    // Puffergroesse -- an einem Puffer mit nur +-0.3 Inhalt gemessene
-    // Ausgaenge von 14 400 (24 000 Frames) bis 1 209 600 (2 016 000 Frames).
-    // Erreichbar ueber REVERSE-Grains, sobald _start + _off unter 0 laeuft
-    // (grain.h:111). frame und i0 muessen dieselbe Zahl beschreiben.
-    if (!(frame >= 0.f) || frame >= fsz) frame = 0.f;
-
-    size_t i0 = static_cast<size_t>(frame);
-    if (i0 >= _size) i0 = 0;                     // Guertel zum Hosentraeger
-    size_t i1 = i0 + 1;
-    if (i1 >= _size) i1 = 0;
-
-    const float frac = frame - static_cast<float>(i0);
-    const Frame a = _buffer[i0];
-    const Frame b = _buffer[i1];
-    out0 = a.l + frac * (b.l - a.l);
-    out1 = a.r + frac * (b.r - a.r);
-}
-
 }  // namespace spky

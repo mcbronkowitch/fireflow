@@ -1850,3 +1850,18 @@ before any saving; budget 960 000 cycles per 96-sample block, clicks from
   workloads sit at 878 k median and 944 k worst, 9 of 20 still above 880 k.
   The open lever is per-engine kernel work (§4 row 11); bench/ and the desktop
   hosts do not build the two firmware-only savings (`docs/gotchas.md`).
+- **CPU round 2, per-engine kernels (2026-10-31,
+  `cpu-hunt-measured.md` §7-§8).** Adopted, bit-identical: V1 (MorphOsc
+  invariants, −10.7 to −17.5 k per SYNTH deck), V3 (sub and sine without the
+  second wrap, 1.5-4.9 k per deck), G1 (`read_linear` skips the fold inside
+  (0, 2·fsz)) and G3 (`read_linear` inlined into the grain loop), together
+  about −25 cycles per grain-sample. Firmware-only, rounding-level, on by
+  default: G2 (Hann window without per-sample divisions, about −10 per
+  grain-sample) and V5 (detune ratio from a polynomial, ~−1 k ctrl per
+  workload). V6 (one-pass voice filter) is accepted but off: it measured −12
+  to −14 k in the measurement image and +15 k on 90, 226 and 314 in the
+  listener image. The grain price is now about 186 cycles per grain-sample
+  (one grain ≈ 17.9 k per block). Against main the listener image gains
+  −34 k p50 on SAMPLER 90 and −14 k on SYNTH 127, and holds BODY/BBD/WAVE.
+  The 20 worst workloads now sit at 835 k median p50 and 939 k worst, none at
+  945 k, 8 of 20 above 880 k.

@@ -3,6 +3,7 @@
 #include "fx/fx_util.h"      // hann_value_at
 #include "util/fast_sin.h"
 #include "util/math.h"
+#include "util/probe_toggles.h"
 
 namespace spky {
 
@@ -62,6 +63,12 @@ public:
         }
         _atk     = atk;
         _dec     = dec;
+#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_GRAIN_WIN
+        // G2: the window's divisors, inverted once here instead of once per
+        // sample in _window() (atk, dec >= 1 after the clamps above).
+        _inv_atk = 1.f / static_cast<float>(atk);
+        _inv_dec = 1.f / static_cast<float>(dec);
+#endif
         _start   = start;
         _off     = 0.f;
         _ratio   = ratio;
@@ -103,6 +110,9 @@ public:
         _rel_from = _level();       // freeze the level we are fading from
         _rel_len = fade_len < 1 ? 1 : fade_len;
         _rel_ctr = _rel_len;
+#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_GRAIN_WIN
+        _inv_rel = 1.f / static_cast<float>(_rel_len);   // G2
+#endif
     }
 
     // Cap the grain's TOTAL life at `total` output samples counted from
@@ -139,7 +149,20 @@ public:
         _rel_from = _level();
         _rel_len  = want;
         _rel_ctr  = want;
+#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_GRAIN_WIN
+        _inv_rel  = 1.f / static_cast<float>(want);      // G2
+#endif
     }
+
+#if defined(SPKY_PROBE_TOGGLES)
+    // Measurement image only (util/probe_toggles.h): the toggle word, pushed
+    // by SamplerEngine::set_probe_word once per block. Bit 22 (LEAN_GRAIN_WIN,
+    // candidate G2) lands in the grain's own flag, which the window reads;
+    // process() never reads the word or the global.
+    void set_probe_word(uint32_t w) {
+        _win_lean = probe::on(w, probe::kBitLeanGrainWin);
+    }
+#endif
 
     void process(const SampleBuffer& buf, float& outL, float& outR) {
         if (!_active) { outL = 0.f; outR = 0.f; return; }
@@ -159,8 +182,19 @@ public:
             // (CHECK_FALSE(g.active()) failed with `true` after exactly
             // fade_len calls).
             --_rel_ctr;
+#if defined(SPKY_PROBE_TOGGLES)
+            // G2 (toggle bit 22): the latched reciprocal, or the divide.
+            if (_win_lean)
+                w = _rel_from * hann_value_at(static_cast<float>(_rel_ctr) * _inv_rel);
+            else
+                w = _rel_from * hann_value_at(static_cast<float>(_rel_ctr)
+                                              / static_cast<float>(_rel_len));
+#elif SPKY_LEAN_GRAIN_WIN
+            w = _rel_from * hann_value_at(static_cast<float>(_rel_ctr) * _inv_rel);
+#else
             w = _rel_from * hann_value_at(static_cast<float>(_rel_ctr)
                                           / static_cast<float>(_rel_len));
+#endif
             if (_rel_ctr <= 0) _active = false;
         } else {
             w = _window();
@@ -189,17 +223,46 @@ private:
     // continuous rather than a step.
     float _level() const {
         if (_rel_len <= 0) return _window();
+#if defined(SPKY_PROBE_TOGGLES)
+        // G2 (toggle bit 22): the latched reciprocal, or the divide.
+        if (_win_lean)
+            return _rel_from * hann_value_at(static_cast<float>(_rel_ctr) * _inv_rel);
         return _rel_from * hann_value_at(static_cast<float>(_rel_ctr)
                                          / static_cast<float>(_rel_len));
+#elif SPKY_LEAN_GRAIN_WIN
+        return _rel_from * hann_value_at(static_cast<float>(_rel_ctr) * _inv_rel);
+#else
+        return _rel_from * hann_value_at(static_cast<float>(_rel_ctr)
+                                         / static_cast<float>(_rel_len));
+#endif
     }
 
+#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_GRAIN_WIN
+    // G2: the same two Hann halves with the divisors latched at spawn.
+    float _window_inv() const {
+        if (_i < _atk)
+            return hann_value_at(static_cast<float>(_i) * _inv_atk);
+        const int from_end = _len - 1 - _i;
+        if (from_end < _dec)
+            return hann_value_at(static_cast<float>(from_end) * _inv_dec);
+        return 1.f;
+    }
+#endif
+
     float _window() const {
+#if defined(SPKY_PROBE_TOGGLES)
+        if (_win_lean) return _window_inv();
+#elif SPKY_LEAN_GRAIN_WIN
+        return _window_inv();
+#endif
+#if !SPKY_LEAN_GRAIN_WIN || defined(SPKY_PROBE_TOGGLES)
         if (_i < _atk)
             return hann_value_at(static_cast<float>(_i) / static_cast<float>(_atk));
         const int from_end = _len - 1 - _i;
         if (from_end < _dec)
             return hann_value_at(static_cast<float>(from_end) / static_cast<float>(_dec));
         return 1.f;
+#endif
     }
 
     // The read position is kept as a start frame plus a RELATIVE offset, and
@@ -256,6 +319,16 @@ private:
     int   _rel_ctr  = 0;
     bool  _reverse  = false;
     bool  _active   = false;
+#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_GRAIN_WIN
+    // G2: 1/_atk and 1/_dec latched at spawn, 1/_rel_len whenever a fade is
+    // armed or shortened (release, trim_total).
+    float _inv_atk  = 1.f;
+    float _inv_dec  = 1.f;
+    float _inv_rel  = 1.f;
+#endif
+#if defined(SPKY_PROBE_TOGGLES)
+    bool  _win_lean = false;     // bit 22, set by set_probe_word
+#endif
 };
 
 }  // namespace spky

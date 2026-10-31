@@ -4,6 +4,7 @@
 #include "util/svf_lp.h"
 #include "synth/morph_osc.h"
 #include "synth/env.h"
+#include "util/probe_toggles.h"
 
 namespace spky {
 
@@ -66,6 +67,28 @@ public:
             xf = _osc_a.mip_crossfading() || _osc_b.mip_crossfading();
         return (xf ? 1 : 0) | (_env.attacking() ? 2 : 0);
     }
+#endif
+#if defined(SPKY_PROBE_TOGGLES)
+    // Measurement image only (util/probe_toggles.h): the toggle word, pushed
+    // by SynthEngineT::_update_control on the control tick. Bit 19 (LEAN_SVF1,
+    // candidate V6) lands in the filter's own flag, which process() reads per
+    // sample; process() never reads the word or the global. Bit 25 (LEAN_EXP2,
+    // candidate V5) lands in both oscillators' flag, which set_detune_cents
+    // reads on the control tick.
+    void set_probe_word(uint32_t w) {
+        _filt.SetSinglePass(probe::on(w, probe::kBitLeanSvf1));
+        _osc_a.set_fast_exp2(probe::on(w, probe::kBitLeanExp2));
+        _osc_b.set_fast_exp2(probe::on(w, probe::kBitLeanExp2));
+    }
+    // Whether bit 25 reached this voice's oscillators
+    // (tests/test_cpu_round2_probes.cpp).
+    bool fast_exp2_on() const { return _osc_a.fast_exp2_on() && _osc_b.fast_exp2_on(); }
+#endif
+#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_SVF1
+    // Whether the FILTER runs one pass per sample (util/svf_lp.h, candidate
+    // V6): from bit 19 in the measurement image, always with SHELL_LEAN_SVF1=1
+    // (tests/test_cpu_round2_probes.cpp, tests/test_lean_svf1.cpp).
+    bool svf_single_pass() const { return _filt.single_pass(); }
 #endif
     float env_value() const { return _env.value(); }
     float detune_cents() const { return _detune_ct; }

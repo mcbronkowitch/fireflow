@@ -51,6 +51,11 @@ CBP_REC4 blk=100 al=40000 at=46000 ax=40000 bl=40000 bt=37000 bx=60000
 CBP_REC5 blk=100 d=1 wp=15000 wc=9000 wv=180000 ti=2 ta=3
 CBP_WIN9 w=5 awp=0 awc=0 awv=0 ati=0 ata=0 bwp=500 bwc=9000 bwv=160000 bti=10 bta=20
 CBP_WIN9 w=6 awp=0 awc=0 awv=0 ati=0 ata=0 bwp=700 bwc=9200 bwv=162000 bti=30 bta=40
+CBP_WIN11 w=5 d=0 sc=1000 ss=2000 sg=150000 sp=8000 sn=600
+CBP_WIN11 w=5 d=1 sc=0 ss=0 sg=0 sp=0 sn=0
+CBP_WIN11 w=6 d=0 sc=1100 ss=2100 sg=152000 sp=8100 sn=640
+CBP_WIN11 w=6 d=1 sc=0 ss=0 sg=0 sp=0 sn=0
+CBP_REC7 blk=100 d=0 sc=1200 ss=2400 sg=190000 sp=8200 sn=700
 CBP_REC blk=101 cb=890000 proc=840000 law=12400 led=1300 maxs=33000@95 med=8500 ev=84
 CBP_REC2 blk=101 a=355000 b=340000 mix=152000 va=1 vb=4
 CBP_REC blk=200 cb=940000 proc=890000 law=12500 led=1300 maxs=33000@95 med=8900 ev=d8000
@@ -104,6 +109,14 @@ check("a window joins its WAVE split, strikes per block",
       and wins[6]["bta"] == 0.04 and "bwv" not in wins[7])
 check("the excess covers the WAVE split", ex["bwv"] == 19000 and ex["bwp"] == 14400
       and abs(ex["bti"] - 1.98) < 1e-9 and ex["bta"] == 2.97)
+check("a SAMPLER engine record lands on its deck's columns",
+      recs[100].get("asg") == 190000 and recs[100].get("asn") == 700 and recs[100].get("asc") == 1200
+      and "bsg" not in recs[100] and "asg" not in recs[200])
+check("a window joins its SAMPLER split, one line per deck",
+      wins[5]["asg"] == 150000 and wins[6]["asn"] == 640 and wins[6]["ass"] == 2100
+      and wins[5]["bsg"] == 0 and wins[6]["bsn"] == 0 and "asg" not in wins[7])
+check("the excess covers the SAMPLER split", ex["asg"] == 39000 and ex["asn"] == 80
+      and ex["asp"] == 150 and "asg" not in ex2)
 m = r.means(wins, 5, 6)
 check("means run over the complete windows only", m is not None and m[1] == 2
       and m[0]["cb"] == 905000 and m[0]["ae"] == 200500 and m[0]["an"] == 3997.5)
@@ -125,7 +138,7 @@ check("a missing split prints dashes", "       -" in text.splitlines()[5])
 # A pre-split capture still gets a mean over the fields its image printed.
 old = r.parse([l for l in FIXTURE
                if not l.startswith(("CBP_WIN2", "CBP_WIN3", "CBP_WIN4", "CBP_WIN5", "CBP_WIN6", "CBP_WIN7", "CBP_WIN8",
-                                    "CBP_WIN9"))])[0]
+                                    "CBP_WIN9", "CBP_WIN11"))])[0]
 mo = r.means(old, 5, 7)
 check("a pre-split capture's mean covers its own fields",
       mo is not None and mo[1] == 3 and mo[0]["cb"] == 910000 and "am" not in mo[0])
@@ -160,6 +173,13 @@ bad = {}
 r.parse([l.replace("CBP_REC5 blk=100 d=1", "CBP_REC5 blk=100 d=0") for l in FIXTURE], None, None, bad)
 check("sabotage: a deck-A WAVE record does not land on deck B",
       "bwv" not in bad[100] and bad[100].get("awv") == 180000)
+bad = {}
+r.parse([l.replace("CBP_REC7 blk=100 d=0", "CBP_REC7 blk=100 d=1") for l in FIXTURE], None, None, bad)
+check("sabotage: a deck-B SAMPLER record does not land on deck A",
+      "asg" not in bad[100] and bad[100].get("bsg") == 190000)
+bad = r.parse([l.replace("CBP_WIN11 w=6 d=0", "CBP_WIN11 w=6 d=2") for l in FIXTURE])[0]
+check("sabotage: a SAMPLER line with no deck 0 or 1 is not read", "asg" not in bad[6]
+      and bad[5]["asg"] == 150000)
 bad = {}
 r.parse([l.replace("cb=960000", "cb=930000") for l in FIXTURE], None, None, bad)
 check("sabotage: a block at the bar is not hot", [b for b, _ in r.hot_blocks(bad)] == [200])

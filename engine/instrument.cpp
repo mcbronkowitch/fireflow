@@ -257,6 +257,13 @@ void Instrument::process(const float* inL, const float* inR,
     // The candidate toggles, once per block and never inside the loop below
     // (util/probe_toggles.h; shell/test_remote_wiring.py holds the place).
     _probe_tog = probe::toggles();
+    // Once per block: every deck's SYNTH, WAVE and SAMPLER keep the word in a
+    // member (BODY does not get it).
+    for (int p = 0; p < PART_COUNT; ++p) {
+        _parts[p].synth().set_probe_word(_probe_tog);
+        _parts[p].wave().set_probe_word(_probe_tog);
+        _parts[p].sampler().set_probe_word(_probe_tog);
+    }
 #if !OLIVERB_HALF_ONLY
     // Bit 9, once per block: the reverb tank at half rate. (With
     // SHELL_REVERB_HALF=1, the firmware default, the tank is always half and

@@ -143,6 +143,7 @@ add_executable(spky_tests
     engine/fx/flux.cpp
     tests/test_flux.cpp
     tests/test_cpu_hunt_equiv.cpp
+    tests/test_cpu_round2_equiv.cpp
     tests/test_tape_echo.cpp
     engine/fx/bbd.cpp
     tests/test_bbd.cpp
@@ -321,6 +322,32 @@ add_test(NAME reverb_full_rate_variants
                  "-DWHAT=the plain build (VCV, render, SHELL_REVERB_HALF=0) renders differently from the tested dispatch variant at full rate"
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/compare_reverb_dumps.cmake)
 
+# --- the class-2 lean switches (spec 2026-10-30-cpu-engine-kernels section 4;
+# shell/Makefile, SHELL_LEAN_*) ---
+# SHELL_LEAN_<NAME>=1 compiles the engine with SPKY_LEAN_<NAME>=1, in the
+# firmware only: VCV, the render host and spky_tests build the old code, so the
+# render hashes do not move. This target compiles each candidate's property
+# tests with its lean define on, as a SHELL_LEAN_*=1 image does, against the
+# old code as the reference (V6: tests/test_lean_svf1.cpp; G2:
+# tests/test_lean_grain_win.cpp, Grain is header-only and sample_buffer.cpp is
+# the one sampler file it links, for the buffer's init and set_rec_size; V5:
+# tests/test_lean_exp2.cpp, MorphOsc and WtOsc are header-only and a voice
+# comes from voice.cpp. The three defines share this target: each reaches only
+# its own class, and the V5 test builds its oscillators and voices itself.)
+add_executable(spky_lean_tests
+    tests/test_main.cpp
+    tests/test_lean_svf1.cpp
+    tests/test_lean_grain_win.cpp
+    tests/test_lean_exp2.cpp
+    engine/synth/voice.cpp
+    engine/synth/wt_bank.cpp
+    engine/sampler/sample_buffer.cpp
+)
+target_compile_definitions(spky_lean_tests PRIVATE SPKY_LEAN_SVF1=1 SPKY_LEAN_GRAIN_WIN=1
+                                                    SPKY_LEAN_EXP2=1)
+target_link_libraries(spky_lean_tests PRIVATE spky_engine doctest)
+add_test(NAME spky_lean_tests COMMAND spky_lean_tests)
+
 # --- render host CLI ---
 add_executable(render
     host/render/main.cpp
@@ -397,8 +424,12 @@ target_link_libraries(sweep PRIVATE spky_engine daisysp_min)
 # the board's (shell/cb_profile.cpp). Its own executable because the define
 # changes Part::process's signature. Also built with SPKY_PROBE_LAW=1
 # (engine/util/probe_law.h), the control law's TIDE split, for the same reason.
+# And with SPKY_PROBE_TOGGLES=1 (engine/util/probe_toggles.h), as the
+# measurement image is, so the CPU round's toggle-word plumbing is compiled
+# here (tests/test_cpu_round2_probes.cpp).
 add_executable(spky_probe_tests
     tests/test_probe_marks.cpp
+    tests/test_cpu_round2_probes.cpp
     engine/mod/lane.cpp
     engine/mod/super_modulator.cpp
     engine/parts/part.cpp
@@ -423,7 +454,7 @@ add_executable(spky_probe_tests
     engine/body/body_voice.cpp
 )
 target_include_directories(spky_probe_tests PRIVATE engine third_party)
-target_compile_definitions(spky_probe_tests PRIVATE SPKY_PROBE_MARKS=1 SPKY_PROBE_LAW=1)
+target_compile_definitions(spky_probe_tests PRIVATE SPKY_PROBE_MARKS=1 SPKY_PROBE_LAW=1 SPKY_PROBE_TOGGLES=1)
 target_link_libraries(spky_probe_tests PRIVATE doctest daisysp_min)
 add_test(NAME spky_probe_tests COMMAND spky_probe_tests)
 
@@ -806,11 +837,11 @@ add_test(NAME shell_math_guard
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_math_guards.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
 
-# The build-switch writers (reverb_half, fast_math, remote, remote_measure) run
-# while the Makefile is parsed and the Makefile ignores their exit status: a
-# refusal or crash that left the old header / stamp / linker script behind
-# would build on a stale value. This holds that each deletes its output on
-# any failure.
+# The build-switch writers (reverb_half, fast_math, remote, remote_measure,
+# engine_lean) run while the Makefile is parsed and the Makefile ignores their
+# exit status: a refusal or crash that left the old header / stamp / linker
+# script behind would build on a stale value. This holds that each deletes its
+# output on any failure.
 add_test(NAME shell_writer_refusals
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_writer_refusals.py
@@ -821,9 +852,10 @@ add_test(NAME shell_writer_refusals
 # listener and measurement images (which must not link the save path:
 # arm-none-eabi-nm on the ELF, with the play image as the canary), the listener
 # with both class-2 savings switched back, the measurement image with both
-# reverb tanks, and a full -ffast-math build that must be REFUSED by the math
-# guard (the list is IMAGES in shell/check_images_build.py, ten entries at the
-# time of writing). Each is a clean ARM build in its own directory under the
+# reverb tanks, the listener with every lean switch (SHELL_LEAN_*, which
+# default to 1) at 0, and a full -ffast-math build that must be REFUSED by the
+# math guard (the list is IMAGES in shell/check_images_build.py, eleven entries
+# at the time of writing). Each is a clean ARM build in its own directory under the
 # build tree (shell/build is not touched), with SRAM_EXEC use in the output.
 # Nothing else in ctest compiles shell/, which is how the Rev A play image
 # stayed broken behind a green suite on 2026-10-09 (450eed36). Skipped, not
@@ -864,6 +896,13 @@ add_test(NAME click_detect_guard
 add_test(NAME remote_lib_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_remote_lib.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tools)
+
+# The CPU round 2 section-means tool (plan 2026-10-30-cpu-engine-kernels
+# Task 1): CBP_WIN* serial lines to per-section window means. Pure Python.
+add_test(NAME section_means_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_section_means.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tools)
 
 # The hot-path libm scan (plan 2026-10-29-cpu-hunt-remote.md Task 4): which

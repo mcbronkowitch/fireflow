@@ -1,5 +1,6 @@
 #include "sampler/sampler_engine.h"
 #include "util/math.h"
+#include "util/probe_mark.h"
 #include <cmath>
 
 namespace spky {
@@ -900,11 +901,20 @@ bool SamplerEngine::_spawn_slice(int k, float pan) {
 }
 
 void SamplerEngine::process(float& outL, float& outR) {
+#if defined(SPKY_PROBE_MARKS)
+    // Callback profile only (sampler_engine.h, ProbeEng): five stamps.
+    volatile uint32_t* const pclk = ::spky::probe_clock;
+    const uint32_t pt0 = *pclk;
+#endif
     if (_ctrl_ctr == 0) {
         _ctrl_ctr = kCtrlInterval;
         _update_control();
     }
     --_ctrl_ctr;
+#if defined(SPKY_PROBE_MARKS)
+    const uint32_t pt1 = *pclk;
+    _probe_eng.ctrl += pt1 - pt0;
+#endif
 
     // --- scheduling ---
     // FLOW only. In STEP nothing schedules itself: a fire spawns exactly one
@@ -921,6 +931,11 @@ void SamplerEngine::process(float& outL, float& outR) {
             _spawn_ctr += _next_interval();
         }
     }
+#if defined(SPKY_PROBE_MARKS)
+    const uint32_t pt2 = *pclk;
+    _probe_eng.sched += pt2 - pt1;
+    uint32_t plive = 0;                      // grains active after the loop
+#endif
 
     // --- the cloud ---
     float l = 0.f, r = 0.f;
@@ -928,9 +943,17 @@ void SamplerEngine::process(float& outL, float& outR) {
         if (!_grains[i].active()) continue;
         float gl = 0.f, gr = 0.f;
         _grains[i].process(_buf, gl, gr);
+#if defined(SPKY_PROBE_MARKS)
+        plive += _grains[i].active() ? 1u : 0u;
+#endif
         l += gl;
         r += gr;
     }
+#if defined(SPKY_PROBE_MARKS)
+    const uint32_t pt3 = *pclk;
+    _probe_eng.grains += pt3 - pt2;
+    _probe_eng.gsamp += plive;
+#endif
 
     // Overlap normalization (1/sqrt(active)): the target is recomputed once
     // per control tick above, but applied here through a OnePole, advanced
@@ -955,6 +978,9 @@ void SamplerEngine::process(float& outL, float& outR) {
 
     outL = l;
     outR = r;
+#if defined(SPKY_PROBE_MARKS)
+    _probe_eng.post += *pclk - pt3;
+#endif
 }
 
 // --- voice row: setters below, the state they write is declared in the header ---

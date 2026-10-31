@@ -639,3 +639,240 @@ A first attempt was discarded. In it two pots (COMP_A, COMP_B) were turned
 to 0 by hand to quiet the room. The PC's GPU noise Bastian heard over the
 monitors was not in the recording: the silent stretch read about −90 dBFS
 at the Twin's inputs.
+
+## 7. Round 2, Phase A: the kernels split, 2026-10-30
+
+Spec `docs/superpowers/specs/2026-10-30-cpu-engine-kernels-design.md` §5.1,
+plan Task 3. Measurement image `7c927be` (main + the Phase A probes;
+`SHELL_PANEL_SCAN=1 SHELL_KEYS_NC=1 SHELL_REMOTE=1 SHELL_REMOTE_MEASURE=1`,
+class-2 switches at their shipping defaults), flashed remotely as a pair,
+QSPI first; the persisted patch read `SHELL_PERSIST src=flash seq=581`.
+14 workloads × 3 rounds of 30 s (34 s with a SAMPLER deck), toggle word 0,
+interleaved with the ablation runs: 126 runs, none failed. Section means
+from `tools/section_means.py`, per run the mean over its windows, then the
+mean of the three runs; "spread" is the max − min of the three run means.
+
+### Which windows count
+
+The measurement image runs ~60 k above the listener image, and on
+SAMPLER_SYNTH_top1 (90) and SAMPLER_WAVE_top1 (99) the overrun guard trips
+on most frames. A silenced block runs no `process()`, so the delta-based
+sections (the engine splits `CBP_WIN9`-`WIN11`) read zero there, while
+`CBP_WIN2`'s deck figures repeat the last processed block. Such a window
+mixes the two. Only windows that overlap no `tripped=1` frame are used
+here ("clean"); 90 keeps 13 clean windows in one run of three, 99 keeps 6
+in two. For those two only ratios are read (cycles per call, cycles per
+grain-sample), which a silenced block does not change. Every other workload
+keeps 11-16 clean windows per run (82 round 1: 7, 92 round 1: 4).
+
+### Engine sections per deck (window means per block, clean windows)
+
+| deck | engine (`ae`/`be`) | inside |
+|---|---|---|
+| SYNTH (108, both decks) | 164-187 k | voices 150-169 k, ctrl 5.2-6.2 k, pending 2-4 k |
+| WAVE (313, both decks) | 172-177 k | voices 152-158 k, ctrl 8.0-8.6 k, pending 2-3 k |
+| SAMPLER with a cloud (81 deck A, 5.7 grains on average) | 170 k | grain loop 132 k, post 17.5 k, ctrl 2.2 k, scheduling 1.2 k |
+| SAMPLER nearly silent (81 deck B, 0.07 grains) | 45 k | grain loop 10.9 k, post 17.0 k, ctrl 1.8 k, scheduling 1.2 k |
+
+Base spread of the summed engine section `ae + be`: 0.4-7 k on most
+workloads; 16-20 k on WAVE_SYNTH_top2 (127), WAVE_WAVE_top1 (135) and
+SAMPLER_SYNTH_top3 (92); 50 k on SAMPLER_SAMPLER_top2 (82).
+
+### Inside a voice (bits 10-13)
+
+Every SYNTH or WAVE deck in these workloads plays all four voices in its hot
+blocks (`CBP_REC6`: 3.7-4.0 active voices per sample; `bastian` deck A 2.9,
+its other ~1.1 idle). Cycles per voice call from `CBP_WIN10`: decay and
+attack 342-457, the WAVE crossfade bins 363-572, idle 1-16.
+
+Each ablation skips one stage in every voice of both decks; delta of
+`ae + be` against the interleaved base, in cycles per block:
+
+| bit | stage skipped | 117 SYNTH+WAVE | 127 WAVE+SYNTH | 313 WAVE×2 | 108 SYNTH×2 | base spread |
+|---|---|---|---|---|---|---|
+| 10 | second oscillator | −85 602 | −85 904 | −77 815 | −93 345 | 1.9-7.2 k (127: 32 k) |
+| 11 | sub oscillator | −41 295 | −32 796 | −44 450 | −43 890 | |
+| 12 | `SvfLp` | −31 443 | −22 933 | −33 747 | −34 741 | |
+| 13 | env × vel × pan (unit gains) | −324 | +10 367 | −2 366 | −257 | |
+
+Per voice-sample (768 per block with two 4-voice decks), on the clean
+same-engine pairs:
+
+| | SYNTH (108) | WAVE (313) |
+|---|---|---|
+| whole voice call (`WIN9` voices / 768) | 414 | 404 |
+| one oscillator (bit 10) | 122 | 101 |
+| sub oscillator (bit 11) | 57 | 58 |
+| `SvfLp` (bit 12) | 45 | 44 |
+| the rest (oscillator A taken equal to B; env, pan, call, loop) | ~69 | ~100 |
+
+Bit 13 is inside the spread everywhere: the envelope, velocity and pan
+multiplies cost nothing measurable.
+
+### Inside a grain (bits 14-16), and the grain price
+
+`sg` is the grain loop per block, `sn` the active grains summed over the
+block's samples. A least-squares line of `sg` against `sn` over every clean
+deck-window of the SAMPLER base runs (90, 99, 81, 82, 92, `bastian`; 175
+points, `sn` 1-946):
+
+**slope 221 cycles per active grain-sample, intercept 11.3 k per block,
+residual sd 3.2 k.** The intercept is the loop over the 16 grain slots with
+nothing sounding (81 deck B: 10.9 k at 0.07 grains). 96 × the slope: one
+grain sounding a whole block costs **21.3 k**. Per-run slopes on 81 and 82:
+220-241.
+
+The ablations, as slopes fitted the same way on each bit's runs, against
+base, pooled over 81 and 82 (the workloads with clean windows in every run):
+
+| bit | stage | slope | delta per grain-sample | share of 225 |
+|---|---|---|---|---|
+| base | | 225.4 ±0.9 | | |
+| 14 | Hann window (`w = 1`) | 207.3 ±1.0 | −18 | 8 % |
+| 15 | the fold in `read_linear` (in-range frames skip it) | 194.7 ±1.6 | −31 | 14 % |
+| 16 | the buffer read from a DTCM array instead of SDRAM | 188.3 ±0.8 | −37 | 16 % |
+
+Per-run slope spread on base is 7 (81) to 22 (82) cycles per
+grain-sample, so bits 15 and 16 stand clear of it and bit 14 sits at its
+edge. Bit 16's array is zeros, so the cloud is silent under it; only `sg`
+is read for it, not `ae`. Hot blocks (`CBP_REC7`) carry 3.6-9.5 grains per
+sample: 99 deck A 9.5, 90 deck A 7.4, 92 6.1, 81 5.6.
+
+Two stages no candidate touches: the SAMPLER post stage (normalisation, two
+`SvfLp`, level) at 17-19 k per SAMPLER deck whether it sounds or not, and
+the 11 k intercept of the grain loop.
+
+### Placement (measurement image `7c927be`)
+
+`ITCM_HOT` 10 720 B free (54 560 of 65 280 used), `SRAM_EXEC` 25 312 B
+free. SYNTH's control code is not in ITCM and WAVE's is, yet SYNTH's ctrl
+section (5.2-6.2 k per deck) is the smaller one (WAVE 8.0-8.6 k).
+
+### Class 3, priced
+
+| | price per block |
+|---|---|
+| one voice fewer per deck (3 instead of 4) | ~33-44 k per deck (96 × 342-457 per voice call in decay) |
+| one grain fewer in a hot block | 21.3 k |
+| WAVE without its second oscillator | ~39 k per WAVE deck (bit 10 on 313, halved) |
+
+### The ranking
+
+By the measured size of the stage each candidate touches (the stage is the
+ceiling; what the candidate takes from it is measured in its own A/B):
+
+| rank | candidate | class | stage it touches, measured |
+|---|---|---|---|
+| 1 | V1 MorphOsc invariants | 1 | SYNTH oscillator, 122 per voice-sample per oscillator (~94 k per SYNTH deck for both) |
+| 2 | V3 sub without the wrap | 1 | sub, 57 per voice-sample (~22 k per deck) |
+| 3 | V6 single-pass `SvfLp` | 2 | voice filter, 45 per voice-sample (~17 k per deck) |
+| 4 | G1 fold fast path | 1 | fold, 31 per grain-sample (~22 k per SAMPLER deck at 7.4 grains) |
+| 5 | G4 int16 buffer | 2 | SDRAM read, 37 per grain-sample (~26 k at 7.4 grains); bit 16 is above the spread, so the task runs |
+| 6 | G2 Hann reciprocals | 2 | window, 18 per grain-sample (~13 k at 7.4 grains), at the spread's edge |
+| 7 | G3 `read_linear` inlined | 1 | not ablated; priced by its own A/B |
+| 8 | V7 WAVE crossfade skipped when quiet | 2 | crossfade extra over decay: 1.6-11 k per deck in window means (117 deck B 11.1 k, 313 1.6-1.7 k) |
+| 9 | V5 cheaper exp2 | 2 | inside ctrl, 5.2-8.6 k per deck in all |
+| 10 | V4 SYNTH control into ITCM | 1 | SYNTH ctrl, 5.2-6.2 k per deck |
+| — | V2 idle-voice skip | 1 | **dropped**: no idle voices in the hot blocks except `bastian` deck A (~1.1 at 1-16 cycles per idle call, ≤ 2 k per block), inside every spread (spec §4) |
+
+### Phase B: the candidates
+
+Each candidate ran on its own measurement image, built from the commit that
+put it behind a toggle bit, flashed remotely as a pair (the persisted patch
+read `seq=581` after every flash). Base (bit 0) and candidate (bit 1)
+alternate per workload, 3 rounds of 30 s, clean windows only (§7). Deltas
+are the mean of the candidate's run means minus the base's; "spread" is the
+max − min of the three base run means.
+
+| candidate | class | bit | image | workloads | measured | verdict |
+|---|---|---|---|---|---|---|
+| V1 MorphOsc invariants | 1 | 17 | `4a6d0bc` | 108, 117, 127, 10 | SYNTH deck voices −10.7 to −17.5 k per block (108 A −17.5, B −10.7; 117 A −11.2; 127 B −17.0; 10 B −10.8), base spread 0.02-6.7 k. Engine section: 10 −10.4, 108 −28.3, 117 −10.2, 127 −16.9 k | adopted, `4a20c34e` |
+| V3 sub and sine segment without the wrap | 1 | 18 | `816eda9` | 108, 117, 313, 127 | engine section 108 −6.7 (spread 6.4), 117 −6.4 (2.8), 127 −4.4 (2.3), 313 −3.3 (1.1) k; 1.5-4.9 k per deck | adopted, `b080ad07` |
+| V6 single-pass voice `SvfLp` (the two Chamberlin steps folded into one step on the same state; output equals the old filter up to rounding, about −100 dB) | 2 | 19 | `f945d88` | 108, 117, 127, 313 | engine section 108 −12.1 (spread 2.9), 117 −12.6 (8.5), 127 −13.5 (1.7), 313 −13.7 (1.0) k; voices −5.3 to −7.0 k per deck | queued for listening behind `SHELL_LEAN_SVF1`, `f9824957`; accepted, then **off by default**: no saving in the listener image (below) |
+| G1 fold fast path in `read_linear`, rev 1: (0, fsz) skips the fold | 1 | 20 | `62ea08a` | 81, 82, 90 | grain-sample 81 **+9.0** (worse in 5 of 6 round pairs), 82 −25.1, 90 −28.1 | revised: on 81, 42 % of reads sit in [fsz, 2fsz) and alternate with in-range reads call by call (desktop count), so the new branch mispredicts |
+| G1 rev 2: (0, 2·fsz) skips the fold, the subtract of fsz as a conditional move | 1 | 20 | `17305ed` | 81, 82, 90 | grain-sample 81 −7.7, 82 −11.8, 90 −22.6; pooled −10.2 | adopted, `edbb6dd6` |
+| G4 int16 sampler buffer | 2 | 21 | `eb6cd82` | 81, 82, 90 | grain-sample 81 −8.2, 82 −9.3, 90 −1.1; pooled −9.0 (~4 % of the grain price) | reverted, `bbb67e05`: int16 clips the overdub at full scale, where the float buffer settles up to 10× the input below `kFbSatKnee` and blooms to ~1.3 above it; not a slight change for 4 % |
+| G2 Hann window without per-sample divisions | 2 | 22 | `ed24372` | 81, 82, 90 | grain-sample 81 −7.2, 82 −18.1, 90 +4.3 (inside 90's per-run spread of ~36); pooled −10.0; the window moves by at most 3e-7 | queued for listening behind `SHELL_LEAN_GRAIN_WIN`, `22f59feb` |
+| G3 `read_linear` inlined into the grain loop | 1 | 23 | `1aa9d3e` | 81, 82, 90 | grain-sample 81 −13.9, 82 −18.3, 90 −22.3; pooled −14.6 | adopted, `3720c6ae` |
+| V7 WAVE mip crossfade skipped on a strike from silence | 2 | 24 | `c20ded2` | 127, 135, 313, 314 | engine section 127 −0.5 (spread 0.4), 135 +3.5 (66), 313 +0.6 (0.3), 314 −0.3 (2.8) k; the crossfade bins barely move (127 deck A `n1` 7152 → 6097, `n3` 12716 → 11242): most crossfades are not strikes from silence | reverted, `de329c94` |
+| V5 fast exp2 for the detune ratio (degree-4 polynomial on [−0.1, 0.1], `std::pow` outside; 7.2e-8 relative) | 2 | 25 | `47f6902` | 108, 117, 127, 313 | ctrl section 108 −0.84 (spread 0.5), 117 −0.99 (0.02), 127 −0.96 (0.3), 313 −1.01 (0.06) k; −0.40 to −0.54 k per deck; the engine section stays inside its spread | queued for listening behind `SHELL_LEAN_EXP2`, `a3213846` |
+| V4 SYNTH `_apply_freq` and `_update_control` from SRAM_EXEC into ITCM (2 KB) | 1 | — | `a321384` vs `fd8005c`, by reflash | 108, 117, 127 | ctrl section 108 +0.24, 117 −0.03, 127 −0.02 k (spreads 0-0.18) | reverted, `8b2b1798`: through the I-cache, SRAM_EXEC runs these as fast as ITCM |
+
+V1's saving differs between the SYNTH decks of one workload (108: −17.5 k on
+deck A, −10.7 k on deck B). The morph position decides which segment's
+arithmetic was being recomputed per sample; the sizes are what was measured,
+not a per-segment model.
+
+The grain candidates (G1-G4) ran 6 rounds on 81, 82 and 90 and are judged
+by the fitted slope of `sg` against `sn` (cycles per active grain-sample,
+with intercept), base against candidate, as in Phase A; 99 gives no clean
+grain windows in its base runs. Single-run slopes scatter by 10-40 cycles
+on these workloads, so a candidate counts when its pooled slope moves by
+several standard errors and no workload moves the other way beyond its own
+scatter. After G1 and G3 the grain price is about 221 − 10 − 15 ≈ 196
+cycles per grain-sample (96 × = 18.8 k per block for one grain), and about
+186 (17.9 k) with G2 if the listening batch accepts it. These are deltas
+from separate A/B runs, added; the end-of-round batch measures them
+together.
+
+**The listener image does not inherit the measurement image's savings.**
+On 2026-10-31 the branch's listener image (`aea1499`, the lean three on) ran
+against main's (`478f8d4`) by reflash, 4 rounds of 30 s, frame maximum
+median (p50) averaged over the rounds: 90 −45 k and 127 −22 k, but 226
++19 k, 314 +16 k, 151 and 21 +5 k each, and 226's worst frame reached
+947 581 (main: 922 469). A bisect of `6a96452`'s listener image, each arm
+flashed with main's image between it and the next so that every flash
+changes the build stamp, 3 rounds of 30 s, p50 in k cycles:
+
+| workload | main | lean three off | lean three on | on, SVF1 off | on, EXP2 off |
+|---|---|---|---|---|---|
+| 226 BODY+WAVE | 842.3 | 845.4 | 860.0 | 848.3 | 859.4 |
+| 314 WAVE+WAVE | 869.4 | 868.0 | 884.3 | 869.8 | 884.9 |
+| 90 SAMPLER | 882.3 | — | 850.9 | 836.0 | — |
+| 127 SYNTH | 893.8 | — | 870.5 | 877.5 | — |
+| 313 WAVE | 881.5 | — | 875.1 | 878.9 | — |
+
+With the three lean switches off the branch equals main on 226 and 314, so
+the class-1 adoptions (V1, V3, G1, G3) and the code they moved cost
+nothing there. V5 and G2 change nothing on these two. V6 alone costs about
+15 k on 226, 314 and 90, and saves 7 k on 127 and 4 k on 313. 90 is a
+sampler deck whose filters never take the one-pass path, so the cost is
+not V6's arithmetic: switching it on enlarges `SvfLp` (six members, a
+branch in `_recalc_damp`) for every user, and the code around it grows
+(`Instrument::process` 7492 → 7892 bytes, `FeedEngine::_control_tick`
+1292 → 1474). Which cache or placement effect turns that into 15 k is not
+measured. The measurement image could not see it: it holds both paths and
+the larger `SvfLp` in both arms. `SHELL_LEAN_SVF1` defaults to 0.
+
+With V6 off (`1fa1960`), the same reflash A/B against main, 4 rounds,
+p50 in k cycles: 90 862.7 → 828.7, 127 890.8 → 876.9, 21 832.2 → 827.4,
+151 831.9 → 830.7, 226 843.3 → 847.3, 314 871.1 → 871.9. 127's worst frame
+was about 963 k on both images.
+
+**End of round 2: the top-20 batch on `1fa1960`** (the listener image, every
+workload of `captures/cpu-hunt-2026-10-30-top20-class2.csv`, 60 s each, a
+second run for any workload over 880 000; the worse of the two counts):
+`captures/cpu-round2-2026-10-31-top20.csv`. The worst frame maximum is
+938 701 (117 SYNTH_WAVE_top1). None of the 20 reaches 945 000, and 8 are
+over 880 000. The median p50 is 834 829.
+
+| one grain, 96 × the grain price | worst frame maximum, top 20 | clicks start |
+|---|---|---|
+| about 17 900 (about 186 cycles per grain-sample after G1, G2, G3: the separate A/B deltas, added) | 938 701 | 945 000 |
+
+## 8. Bastian's decisions, round 2
+
+2026-10-31, on the three class-2 candidates queued for listening (V6, G2,
+V5), each of which differs from the old code only by rounding (V6 about
+−100 dB against the two-pass filter, G2's window by at most 3e-7, V5's
+detune ratio by at most 7.2e-8 relative), asked whether they still need the
+blind A/B on the Twin: **"Accept without listening"**.
+
+So `SHELL_LEAN_GRAIN_WIN` and `SHELL_LEAN_EXP2` default to 1 in every
+shell image; `SHELL_LEAN_SVF1` defaulted to 1 for the same few hours and
+then went to 0, because the listener-image bisect in section 7 measured it
+as a net cost. `shell/README.md` "Turning a CPU saving back" says how to
+switch each one. No blind A/B was recorded for round 2. The
+measurement image still holds both paths of each, with the old path at
+toggle bit 0, so a measurement run measures the old arithmetic for these
+three unless their bits are set.

@@ -300,6 +300,28 @@ public:
     int test_cursor() const    { return _cursor; }
     int test_last_slot() const { return _last_slot; }
 
+#if defined(SPKY_PROBE_MARKS)
+    // Callback profile only (CPU round 2, spec 2026-10-30 section 5.1), the
+    // SynthEngineT::ProbeEng idiom: running totals the host differences once
+    // per block, so nothing outside the engine writes here. Cycles in
+    // process()'s four parts -- the control tick (ctrl), scheduling and spawn
+    // (sched), the grain loop (grains), normalisation + the two SvfLp + the
+    // level + the monitor (post) -- and the grains still active after each
+    // call's grain loop, summed over the calls (gsamp: active grain-samples).
+    struct ProbeEng { uint32_t ctrl, sched, grains, post, gsamp; };
+    const ProbeEng& probe_eng() const { return _probe_eng; }
+#endif
+#if defined(SPKY_PROBE_TOGGLES)
+    // Measurement image only (util/probe_toggles.h, bits from 17): the toggle
+    // word, handed down once per block by Instrument::process. A candidate
+    // tests its bit on this member, never on the global.
+    // The grains take bit 22 (G2) from it.
+    void set_probe_word(uint32_t w) {
+        _probe_word = w;
+        for (int i = 0; i < kGrains; ++i) _grains[i].set_probe_word(w);
+    }
+#endif
+
 private:
     void  _update_control();     // recompute derived values on the raster
     // Das effektive Intervall bis zum naechsten Spawn: Grundintervall mal
@@ -424,6 +446,13 @@ private:
     // voice row
     float _atk_n = 0.3f, _dec_n = 0.3f;
     float _filt_amt = 0.f, _res_n = 0.15f, _sub_n = 0.f, _detune_n = 0.f;
+
+#if defined(SPKY_PROBE_MARKS)
+    ProbeEng _probe_eng {};
+#endif
+#if defined(SPKY_PROBE_TOGGLES)
+    uint32_t _probe_word = 0;
+#endif
 };
 
 }  // namespace spky

@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include "synth/wt_bank.h"
+#include "util/fast_exp2.h"
 #include "util/math.h"
 
 namespace spky {
@@ -68,9 +69,29 @@ public:
     void set_detune_cents(float ct) { // control rate
         if (ct == _ct) return;
         _ct = ct;
+#if defined(SPKY_PROBE_TOGGLES)
+        // CPU round 2, candidate V5 (toggle bit 25, util/probe_toggles.h): the
+        // voice's set_probe_word sets the flag on the control tick.
+        _ratio = _fast_exp2 ? fast_exp2(ct * (1.f / 1200.f))
+                            : std::pow(2.f, ct * (1.f / 1200.f));
+#elif SPKY_LEAN_EXP2
+        // SHELL_LEAN_EXP2=1 (class 2): util/fast_exp2.h.
+        _ratio = fast_exp2(ct * (1.f / 1200.f));
+#else
         _ratio = std::pow(2.f, ct * (1.f / 1200.f));
+#endif
         set_freq(_freq);
     }
+
+#if defined(SPKY_PROBE_TOGGLES)
+    // Measurement image only: bit 25 (LEAN_EXP2, candidate V5), pushed by
+    // VoiceT::set_probe_word. set_detune_cents reads it; process() does not.
+    void set_fast_exp2(bool on) { _fast_exp2 = on; }
+    bool fast_exp2_on() const { return _fast_exp2; }
+#elif SPKY_LEAN_EXP2
+    // The detune ratio in use (tests/test_lean_exp2.cpp: the lean arm ran).
+    float ratio() const { return _ratio; }
+#endif
 
     void set_morph(float m) {
         const float target = clampf(m, 0.f, 1.f) * 15.f;
@@ -191,6 +212,9 @@ private:
     int _mip_xfade_remaining = 0;
     float _mip_source_weight[wt::kMipCount] = {};
     int _src_mip = 0;   // the lone weight-1 source, or -1 for a weighted mix
+#if defined(SPKY_PROBE_TOGGLES)
+    bool _fast_exp2 = false;   // bit 25, set by set_fast_exp2
+#endif
 };
 
 } // namespace spky

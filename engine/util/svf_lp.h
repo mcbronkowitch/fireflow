@@ -55,6 +55,9 @@ public:
         _res_damp = 2.0f * (1.0f - powf(_res, 0.25f));   // cache; see SetFreq
         _fc_req  = -1.f;   // guards: force the first Set* through
         _res_req = -1.f;
+#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_SVF1
+        _single = false;   // two passes until SetSinglePass(true)
+#endif
     }
 
     void SetFreq(float f) {
@@ -94,6 +97,51 @@ public:
     }
 
     float Low() const { return _out_low; }
+
+#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_SVF1
+    // ---- One pass per sample (CPU round 2, candidate V6; class 2) ----------
+    // Compiled only in the measurement image (SPKY_PROBE_TOGGLES, toggle bit
+    // 19) and with the firmware switch SHELL_LEAN_SVF1=1 (SPKY_LEAN_SVF1).
+    // Every other build -- desktop, VCV, and a firmware built with
+    // SHELL_LEAN_SVF1=0 -- has none of it, and Process() above is the same in
+    // all of them (the default firmware too: the switch is off, the board
+    // measured a net cost -- shell/Makefile, SHELL_LEAN_SVF1). Only the
+    // voice switches it on (synth/voice.cpp); SamplerEngine's and FeedEngine's
+    // filters stay two-pass in every build.
+    //
+    // It is the same filter, not a better one: Process()'s two steps folded
+    // into one. One Chamberlin step at 2*sr maps the state x = (_low, _band)
+    // to A x + b in, with
+    //     A = [ 1  f ; -f  e ],   b = (0, f),   e = 1 - qf - f^2
+    // (f = _freq, q = _damp). Two steps on the held input, and the average of
+    // the two lows, are therefore exactly
+    //     x' = A^2 x + (A + I) b in,   out = C x + (f^2/2) in,
+    //     C  = (1 - f^2/2, f (1 + s)/2),   s = 1 + e = 2 - qf - f^2
+    // which, written out with d = in - _low, is the four lines below:
+    //     out   = _low + (f^2/2) d + (f (1 + s)/2) _band
+    //     _low  = _low + f^2 d + f s _band
+    //     _band = (e^2 - f^2) _band + f s d
+    // Same state, same coordinates, same coefficients' inputs: the output is
+    // Process()'s up to float rounding, under modulation too (the coefficients
+    // change between calls in both), and the two can be swapped mid-stream
+    // without a transient. Stable wherever Process() is (A^2's eigenvalues
+    // are the squares of A's). tests/test_lean_svf1.cpp measures both with
+    // sine sweeps. The coefficients are a few products at control rate, after
+    // the sinf SetFreq already runs; no division, no tan.
+    void SetSinglePass(bool on) {
+        if (on == _single) return;
+        _single = on;
+        if (on) _recalc_single();
+    }
+    bool single_pass() const { return _single; }
+
+    void ProcessSingle(float in) {
+        const float d = in - _low;
+        _out_low = _low + _s_h * d + _s_c1 * _band;
+        _low  = _low + _s_f2 * d + _s_fs * _band;
+        _band = _s_m11 * _band + _s_fs * d;
+    }
+#endif
 
     // Zero the state once it has decayed below audibility. A two-pole fed
     // exact zeros decays GEOMETRICALLY: it approaches zero without reaching
@@ -140,7 +188,25 @@ private:
 
     void _recalc_damp() {
         _damp = min_(_res_damp, min_(2.0f, 2.0f / _freq - _freq * 0.5f));
+#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_SVF1
+        if (_single) _recalc_single();
+#endif
     }
+
+#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_SVF1
+    // The one-pass coefficients from _freq and _damp (see ProcessSingle).
+    void _recalc_single() {
+        const float f  = _freq;
+        const float ff = f * f;
+        const float e  = 1.0f - _damp * f - ff;
+        const float s  = 1.0f + e;
+        _s_f2  = ff;
+        _s_h   = 0.5f * ff;
+        _s_fs  = f * s;
+        _s_c1  = 0.5f * f * (1.0f + s);
+        _s_m11 = e * e - ff;
+    }
+#endif
 
     float _sr = 48000.f;
     float _fc = 200.f;
@@ -154,6 +220,14 @@ private:
     float _low = 0.f;
     float _band = 0.f;
     float _out_low = 0.f;
+#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_SVF1
+    bool  _single = false;   // ProcessSingle's coefficients are kept current
+    float _s_f2 = 0.f;       // f^2
+    float _s_h = 0.f;        // f^2 / 2
+    float _s_fs = 0.f;       // f s
+    float _s_c1 = 0.f;       // f (1 + s) / 2
+    float _s_m11 = 1.f;      // e^2 - f^2
+#endif
 };
 
 }  // namespace spky

@@ -68,7 +68,125 @@
 //                                                        the tank in a
 //                                                        measurement image built
 //                                                        with SHELL_REVERB_HALF=0
-//   10-29 (free: candidates; bits 0-9 are never reused)
+//   10   ABL_OSC_B            engine/synth/voice.cpp     USED, reverted after
+//                                                        Phase A: VoiceT runs osc
+//                                                        A twice, not osc B
+//   11   ABL_SUB              engine/synth/voice.cpp     USED, reverted after
+//                                                        Phase A: no sub osc
+//   12   ABL_SVF              engine/synth/voice.cpp     USED, reverted after
+//                                                        Phase A: the voice
+//                                                        passes unfiltered
+//   13   ABL_ENV_PAN          engine/synth/voice.cpp     USED, reverted after
+//                                                        Phase A: envelope a
+//                                                        constant 0.5, unit
+//                                                        gains (Env::process
+//                                                        still runs for state)
+//   14   ABL_GRAIN_WIN        engine/sampler/grain.h     USED, reverted after
+//                                                        Phase A: window w = 1,
+//                                                        counters as before
+//   15   ABL_GRAIN_FOLD       engine/sampler/            USED, reverted after
+//                             sample_buffer.cpp          Phase A: read_linear
+//                                                        skips the fold inside
+//                                                        the content, clamps
+//                                                        outside it
+//   16   ABL_GRAIN_SRAM       engine/sampler/            USED, reverted after
+//                             sample_buffer.cpp          Phase A: read_linear
+//                                                        reads a 4096-frame
+//                                                        static array (DTCM on
+//                                                        the board), not the
+//                                                        buffer
+//                                                        (bits 10-16: measured
+//                                                        in docs/hardware/
+//                                                        cpu-hunt-measured.md
+//                                                        section 7; spec
+//                                                        2026-10-30-cpu-engine-
+//                                                        kernels-design.md 5.1;
+//                                                        each prices one stage
+//                                                        and changes the sound)
+//   17   MORPH_INV            engine/synth/morph_osc.h   RETIRED: adopted, the
+//                                                        only path now (round 2
+//                                                        V1: MorphOsc's segment,
+//                                                        weight and dt fixed in
+//                                                        the setters, bit-
+//                                                        identical)
+//   18   SIN_WRAPPED          engine/util/fast_sin.h     RETIRED: adopted, the
+//                                                        only path now (round 2
+//                                                        V3: the sub oscillator
+//                                                        and MorphOsc's sine
+//                                                        segment call
+//                                                        fast_sin_wrapped, no
+//                                                        second floor wrap, bit-
+//                                                        identical)
+//   19   LEAN_SVF1            engine/util/svf_lp.h,      V6 (round 2, class 2),
+//                             engine/synth/voice.cpp     accepted, but OFF by
+//                                                        default in the firmware:
+//                                                        the listener images
+//                                                        measured a net cost
+//                                                        (2026-10-31). SYNTH and
+//                                                        WAVE voices filter in
+//                                                        one pass
+//                                                        (SvfLp::ProcessSingle);
+//                                                        the old path is bit 0
+//                                                        here; the firmware
+//                                                        switch is
+//                                                        SHELL_LEAN_SVF1
+//   20   GRAIN_FOLD_FAST      engine/sampler/            RETIRED: adopted, the
+//                             sample_buffer.cpp          only path now (round 2
+//                                                        G1: read_linear skips
+//                                                        the divide and floor
+//                                                        for a frame inside
+//                                                        (0, 2 size), a select
+//                                                        for the second period,
+//                                                        bit-identical)
+//   21   LEAN_SAMPLER_I16     engine/sampler/            USED, reverted: round 2
+//                             sample_buffer.h/.cpp       G4, the record buffer
+//                                                        as int16 frames (eb6cd82,
+//                                                        in-place conversion on
+//                                                        the flip); saved ~9
+//                                                        cycles per grain-sample,
+//                                                        not worth clipping the
+//                                                        overdub at full scale
+//   22   LEAN_GRAIN_WIN       engine/sampler/grain.h     G2 (round 2, class 2),
+//                                                        accepted: on by default
+//                                                        in the firmware
+//                                                        (2026-10-31). A grain's
+//                                                        Hann window multiplies
+//                                                        by 1/atk, 1/dec, 1/fade
+//                                                        latched at spawn and at
+//                                                        release instead of
+//                                                        dividing per sample; the
+//                                                        old path is bit 0 here;
+//                                                        the firmware switch is
+//                                                        SHELL_LEAN_GRAIN_WIN
+//   23   GRAIN_READ_INLINE    engine/sampler/            RETIRED: adopted, the
+//                             sample_buffer.h            only path now (round 2
+//                                                        G3: read_linear is
+//                                                        inline in the grain
+//                                                        loop, bit-identical)
+//   24   LEAN_XFADE_QUIET     engine/synth/wt_osc.h,     USED, reverted: round 2
+//                             engine/synth/voice.cpp     V7, a WAVE strike from
+//                                                        an envelope below
+//                                                        -60 dB snapped to the
+//                                                        new mip instead of
+//                                                        crossfading (c20ded2a);
+//                                                        engine section within
+//                                                        the spread on 127, 135,
+//                                                        313, 314 (most
+//                                                        crossfades are not
+//                                                        strikes from silence)
+//   25   LEAN_EXP2            engine/synth/morph_osc.h,  V5 (round 2, class 2),
+//                             engine/synth/wt_osc.h      accepted: on by default
+//                                                        in the firmware
+//                                                        (2026-10-31). The detune
+//                                                        ratio 2^(ct / 1200) of
+//                                                        a SYNTH or WAVE voice's
+//                                                        oscillators from
+//                                                        util/fast_exp2.h, not
+//                                                        std::pow (the old path,
+//                                                        bit 0 here); the
+//                                                        firmware switch is
+//                                                        SHELL_LEAN_EXP2
+//   26-29 (free: candidates; bits 0-25 are never reused)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE
 //                                                        burn on every block
 //   31   SHELL_GUARD_OFF      shell/panel_scan.cpp       the overrun guard is
@@ -85,7 +203,9 @@ namespace probe {
 
 // The candidates' bits (above).
 inline constexpr int kBitReverbHalf = 9;
-
+inline constexpr int kBitLeanSvf1   = 19;
+inline constexpr int kBitLeanGrainWin = 22;
+inline constexpr int kBitLeanExp2 = 25;
 // The shell's two bits (above).
 inline constexpr int kBitShellLateRepeat = 30;
 inline constexpr int kBitShellGuardOff   = 31;

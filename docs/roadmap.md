@@ -4198,6 +4198,29 @@ the coupon has nothing else open.
 LEDs on the 595 — waits for the control PCB's pin map, which should give one
 spare channel to AGND and one to the rail (spec §8).
 
+**2026-10-31 — CPU round 2 on Rev A: per-engine kernels ✅ measured, merged.**
+Spec `docs/superpowers/specs/2026-10-30-cpu-engine-kernels-design.md`, plan
+`docs/superpowers/plans/2026-10-30-cpu-engine-kernels.md`; branch
+`feat/cpu-engine-kernels`, fast-forwarded into main 2026-10-31. Numbers in
+`docs/hardware/cpu-hunt-measured.md` §7-§8. This closes the CPU hunt's §4
+row 11 (per-engine kernel work).
+- **Why.** Headroom for a future generative granular layer that reads its
+  sample from the SD card; one grain's price decides how many fit.
+- **Adopted, bit-identical:** V1 MorphOsc invariants, V3 sub and sine without
+  the second wrap, G1 `read_linear`'s fold skipped inside (0, 2·fsz), G3
+  `read_linear` inlined into the grain loop.
+- **Firmware-only, rounding-level, accepted without a listen and on:** G2
+  (Hann window without per-sample divisions), V5 (detune ratio from a
+  polynomial). **V6** (one-pass voice filter) is accepted but **off**: the
+  listener image measured it as +15 k on three workloads.
+- **Rejected on measurement:** G4 int16 sampler buffer (clips the overdub),
+  V7 WAVE crossfade skip (nothing to skip), V4 SYNTH control code in ITCM
+  (I-cache already serves it).
+- **Result.** One grain ≈ 17.9 k cycles per block (≈186 per grain-sample).
+  The 20 worst listener workloads: worst 938 701, none at 945 000, 8 of 20
+  above 880 000 (was 944 258 and 9). Against main: SAMPLER 90 −34 k p50,
+  SYNTH 127 −14 k, BODY/BBD/WAVE unchanged.
+
 **2026-10-30 — CPU hunt on Rev A: every worst case under the click line ✅ measured, merged.**
 Plan `docs/superpowers/plans/2026-10-29-cpu-hunt-remote.md`; branch
 `feat/cpu-hunt-remote`, fast-forwarded into main 2026-10-30 (`47f3901b`).

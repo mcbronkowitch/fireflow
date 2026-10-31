@@ -485,7 +485,20 @@ invisible from reading the scripts, and each cost real time.
   block by roughly 60-75 k cycles (`proc`, measured on three workloads,
   `docs/hardware/cpu-hunt-measured.md` §5). Compare board numbers only against
   board numbers from the same switch set. `SHELL_FAST_MATH=2` folds the engine's
-  NaN guards and the image build refuses it on purpose.
+  NaN guards and the image build refuses it on purpose. Since 2026-10-31 the
+  firmware also builds two lean switches on by default (`SHELL_LEAN_GRAIN_WIN`,
+  `SHELL_LEAN_EXP2`; `SHELL_LEAN_SVF1` exists but is off), which `bench/` and
+  the desktop hosts never see either (`shell/README.md`).
+
+- **A measurement-image saving can vanish, or turn into a cost, in the
+  shipping image.** The measurement image compiles both paths of a candidate
+  and picks one by toggle bit, so a candidate that changes a class's layout
+  (new members, a new branch in a shared setter) carries that layout into BOTH
+  arms. V6, the one-pass voice filter, measured −12 to −14 k there and +15 k
+  on three workloads in the listener image, including a sampler deck that
+  never runs the new path (2026-10-31, `cpu-hunt-measured.md` §7). Confirm a
+  layout-changing candidate with a listener-image reflash A/B (main's image
+  flashed between arms when they share a git hash) before calling it a saving.
 
 - **One 60 s `frame_max` is not a verdict.** The worst block of the same
   workload on the same image moved by ±135 k between runs (measured
