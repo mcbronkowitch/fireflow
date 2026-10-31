@@ -6,6 +6,7 @@
 #include "shell_raw_spread.h"
 #include "shell_remote.h"
 #include "shell_remote_measure.h"
+#include "shell_sd.h"
 
 #if SHELL_PANEL_SCAN
 
@@ -42,6 +43,9 @@
 #endif
 #if SHELL_REMOTE_MEASURE
 #include <algorithm>
+#endif
+#if SHELL_SD
+#include "sd_probe.h"
 #endif
 #if !SHELL_COUPON_PROBE
 #include "control/clock_law.hpp"
@@ -1267,6 +1271,13 @@ void run_panel_scan_report(bench::Board& hw)
     uint32_t guard_trips_said    = 0;
     uint32_t guard_rearms_said   = 0;
 #endif
+#if SHELL_SD
+    // The card test, once, here: audio runs and the listener is up, so a card
+    // that hangs still leaves BOOT working (sd_probe.h). Its lines go out
+    // with the passes below.
+    sd_bringup_run();
+    uint32_t sd_pass = 0;
+#endif
 #if SHELL_REMOTE_MEASURE
     // The last busy window's figures, printed with the next frame.
     OutStats out_stats = {0, 0, 0, 0, 0, 0, 0, 0};
@@ -1821,6 +1832,11 @@ void run_panel_scan_report(bench::Board& hw)
         // this image's recordings are not compared by level against plain
         // images.
         out_stats = busy_window();
+#elif SHELL_SD
+        // The same 500 ms, reading the card in every other ten raw windows
+        // (row 11.2: the pots' spread streaming against idle).
+        sd_report(hw, sd_pass++);
+        sd_stream_pass(hw, g_raw_win);
 #else
         hw.Delay(500);
 #endif

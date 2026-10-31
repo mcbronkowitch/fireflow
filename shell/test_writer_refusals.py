@@ -4,8 +4,8 @@ The Makefile runs these writers while it is parsed and ignores their exit
 status, so a refusal that left the previous build's header, stamp or linker
 script in place would let the build carry on with a stale value (and the
 guards behind it read the stale file and pass). Each writer therefore deletes
-its output on ANY failure. This runs the four writers that carry that rule
-(reverb_half, fast_math, remote, remote_measure) in a temp directory with an
+its output on ANY failure. This runs the five writers that carry that rule
+(reverb_half, fast_math, remote, remote_measure, sd) in a temp directory with an
 old output already in place and checks, per writer:
 
   - a refusal (bad value / bad marker count)       -> non-zero exit, output gone
@@ -43,9 +43,10 @@ def trap_dir(parent, name):
 with tempfile.TemporaryDirectory() as tmp:
     tmp = Path(tmp)
 
-    # --- fast_math / remote: OUTPUT {values} [STALE_OBJECT...] -------------
+    # --- fast_math / remote / sd: OUTPUT {values} [STALE_OBJECT...] --------
     for script, good, bad in (("write_shell_fast_math.py", "1", "3"),
-                              ("write_shell_remote.py", "1", "2")):
+                              ("write_shell_remote.py", "1", "2"),
+                              ("write_shell_sd.py", "1", "2")):
         d = tmp / script[:-3]
         d.mkdir()
         out = d / "sw.h"

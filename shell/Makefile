@@ -479,6 +479,33 @@ ifeq ($(SHELL_REMOTE_MEASURE),1)
 C_DEFS += -DSPKY_PROBE_MARKS=1 -DSPKY_PROBE_TOGGLES=1
 endif
 
+# The SD bring-up image (spec 2026-10-31-sd-bring-up-design.md, bring-up
+# section 11): the listener image with the raw readout, plus a card test on
+# the first report pass (mount, write, remount, read back and verify, timed)
+# and a stream that reads the card in every other ten raw windows in place of
+# the report loop's Delay(500). It needs the listener, so a hang or a fault in
+# the SD code ends in the bootloader and the persistence record is never
+# written; the raw readout, whose window counter times the stream's phases
+# (row 11.2 compares the pots' spread streaming against idle); and not the
+# measurement image, whose busy loop takes the same Delay(500). FatFs is
+# linked in this image only.
+SHELL_SD ?= 0
+
+ifneq ($(words $(SHELL_SD))-$(filter $(SHELL_SD),0 1),1-$(SHELL_SD))
+$(error SHELL_SD must be 0 or 1)
+endif
+
+ifeq ($(SHELL_SD),1)
+ifneq ($(SHELL_REMOTE)$(SHELL_RAW_SPREAD),11)
+$(error SHELL_SD=1 needs SHELL_REMOTE=1 and SHELL_RAW_SPREAD=1: the listener \
+gets the board out of a hung card, and the raw windows time the stream)
+endif
+ifeq ($(SHELL_REMOTE_MEASURE),1)
+$(error SHELL_SD=1 excludes SHELL_REMOTE_MEASURE: both take the report loop's Delay(500))
+endif
+USE_FATFS = 1
+endif
+
 CPP_SOURCES = \
 	main.cpp \
 	cb_profile.cpp \
@@ -556,6 +583,12 @@ CPP_SOURCES += remote_cmd.cpp remote_listen.cpp
 # The workloads, gestures and overrun guard (plan Task 5). Its generated tables
 # (generated_workloads.h) go to .qspi_rodata, i.e. QSPI (qspi_cold.ld).
 CPP_SOURCES += workload_run.cpp
+endif
+
+# The card test and the stream, in SHELL_SD images alone; its callers in
+# panel_scan.cpp sit under #if SHELL_SD.
+ifeq ($(SHELL_SD),1)
+CPP_SOURCES += sd_probe.cpp
 endif
 
 # -O3, und das ist nicht optional. libDaisys core/Makefile setzt `OPT ?= -O2`,
@@ -713,6 +746,7 @@ SWITCH_HEADERS := \
   $(shell python write_shell_itcm.py $(BUILD_DIR)/shell_itcm.h $(SHELL_ITCM) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_remote.py $(BUILD_DIR)/shell_remote.h $(SHELL_REMOTE) $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o) \
   $(shell python write_shell_remote_measure.py $(BUILD_DIR)/shell_remote_measure.h $(SHELL_REMOTE_MEASURE) $(BUILD_DIR)) \
+  $(shell python write_shell_sd.py $(BUILD_DIR)/shell_sd.h $(SHELL_SD) $(BUILD_DIR)/panel_scan.o) \
   $(shell python write_shell_fast_math.py $(BUILD_DIR)/shell_fast_math.h $(SHELL_FAST_MATH) $(ENGINE_OBJECTS)) \
   $(shell python write_shell_reverb_half.py itcm_hot.ld $(BUILD_DIR)/itcm_hot.ld $(BUILD_DIR)/shell_reverb_half.state $(SHELL_REVERB_HALF) $(SHELL_REMOTE_MEASURE) $(BUILD_DIR)) \
   $(shell python write_shell_link_stamp.py $(BUILD_DIR)/shell_link_stamp.h $(BUILD_DIR)/itcm_load.o) \
@@ -736,6 +770,7 @@ $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o: $(BUI
 # The objects that read the header; the writer deletes every object on a flip
 # anyway (the probe defines reach the engine), so this edge is the ordering.
 $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_remote_measure.h
+$(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_sd.h
 $(ENGINE_OBJECTS): $(BUILD_DIR)/shell_fast_math.h
 $(BUILD_DIR)/scan_check.o: $(BUILD_DIR)/shell_scan_check.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_panel_scan.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_keys_nc.h $(BUILD_DIR)/shell_raw_spread.h $(BUILD_DIR)/shell_persist.h $(BUILD_DIR)/shell_persist_stress.h
