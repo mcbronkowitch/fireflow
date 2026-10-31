@@ -221,7 +221,8 @@ H1. A1 failing is a result for R5, not a stop.
   of a grain does not depend on where its sample came from) with a
   throwaway grain layer behind a probe switch: N fixed grains (0, 2, 4, 8)
   reading a generated sample from SDRAM with the sampler's kernel (Hann
-  window, linear read), mono, summed into the reverb input.
+  window, linear read; `spky::Grain` unchanged, so stereo), summed into
+  the reverb input.
 - **Measured:** the per-window callback mean on the workloads of A3 at each
   N, with N interleaved per round (0-8-2-4, then 4-2-8-0, …) over at least
   three rounds; the slope per grain fitted to the window means against N.
