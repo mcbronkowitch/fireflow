@@ -794,6 +794,9 @@ max − min of the three base run means.
 | G4 int16 sampler buffer | 2 | 21 | `eb6cd82` | 81, 82, 90 | grain-sample 81 −8.2, 82 −9.3, 90 −1.1; pooled −9.0 (~4 % of the grain price) | reverted, `bbb67e05`: int16 clips the overdub at full scale, where the float buffer settles up to 10× the input below `kFbSatKnee` and blooms to ~1.3 above it; not a slight change for 4 % |
 | G2 Hann window without per-sample divisions | 2 | 22 | `ed24372` | 81, 82, 90 | grain-sample 81 −7.2, 82 −18.1, 90 +4.3 (inside 90's per-run spread of ~36); pooled −10.0; the window moves by at most 3e-7 | queued for listening behind `SHELL_LEAN_GRAIN_WIN`, `22f59feb` |
 | G3 `read_linear` inlined into the grain loop | 1 | 23 | `1aa9d3e` | 81, 82, 90 | grain-sample 81 −13.9, 82 −18.3, 90 −22.3; pooled −14.6 | adopted, `3720c6ae` |
+| V7 WAVE mip crossfade skipped on a strike from silence | 2 | 24 | `c20ded2` | 127, 135, 313, 314 | engine section 127 −0.5 (spread 0.4), 135 +3.5 (66), 313 +0.6 (0.3), 314 −0.3 (2.8) k; the crossfade bins barely move (127 deck A `n1` 7152 → 6097, `n3` 12716 → 11242): most crossfades are not strikes from silence | reverted, `de329c94` |
+| V5 fast exp2 for the detune ratio (degree-4 polynomial on [−0.1, 0.1], `std::pow` outside; 7.2e-8 relative) | 2 | 25 | `47f6902` | 108, 117, 127, 313 | ctrl section 108 −0.84 (spread 0.5), 117 −0.99 (0.02), 127 −0.96 (0.3), 313 −1.01 (0.06) k; −0.40 to −0.54 k per deck; the engine section stays inside its spread | queued for listening behind `SHELL_LEAN_EXP2`, `a3213846` |
+| V4 SYNTH `_apply_freq` and `_update_control` from SRAM_EXEC into ITCM (2 KB) | 1 | — | `a321384` vs `fd8005c`, by reflash | 108, 117, 127 | ctrl section 108 +0.24, 117 −0.03, 127 −0.02 k (spreads 0-0.18) | reverted, `8b2b1798`: through the I-cache, SRAM_EXEC runs these as fast as ITCM |
 
 V1's saving differs between the SYNTH decks of one workload (108: −17.5 k on
 deck A, −10.7 k on deck B). The morph position decides which segment's
