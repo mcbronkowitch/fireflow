@@ -2,9 +2,6 @@
 #include "sampler/sampler_config.h"
 #include "util/math.h"
 #include "util/fast_tanh.h"
-#if defined(SPKY_PROBE_TOGGLES)
-#include "util/probe_toggles.h"
-#endif
 #include <cmath>
 #include <cstring>
 
@@ -166,13 +163,7 @@ void SampleBuffer::write(float in0, float in1) {
     const float fb_ceil = _feedback > 1.f ? _feedback : 1.f;
     const float fb_fade = clampf(1.f - fade * (1.f - fb), 0.f, fb_ceil);
 
-#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_SAMPLER_I16
-    // G4 (sample_buffer.h): read and write back through the storage.
-    Frame f;
-    frame_at(_write_head, f.l, f.r);
-#else
     Frame f = _buffer[_write_head];
-#endif
     // Saturate what was read back BEFORE the feedback multiply -- the order
     // that keeps BbdEcho::Process stable at its 1.2 coefficient
     // (engine/fx/bbd.h; the coefficient itself is set by Flux::set_feedback,
@@ -197,11 +188,7 @@ void SampleBuffer::write(float in0, float in1) {
     // NaN ist falsch, also greift die Negation).
     if (!(f.l > -1e6f && f.l < 1e6f)) f.l = 0.f;
     if (!(f.r > -1e6f && f.r < 1e6f)) f.r = 0.f;
-#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_SAMPLER_I16
-    set_frame(_write_head, f.l, f.r);   // saturates to the int16 range (G4)
-#else
     _buffer[_write_head] = f;
-#endif
 
     ++_write_head;
     if (_cut.is_on()) {
@@ -246,14 +233,8 @@ void SampleBuffer::clear() {
     // (Fireflow.cpp pushParams) hits exactly this empty-buffer case on the
     // audio thread. Every other line below stays unconditional -- a buffer
     // that DID hold content (_size != 0) still gets the full memset.
-#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_SAMPLER_I16
-    // G4: an int16 arena is cleared over its front half, the part it uses.
-    if (_buffer && _buffer_size && _size != 0)
-        std::memset(_buffer, 0, (_is_i16() ? sizeof(Frame16) : sizeof(Frame)) * _buffer_size);
-#else
     if (_buffer && _buffer_size && _size != 0)
         std::memset(_buffer, 0, sizeof(Frame) * _buffer_size);
-#endif
     _write_head          = 0;
     _size                = 0;
     _fade_ctr            = 0;
@@ -324,60 +305,10 @@ void SampleBuffer::read_linear(float frame, float& out0, float& out1) const {
     if (i1 >= _size) i1 = 0;
 
     const float frac = frame - static_cast<float>(i0);
-#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_SAMPLER_I16
-    if (_is_i16()) {
-        // G4: interpolate in steps and scale once. The int16 values and their
-        // difference convert exactly, and the scale is a power of two, so this
-        // is the float interpolation of the scaled frames, rounding for
-        // rounding.
-        const Frame16* q = _q();
-        const Frame16 qa = q[i0];
-        const Frame16 qb = q[i1];
-        const float al = static_cast<float>(qa.l);
-        const float ar = static_cast<float>(qa.r);
-        out0 = (al + frac * (static_cast<float>(qb.l) - al)) * (1.f / 32768.f);
-        out1 = (ar + frac * (static_cast<float>(qb.r) - ar)) * (1.f / 32768.f);
-        return;
-    }
-#endif
     const Frame a = _buffer[i0];
     const Frame b = _buffer[i1];
     out0 = a.l + frac * (b.l - a.l);
     out1 = a.r + frac * (b.r - a.r);
 }
-
-#if defined(SPKY_PROBE_TOGGLES)
-void SampleBuffer::set_probe_word(uint32_t w) {
-    const bool want = probe::on(w, probe::kBitLeanSamplerI16);
-    if (want == _i16) return;
-    _i16 = want;
-    if (_buffer == nullptr || _buffer_size == 0) return;
-    // The whole arena, not only the content: free-run recording sums onto
-    // the frames past rec_size(), so they must stay what they were (zero),
-    // and an arena the platform never zeroed (SDRAM; NaN in the tests)
-    // converts to silence. In place, through bytes (memcpy), not through the
-    // two frame types: frame i of the int16 view lies inside float frame i/2,
-    // so float -> int16 runs upwards (frame i is read before anything at or
-    // past it is written) and int16 -> float downwards (frame i's float
-    // overwrites int16 frames 2i and 2i + 1, both already read).
-    unsigned char* bytes = reinterpret_cast<unsigned char*>(_buffer);
-    if (want) {
-        for (size_t i = 0; i < _buffer_size; ++i) {
-            Frame f;
-            std::memcpy(&f, bytes + i * sizeof(Frame), sizeof f);
-            const Frame16 q{ to_i16(f.l), to_i16(f.r) };
-            std::memcpy(bytes + i * sizeof(Frame16), &q, sizeof q);
-        }
-    } else {
-        for (size_t i = _buffer_size; i-- > 0;) {
-            Frame16 q;
-            std::memcpy(&q, bytes + i * sizeof(Frame16), sizeof q);
-            const Frame f{ static_cast<float>(q.l) * (1.f / 32768.f),
-                           static_cast<float>(q.r) * (1.f / 32768.f) };
-            std::memcpy(bytes + i * sizeof(Frame), &f, sizeof f);
-        }
-    }
-}
-#endif
 
 }  // namespace spky

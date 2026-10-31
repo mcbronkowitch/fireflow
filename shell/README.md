@@ -141,7 +141,6 @@ deletes the objects when one changes, so no `make clean` is needed here either.
 | Switch | Default | What it does |
 |---|---|---|
 | `SHELL_LEAN_SVF1` | `0` | the SYNTH and WAVE voices' low-pass runs one pass per sample instead of two (the same response up to rounding); toggle bit 19 in the measurement image |
-| `SHELL_LEAN_SAMPLER_I16` | `0` | the sampler's record buffer holds int16 stereo frames instead of float ones, in the same arena at the same length (the content quantised to 16 bits, saturating at full scale); toggle bit 21 in the measurement image, which converts the buffer in place on a flip |
 
 ## Flashen
 

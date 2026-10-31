@@ -4,13 +4,11 @@
 // as the measurement image is; the default build has neither, so these cases
 // could not fail there. The stamp clock is test_probe_marks.cpp's
 // (spky::probe_clock); these cases count, they do not time.
-// Also the toggle bits' plumbing for the round's candidates (bit 19 on, bit
-// 21 on), whose two paths can only both be compiled here.
+// Also the toggle bits' plumbing for the round's candidates (bit 19 on), whose
+// two paths can only both be compiled here.
 #include <doctest/doctest.h>
 #include <cmath>
 #include <cstdint>
-#include <cstring>
-#include <limits>
 #include <vector>
 #include "sampler/sampler_engine.h"
 #include "synth/synth_engine.h"
@@ -141,120 +139,4 @@ TEST_CASE("V6 bit 19: a SYNTH deck through the one-pass filter stays within roun
     CAPTURE(sig);
     CAPTURE(diff);
     CHECK(diff < 1e-8 * sig);   // below -80 dB
-}
-
-namespace {
-
-constexpr float kG4Lsb = 1.f / 32768.f;
-
-float g4_stored(float x) {
-    const float top = 32767.f / 32768.f;
-    return x > top ? top : (x < -1.f ? -1.f : x);
-}
-
-// Every frame of the arena through the buffer's own reader: finite, and the
-// content within one int16 step of `want` (after saturation), the rest zero.
-void g4_check(const spky::SampleBuffer& b, const std::vector<float>& want_l,
-              const std::vector<float>& want_r, bool saturated) {
-    bool finite = true;
-    float worst = 0.f, tail = 0.f;
-    for (size_t i = 0; i < b.capacity(); ++i) {
-        float l = 9.f, r = 9.f;
-        b.frame_at(i, l, r);
-        finite = finite && std::isfinite(l) && std::isfinite(r);
-        if (i < want_l.size()) {
-            const float wl = saturated ? g4_stored(want_l[i]) : want_l[i];
-            const float wr = saturated ? g4_stored(want_r[i]) : want_r[i];
-            worst = std::fmax(worst, std::fmax(std::fabs(l - wl), std::fabs(r - wr)));
-        } else {
-            tail = std::fmax(tail, std::fmax(std::fabs(l), std::fabs(r)));
-        }
-    }
-    CHECK(finite);
-    CHECK(worst <= kG4Lsb);
-    CHECK(tail == 0.f);
-}
-
-} // namespace
-
-TEST_CASE("G4 bit 21: the toggle flip converts the buffer both ways at the same length") {
-    // An arena as the board's SDRAM comes up: not zeroed (NaN here), with
-    // content over the first 3 000 frames, some of it past full scale.
-    constexpr size_t kCap = 8192, kN = 3000;
-    const uint32_t bit = 1u << spky::probe::kBitLeanSamplerI16;
-    std::vector<spky::SampleBuffer::Frame> mem(
-        kCap, spky::SampleBuffer::Frame{ std::numeric_limits<float>::quiet_NaN(),
-                                         std::numeric_limits<float>::quiet_NaN() });
-    spky::SampleBuffer b;
-    b.init(mem.data(), kCap, 48000.f);
-    REQUIRE_FALSE(b.storage_i16());
-    std::vector<float> l(kN), r(kN);
-    for (size_t i = 0; i < kN; ++i) {
-        l[i] = 1.3f * std::sin(0.0137f * float(i));
-        r[i] = 0.7f * std::cos(0.0291f * float(i));
-        b.set_frame(i, l[i], r[i]);
-    }
-    b.set_rec_size(kN);
-
-    // On: int16, the length kept, the content within a step, saturated.
-    b.set_probe_word(bit);
-    CHECK(b.storage_i16());
-    CHECK(b.rec_size() == kN);
-    CHECK(b.capacity() == kCap);
-    g4_check(b, l, r, true);
-    // The same word again (every block hands it down) converts nothing.
-    b.set_probe_word(bit | (1u << spky::probe::kBitLeanSvf1));
-    CHECK(b.storage_i16());
-    g4_check(b, l, r, true);
-
-    // Off: float again, the same length and content; the arena holds plain
-    // floats once more, so the float reader and the arena agree bit for bit.
-    b.set_probe_word(1u << spky::probe::kBitLeanSvf1);
-    CHECK_FALSE(b.storage_i16());
-    CHECK(b.rec_size() == kN);
-    CHECK(b.capacity() == kCap);
-    g4_check(b, l, r, true);
-    for (size_t i = 0; i < kCap; i += 97) {
-        float fl = 9.f, fr = 9.f;
-        b.frame_at(i, fl, fr);
-        CHECK(fl == mem[i].l);
-        CHECK(fr == mem[i].r);
-    }
-
-    // And on again from the float side, after a round trip.
-    b.set_probe_word(bit);
-    CHECK(b.storage_i16());
-    g4_check(b, l, r, true);
-}
-
-TEST_CASE("G4 bit 21 reaches the sampler's buffer, and the deck plays either way") {
-    SamplerRig g;
-    const uint32_t bit = 1u << spky::probe::kBitLeanSamplerI16;
-    auto play = [&g]() {
-        bool finite = true;
-        double sum = 0.0;
-        for (int i = 0; i < 9600; ++i) {
-            float l = 0.f, r = 0.f;
-            g.e.process(l, r);
-            finite = finite && std::isfinite(l) && std::isfinite(r);
-            sum += double(l) * l + double(r) * r;
-        }
-        CHECK(finite);
-        CHECK(sum > 1.0);
-    };
-    play();
-    const size_t n = g.e.rec_size();
-    REQUIRE(n == 24000);
-    g.e.set_probe_word(bit);
-    // The arena's first bytes are int16 pairs now: frame 100 of the sine.
-    int16_t q[2];
-    std::memcpy(q, reinterpret_cast<const unsigned char*>(g.mem.data()) + 4 * 100, sizeof q);
-    const float s100 = std::sin(6.2831853f * 441.f * 100.f / 48000.f);
-    CHECK(std::fabs(float(q[0]) / 32768.f - s100) <= kG4Lsb);
-    CHECK(g.e.rec_size() == n);
-    play();
-    g.e.set_probe_word(0u);
-    CHECK(g.e.rec_size() == n);
-    CHECK(std::fabs(g.mem[100].l - s100) <= kG4Lsb);
-    play();
 }

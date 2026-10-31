@@ -25,10 +25,6 @@ public:
     // Offline path (load_sample): detect over [0, frames) in one call.
     // Replaces any existing markers.
     void scan(const SampleBuffer::Frame* buf, size_t frames);
-#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_SAMPLER_I16
-    // The same over the content through its storage (G4, sample_buffer.h).
-    void scan(const SampleBuffer& buf, size_t frames);
-#endif
 
     // Live path (Task 2): `frame` was just written; l/r are what actually
     // landed in the buffer (post overdub mix).

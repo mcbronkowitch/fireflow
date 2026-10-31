@@ -59,63 +59,8 @@ public:
     // written value landed on.
     size_t write_head() const { return _write_head; }
 
-#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_SAMPLER_I16
-    // CPU round 2, candidate G4 (class 2): the content as int16 stereo frames
-    // (4 B), not float ones (8 B), so a grain's read moves half the bytes. The
-    // frames sit at the front of the same injected arena -- the host still
-    // hands over Frame* and the length in frames, and the length stays what
-    // it was; the arena's back half is unused. Stored as round(x * 32 768),
-    // saturated to the int16 range (non-finite stores 0); read as q / 32 768.
-    // With SHELL_LEAN_SAMPLER_I16=1 (SPKY_LEAN_SAMPLER_I16) this is the only
-    // storage; in the measurement image toggle bit 21 picks it per block
-    // (set_probe_word). raw() and sample_data() are then the arena, not the
-    // content: read the content through frame_at().
-    struct Frame16 { int16_t l; int16_t r; };
-
-    static int16_t to_i16(float x) {
-        float s = x * 32768.f;
-        // One test catches the range and NaN (every NaN comparison is false).
-        if (!(s > -32768.f && s < 32767.f)) s = s > 0.f ? 32767.f : (s < 0.f ? -32768.f : 0.f);
-        return static_cast<int16_t>(static_cast<int32_t>(s + (s < 0.f ? -0.5f : 0.5f)));
-    }
-
-    // Content frame i through the storage, and the store the load path uses
-    // (no state change: set_rec_size() declares the content afterwards).
-    void frame_at(size_t i, float& l, float& r) const {
-        if (_is_i16()) {
-            const Frame16 q = _q()[i];
-            l = static_cast<float>(q.l) * (1.f / 32768.f);
-            r = static_cast<float>(q.r) * (1.f / 32768.f);
-        } else {
-            l = _buffer[i].l;
-            r = _buffer[i].r;
-        }
-    }
-    void set_frame(size_t i, float l, float r) {
-        if (_is_i16()) _q()[i] = Frame16{ to_i16(l), to_i16(r) };
-        else           _buffer[i] = Frame{ l, r };
-    }
-#endif
-#if defined(SPKY_PROBE_TOGGLES)
-    // Measurement image only (util/probe_toggles.h, bit 21 LEAN_SAMPLER_I16):
-    // SamplerEngine::set_probe_word hands the block's word down, once per
-    // block. When the bit differs from the storage, the whole arena is
-    // converted in place, at the block boundary; a slow block, once per flip.
-    void set_probe_word(uint32_t w);
-    bool storage_i16() const { return _i16; }
-#endif
-
 private:
     enum class State : uint8_t { idle, fadein, sustain, fadeout };
-
-#if defined(SPKY_PROBE_TOGGLES)
-    bool _is_i16() const { return _i16; }
-#elif SPKY_LEAN_SAMPLER_I16
-    static constexpr bool _is_i16() { return true; }
-#endif
-#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_SAMPLER_I16
-    Frame16* _q() const { return reinterpret_cast<Frame16*>(_buffer); }
-#endif
 
     SoftSwitch _cut;
     Frame*  _buffer      = nullptr;
@@ -135,9 +80,6 @@ private:
     // equals _write_head at the moment of the stop, so restoring it is a
     // no-op there.
     size_t  _fadeout_resume_head = 0;
-#if defined(SPKY_PROBE_TOGGLES)
-    bool    _i16 = false;   // bit 21: the arena holds Frame16 (G4)
-#endif
 };
 
 }  // namespace spky
