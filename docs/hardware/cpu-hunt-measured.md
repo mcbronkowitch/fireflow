@@ -872,7 +872,10 @@ So `SHELL_LEAN_GRAIN_WIN` and `SHELL_LEAN_EXP2` default to 1 in every
 shell image; `SHELL_LEAN_SVF1` defaulted to 1 for the same few hours and
 then went to 0, because the listener-image bisect in section 7 measured it
 as a net cost. `shell/README.md` "Turning a CPU saving back" says how to
-switch each one.
+switch each one. No blind A/B was recorded for round 2. The measurement
+image still holds both paths of each, with the old path at toggle bit 0, so
+a measurement run measures the old arithmetic for these three unless their
+bits are set.
 
 ### What ships after round 2: the play image of main, 10 minutes
 
@@ -900,7 +903,40 @@ No callback came near the click line: the worst is ~206 k under ~945 000.
 The detector's hits are this patch's own transients. Their top score of 23
 is far below the 94-2 672 that §3's injected late blocks scored, but the
 detector cannot prove their absence on a patch this busy. No persistence
-save fell inside the run. No blind A/B was recorded for round 2. The
-measurement image still holds both paths of each, with the old path at
-toggle bit 0, so a measurement run measures the old arithmetic for these
-three unless their bits are set.
+save fell inside the run.
+
+## 9. A reserve, not taken: a 192-sample block, 2026-10-31
+
+If the granular layer needs more than round 2 freed, doubling the audio
+block is the next lever on the shelf. Measured roughly and **not
+adopted**: the firmware stays at 96 samples (Bastian, 2026-10-31).
+
+A throwaway `SHELL_BLOCK` switch (96 | 192) scaled the overrun guard's
+cycle limits and the block-count windows (re-arm, law warm-up, workload
+settle) with the block. Commit `ae8f98a`, kept as the local tag
+`attic/block-192-2026-10-31`. Measurement image at both sizes, 2 runs of
+30 s per workload and size. `frame_max` is in % of each size's budget
+(960 000 or 1 920 000 cycles); the saving is per 96 samples.
+
+| workload | `frame_max` max, % | `frame_max` p50, % | saving per 96 samples (max / p50) |
+|---|---|---|---|
+| 90 SAMPLER_SYNTH_top1 | 101.1 → 95.1 | 98.1 → 93.3 | −57 k / −45 k |
+| 99 SAMPLER_WAVE_top1 | 102.0 → 97.2 | 99.2 → 95.9 | −46 k / −32 k |
+| 145 `bastian` | 93.6 → 89.7 | 88.8 → 86.6 | −37 k / −22 k |
+| 108 SYNTH_SYNTH_top1 | 91.1 → 86.7 | 90.0 → 86.1 | −42 k / −38 k |
+| 127 WAVE_SYNTH_top2 | 103.8 → 97.4 | 98.1 → 93.1 | −62 k / −48 k |
+
+The overrun guard tripped in 8 of the 10 runs at 96 (workloads 90 and 99)
+and in none at 192. One 96 run of 99 is formally void (a pot took over a
+value); its numbers match the other run.
+
+- **What it buys:** 22-62 k cycles per 96 samples, roughly 1-3 more grains
+  at ~17.9 k each (§7).
+- **Why it is not more:** the engine still runs its control work every 96
+  samples (`Center::kCtrlInterval`), twice per 192-sample block. Only the
+  shell's once-per-block work is halved: panel scan, control law, LEDs and
+  the callback overhead.
+- **What it costs:** 4 ms instead of 2 ms per block, so twice the latency,
+  and the pots are scanned half as often.
+- **Not measured:** the listener or play image at 192, by ear, and the
+  clock and gate timing at the coarser block.

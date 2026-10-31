@@ -4220,6 +4220,10 @@ row 11 (per-engine kernel work).
   The 20 worst listener workloads: worst 938 701, none at 945 000, 8 of 20
   above 880 000 (was 944 258 and 9). Against main: SAMPLER 90 −34 k p50,
   SYNTH 127 −14 k, BODY/BBD/WAVE unchanged.
+- **Reserve on the shelf, not taken:** a 192-sample block frees 22-62 k
+  cycles per 96 samples on five hard workloads (1-3 grains), at twice the
+  latency; the firmware stays at 96 (Bastian, 2026-10-31).
+  `cpu-hunt-measured.md` §9, code on the local tag `attic/block-192-2026-10-31`.
 
 **2026-10-30 — CPU hunt on Rev A: every worst case under the click line ✅ measured, merged.**
 Plan `docs/superpowers/plans/2026-10-29-cpu-hunt-remote.md`; branch
