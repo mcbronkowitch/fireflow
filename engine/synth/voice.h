@@ -73,9 +73,19 @@ public:
     // by SynthEngineT::_update_control on the control tick. Bit 19 (LEAN_SVF1,
     // candidate V6) lands in the filter's own flag, which process() reads per
     // sample; process() never reads the word or the global.
+    // Bit 24 (LEAN_XFADE_QUIET, candidate V7) lands in a flag trigger() reads.
     void set_probe_word(uint32_t w) {
         _filt.SetSinglePass(probe::on(w, probe::kBitLeanSvf1));
+        _xfade_quiet = probe::on(w, probe::kBitLeanXfadeQuiet);
     }
+    // Whether bit 24 reached this voice (tests/test_cpu_round2_probes.cpp).
+    bool xfade_quiet() const { return _xfade_quiet; }
+#endif
+#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_XFADE_QUIET
+    // Whether either WAVE osc is inside a mip crossfade (candidate V7;
+    // tests/test_lean_xfade_quiet.cpp). Always false for a SYNTH voice: its
+    // MorphOsc has no crossfade.
+    bool osc_crossfading() const;
 #endif
 #if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_SVF1
     // Whether the FILTER runs one pass per sample (util/svf_lp.h, candidate
@@ -98,6 +108,9 @@ public:
 
 private:
     void _apply_freq();                   // osc A/B freq from pitch+detune+drift
+#if defined(SPKY_PROBE_TOGGLES) || SPKY_LEAN_XFADE_QUIET
+    void _apply_freq_quiet();             // _apply_freq() for a strike nobody hears (V7)
+#endif
 
     OscT _osc_a;
     OscT _osc_b;
@@ -126,6 +139,9 @@ private:
     float _drift_pan_hz = 0.1f;
     float _drift_det_hz = 0.1f;
     float _drift_ct_cur = 0.f;            // current micro-detune drift (cents)
+#if defined(SPKY_PROBE_TOGGLES)
+    bool  _xfade_quiet = false;           // bit 24, set by set_probe_word
+#endif
 };
 
 using Voice = VoiceT<MorphOsc>;

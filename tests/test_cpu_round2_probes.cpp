@@ -103,6 +103,52 @@ TEST_CASE("V6 bit 19 reaches every SYNTH and WAVE voice's filter on the next con
     check_svf1_reaches_voices<spky::WaveEngine>();
 }
 
+TEST_CASE("V7 bit 24 reaches every WAVE voice, and a strike from silence then skips the crossfade") {
+    // The flag lands on the control tick (set_probe_word); a strike after it
+    // finds the idle voice's envelope at 0. Voices init at 220 Hz (mip 2);
+    // pitch 1.0 is 880 Hz (mip 4), so the plain strike crossfades.
+    auto strike = [](uint32_t word, bool& crossfading, bool& flag) {
+        DeckRig<spky::WaveEngine> g;
+        g.e.set_probe_word(word);
+        g.tick();
+        flag = true;
+        for (int v = 0; v < spky::WaveEngine::kVoices; ++v) flag = flag && g.e.probe_voice(v).xfade_quiet();
+        g.e.trigger(1.f);
+        crossfading = false;
+        for (int v = 0; v < spky::WaveEngine::kVoices; ++v)
+            crossfading = crossfading || g.e.probe_voice(v).osc_crossfading();
+    };
+    bool off_xf = false, off_flag = true, on_xf = true, on_flag = false, other_xf = false, other_flag = true;
+    strike(0u, off_xf, off_flag);
+    strike(1u << spky::probe::kBitLeanXfadeQuiet, on_xf, on_flag);
+    strike(~(1u << spky::probe::kBitLeanXfadeQuiet), other_xf, other_flag);   // every other bit
+    CHECK_FALSE(off_flag);
+    CHECK(off_xf);            // the old path: the strike fades (so this case can fail)
+    CHECK(on_flag);
+    CHECK_FALSE(on_xf);
+    CHECK_FALSE(other_flag);
+    CHECK(other_xf);
+}
+
+TEST_CASE("V7 bit 24 leaves a SYNTH deck's output bit-identical") {
+    // MorphOsc has no mip crossfade: the flag lands on the voices and nothing
+    // reads it there.
+    auto render = [](uint32_t word) {
+        DeckRig<spky::SynthEngine> g;
+        g.e.set_probe_word(word);
+        g.e.trigger(1.f);
+        std::vector<float> out;
+        for (int t = 0; t < 100; ++t) g.tick(&out);
+        return out;
+    };
+    const std::vector<float> off = render(0u);
+    const std::vector<float> on  = render(1u << spky::probe::kBitLeanXfadeQuiet);
+    double sig = 0.0;
+    for (float x : off) sig += double(x) * x;
+    CHECK(sig > 1.0);        // the deck sounded
+    CHECK(on == off);
+}
+
 TEST_CASE("G2 bit 22 reaches the grains, and the deck plays either way") {
     // The same SAMPLER cloud (same seed, so the same spawns) three times: no
     // bit, bit 22, and a bit that is not 22. Only bit 22 changes the window's

@@ -330,16 +330,21 @@ add_test(NAME reverb_full_rate_variants
 # tests with its lean define on, as a SHELL_LEAN_*=1 image does, against the
 # old code as the reference (V6: tests/test_lean_svf1.cpp; G2:
 # tests/test_lean_grain_win.cpp, Grain is header-only and sample_buffer.cpp is
-# the one sampler file it links, for the buffer's init and set_rec_size).
+# the one sampler file it links, for the buffer's init and set_rec_size; V7:
+# tests/test_lean_xfade_quiet.cpp, WtOsc is header-only and a WAVE voice comes
+# from voice.cpp. The three defines share this target: each reaches only its
+# own class, and the V7 test builds its voices and oscillators itself.)
 add_executable(spky_lean_tests
     tests/test_main.cpp
     tests/test_lean_svf1.cpp
     tests/test_lean_grain_win.cpp
+    tests/test_lean_xfade_quiet.cpp
     engine/synth/voice.cpp
     engine/synth/wt_bank.cpp
     engine/sampler/sample_buffer.cpp
 )
-target_compile_definitions(spky_lean_tests PRIVATE SPKY_LEAN_SVF1=1 SPKY_LEAN_GRAIN_WIN=1)
+target_compile_definitions(spky_lean_tests PRIVATE SPKY_LEAN_SVF1=1 SPKY_LEAN_GRAIN_WIN=1
+                                                    SPKY_LEAN_XFADE_QUIET=1)
 target_link_libraries(spky_lean_tests PRIVATE spky_engine doctest)
 add_test(NAME spky_lean_tests COMMAND spky_lean_tests)
 
