@@ -1,0 +1,20 @@
+{
+ "image": "play, main 00d1e42 (CPU round 2), SHELL_PANEL_SCAN=1 SHELL_KEYS_NC=1, lean switches at their defaults (GRAIN_WIN 1, EXP2 1, SVF1 0)",
+ "patch": "bastian, persisted record seq=581, pots as Bastian reset them on 2026-10-31 after the SD soldering (COMP_A/COMP_B had stood at 0; ENGINE_A changed, eng=1,1 against 3,1 on 2026-10-30): NOT the 2026-10-30 operating point",
+ "recorded_s": 601.7,
+ "audio_rms_dbfs_per_second": {"min": -24.5, "median": -19.6, "max": -13.8},
+ "law_prints": 1099,
+ "cb_last": {"p50": 510264, "p99": 726820, "max": 733867},
+ "cb_max": 739462,
+ "cb_last_ge_945000": 0,
+ "detector": {
+  "method": "tools/click_detect.py, k = 12",
+  "hits_ch0": 1314,
+  "hits_ch1": 1326,
+  "top_score_ch0": 22.9,
+  "top_score_ch1": 22.1,
+  "calibrated_late_block_scores": "94 - 2672 (cpu-hunt-measured.md section 3)"
+ },
+ "persist_saves_in_run": [],
+ "pot_row_changes": 0
+}

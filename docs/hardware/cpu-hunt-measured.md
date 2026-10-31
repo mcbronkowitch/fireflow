@@ -872,7 +872,35 @@ So `SHELL_LEAN_GRAIN_WIN` and `SHELL_LEAN_EXP2` default to 1 in every
 shell image; `SHELL_LEAN_SVF1` defaulted to 1 for the same few hours and
 then went to 0, because the listener-image bisect in section 7 measured it
 as a net cost. `shell/README.md` "Turning a CPU saving back" says how to
-switch each one. No blind A/B was recorded for round 2. The
+switch each one.
+
+### What ships after round 2: the play image of main, 10 minutes
+
+The play image of main `00d1e42` (clean build, `SHELL_PANEL_SCAN=1
+SHELL_KEYS_NC=1`, lean switches at their defaults), booted from the
+persisted record (seq 581), no pot moved during the run, 601.7 s through
+the Twin (inputs 1/2). Summary in
+`captures/cpu-round2-2026-10-31-bastian-600-play-main.json`.
+
+**Not the 2026-10-30 operating point.** After the SD socket was soldered
+the patch was silent: the pots read COMP_A 0.18 and COMP_B 0, among
+others at 0, and a first 10-minute recording read the Twin's noise floor
+(−89 dBFS) throughout. A fixed workload (127) on the listener image played
+normally, so the board's audio path was fine. Bastian then set the pots by
+ear; the deck A engine changed with them (`eng=1,1`, was `3,1`). So this
+run's numbers do not compare one-to-one with §6's.
+
+| | `SHELL_PLAY_LAW`, 1099 prints |
+|---|---|
+| `cb_last` p50 / p99 / max | 510 264 / 726 820 / 733 867 |
+| `cb_max` at the end | 739 462 |
+| detector hits (k = 12) | 1314 / 1326, top scores 22.9 / 22.1 |
+
+No callback came near the click line: the worst is ~206 k under ~945 000.
+The detector's hits are this patch's own transients. Their top score of 23
+is far below the 94-2 672 that §3's injected late blocks scored, but the
+detector cannot prove their absence on a patch this busy. No persistence
+save fell inside the run. No blind A/B was recorded for round 2. The
 measurement image still holds both paths of each, with the old path at
 toggle bit 0, so a measurement run measures the old arithmetic for these
 three unless their bits are set.
