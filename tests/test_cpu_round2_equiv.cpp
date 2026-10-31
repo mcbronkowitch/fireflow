@@ -280,11 +280,6 @@ struct G1Buf {
         if (n > 2) { mem[n - 1].l = -0.f;  mem[n - 1].r = -0.f; }
         buf.init(mem.data(), n, 48000.f);
         buf.set_rec_size(n);
-#if defined(SPKY_PROBE_TOGGLES)
-        // A probe build runs the old fold until bit 20 is handed down; without
-        // this the test would compare the old path with itself.
-        buf.set_probe_word(1u << probe::kBitGrainFoldFast);
-#endif
     }
 };
 

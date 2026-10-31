@@ -275,16 +275,14 @@ void SampleBuffer::read_linear(float frame, float& out0, float& out1) const {
     // end of the recording is where a long grain or a high pitch lands, so it
     // has its own arm, and the choice is a select on the sign of frame - fsz,
     // not a branch: the pattern can alternate from read to read, and a branch
-    // on frame >= fsz (written as a ?: on the subtract or on its operand) came
-    // out as a conditional branch on the Daisy toolchain, this form as a
-    // conditional move (vcmpe, it pl, vmovpl). Zero is left to the fold on purpose:
-    // -0.f comes out of it as +0.f, and a bare >= 0 test would pass -0.f on
-    // with its sign, which flips the sign of a zero in frac.
-#if defined(SPKY_PROBE_TOGGLES)
-    const bool inside = _fold_fast && frame > 0.f && frame < 2.f * fsz;
-#else
+    // on frame >= fsz (written as a ?: on the subtract or on its operand)
+    // came out as a conditional branch on the Daisy toolchain, this form as a
+    // conditional move (vcmpe, it pl, vmovpl).
+    //
+    // Zero is left to the fold on purpose: -0.f comes out of it as +0.f, and
+    // a bare >= 0 test would pass -0.f on with its sign, which flips the sign
+    // of a zero in frac.
     const bool inside = frame > 0.f && frame < 2.f * fsz;
-#endif
     if (inside) {
         const float d = frame - fsz;
         frame = std::signbit(d) ? frame : d;

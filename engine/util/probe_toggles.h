@@ -124,13 +124,14 @@
 //                                                        (SvfLp::ProcessSingle);
 //                                                        the firmware switch is
 //                                                        SHELL_LEAN_SVF1
-//   20   GRAIN_FOLD_FAST      engine/sampler/            candidate G1 (round 2,
-//                             sample_buffer.cpp          class 1): read_linear
-//                                                        skips the fold for a
-//                                                        frame inside (0, 2 size)
-//                                                        (a select for the
-//                                                        second period),
-//                                                        bit-identical
+//   20   GRAIN_FOLD_FAST      engine/sampler/            RETIRED: adopted, the
+//                             sample_buffer.cpp          only path now (round 2
+//                                                        G1: read_linear skips
+//                                                        the divide and floor
+//                                                        for a frame inside
+//                                                        (0, 2 size), a select
+//                                                        for the second period,
+//                                                        bit-identical)
 //   21-29 (free: candidates; bits 0-20 are never reused)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE
 //                                                        burn on every block
@@ -149,8 +150,6 @@ namespace probe {
 // The candidates' bits (above).
 inline constexpr int kBitReverbHalf = 9;
 inline constexpr int kBitLeanSvf1   = 19;
-inline constexpr int kBitGrainFoldFast = 20;
-
 // The shell's two bits (above).
 inline constexpr int kBitShellLateRepeat = 30;
 inline constexpr int kBitShellGuardOff   = 31;

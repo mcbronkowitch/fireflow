@@ -2,7 +2,6 @@
 #include <cstddef>
 #include <cstdint>
 #include "fx/fx_util.h"   // SoftSwitch, hann_value_at
-#include "util/probe_toggles.h"
 
 namespace spky {
 
@@ -60,14 +59,6 @@ public:
     // written value landed on.
     size_t write_head() const { return _write_head; }
 
-#if defined(SPKY_PROBE_TOGGLES)
-    // Measurement image only (util/probe_toggles.h, bit 20 GRAIN_FOLD_FAST):
-    // SamplerEngine::set_probe_word hands the block's toggle word down, once
-    // per block. A member rather than a parameter, so read_linear's signature
-    // and its callers stay as they are; the default build has neither.
-    void set_probe_word(uint32_t w) { _fold_fast = probe::on(w, probe::kBitGrainFoldFast); }
-#endif
-
 private:
     enum class State : uint8_t { idle, fadein, sustain, fadeout };
 
@@ -89,9 +80,6 @@ private:
     // equals _write_head at the moment of the stop, so restoring it is a
     // no-op there.
     size_t  _fadeout_resume_head = 0;
-#if defined(SPKY_PROBE_TOGGLES)
-    bool    _fold_fast = false;   // bit 20: read_linear skips the fold inside (0, 2 size)
-#endif
 };
 
 }  // namespace spky

@@ -71,7 +71,7 @@ SECTIONS
     *(.text._ZN4spky7ModLane11_start_noteEi)                           /*  332 */
     *(.text._ZN4spky8SliceMap8on_writeEjff)                            /*  214 */
     *(.text._ZN7daisysp9CrossFade7ProcessERfS1_)                       /*  212 */
-    *(.text._ZNK4spky12SampleBuffer11read_linearEfRfS1_)               /*  204 */
+    *(.text._ZNK4spky12SampleBuffer11read_linearEfRfS1_)               /*  244 */
     *(.text._ZN7daisysp17SampleRateReducer7ProcessEf)                  /*  148 */
     *(.text._ZN7daisysp9Overdrive7ProcessEf)                           /*  106 */
     *(.text._ZN4spky14TestToneEngine7processERfS1_)                    /*   96 */
