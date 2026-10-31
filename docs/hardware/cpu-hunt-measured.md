@@ -844,6 +844,22 @@ branch in `_recalc_damp`) for every user, and the code around it grows
 measured. The measurement image could not see it: it holds both paths and
 the larger `SvfLp` in both arms. `SHELL_LEAN_SVF1` defaults to 0.
 
+With V6 off (`1fa1960`), the same reflash A/B against main, 4 rounds,
+p50 in k cycles: 90 862.7 → 828.7, 127 890.8 → 876.9, 21 832.2 → 827.4,
+151 831.9 → 830.7, 226 843.3 → 847.3, 314 871.1 → 871.9. 127's worst frame
+was about 963 k on both images.
+
+**End of round 2: the top-20 batch on `1fa1960`** (the listener image, every
+workload of `captures/cpu-hunt-2026-10-30-top20-class2.csv`, 60 s each, a
+second run for any workload over 880 000; the worse of the two counts):
+`captures/cpu-round2-2026-10-31-top20.csv`. The worst frame maximum is
+938 701 (117 SYNTH_WAVE_top1). None of the 20 reaches 945 000, and 8 are
+over 880 000. The median p50 is 834 829.
+
+| one grain, 96 × the grain price | worst frame maximum, top 20 | clicks start |
+|---|---|---|
+| about 17 900 (about 186 cycles per grain-sample after G1, G2, G3: the separate A/B deltas, added) | 938 701 | 945 000 |
+
 ## 8. Bastian's decisions, round 2
 
 2026-10-31, on the three class-2 candidates queued for listening (V6, G2,
