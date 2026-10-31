@@ -140,7 +140,16 @@
 //                                                        cycles per grain-sample,
 //                                                        not worth clipping the
 //                                                        overdub at full scale
-//   22-29 (free: candidates; bits 0-21 are never reused)
+//   22   LEAN_GRAIN_WIN       engine/sampler/grain.h     candidate G2 (round 2,
+//                                                        class 2): a grain's
+//                                                        Hann window multiplies
+//                                                        by 1/atk, 1/dec, 1/fade
+//                                                        latched at spawn and at
+//                                                        release instead of
+//                                                        dividing per sample; the
+//                                                        firmware switch is
+//                                                        SHELL_LEAN_GRAIN_WIN
+//   23-29 (free: candidates; bits 0-22 are never reused)
 //   30   SHELL_LATE_REPEAT    shell/panel_scan.cpp       repeat the last LATE
 //                                                        burn on every block
 //   31   SHELL_GUARD_OFF      shell/panel_scan.cpp       the overrun guard is
@@ -158,6 +167,7 @@ namespace probe {
 // The candidates' bits (above).
 inline constexpr int kBitReverbHalf = 9;
 inline constexpr int kBitLeanSvf1   = 19;
+inline constexpr int kBitLeanGrainWin = 22;
 // The shell's two bits (above).
 inline constexpr int kBitShellLateRepeat = 30;
 inline constexpr int kBitShellGuardOff   = 31;

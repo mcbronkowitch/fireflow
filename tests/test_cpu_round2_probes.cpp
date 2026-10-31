@@ -4,8 +4,8 @@
 // as the measurement image is; the default build has neither, so these cases
 // could not fail there. The stamp clock is test_probe_marks.cpp's
 // (spky::probe_clock); these cases count, they do not time.
-// Also the toggle bits' plumbing for the round's candidates (bit 19 on), whose
-// two paths can only both be compiled here.
+// Also the toggle bits' plumbing for the round's candidates (bits 19 and 22
+// on), whose two paths can only both be compiled here.
 #include <doctest/doctest.h>
 #include <cmath>
 #include <cstdint>
@@ -101,6 +101,41 @@ void check_svf1_reaches_voices() {
 TEST_CASE("V6 bit 19 reaches every SYNTH and WAVE voice's filter on the next control tick") {
     check_svf1_reaches_voices<spky::SynthEngine>();
     check_svf1_reaches_voices<spky::WaveEngine>();
+}
+
+TEST_CASE("G2 bit 22 reaches the grains, and the deck plays either way") {
+    // The same SAMPLER cloud (same seed, so the same spawns) three times: no
+    // bit, bit 22, and a bit that is not 22. Only bit 22 changes the window's
+    // arithmetic (a different last bit here and there), and only by rounding.
+    auto render = [](uint32_t word) {
+        SamplerRig g;
+        g.e.set_probe_word(word);
+        std::vector<float> out;
+        for (int i = 0; i < 19200; ++i) {
+            float l = 0.f, r = 0.f;
+            g.e.process(l, r);
+            out.push_back(l);
+            out.push_back(r);
+        }
+        return out;
+    };
+    const std::vector<float> off   = render(0u);
+    const std::vector<float> on    = render(1u << spky::probe::kBitLeanGrainWin);
+    const std::vector<float> other = render(1u << spky::probe::kBitLeanSvf1);
+    REQUIRE(off.size() == on.size());
+    double sig = 0.0, worst = 0.0, worst_other = 0.0;
+    bool finite = true;
+    for (size_t i = 0; i < off.size(); ++i) {
+        sig += double(on[i]) * on[i];
+        worst = std::fmax(worst, std::fabs(double(on[i]) - off[i]));
+        worst_other = std::fmax(worst_other, std::fabs(double(other[i]) - off[i]));
+        finite = finite && std::isfinite(on[i]);
+    }
+    CHECK(finite);
+    CHECK(sig > 1.0);            // the deck sounded
+    CHECK(worst > 0.0);          // the bit reached the window
+    CHECK(worst < 1e-5);         // and changed it by rounding only
+    CHECK(worst_other == 0.0);   // no other bit does
 }
 
 TEST_CASE("V6 bit 19: a SYNTH deck through the one-pass filter stays within rounding of the two-pass one") {

@@ -315,7 +315,11 @@ public:
     // Measurement image only (util/probe_toggles.h, bits from 17): the toggle
     // word, handed down once per block by Instrument::process. A candidate
     // tests its bit on this member, never on the global.
-    void set_probe_word(uint32_t w) { _probe_word = w; }
+    // The grains take bit 22 (G2) from it.
+    void set_probe_word(uint32_t w) {
+        _probe_word = w;
+        for (int i = 0; i < kGrains; ++i) _grains[i].set_probe_word(w);
+    }
 #endif
 
 private:
