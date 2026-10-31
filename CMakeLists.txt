@@ -857,8 +857,9 @@ add_test(NAME shell_writer_refusals
 # reverb tanks, the listener with every lean switch (SHELL_LEAN_*, which
 # default to 1) at 0, a full -ffast-math build that must be REFUSED by the
 # math guard, and the SD bring-up image (it must link FatFs and the card test,
-# the others must not) with its refusal without the listener (the list is
-# IMAGES in shell/check_images_build.py, fourteen entries at the time of
+# the others must not) with its refusal without the listener, and the SD
+# burst probe image with its refusal without the SD image (the list is
+# IMAGES in shell/check_images_build.py, sixteen entries at the time of
 # writing). Each is a clean ARM build in its own directory under the
 # build tree (shell/build is not touched), with SRAM_EXEC use in the output.
 # Nothing else in ctest compiles shell/, which is how the Rev A play image

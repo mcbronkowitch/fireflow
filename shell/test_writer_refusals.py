@@ -4,8 +4,8 @@ The Makefile runs these writers while it is parsed and ignores their exit
 status, so a refusal that left the previous build's header, stamp or linker
 script in place would let the build carry on with a stale value (and the
 guards behind it read the stale file and pass). Each writer therefore deletes
-its output on ANY failure. This runs the six writers that carry that rule
-(reverb_half, fast_math, remote, remote_measure, engine_lean, sd) in a temp
+its output on ANY failure. This runs the seven writers that carry that rule
+(reverb_half, fast_math, remote, remote_measure, engine_lean, sd, sd_probe) in a temp
 directory with an old output already in place and checks, per writer:
 
   - a refusal (bad value / bad marker count)       -> non-zero exit, output gone
@@ -46,7 +46,8 @@ with tempfile.TemporaryDirectory() as tmp:
     # --- fast_math / remote / sd: OUTPUT {values} [STALE_OBJECT...] --------
     for script, good, bad in (("write_shell_fast_math.py", "1", "3"),
                               ("write_shell_remote.py", "1", "2"),
-                              ("write_shell_sd.py", "1", "2")):
+                              ("write_shell_sd.py", "1", "2"),
+                              ("write_shell_sd_probe.py", "burst", "nope")):
         d = tmp / script[:-3]
         d.mkdir()
         out = d / "sw.h"
@@ -62,6 +63,24 @@ with tempfile.TemporaryDirectory() as tmp:
 
         rc = run(script, out, good)
         check("%s: good run writes the header" % script, rc == 0 and out.is_file())
+
+    # --- sd_probe: what the header says, and that a change deletes the objects
+    script = "write_shell_sd_probe.py"
+    d = tmp / "sdp"
+    d.mkdir()
+    out, stale = d / "p.h", d / "stale.o"
+    stale.write_text("x")
+    check("%s: burst writes its name and its index" % script,
+          run(script, out, "burst", stale) == 0
+          and out.read_text() == "#define SHELL_SD_PROBE_BURST 1\n#define SHELL_SD_PROBE 1\n"
+          and not stale.exists())
+    stale.write_text("x")
+    check("%s: an unchanged value keeps the objects" % script,
+          run(script, out, "burst", stale) == 0 and stale.exists())
+    check("%s: stream is index 0" % script,
+          run(script, out, "stream", stale) == 0
+          and out.read_text() == "#define SHELL_SD_PROBE_STREAM 1\n#define SHELL_SD_PROBE 0\n"
+          and not stale.exists())
 
     # --- remote_measure: OUTPUT {0|1} BUILD_DIR ----------------------------
     script = "write_shell_remote_measure.py"

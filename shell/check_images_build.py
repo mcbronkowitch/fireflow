@@ -85,12 +85,20 @@ IMAGES = [
                  "SHELL_RAW_SPREAD=1", "SHELL_SD=1"]),
     ("reva_sd_no_listener_refused", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1",
                                      "SHELL_RAW_SPREAD=1", "SHELL_SD=1"]),
+    # The SD use-case tests' probe modes (spec 2026-10-31-sd-use-cases-tests-
+    # design.md section 5): the SD image with the burst mode and its pot hold.
+    # A probe mode without the SD image around it must be refused.
+    ("reva_sd_burst", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
+                       "SHELL_RAW_SPREAD=1", "SHELL_SD=1", "SHELL_SD_PROBE=burst"]),
+    ("reva_sd_probe_no_sd_refused", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1",
+                                     "SHELL_SD_PROBE=burst"]),
 ]
 
 # Images whose build must be refused, and the refusal's text (name -> text).
 EXPECT_REFUSED = {
     "reva_remote_fm2_refused": "math guard: isfinite guard folded away in",
     "reva_sd_no_listener_refused": "SHELL_SD=1 needs SHELL_REMOTE=1",
+    "reva_sd_probe_no_sd_refused": "SHELL_SD_PROBE=burst needs SHELL_SD=1",
 }
 
 # The save path, as linked symbols (nm -C): persist_write() and the QSPI
@@ -121,6 +129,7 @@ SYMBOL_RULES = {
     "reva_remote": ([], SAVE_PATH + SD_PATH),
     "reva_remote_measure": ([], SAVE_PATH),
     "reva_sd": (SD_PATH, SAVE_PATH),
+    "reva_sd_burst": (SD_PATH, SAVE_PATH),
 }
 
 

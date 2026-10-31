@@ -174,5 +174,95 @@ lines = capture(on_override=lambda c, on: False if c == 15 else on)
 on, off = read_sd.classify(rp.parse_raw_windows(lines), read_sd.parse_stream(lines))
 check("a phase line that says on=0 drops its window", len(on) == 17 and 16 not in [w["w"] for w in on])
 
+# --- burst mode (SHELL_SD_PROBE=burst, spec section 5, A1) ------------------
+# The same shape as above, but the phase is not a bit of w / 10: each
+# SHELL_SD_S line names its own class (on, per, tail), the way
+# shell/sd_schedule.cpp burst_phase() hands it out. Counters 0-9 idle, 10-19
+# (83 ms, tail 0), 20-29 idle, 30-39 (83 ms, tail 1), 40 idle. Each class
+# keeps its own spread, so a reader that lumps (83,0) and (83,1) together
+# (keys on `on` only) shows the wider one in both.
+BURST_SPREAD = {(0, 0, 0): 6, (1, 83, 0): 40, (1, 83, 1): 150}
+BURST_HELD = {(0, 0, 0): 0, (1, 83, 0): 5, (1, 83, 1): 25}
+SENSE_OF_ROW = rp.row_senses()
+
+
+def burst_key(c):
+    ph = (c // 10) % 12
+    return {1: (1, 83, 0), 3: (1, 83, 1)}.get(ph, (0, 0, 0))
+
+
+def burst_capture(card=CARD, fr_line=None):
+    """Card lines, then per counter c two SHELL_SD_S burst lines and the
+    window they fill (printed w=c+1). fr_line: the counter whose lines say
+    fr=1."""
+    lines = list(card)
+    for c in range(COUNTERS):
+        key = burst_key(c)
+        on, per, tail = key
+        for _ in range(2):
+            lines.append("SHELL_SD_S w=%d on=%d mode=burst per=%d tail=%d kib=%d ms=%d "
+                         "kib_s=%d worst_us=%d bad=0 fr=%d held=%d hmax=%d"
+                         % (c, on, per, tail, 160 if on else 0, 490 if on else 0,
+                            6530 if on else 0, 9000 if on else 0,
+                            1 if c == fr_line else 0, BURST_HELD[key], 2 if on else 0))
+        # The first window of a phase holds the previous phase's last
+        # transfer and its tail: wide, and not judged.
+        s = 300 if c % 10 == 0 else BURST_SPREAD[key]
+        for r0 in range(0, ROWS, 6):
+            pairs = " ".join("%d:%d" % (1000, 1000 + s) for _ in range(min(6, ROWS - r0)))
+            lines.append("SHELL_PLAY_R w=%d r=%d %s" % (c + 1, r0, pairs))
+    return [l + "\n" for l in lines]
+
+
+def test_burst_classes():
+    lines = burst_capture()
+    stream = read_sd.parse_stream(lines)
+    check("burst: the lines parse, mode kept as text",
+          len(stream) == 2 * COUNTERS and stream[0]["mode"] == "burst" and stream[0]["per"] == 0
+          and stream[20]["per"] == 83 and stream[60]["tail"] == 1)
+    classes = read_sd.burst_classes(rp.parse_raw_windows(lines), stream)
+    check("burst: three classes", sorted(classes) == sorted(BURST_SPREAD))
+    # Judged: counters 1-9 and 21-29 idle, 11-19 (83,0), 31-39 (83,1).
+    check("burst: window counts per class",
+          [len(classes[k]["windows"]) for k in sorted(BURST_SPREAD)] == [18, 9, 9])
+    for key, want in BURST_SPREAD.items():
+        sm = read_sd.burst_summary(classes[key]["windows"], SENSE_OF_ROW)
+        rows_by_pin = [SENSE_OF_ROW.count(p) for p in range(rp.SENSES)]
+        check("burst %s: spread is the class's own, worst and median" % (key,),
+              all(sm[p]["worst"] == want and sm[p]["median"] == want
+                  for p in range(rp.SENSES) if rows_by_pin[p]))
+        check("burst %s: pots over band" % (key,),
+              all(sm[p]["over_h"] == (rows_by_pin[p] if want > rp.REVA_HYSTERESIS[p] else 0)
+                  for p in range(rp.SENSES)))
+        check("burst %s: pots over kPotTouch" % (key,),
+              all(sm[p]["over_touch"] == (rows_by_pin[p] if want > rp.POT_TOUCH else 0)
+                  for p in range(rp.SENSES)))
+        check("burst %s: held share is the held blocks over 250 blocks a pass" % (key,),
+              abs(classes[key]["held_share"] - BURST_HELD[key] / 250.0) < 1e-9)
+        check("burst %s: no error" % (key,), classes[key]["error"] is None)
+    code, text = run(lines)
+    check("burst: report exits 0", code == 0)
+    for key in BURST_SPREAD:
+        check("burst: report names class %s" % (key,),
+              "class on=%d per=%d tail=%d" % key in text)
+    check("burst: the report shows the held share", "held 10.0 %" in text)
+
+
+def test_burst_error_reported():
+    lines = burst_capture(fr_line=35)   # inside (83,1)
+    classes = read_sd.burst_classes(rp.parse_raw_windows(lines), read_sd.parse_stream(lines))
+    check("burst error: the class carries it", classes[(1, 83, 1)]["error"] is not None)
+    check("burst error: the other classes do not",
+          classes[(1, 83, 0)]["error"] is None and classes[(0, 0, 0)]["error"] is None)
+    code, text = run(lines)
+    check("burst error: report says error for the class", "on=1 per=83 tail=1: error" in text)
+    check("burst error: the class is not averaged",
+          text.count("worst/median") == 2)   # the other two classes' tables only
+    check("burst error: exits 1", code == 1)
+
+
+test_burst_classes()
+test_burst_error_reported()
+
 print("%d failed" % len(FAILS))
 sys.exit(1 if FAILS else 0)

@@ -506,6 +506,24 @@ endif
 USE_FATFS = 1
 endif
 
+# The SD use-case tests' probe mode (spec 2026-10-31-sd-use-cases-tests-design.md
+# section 5): what the SD image does with the card. `stream` is the bring-up
+# image's own stream; the others are the board tests A1.., one per mode, and
+# each needs the SD image around it. write_shell_sd_probe.py turns the value
+# into a header at parse time and deletes sd_probe.o and panel_scan.o when it
+# changes -- two switch positions must never share an object.
+SHELL_SD_PROBE ?= stream
+
+ifneq ($(words $(SHELL_SD_PROBE))-$(filter $(SHELL_SD_PROBE),stream burst rtail wtail bank buffer duplex patch),1-$(SHELL_SD_PROBE))
+$(error SHELL_SD_PROBE must be one of: stream burst rtail wtail bank buffer duplex patch)
+endif
+
+ifneq ($(SHELL_SD_PROBE),stream)
+ifneq ($(SHELL_SD),1)
+$(error SHELL_SD_PROBE=$(SHELL_SD_PROBE) needs SHELL_SD=1: the probe modes run on the SD image)
+endif
+endif
+
 CPP_SOURCES = \
 	main.cpp \
 	cb_profile.cpp \
@@ -588,7 +606,7 @@ endif
 # The card test and the stream, in SHELL_SD images alone; its callers in
 # panel_scan.cpp sit under #if SHELL_SD.
 ifeq ($(SHELL_SD),1)
-CPP_SOURCES += sd_probe.cpp
+CPP_SOURCES += sd_probe.cpp sd_schedule.cpp
 endif
 
 # -O3, und das ist nicht optional. libDaisys core/Makefile setzt `OPT ?= -O2`,
@@ -812,6 +830,7 @@ SWITCH_HEADERS := \
   $(shell python write_shell_remote.py $(BUILD_DIR)/shell_remote.h $(SHELL_REMOTE) $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o) \
   $(shell python write_shell_remote_measure.py $(BUILD_DIR)/shell_remote_measure.h $(SHELL_REMOTE_MEASURE) $(BUILD_DIR)) \
   $(shell python write_shell_sd.py $(BUILD_DIR)/shell_sd.h $(SHELL_SD) $(BUILD_DIR)/panel_scan.o) \
+  $(shell python write_shell_sd_probe.py $(BUILD_DIR)/shell_sd_probe.h $(SHELL_SD_PROBE) $(BUILD_DIR)/sd_probe.o $(BUILD_DIR)/panel_scan.o) \
   $(shell python write_shell_fast_math.py $(BUILD_DIR)/shell_fast_math.h $(SHELL_FAST_MATH) $(ENGINE_OBJECTS)) \
   $(shell python write_shell_engine_lean.py $(BUILD_DIR)/shell_engine_lean.h SVF1=$(SHELL_LEAN_SVF1) GRAIN_WIN=$(SHELL_LEAN_GRAIN_WIN) EXP2=$(SHELL_LEAN_EXP2) -- $(BUILD_DIR)) \
   $(shell python write_shell_reverb_half.py itcm_hot.ld $(BUILD_DIR)/itcm_hot.ld $(BUILD_DIR)/shell_reverb_half.state $(SHELL_REVERB_HALF) $(SHELL_REMOTE_MEASURE) $(BUILD_DIR)) \
@@ -837,6 +856,7 @@ $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o: $(BUI
 # anyway (the probe defines reach the engine), so this edge is the ordering.
 $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_remote_measure.h
 $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_sd.h
+$(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/sd_probe.o: $(BUILD_DIR)/shell_sd_probe.h
 $(ENGINE_OBJECTS): $(BUILD_DIR)/shell_fast_math.h
 # The lean stamp: the writer deletes every object on a change; this edge is
 # the ordering for the objects that read the defines it stands for.

@@ -898,8 +898,20 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
     }
     if(step < 0) return;
 
+#if SHELL_SD
+    // The SD burst probe's pot hold (spec 2026-10-31-sd-use-cases-tests-design
+    // section 5, A1), decided once per block: while a card transfer runs and
+    // for a tail of blocks after it, none of this step's readings counts --
+    // not the raw window below, not the calibration pair, not the pot filter.
+    // What is left is what the board test judges against the noise floor.
+    // False in every other SD mode.
+    const bool sd_drop = sd_hold_block();
+#endif
     for(int s = 0; s < kActiveChain.sense_pins; ++s)
     {
+#if SHELL_SD
+        if(sd_drop) continue;
+#endif
         // A pin with no live channel this step floats; group_at() says so.
         const int g = group_at(kActiveChain, step, s);
         if(g < 0) continue;

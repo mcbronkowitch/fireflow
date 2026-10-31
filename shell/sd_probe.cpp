@@ -5,9 +5,16 @@
 
 #include "cycles.h"
 #include "per/sdmmc.h"
+#include "sd_schedule.h"
+#include "shell_sd_probe.h"
 #include "sys/fatfs.h"
 
 namespace shell {
+
+// The foreground's mark on every card transfer (sd_probe.h). Outside the
+// anonymous namespace: panel_scan.cpp's callback reads it through sd_hold_block().
+volatile bool g_sd_seen = false;
+
 namespace {
 
 // 32 KB per f_read / f_write: 64 sectors, one DMA transfer each when the
@@ -87,6 +94,33 @@ struct Result
 Result g_res;
 
 char g_path[24];
+
+#if SHELL_SD_PROBE_BURST
+// The raw window counter, handed over by the pass so the callback can read
+// the current phase's tail (sd_hold_tail()). Null until the first pass: no
+// phase, no tail.
+const volatile uint32_t* g_win = nullptr;
+
+// Set around the f_read call itself. g_sd_seen alone would not cover a
+// transfer longer than one block: the callback clears it at the first block
+// boundary inside the call, and the blocks after that would take their pot
+// readings as clean while the bus is still busy. The callback drops on either.
+// g_sd_seen is set again after the call returns for the block the transfer
+// ended in, whose readings were taken partly under it.
+volatile bool g_sd_busy = false;
+
+// Callback side. Counts per pass, not since boot: the foreground bumps
+// g_pass_epoch after it has read the counters, and the callback starts them
+// over at the first block that sees the new epoch (so the foreground never
+// writes a variable the callback also writes). A block between the read and
+// the bump is the one dropped from the count -- one block of 250.
+SdHold              g_hold;
+uint32_t            g_run       = 0;   // the open run of dropped blocks
+uint32_t            g_cb_epoch  = 0;
+volatile uint32_t   g_pass_epoch = 0;
+volatile uint32_t   g_held_blocks = 0; // dropped blocks this pass
+volatile uint32_t   g_hold_max    = 0; // the longest run of them this pass
+#endif
 
 // A hash of the word index, so a word read from the wrong place, a shifted
 // sector or a stuck data line all fail the compare.
@@ -332,7 +366,142 @@ void sd_report(bench::Board& hw, uint32_t pass)
                  static_cast<unsigned>(g_res.bad_off));
 }
 
-void sd_stream_pass(bench::Board& hw, const volatile uint32_t& win)
+uint8_t sd_hold_tail()
+{
+#if SHELL_SD_PROBE_BURST
+    const volatile uint32_t* w = g_win;
+    if(w == nullptr)
+        return 0;
+    const BurstPhase p = burst_phase(*w);
+    return p.on ? p.tail : 0;
+#else
+    return 0;
+#endif
+}
+
+bool sd_hold_block()
+{
+#if SHELL_SD_PROBE_BURST
+    const uint32_t epoch = g_pass_epoch;
+    if(epoch != g_cb_epoch)
+    {
+        g_cb_epoch    = epoch;
+        g_held_blocks = 0;
+        g_hold_max    = g_run;   // a run that spans the pass boundary counts whole
+    }
+    const bool seen = g_sd_seen || g_sd_busy;
+    g_sd_seen       = false;
+    const bool drop = g_hold.step(seen, sd_hold_tail());
+    if(drop)
+    {
+        ++g_run;
+        g_held_blocks = g_held_blocks + 1u;
+        if(g_run > g_hold_max)
+            g_hold_max = g_run;
+    }
+    else
+        g_run = 0;
+    return drop;
+#else
+    return false;   // nothing sets g_sd_seen: every block's readings stay
+#endif
+}
+
+#if SHELL_SD_PROBE_BURST
+// Spec 2026-10-31-sd-use-cases-tests-design.md section 5, A1: what a sample
+// player's streaming looks like to the pots. In a burst phase (burst_phase(),
+// shell/sd_schedule.cpp) one verified 32 KB read of the test file every `per`
+// ms, wrapping; idle phases read nothing. Between reads the pass waits with
+// the bus clock stopped (kClockPowerSave), so the load is the reads and
+// nothing else. A transfer, and `tail` blocks after it, cost the pots their
+// readings (sd_hold_block()): the line says how many blocks that was, and
+// read_sd.py judges the spread of what is left against the noise floor.
+static void burst_pass(bench::Board& hw, const volatile uint32_t& win)
+{
+    g_win                 = &win;
+    static bool    was_on = false;
+    static uint32_t next  = 0;   // System::GetNow() of the next read
+    const uint32_t w0     = win;
+    const BurstPhase ph   = burst_phase(w0);
+    const bool     on     = g_res.ready && ph.on;
+    const uint32_t t0     = daisy::System::GetNow();
+    uint32_t       bytes = 0, us = 0, worst = 0, bad = 0;
+    if(on)
+    {
+        if(!was_on)
+            next = t0;   // a phase starts with a read, not a catch-up
+        // Until the 500 ms are up or the raw window counter leaves the
+        // phase; at most one read spills into the next phase's first window,
+        // which read_sd.py does not judge.
+        while(daisy::System::GetNow() - t0 < kPassMs
+              && win / kPhaseWin == w0 / kPhaseWin)
+        {
+            if(static_cast<int32_t>(daisy::System::GetNow() - next) < 0)
+            {
+                daisy::System::Delay(1);
+                continue;
+            }
+            const uint32_t start = daisy::System::GetNow();
+            FRESULT        fr    = FR_OK;
+            if(f_tell(&g_fs.file) >= kFileBytes)
+                fr = f_lseek(&g_fs.file, 0);
+            const uint32_t word0 = static_cast<uint32_t>(f_tell(&g_fs.file) / 4u);
+            UINT           br    = 0;
+            const uint32_t u0    = cycles_now();
+            if(fr == FR_OK)
+            {
+                g_sd_seen = true;
+                g_sd_busy = true;
+                fr        = f_read(&g_fs.file, g_buf, kChunk, &br);
+                g_sd_seen = true;
+                g_sd_busy = false;
+            }
+            const uint32_t dt = (cycles_now() - u0) / kCoreMhz;
+            if(fr != FR_OK || br != kChunk)
+            {
+                // Stops the reads for good; the line keeps saying why.
+                g_res.stream_fr = fr != FR_OK ? static_cast<int>(fr) : -2;
+                g_res.ready     = false;
+                break;
+            }
+            bytes += br;
+            us += dt;
+            if(dt > worst)
+                worst = dt;
+            if(first_bad(word0) >= 0)
+                ++bad;
+            // The period runs from the read's start; a read slower than the
+            // period does not queue a second one behind it.
+            next = start + ph.period_ms;
+            if(static_cast<int32_t>(daisy::System::GetNow() - next) > 0)
+                next = daisy::System::GetNow();
+        }
+    }
+    was_on = on;
+    // The pass stays 500 ms long either way, so the frame rate does not
+    // change with the phase.
+    const uint32_t spent = daisy::System::GetNow() - t0;
+    if(spent < kPassMs)
+        hw.Delay(kPassMs - spent);
+    // The pass's hold counters, then the callback starts them over.
+    const uint32_t held = g_held_blocks;
+    const uint32_t hmax = g_hold_max;
+    g_pass_epoch        = g_pass_epoch + 1u;
+    // Longest line: w 5 digits, kib 3, ms 3, kib_s 5, worst_us 6, held 3,
+    // hmax 2 -- 120 bytes of the 128.
+    hw.PrintLine("SHELL_SD_S w=%u on=%d mode=burst per=%u tail=%u kib=%u ms=%u kib_s=%u "
+                 "worst_us=%u bad=%u fr=%d held=%u hmax=%u",
+                 static_cast<unsigned>(w0), on ? 1 : 0, on ? ph.period_ms : 0u,
+                 on ? static_cast<unsigned>(ph.tail) : 0u,
+                 static_cast<unsigned>(bytes / 1024u), static_cast<unsigned>(us / 1000u),
+                 static_cast<unsigned>(kib_s(bytes, us)), static_cast<unsigned>(worst),
+                 static_cast<unsigned>(bad), g_res.stream_fr, static_cast<unsigned>(held),
+                 static_cast<unsigned>(hmax));
+}
+#endif // SHELL_SD_PROBE_BURST
+
+#if SHELL_SD_PROBE_STREAM
+static void stream_pass(bench::Board& hw, const volatile uint32_t& win)
 {
     const uint32_t w0 = win;
     const bool     on = g_res.ready && ((w0 / kPhaseWin) & 1u) != 0;
@@ -374,11 +543,23 @@ void sd_stream_pass(bench::Board& hw, const volatile uint32_t& win)
     const uint32_t spent = daisy::System::GetNow() - t0;
     if(spent < kPassMs)
         hw.Delay(kPassMs - spent);
-    hw.PrintLine("SHELL_SD_S w=%u on=%d kib=%u ms=%u kib_s=%u worst_us=%u bad=%u fr=%d",
+    hw.PrintLine("SHELL_SD_S w=%u on=%d mode=stream kib=%u ms=%u kib_s=%u worst_us=%u bad=%u fr=%d",
                  static_cast<unsigned>(w0), on ? 1 : 0, static_cast<unsigned>(bytes / 1024u),
                  static_cast<unsigned>(ms),
                  static_cast<unsigned>(ms == 0 ? 0 : static_cast<uint64_t>(bytes) * 1000u / 1024u / ms),
                  static_cast<unsigned>(worst), static_cast<unsigned>(bad), g_res.stream_fr);
+}
+#endif // SHELL_SD_PROBE_STREAM
+
+void sd_stream_pass(bench::Board& hw, const volatile uint32_t& win)
+{
+#if SHELL_SD_PROBE_BURST
+    burst_pass(hw, win);
+#elif SHELL_SD_PROBE_STREAM
+    stream_pass(hw, win);
+#else
+#error "this SHELL_SD_PROBE mode has no pass yet (shell/sd_probe.cpp)"
+#endif
 }
 
 } // namespace shell

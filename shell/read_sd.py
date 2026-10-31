@@ -18,8 +18,19 @@ Record with read_play.py (it writes every line), then:
    window counts only when every SHELL_SD_S line that started in it agrees
    with its phase (a stream that stopped on an error shows on=0).
 
+A capture of the burst mode (SHELL_SD_PROBE=burst, spec
+2026-10-31-sd-use-cases-tests-design.md section 5, A1) is told by `mode=burst`
+on its SHELL_SD_S lines. Its windows go into classes keyed by the phase the
+line names, (on, per, tail), each with its own windows only; per class and
+sense pin it prints the worst and median spread of the readings the pot hold
+kept, the pots over their pin's band and over kPotTouch, and the share of
+blocks the hold dropped. A class whose lines carry an error (fr, bad) is
+reported as `error`, not averaged. Exit 0 when the card test passed, no
+class has an error, and the idle class and a transferring class have a
+judged window.
+
 Exit 0 when the card test passed and both classes have a judged window;
-1 otherwise. The spread is reported, not judged: the row's verdict needs the
+1 otherwise (stream mode). The spread is reported, not judged: the row's verdict needs the
 numbers beside the pin's band and Bastian's reading of them.
 """
 import re
@@ -29,6 +40,7 @@ import read_play as rp
 
 PHASE_WINDOWS = 10   # sd_probe.cpp kPhaseWin
 FILE_KIB = 8192      # sd_probe.cpp kFileBytes
+BLOCKS_PER_PASS = 250   # a 500 ms pass (kPassMs) of 2 ms blocks: the base of the held share
 
 _SD = re.compile(r"^SHELL_SD (mount=|prev=|write |verify=)(.*)$")
 _SD_S = re.compile(r"^SHELL_SD_S (.*)$")
@@ -82,12 +94,15 @@ def parse_root(lines):
 
 
 def parse_stream(lines):
-    """Every SHELL_SD_S line, in order, as an int field dict."""
+    """Every SHELL_SD_S line, in order, as a field dict: ints, except `mode`
+    (stream or burst), which stays text. A line from an image older than the
+    probe switch has no mode."""
     out = []
     for raw in strip_host_time(lines):
         m = _SD_S.match(raw.strip())
         if m:
-            out.append({k: int(v) for k, v in _kv(m.group(1)).items()})
+            out.append({k: (v if k == "mode" else int(v))
+                        for k, v in _kv(m.group(1)).items()})
     return out
 
 
@@ -152,6 +167,132 @@ def classify(windows, stream):
     return on, off
 
 
+def burst_key(s):
+    """The class a burst line belongs to: the schedule phase it ran in
+    (shell/sd_schedule.cpp burst_phase())."""
+    return (s["on"], s["per"], s["tail"])
+
+
+def burst_classes(windows, stream):
+    """Burst mode: {(on, per, tail): class} where a class is
+    {"windows", "lines", "error", "passes", "kib", "ms", "kib_s", "worst_us",
+    "held_share", "hmax"}.
+
+    A window is judged exactly as classify() does (counter c = w - 1; the
+    first window of a phase and the window before the first pass are out; both
+    its own and the previous counter have lines), and it goes to the class its
+    lines name -- all of them must agree. Each class keeps only its own
+    windows, so a spread is never averaged over another phase's.
+
+    error: the first thing that makes the class unusable, or None. A failing
+    f_read counts once, on the line where its fr first appears (fr is sticky
+    and later lines repeat it); a chunk that failed the compare (bad) counts on
+    its own line. A class with an error is reported, not averaged."""
+    burst = [s for s in stream if s.get("mode") == "burst"]
+    seen = {}
+    for s in burst:
+        seen.setdefault(s["w"], []).append(s)
+    classes = {}
+
+    def get(key):
+        return classes.setdefault(key, {"windows": [], "lines": [], "error": None})
+
+    prev_fr = 0
+    for s in burst:
+        c = get(burst_key(s))
+        why = None
+        if s["fr"] != 0 and s["fr"] != prev_fr:
+            why = "fr=%d" % s["fr"]
+        elif s["bad"]:
+            why = "bad=%d" % s["bad"]
+        prev_fr = s["fr"]
+        if why and c["error"] is None:
+            c["error"] = "%s at w=%d" % (why, s["w"])
+    for win in windows:
+        c = win["w"] - 1
+        if c < 1 or c % PHASE_WINDOWS == 0 or c not in seen or c - 1 not in seen:
+            continue
+        keys = {burst_key(s) for s in seen[c]}
+        if len(keys) != 1:
+            continue
+        cls = classes[keys.pop()]
+        cls["windows"].append(win)
+        cls["lines"].extend(seen[c])
+    for cls in classes.values():
+        lines = cls["lines"]
+        cls["passes"] = len(lines)
+        cls["kib"] = sum(l["kib"] for l in lines)
+        cls["ms"] = sum(l["ms"] for l in lines)
+        cls["kib_s"] = (cls["kib"] * 1000 // cls["ms"]) if cls["ms"] else 0
+        cls["worst_us"] = max((l["worst_us"] for l in lines), default=0)
+        cls["held_share"] = (sum(l["held"] for l in lines) / (BLOCKS_PER_PASS * len(lines))
+                             if lines else 0.0)
+        cls["hmax"] = max((l["hmax"] for l in lines), default=0)
+    return classes
+
+
+def burst_summary(windows, senses):
+    """Sense pin -> {"rows", "worst", "median", "over_h", "over_touch"} of the
+    rows' worst KEPT spread over the windows. A window the hold left a row
+    without a reading in publishes lo 65535, hi 0; it says nothing about the
+    row and is skipped, and a row with no reading in any window is left out of
+    `rows`. over_h: rows whose worst is above their pin's band; over_touch:
+    above kPotTouch."""
+    from statistics import median
+    worst = {}
+    for r in range(len(senses)):
+        vals = [w["hi"][r] - w["lo"][r] for w in windows if w["lo"][r] <= w["hi"][r]]
+        if vals:
+            worst[r] = max(vals)
+    out = {}
+    for p in range(rp.SENSES):
+        vals = [worst[r] for r in worst if senses[r] == p]
+        out[p] = {"rows": len(vals),
+                  "worst": max(vals) if vals else None,
+                  "median": median(vals) if vals else None,
+                  "over_h": sum(1 for v in vals if v > rp.REVA_HYSTERESIS[p]),
+                  "over_touch": sum(1 for v in vals if v > rp.POT_TOUCH)}
+    return out
+
+
+def burst_report(lines, stream, out, card_ok):
+    """The per-class report of a burst capture. Exit code: 0 when the card
+    test passed, no class has an error, the idle class and at least one
+    transferring class have a judged window."""
+    classes = burst_classes(rp.parse_raw_windows(lines), stream)
+    senses = rp.row_senses()
+    print("burst classes (spread of the pot readings that were kept, per sense pin):", file=out)
+    failed = False
+    for key in sorted(classes):
+        c = classes[key]
+        head = "class on=%d per=%d tail=%d" % key
+        if c["error"]:
+            print("%s: error (%s), not averaged" % (head, c["error"]), file=out)
+            failed = True
+            continue
+        if not c["windows"]:
+            print("%s: no judged window" % head, file=out)
+            continue
+        print("%s: %d windows, %d passes, %d KiB in %d ms = %d KiB/s, worst f_read %d us, "
+              "held %.1f %% of the blocks, longest run %d"
+              % (head, len(c["windows"]), c["passes"], c["kib"], c["ms"], c["kib_s"],
+                 c["worst_us"], 100.0 * c["held_share"], c["hmax"]), file=out)
+        sm = burst_summary(c["windows"], senses)
+        print("  sense  band  rows  worst/median  over band  over %d" % rp.POT_TOUCH, file=out)
+        for p in range(rp.SENSES):
+            s = sm[p]
+            med = "-" if s["median"] is None else "%.1f" % s["median"]
+            print("  %5d  %4d  %4d  %6s/%-6s  %9d  %8d"
+                  % (p, rp.REVA_HYSTERESIS[p], s["rows"], s["worst"], med,
+                     s["over_h"], s["over_touch"]), file=out)
+    idle = classes.get((0, 0, 0))
+    has_idle = bool(idle and idle["windows"])
+    has_burst = any(k[0] == 1 and c["windows"] for k, c in classes.items())
+    print("judged: idle class %s, transferring class %s"
+          % ("yes" if has_idle else "NO", "yes" if has_burst else "NO"), file=out)
+    return 0 if card_ok and not failed and has_idle and has_burst else 1
+
+
 def stream_stats(stream):
     s_on = [s for s in stream if s["on"] == 1]
     kib = sum(s["kib"] for s in s_on)
@@ -182,6 +323,9 @@ def report(lines, out=None):
     st = stream_stats(stream)
     print("stream: %(passes)d passes, %(kib)d KiB in %(ms)d ms = %(kib_s)d KiB/s, "
           "worst f_read %(worst_us)d us, bad chunks %(bad)d, fr %(fr)s" % st, file=out)
+
+    if any(s.get("mode") == "burst" for s in stream):
+        return burst_report(lines, stream, out, ok)
 
     on, off = classify(rp.parse_raw_windows(lines), stream)
     print("raw windows judged: %d streaming, %d idle" % (len(on), len(off)), file=out)
