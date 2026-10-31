@@ -224,12 +224,14 @@ private:
     float _level() const {
         if (_rel_len <= 0) return _window();
 #if defined(SPKY_PROBE_TOGGLES)
+        // G2 (toggle bit 22): the latched reciprocal, or the divide.
         if (_win_lean)
             return _rel_from * hann_value_at(static_cast<float>(_rel_ctr) * _inv_rel);
+        return _rel_from * hann_value_at(static_cast<float>(_rel_ctr)
+                                         / static_cast<float>(_rel_len));
 #elif SPKY_LEAN_GRAIN_WIN
         return _rel_from * hann_value_at(static_cast<float>(_rel_ctr) * _inv_rel);
-#endif
-#if !SPKY_LEAN_GRAIN_WIN || defined(SPKY_PROBE_TOGGLES)
+#else
         return _rel_from * hann_value_at(static_cast<float>(_rel_ctr)
                                          / static_cast<float>(_rel_len));
 #endif
