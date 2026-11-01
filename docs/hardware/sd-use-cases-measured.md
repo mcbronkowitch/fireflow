@@ -98,12 +98,16 @@ The reader's per-arm p99 is the same as its max here. With about 80 frames, the 
 | 108 | +6 472 ± 1 407 | +4 959 ± 1 773 | +5 285 ± 946 |
 
 Reading:
-- **Size of the effect.** Streaming flat out costs the callback about 0-13 k cycles per block on average, 0-1.4 % of the block. That sits at the spec's 1 % line, above it on some workload/arm pairs and below on others.
+- **Size of the effect.** With 16 KB reads, streaming flat out stays within ±9 k cycles per block of idle on every workload (≤ 1 %, reader Δ). With 32 KB reads it reaches +13 to +20 k (1.4-2.1 %) on 145, 90 and 99.
 - **Bastian's patch (145).** Its phase-to-phase spread (sd 30-46 k) is far larger than any arm difference, so its FAIL (sdram32 +20 k) is inside its own noise.
 - **Location.** It has no consistent sign: AXI is cheaper on 145 and 90, more expensive on 99 and 127 (+7.9 k on 127, where the noise is ±0.7 k), and equal on 108. Moving the transfer buffer out of SDRAM does not reliably lower the cost. So the cost is not SDRAM bandwidth that the sampler, echo and BBD lose to the IDMA. What else it is was not measured.
-- **Chunk size.** 32 KB is never cheaper than 16 KB, by 0-22 k depending on the workload. Only 127 and 108 resolve it, at +7 k and ±0.
+- **Chunk size.** The chunk contrast is positive on all five workloads: +17.5, +6.5, +22.3, +3.5 and +0.2 k. That is the one consistent signal in A3. The per-phase noise resolves it only on 127 and 108, at +7 k and ±0. Why larger reads cost more was not measured.
 - **Real players.** A player streams at 384-768 KB/s with bursts (A1), about 1/15-1/30 of this load. If the cost scales with the bytes moved, it falls to a few hundred cycles. That is an extrapolation, not a measurement.
 - **Click line.** One frame crossed it: 954 478 in an sdram16 phase on 145. The idle max on the same run is 761 633, and on other workloads the idle max reaches 906 587. A single worst block moves ±135 k between runs (`docs/gotchas.md`), so this one frame does not decide anything.
 - **Pots.** Unheld streaming put every pot over its band on every workload (S2 worst 540-588 counts). That is R5 again, as expected for this mode.
 
-**Result.** The reader's verdict is FAIL on 3 of 5 workloads. Read against the per-phase noise, the traffic costs at most about 1 % of the block on average while streaming flat out. The cost does not depend on whether the IDMA writes into SDRAM or AXI SRAM. A miss here prices the traffic, as the spec says; it does not stop the round.
+**Result.** The reader's verdict is FAIL on 145, 90 and 99, as printed, all from sdram32. A miss here prices the traffic, as the spec says; it does not stop the round.
+- `sdram16` and `axi16` stay within ±9 k cycles of idle on every workload (≤ 1 %). In the per-phase check, axi16 on 99 is +12.1 ± 5.8 k.
+- 32 KB chunks cost more than 16 KB on every workload, by up to +22 k, so 16 KB is the chunk size to keep.
+- Location (SDRAM against AXI SRAM) shows no consistent sign.
+- The FAIL on 145 is inside that run's own phase-to-phase noise. On 90 and 99 the noise does not explain the sdram32 excess.
