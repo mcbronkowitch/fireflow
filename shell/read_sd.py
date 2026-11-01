@@ -19,17 +19,21 @@ Record with read_play.py (it writes every line), then:
    with its phase (a stream that stopped on an error shows on=0).
 
 4. Test A3 (spec 2026-10-31-sd-use-cases-tests-design.md): the stream mode
-   alternates its transfer buffer between SDRAM and AXI SRAM (`buf=sdram|axi`
-   on its on=1 lines), and the audio callback is priced by phase from the
+   rotates its on-phases through three arms, sdram-16 (SDRAM buffer, 16 KiB
+   chunks), axi-16 (AXI SRAM buffer, 16 KiB) and sdram-32 (SDRAM, 32 KiB) --
+   `buf=` and `chunk=` on its on=1 lines name the arm. AXI SRAM had room for a
+   16 KiB buffer only, so two arms alone would differ in location and chunk
+   size at once; here the first two differ in location alone and the last two
+   in chunk size alone. The audio callback is priced by phase from the
    SHELL_PLAY_WIN frames (SHELL_CB_WINDOW images): each frame goes to the latest
-   SHELL_SD_S line before it (idle, sdram, axi); per class the frame count, the
-   mean of the per-frame means (sum / n), the p99 and the maximum of win. The
-   verdict is printed, not part of the exit code (a miss prices the traffic):
-   each buffer class's mean within 9 600 cycles of idle's, and no win over
-   945 000. A frame with sum=0 n=0 is skipped, and so is the first frame after
-   every phase change. The two arms read different chunks (chunk= on the line:
-   32 KiB from SDRAM, 16 KiB from the AXI buffer, which is all AXI SRAM had
-   room for).
+   SHELL_SD_S line before it (idle, sdram16, axi16, sdram32); per class the
+   frame count, the mean of the per-frame means (sum / n), the p99 and the
+   maximum of win. The verdict is printed, not part of the exit code (a miss
+   prices the traffic): each arm's mean within 9 600 cycles of idle's, and no
+   win over 945 000; every class needs frames. Two contrasts are reported, not
+   judged: location (axi16 - sdram16) and chunk (sdram32 - sdram16). A frame
+   with sum=0 n=0 is skipped, and so is the first frame after every phase
+   change (each arm change is one).
 
 A capture of the burst mode (SHELL_SD_PROBE=burst, spec
 2026-10-31-sd-use-cases-tests-design.md section 5, A1) is told by `mode=burst`
@@ -456,10 +460,18 @@ def tail_report(lines, out, card_ok):
     capture belong to. The pass criterion of C1 / C2 -- two runs agree within
     2x on the worst call -- compares two captures, so it is not judged here."""
     t = tails(lines)
+    # Only setup / fill errors: the run died before the first kind, so the
+    # family is unknown (wtail and rtail both print them). Say the errors and
+    # list no kind as missing, for either family.
+    setup_only = bool(t) and all(k in SETUP_KINDS for k in t)
     family = WRITE_KINDS if any(k in WRITE_KINDS for k in t) else READ_KINDS
-    print("latency tails (%s; buckets [2^i, 2^(i+1)) x %d us, bucket 0 from 0, bucket %d open):"
-          % ("writes" if family is WRITE_KINDS else "reads", TAIL_BUCKET_US, TAIL_BUCKETS - 1),
-          file=out)
+    if setup_only:
+        family = ()
+        print("latency tails (the run failed before the first kind):", file=out)
+    else:
+        print("latency tails (%s; buckets [2^i, 2^(i+1)) x %d us, bucket 0 from 0, bucket %d open):"
+              % ("writes" if family is WRITE_KINDS else "reads", TAIL_BUCKET_US, TAIL_BUCKETS - 1),
+              file=out)
     failed = False
     # A failure before the first kind: the rtail fill (and its early CLMT look)
     # prints as kind=fill, a missing card-test file (fr=-3) as kind=setup.
@@ -494,14 +506,31 @@ def tail_report(lines, out, card_ok):
     return 0 if card_ok and not failed else 1
 
 
+CB_CLASSES = ("idle", "sdram16", "axi16", "sdram32")
+CB_ARMS = CB_CLASSES[1:]
+
+
+def cb_class(kv):
+    """The A3 class of a stream-mode SHELL_SD_S line's fields: "idle" for on=0,
+    else the arm (buf, chunk) names: sdram16, axi16 or sdram32. An older line
+    without chunk= is from before the three arms: sdram32 if buf is sdram or
+    missing, axi16 if buf=axi (the two arms of that image)."""
+    if kv.get("on") == "0":
+        return "idle"
+    if kv.get("buf") == "axi":
+        return "axi16"
+    return "sdram16" if kv.get("chunk") == "16" else "sdram32"
+
+
 def cb_by_phase(lines):
-    """Test A3: the audio callback priced by transfer phase. {"idle", "sdram",
-    "axi"} -> {"means": [...], "win": [...]}: per SHELL_PLAY_WIN frame its mean
-    block (sum / n) and its worst block (win).
+    """Test A3: the audio callback priced by transfer phase. {"idle", "sdram16",
+    "axi16", "sdram32"} -> {"means": [...], "win": [...]}: per SHELL_PLAY_WIN
+    frame its mean block (sum / n) and its worst block (win).
 
     A frame belongs to the latest stream-mode SHELL_SD_S line before it: on=0
-    is idle, on=1 the buffer `buf=` names (a line from before the alternation
-    has none and read into SDRAM). A frame before the first such line, or after
+    is idle, on=1 the arm `buf=` and `chunk=` name (see cb_class(); the arms
+    differ in location alone, sdram16 against axi16, or in chunk size alone,
+    sdram16 against sdram32). A frame before the first such line, or after
     a burst-mode line, belongs to no phase. A frame with n=0 (the board prints
     sum=0 n=0 when its torn-read retry gave up) says nothing about the callback
     and is skipped whole, not counted as a zero.
@@ -513,9 +542,9 @@ def cb_by_phase(lines):
     and "the latest line before it" is that pass.
 
     The first frame after every phase change (idle to stream or back, or one
-    buffer to the other) is dropped: it holds the last chunk of the phase
-    before, as the raw windows' first window of a phase does (classify())."""
-    out = {k: {"means": [], "win": []} for k in ("idle", "sdram", "axi")}
+    arm to the next) is dropped: it holds the last chunk of the phase before,
+    as the raw windows' first window of a phase does (classify())."""
+    out = {k: {"means": [], "win": []} for k in CB_CLASSES}
     cur = None
     fresh = False   # the next frame is the first of a new phase
     for raw in strip_host_time(lines):
@@ -525,10 +554,8 @@ def cb_by_phase(lines):
             kv = _kv(m.group(1))
             if kv.get("mode", "stream") != "stream":
                 new = None
-            elif kv.get("on") == "0":
-                new = "idle"
             else:
-                new = "axi" if kv.get("buf") == "axi" else "sdram"
+                new = cb_class(kv)
             if new != cur:
                 fresh = True
             cur = new
@@ -560,33 +587,39 @@ def cb_stats(cls):
 
 
 def cb_verdict(by):
-    """(ok, reasons): each buffer class's mean within CB_TOLERANCE cycles of
+    """(ok, reasons): each of the three arms' mean within CB_TOLERANCE cycles of
     the idle mean, in either direction, and no window maximum in any class
-    above CB_CLICK. A class with no frames cannot be judged and fails."""
+    above CB_CLICK. A class with no frames cannot be judged and fails (the A3
+    run uses the three-arm image, so a capture of the older two-arm image fails
+    on its missing arm). The location and chunk contrasts are not judged, see
+    cb_report()."""
     st = {k: cb_stats(by[k]) for k in by}
     why = []
-    for k in ("idle", "sdram", "axi"):
+    for k in CB_CLASSES:
         if not st[k]["frames"]:
             why.append("no %s frames" % k)
-    for k in ("sdram", "axi"):
+    for k in CB_ARMS:
         if st[k]["frames"] and st["idle"]["frames"]:
             d = st[k]["mean"] - st["idle"]["mean"]
             if abs(d) > CB_TOLERANCE:
                 why.append("%s mean %+.0f cycles from idle (limit %d)" % (k, d, CB_TOLERANCE))
-    for k in ("idle", "sdram", "axi"):
+    for k in CB_CLASSES:
         if st[k]["frames"] and st[k]["max"] > CB_CLICK:
             why.append("%s win %d is over the click line %d" % (k, st[k]["max"], CB_CLICK))
     return not why, why
 
 
 def cb_report(by, out):
-    """Prints cb_by_phase()'s classes and the verdict, if any frame was found."""
+    """Prints cb_by_phase()'s classes, the two contrasts (reported, not judged)
+    and the verdict, if any frame was found. location is axi16 - sdram16 (the
+    same 16 KB chunk, only the buffer's place differs); chunk is sdram32 -
+    sdram16 (the same SDRAM buffer, only the chunk size differs)."""
     if not any(by[k]["means"] for k in by):
         return
     st = {k: cb_stats(by[k]) for k in by}
     print("callback by phase (SHELL_PLAY_WIN: mean of the per-frame sum / n; "
           "win: the frame's worst block):", file=out)
-    for k in ("idle", "sdram", "axi"):
+    for k in CB_CLASSES:
         s = st[k]
         if not s["frames"]:
             print("  %s: no frames" % k, file=out)
@@ -595,6 +628,10 @@ def cb_report(by, out):
             ", %+.0f from idle" % (s["mean"] - st["idle"]["mean"])
         print("  %s: %d frames, mean %.0f cycles%s, p99 win %d, max win %d"
               % (k, s["frames"], s["mean"], extra, s["p99"], s["max"]), file=out)
+    for name, hi, lo in (("location (axi16 - sdram16)", "axi16", "sdram16"),
+                         ("chunk (sdram32 - sdram16)", "sdram32", "sdram16")):
+        if st[hi]["frames"] and st[lo]["frames"]:
+            print("  %s: %+.0f cycles" % (name, st[hi]["mean"] - st[lo]["mean"]), file=out)
     ok, why = cb_verdict(by)
     print("callback verdict: %s" % ("PASS" if ok else "FAIL (" + "; ".join(why) + ")"), file=out)
 

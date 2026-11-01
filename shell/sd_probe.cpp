@@ -86,15 +86,18 @@ alignas(32) uint32_t DSY_SDRAM_BSS g_buf[kChunk / 4];
 //
 // 16 KB, not the 32 KB of the SDRAM buffer: AXI SRAM had 30 088 B free in this
 // image, and a 32 KB buffer overflowed it by 2 680 B. The axi on-phases
-// therefore read 16 KB chunks, the sdram ones keep 32 KB (the 11.2 pattern);
-// the SHELL_SD_S line says which with chunk=.
+// therefore read 16 KB chunks. So that location and chunk size are not
+// confounded, the stream rotates three arms (moderator correction 2026-10-31):
+// sdram-16 (g_buf, 16 KB), axi-16 (g_buf_axi, 16 KB) and sdram-32 (g_buf,
+// 32 KB, the 11.2 pattern). The SHELL_SD_S line names the arm with buf= and
+// chunk=.
 constexpr uint32_t kChunkAxi = 16u * 1024u;
 alignas(32) uint32_t g_buf_axi[kChunkAxi / 4];
 static_assert(sizeof(g_buf_axi) % 32 == 0, "the invalidate rounds out to 32-byte lines");
 #endif
 // Both chunks divide the file, so a pass that starts on a chunk boundary of its
-// own size wraps exactly at the end. The positions the two arms leave behind
-// differ (an axi phase can stop at an odd multiple of 16 KB, which is not a
+// own size wraps exactly at the end. The positions the arms leave behind
+// differ (a 16 KB phase can stop at an odd multiple of 16 KB, which is not a
 // 32 KB boundary): stream_pass() rounds the position down to its chunk at the
 // start of every pass.
 static_assert(kFileBytes % kChunk == 0, "the sdram chunk divides the file");
@@ -765,10 +768,12 @@ void tail_close_file()
 // size the table needed, if lr is FR_NOT_ENOUGH_CORE), so frags=1 means the
 // file is contiguous. `when` says which look it is: "pre" (right after the file
 // is known good, before seq and rand read it) or "randfs" (the table that phase
-// really uses).
+// really uses). Any other failure leaves tbl[0] at the capacity the caller
+// preset, which is not a fragment count: the line then says frags=0 dwords=0
+// and fr= names the error.
 void tail_clmt_line(bench::Board& hw, const char* when, FRESULT lr)
 {
-    const uint32_t dwords = g_clmt[0];
+    const uint32_t dwords = (lr == FR_OK || lr == FR_NOT_ENOUGH_CORE) ? g_clmt[0] : 0u;
     hw.PrintLine("SHELL_SD_H clmt at=%s frags=%u dwords=%u cap=%u fr=%d", when,
                  static_cast<unsigned>(dwords >= 2 ? (dwords - 2) / 2 : 0),
                  static_cast<unsigned>(dwords), static_cast<unsigned>(kClmtDwords),
@@ -1166,18 +1171,23 @@ static void stream_pass(bench::Board& hw, const volatile uint32_t& win)
 {
     const uint32_t w0 = win;
     const bool     on = g_res.ready && ((w0 / kPhaseWin) & 1u) != 0;
-    // Test A3: the on-phases alternate the transfer buffer, SDRAM, AXI, SDRAM,
-    // ... A phase is kPhaseWin windows and on-phases are the odd ones, so
-    // w / (2 * kPhaseWin) counts them. A pass stays inside its phase (the loop
-    // below ends when the window counter leaves it), so one pass, one buffer.
-    const bool       axi = ((w0 / (2u * kPhaseWin)) & 1u) != 0;
+    // Test A3: the on-phases rotate through three arms, sdram-16, axi-16,
+    // sdram-32. The first two differ only in where the buffer is, the last two
+    // only in the chunk size (the AXI buffer cannot be 32 KB, see g_buf_axi), so
+    // the location and the chunk size are each contrasted on their own
+    // (moderator correction 2026-10-31; two arms alone confounded them). A phase
+    // is kPhaseWin windows and on-phases are the odd ones, so w / (2 * kPhaseWin)
+    // counts them. A pass stays inside its phase (the loop below ends when the
+    // window counter leaves it), so one pass, one arm.
+    const uint32_t   arm   = (w0 / (2u * kPhaseWin)) % 3u;
+    const bool       axi   = arm == 1;
     uint32_t* const  buf   = axi ? g_buf_axi : g_buf;
-    const uint32_t   chunk = axi ? kChunkAxi : kChunk;   // the AXI buffer is 16 KB, see g_buf_axi
+    const uint32_t   chunk = arm == 2 ? kChunk : kChunkAxi;
     const uint32_t t0 = daisy::System::GetNow();
     uint32_t       bytes = 0, worst = 0, bad = 0, ms = 0;
     if(on)
     {
-        // The previous on-phase may have used the other chunk size and left the
+        // The previous on-phase may have used another chunk size and left the
         // position on a boundary of that one only (16 KB steps can stop at an
         // odd multiple, where a 32 KB read would come back short and end the
         // stream). Round down to this pass's own chunk; the words a repeated
