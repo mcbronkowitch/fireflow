@@ -15,10 +15,11 @@
 namespace shell {
 
 // One grain's price per 96-sample block, in DWT cycles: B2's cap grants
-// (budget - base) / kRgrainCycles grains. 17 900 is the round-2 estimate (spec
-// section 2, "One grain of the sampler"); B1's measured slope replaces it.
+// (budget - base) / kRgrainCycles grains. B1 on Rev A #1 (2026-11-01): the
+// median of the slopes of the workloads the overrun guard left counted, w145
+// 16 584 and w108 16 065, rounded up to 100 (the round-2 estimate was 17 900).
 // read_rgrain.py reads this line for B2's verdict.
-inline constexpr uint32_t kRgrainCycles = 17900;
+inline constexpr uint32_t kRgrainCycles = 16400;
 
 // B2's budget: the grant fills the previous block's grain-free cost up to here.
 inline constexpr uint32_t kRgrainBudget = 920000;
