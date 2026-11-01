@@ -120,7 +120,10 @@ Reading:
   - B1: `de5faea`, `SHELL_PANEL_SCAN=1 SHELL_KEYS_NC=1 SHELL_REMOTE=1 SHELL_RGRAIN=1`, no SD code.
   - B2: `f39d228` (B1's slope in `kRgrainCycles`), the same flags with `SHELL_RGRAIN=2`.
 - **Hold.** C1 and C2 run A1's bursts with the hold and tail 0 (§3); C2's `wmax` runs back to back and is unmarked.
-- **Clock caveat.** The probes of §3-§7 time their burst periods, phase lengths and transfer rates with `System::GetNow()`, which runs slow while audio plays (`docs/gotchas.md`). The call counts show it: C2's `w16` and `w24` made 3 852 and 5 689 calls in a "600 s" phase, where 3 600 and 5 400 fit, and C1's `seq` made 15 257 where 14 634 fit. So A1's labelled rates, A3's MiB/s and the "10 min" phases of C1 and C2 are 4-7 % off in the same direction. The latencies (`worst`, buckets) come from the DWT counter and are exact. No verdict changes. D2's save/load time uses DWT since commit `706375af`.
+- **Clock caveat.** `System::GetNow()` runs slow while audio plays (`docs/gotchas.md`: about 25 % at heavier load).
+  - **C1 and C2.** Their burst periods (one chunk per 41 ms; 192 and 288 KB/s) and all latencies (`worst`, buckets) come from the DWT counter and are exact. Only the phase length and the 10 s report lines use `GetNow`, so a "10 min" phase really lasted 4-7 % longer. The call counts show it: C2's `w16` and `w24` made 3 852 and 5 689 calls where 3 600 and 5 400 fit in 600 s, and C1's `seq` 15 257 where 14 634 fit.
+  - **A1 and A3.** A1's burst periods and A3's `ms`/MiB/s are `GetNow`-timed. They were not cross-checked; by the same mechanism the real rates lie some percent below the labelled and printed ones, by up to the gotcha's 25 % (inferred, not measured). No verdict depends on them.
+  - **D2.** Its save/load time uses DWT since commit `706375af`.
 - **End.** See §10.
 
 ## 6. C1: read latency tail and seeks
