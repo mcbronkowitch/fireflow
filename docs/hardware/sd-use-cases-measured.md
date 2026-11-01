@@ -225,3 +225,89 @@ Swing is the largest change of the grant from one block to the next within a fra
   4. `remote_run.py boot --expect-build 4f50d99` reached DFU with no hands on the board.
   5. The same pair flashed again, and step 1 confirmed again, with `seq=581` and `take=1`.
 - **Next flash.** It needs no hands: `remote_run.py boot --expect-build 4f50d99`.
+
+## 11. Setup, board session 3 (plan Task 13), 2026-11-01
+
+- **Board, card, patch.** As in §1; the card stayed in the board. Every flash went through `remote_run.py boot`, with no hands on the board.
+- **Images.** Clean builds of `8648a74` (main), flashed QSPI first with the stamp checked. All four use the §1 flags plus `SHELL_SD_PROBE=bank`, `buffer`, `patch` or `duplex`. All transfers are 16 KB chunks, held as in A1 with tail 0.
+- **Captures.**
+  - D4 and D3: `read_play.py` on Bastian's patch (120 s and 600 s).
+  - D1 and D2: `remote_run.py cmd "LOAD <id>"`, then `read_play.py` for 600 s. A first try with `remote_run.py run` failed at once on both images. `run` waits 3 s for the listener's `SHELL_REMOTE run` line, and the probe's first pass holds the report loop longer than that (D4's first write alone took 1.9 s). The load was acknowledged in both captures.
+
+## 12. D1: wavetable bank reload
+
+- **Mode.** `bank` exports the bank to the card once (63 KiB in 38 ms). It then loads it back into the spare D2 slot every few seconds, compares it, and swaps the slots at the top of a block.
+- **Run.** Workload 127 (`WAVE_SYNTH_top2`), 600 s.
+
+| loads | cmp ok | load time max / mean | worst `f_read` | longest hold | callback idle / busy mean | max win idle / busy |
+|---|---|---|---|---|---|---|
+| 96 | 96 | 13.8 / 12.1 ms | 3.9 ms | 8 blocks | 803 251 / 803 313 (+62) | 930 158 / 959 046 |
+
+**Result.**
+- **Loads.** All 96 compare, and a bank reload takes about 12 ms.
+- **Cost.** The callback mean in reload frames is the idle mean within 62 cycles, so the 1 % bound holds.
+- **Reader verdict: FAIL, as printed.** One busy frame's worst block (959 k) is over the 945 k click line. That is a single worst block on a workload that reaches about 963 k with no SD traffic at all (spec §2), and a worst block moves ±135 k between runs (`docs/gotchas.md`).
+
+## 13. D2: sampler buffer save and load
+
+- **Mode.** `buffer` takes one part's sampler buffer (16.1 MB of float stereo frames) as a scratch copy and cycles it through four operations, one per pass with 10 s idle after each:
+  - fill and save as float (`FFBUF.F32`);
+  - load and compare;
+  - save as 16-bit (`FFBUF.S16`, 8.1 MB, conversion included);
+  - load and compare within 1 LSB.
+- **Run.** Workload 145 (Bastian's patch as a deck), 600 s. Times come from the DWT counter (commit `706375af`).
+
+| operation | count | time max / mean | worst call | longest hold |
+|---|---|---|---|---|
+| f32 save | 8 | 3 077 / 2 995 ms | 31.9 ms | 1 539 blocks |
+| f32 load | 8 | 1 977 / 1 972 ms | 4.0 ms | 990 blocks |
+| s16 save | 7 | 4 540 / 4 064 ms | 89.7 ms | 2 271 blocks |
+| s16 load | 7 | 1 143 / 1 140 ms | 3.9 ms | 573 blocks |
+
+Callback: idle mean 778 226 over 592 frames, busy mean 772 984 over 30 frames (−5 242); max win 836 078 idle, 824 333 busy.
+
+**Result: PASS.**
+- **Integrity.** Every float load is identical to what was saved, and every 16-bit load is within 1 LSB.
+- **Speed.** A float buffer saves in about 3 s (5.4 MB/s) and loads in 2 s (8.2 MB/s). A 16-bit buffer loads in 1.1 s; its save takes 4 s with the conversion.
+- **Cost.** The callback does not get dearer while a buffer moves.
+- **What a busy frame contains.** It also holds the probe's own 16 MB fill, clear and compare work in the foreground, so it is not card traffic alone.
+- **Pots.** They are held for up to 2 271 blocks (about 4.5 s) per operation, so a save or load freezes the pots for that long.
+
+## 14. D3: stream and record at once
+
+- **Mode.** `duplex` reads `FFSDBIG.DAT` into a 1 152 KB read ring that the callback drains at 384 KB/s (float stereo). At the same time it writes the master output as 24-bit stereo from a 1 152 KB write ring to `FFREC.DAT`, in 16 KB chunks, with an `f_sync` every 4 MiB. Ring sizes and chunk size come from §4, §6 and §7.
+- **Run.** Bastian's patch, 600 s, hands off.
+
+| passes | underruns | overruns | read ring min | write ring max | worst `f_read` | worst `f_write`/`f_sync` | held |
+|---|---|---|---|---|---|---|---|
+| 1 076 | 403 | 0 | 256 of 1 179 648 B | 1 160 960 of 1 179 648 B | 98.0 ms | 3 840 845 µs | 27.3 % |
+
+Pots: 0 over their band, none over 144 (sense-pin worsts 63, 21, 23 and 21). Callback: mean 545 588, max win 751 611; there is no idle phase to compare with (no-stream run not made).
+
+**Result: FAIL, as printed (403 underruns).**
+- **Where they come from.** All 403 underruns fall in the first passes: 395 in the pass whose write took 3.84 s, and 8 in a pass shortly after, while the read ring was still refilling from 256 B. After that, 1 074 passes ran with none, the read ring near full (about 1.16 MB) and the worst write at 37.5 ms.
+- **The first write after mount is slow.** D4 shows the same: its first write took 1.95 s, every later one 8-80 ms. A first allocation on a 64 GB FAT32 volume that searches the FAT for free clusters would explain it. That is inferred, not measured.
+- **For a recorder.** A player-recorder should make its first write (or allocate its file) before playback starts. The ring sizes then hold.
+- **Pots and callback.** The hold keeps the pots clean while both streams run, and the callback stays far from the click line.
+
+## 15. D4: the patch as a file
+
+- **Mode.** `patch` reads Bastian's persisted record from QSPI (read only), then writes it to `PATCH.FFP` 100 times. Each time it syncs, reads the file back and compares it with the record.
+- **Run.** Bastian's patch, 120 s.
+
+| round trips | ok | record | `f_write` median / 2nd worst / worst | `f_sync` median / worst | read median / worst |
+|---|---|---|---|---|---|
+| 100 | 100 | seq 581 | 9.6 / 79.9 / 1 945.1 ms (the first) | 10.0 / 74.0 ms | 2.5 / 3.5 ms |
+
+Callback: busy +7 404 against idle (100 and 113 frames), PASS.
+
+**Result: PASS.**
+- **Round trips.** 100 of 100 compare.
+- **Speed.** A patch saves to the card in about 20 ms with its sync, and reads back in 2.5 ms.
+- **The first write.** It took 1.9 s, as in D3.
+- **The card.** `PATCH.FFP` is left on it for D5.
+
+## 16. End of board session 3
+
+- **Image left on the board.** The play image of main `8648a74` with the boot-only listener (`SHELL_PANEL_SCAN=1 SHELL_KEYS_NC=1`). It printed `SHELL_PERSIST boot ex=0,0 eng=1,1 take=1`, `src=flash seq=581` and `SHELL_REMOTE on build=8648a74 cmds=boot`.
+- **Next flash.** `remote_run.py boot --expect-build 8648a74`, no hands.
