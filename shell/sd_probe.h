@@ -30,12 +30,21 @@ void sd_report(bench::Board& hw, uint32_t pass);
 // Makefile) the pass follows sd_schedule.h's burst phases instead; see below.
 // With rtail or wtail it measures the read or write latency tail (spec section
 // 5, C1 / C2): SHELL_SD_H lines, documented in sd_probe.cpp and read by
-// read_sd.py's tails().
+// read_sd.py's tails(). With bank, buffer or patch (spec section 5, D1, D2,
+// D4) it runs one card operation now and then and prints one line per
+// operation (SHELL_SD_K, SHELL_SD_B, SHELL_SD_P; sd_probe.cpp).
 void sd_stream_pass(bench::Board& hw, const volatile uint32_t& win);
+
+// SHELL_SD_PROBE=bank only: the audio callback's side of the bank swap, once
+// per block at its top (panel_scan_tick()). A bank the foreground loaded and
+// verified becomes the engine's here (spky::wt::set_bank()), so the swap falls
+// between two blocks and no read of a block mixes two banks.
+void sd_bank_block();
 
 // ---- The pot hold (SHELL_SD_PROBE=burst, spec 2026-10-31-sd-use-cases-tests-
 // design.md section 5, A1; also rtail and wtail, when their build constant
-// kTailBurst says the transfers are A1's bursts). The foreground marks each transfer, the audio
+// kTailBurst says the transfers are A1's bursts, and bank, buffer and patch
+// with A1's tail of 0). The foreground marks each transfer, the audio
 // callback decides once per block whether this block's pot readings are
 // dropped, so the readings that stay can be measured against the noise floor
 // (fault R5: the card makes every pot noisy while it transfers).
@@ -53,7 +62,8 @@ uint8_t sd_hold_tail();
 // The callback's side, once per block, before the step's readings are looked
 // at: true means drop this block's pot readings. Counts the dropped blocks and
 // the longest run of them for the pass line. Always false when nothing sets
-// g_sd_seen (every mode but the burst and, with kTailBurst, the tail modes), so
+// g_sd_seen (every mode but the burst, bank, buffer, patch and, with
+// kTailBurst, the tail modes), so
 // the other modes read every block.
 bool sd_hold_block();
 

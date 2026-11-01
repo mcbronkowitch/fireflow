@@ -54,6 +54,16 @@ KB/s reads, 288 KB/s writes, rounded up to 32 KB). An interval that carries an
 error (fr, bad) is reported per kind, not merged. Exit 0 when the card test
 passed, every kind of the mode has merged intervals and none has an error.
 
+A capture of the bank, buffer or patch mode (SHELL_SD_PROBE=bank, buffer,
+patch; spec section 5, D1, D2, D4) is told by its SHELL_SD_K, SHELL_SD_B or
+SHELL_SD_P lines, one per operation. bank_stats(), buffer_stats() and
+patch_stats() judge them: every bank load cmp=ok; both buffer formats saved
+and loaded, every load cmp=ok (a bad one named with its offset); 100 of 100
+patch round trips ok; in all three no fr and no stop line. The callback is
+priced by operation (ops_by_phase()): the frame right after an operation line
+is busy, every other frame idle, judged as A3's (printed, not in the exit
+code). Exit 0 when the card test and the mode's stats pass.
+
 Exit 0 when the card test passed and both classes have a judged window;
 1 otherwise (stream mode). The spread is reported, not judged: the row's verdict needs the
 numbers beside the pin's band and Bastian's reading of them.
@@ -647,6 +657,232 @@ def stream_stats(stream):
             "fr": stream[-1]["fr"] if stream else None}
 
 
+PATCH_RUNS = 100     # sd_probe.cpp kPatchRuns: spec D4's "100 of 100"
+BUFFER_KEYS = (("f32", "save"), ("f32", "load"), ("s16", "save"), ("s16", "load"))
+_OPS = re.compile(r"^SHELL_SD_([KBP]) (.*)$")
+# The lines that report a card operation (the export, a load, a save, a patch
+# round trip); `stop` and `done` lines report state, not work.
+_OP_LINE = re.compile(r"^SHELL_SD_[KBP] (?:export |load_us=|fmt=|i=)")
+_OP_TEXT = ("cmp", "fmt", "op")
+
+
+def parse_ops(lines, tag):
+    """Every `SHELL_SD_<tag>` line (K bank, B buffer, P patch), in order, as a
+    field dict: ints, except cmp, fmt and op, which stay text. "kind" is the
+    line's leading word when it is not a field (export, stop, done), else "op"."""
+    out = []
+    for raw in strip_host_time(lines):
+        m = _OPS.match(raw.strip())
+        if not m or m.group(1) != tag:
+            continue
+        words = m.group(2).split()
+        d = {"kind": words[0] if words and "=" not in words[0] else "op"}
+        for k, v in _kv(m.group(2)).items():
+            d[k] = v if k in _OP_TEXT else int(v)
+        out.append(d)
+    return out
+
+
+def _stops(rows, why):
+    for r in rows:
+        if r["kind"] == "stop":
+            why.append("stopped, fr=%d" % r.get("fr", 0))
+            return
+
+
+def bank_stats(lines):
+    """D1, the bank reload: {"loads", "ok", "load_us_max", "load_us_mean",
+    "worst_us", "held_max", "slots", "export", "pass", "why"}. Pass: at least
+    one load, every load cmp=ok with fr=0, the export (when the capture has
+    it) fr=0, and no stop line."""
+    rows = parse_ops(lines, "K")
+    loads = [r for r in rows if r["kind"] == "op"]
+    export = next((r for r in rows if r["kind"] == "export"), None)
+    why = []
+    if export is not None and export.get("fr", 0) != 0:
+        why.append("export fr=%d" % export["fr"])
+    if not loads:
+        why.append("no load line")
+    for n, r in enumerate(loads):
+        if r.get("fr", 0) != 0:
+            why.append("load %d fr=%d" % (n, r["fr"]))
+            break
+    for n, r in enumerate(loads):
+        if r.get("cmp") != "ok":
+            why.append("load %d cmp=%s (slot %d)" % (n, r.get("cmp"), r.get("slot", -1)))
+            break
+    _stops(rows, why)
+    us = [r["load_us"] for r in loads]
+    return {"loads": len(loads),
+            "ok": sum(1 for r in loads if r.get("cmp") == "ok" and r.get("fr", 0) == 0),
+            "load_us_max": max(us, default=0),
+            "load_us_mean": (sum(us) / len(us)) if us else 0,
+            "worst_us": max((r["worst_us"] for r in loads), default=0),
+            "held_max": max((r["held"] for r in loads), default=0),
+            "slots": sorted({r["slot"] for r in loads}),
+            "export": export, "pass": not why, "why": why}
+
+
+def buffer_stats(lines):
+    """D2, the buffer save and load: {"ops": {(fmt, op): {"n", "ms_max",
+    "ms_mean", "worst_us", "held_max"}}, "pass", "why"}. Pass: every one of
+    f32/s16 x save/load is in the capture, every load says cmp=ok, nothing
+    has fr != 0, and no stop line. A bad load is named with its format and
+    the first bad byte (off=)."""
+    rows = parse_ops(lines, "B")
+    done = [r for r in rows if r["kind"] == "op"]
+    why = []
+    ops = {}
+    for key in BUFFER_KEYS:
+        rs = [r for r in done if (r.get("fmt"), r.get("op")) == key]
+        if not rs:
+            why.append("no %s %s" % key)
+            continue
+        ms = [r["ms"] for r in rs]
+        ops[key] = {"n": len(rs), "ms_max": max(ms), "ms_mean": sum(ms) / len(ms),
+                    "worst_us": max(r["worst_us"] for r in rs),
+                    "held_max": max(r["held"] for r in rs)}
+    for r in done:
+        if r.get("fr", 0) != 0:
+            why.append("%s %s fr=%d" % (r.get("fmt"), r.get("op"), r["fr"]))
+            break
+    for r in done:
+        if r.get("op") == "load" and r.get("cmp") != "ok":
+            why.append("%s load cmp=%s off=%d" % (r.get("fmt"), r.get("cmp"), r.get("off", 0)))
+            break
+    _stops(rows, why)
+    return {"ops": ops, "pass": not why, "why": why}
+
+
+def patch_stats(lines):
+    """D4, the patch file: {"n", "ok", "write_us_max", "sync_us_max",
+    "read_us_max", "seqs", "pass", "why"}. Pass: PATCH_RUNS (100) round trips
+    or more, every one cmp=ok with fr=0 -- 100 of 100 -- and no stop line."""
+    rows = parse_ops(lines, "P")
+    its = [r for r in rows if r["kind"] == "op"]
+    good = [r for r in its if r.get("cmp") == "ok" and r.get("fr", 0) == 0]
+    why = []
+    if len(its) < PATCH_RUNS:
+        why.append("only %d of %d round trips" % (len(its), PATCH_RUNS))
+    if len(good) != len(its):
+        r = next(r for r in its if r not in good)
+        why.append("%d of %d ok, first bad i=%d cmp=%s fr=%d"
+                   % (len(good), len(its), r.get("i", -1), r.get("cmp"), r.get("fr", 0)))
+    _stops(rows, why)
+    return {"n": len(its), "ok": len(good),
+            "write_us_max": max((r["write_us"] for r in its), default=0),
+            "sync_us_max": max((r["sync_us"] for r in its), default=0),
+            "read_us_max": max((r["read_us"] for r in its), default=0),
+            "seqs": sorted({r["seq"] for r in its}), "pass": not why, "why": why}
+
+
+def ops_by_phase(lines):
+    """D1, D2, D4: the audio callback priced by operation. {"idle", "busy"} ->
+    {"means", "win"} in cb_by_phase()'s shape. These modes print no SHELL_SD_S
+    lines (cb_by_phase() finds nothing in them); a busy phase is a frame with
+    an operation line in it.
+
+    Every operation runs inside one report pass (sd_probe.cpp: the buffer's
+    saves and loads take the seconds they take in that one pass), and the
+    pass's line comes before the frame that measured it (cb_by_phase()'s print
+    order). So the first frame after an operation line is busy and every other
+    frame idle -- with no spill to drop, unlike the stream's phases. Frames
+    before the first operation line (the card test) are nobody's; a frame with
+    n=0 is skipped."""
+    out = {k: {"means": [], "win": []} for k in ("idle", "busy")}
+    started = busy = False
+    for raw in strip_host_time(lines):
+        raw = raw.strip()
+        if _OP_LINE.match(raw):
+            started = busy = True
+            continue
+        m = _PLAY_WIN.match(raw)
+        if m is None or not started:
+            continue
+        cls = "busy" if busy else "idle"
+        busy = False
+        kv = {k: int(v) for k, v in _INT_KV.findall(m.group(1))}
+        if kv.get("n", 0) <= 0 or "sum" not in kv or "win" not in kv:
+            continue
+        out[cls]["means"].append(kv["sum"] / kv["n"])
+        out[cls]["win"].append(kv["win"])
+    return out
+
+
+def ops_cb_verdict(by):
+    """(ok, reasons): the busy mean within CB_TOLERANCE of the idle mean (A3's
+    1 %, spec D1 / D2), no window maximum over CB_CLICK, both classes with
+    frames."""
+    st = {k: cb_stats(by[k]) for k in by}
+    why = ["no %s frames" % k for k in ("idle", "busy") if not st[k]["frames"]]
+    if st["busy"]["frames"] and st["idle"]["frames"]:
+        d = st["busy"]["mean"] - st["idle"]["mean"]
+        if abs(d) > CB_TOLERANCE:
+            why.append("busy mean %+.0f cycles from idle (limit %d)" % (d, CB_TOLERANCE))
+    for k in ("idle", "busy"):
+        if st[k]["frames"] and st[k]["max"] > CB_CLICK:
+            why.append("%s win %d is over the click line %d" % (k, st[k]["max"], CB_CLICK))
+    return not why, why
+
+
+def ops_report(lines, out, card_ok):
+    """The report of a bank, buffer or patch capture; the mode is the tag of
+    its lines. Exit code: 0 when the card test and the mode's stats pass. The
+    callback verdict is printed, not part of the exit code (as A3's)."""
+    tags = {m.group(1) for m in (_OPS.match(l.strip()) for l in lines) if m}
+    ok = card_ok
+    if "K" in tags:
+        st = bank_stats(lines)
+        ex = st["export"]
+        if ex is not None:
+            print("bank export: %d KiB in %d us, worst f_write %d us, fr %d"
+                  % (ex.get("kib", 0), ex.get("us", 0), ex.get("worst_us", 0), ex.get("fr", 0)),
+                  file=out)
+        print("bank: %d loads, %d ok, load %d us max / %.0f us mean, worst f_read %d us, "
+              "held %d blocks max, slots %s"
+              % (st["loads"], st["ok"], st["load_us_max"], st["load_us_mean"], st["worst_us"],
+                 st["held_max"], st["slots"]), file=out)
+        print("bank verdict: %s" % ("PASS" if st["pass"] else "FAIL (" + "; ".join(st["why"]) + ")"),
+              file=out)
+        ok = ok and st["pass"]
+    if "B" in tags:
+        st = buffer_stats(lines)
+        for key in BUFFER_KEYS:
+            o = st["ops"].get(key)
+            if o:
+                print("buffer %s %s: %d, %d ms max / %.0f ms mean, worst call %d us, held %d max"
+                      % (key + (o["n"], o["ms_max"], o["ms_mean"], o["worst_us"], o["held_max"])),
+                      file=out)
+        print("buffer verdict: %s" % ("PASS" if st["pass"] else "FAIL (" + "; ".join(st["why"]) + ")"),
+              file=out)
+        ok = ok and st["pass"]
+    if "P" in tags:
+        st = patch_stats(lines)
+        print("patch: %d of %d ok, worst write %d us, f_sync %d us, read %d us, record seq %s"
+              % (st["ok"], st["n"], st["write_us_max"], st["sync_us_max"], st["read_us_max"],
+                 ",".join(str(s) for s in st["seqs"]) or "-"), file=out)
+        print("patch verdict: %s" % ("PASS" if st["pass"] else "FAIL (" + "; ".join(st["why"]) + ")"),
+              file=out)
+        ok = ok and st["pass"]
+    by = ops_by_phase(lines)
+    if any(by[k]["means"] for k in by):
+        print("callback by operation (SHELL_PLAY_WIN: mean of the per-frame sum / n; "
+              "win: the frame's worst block):", file=out)
+        stats = {k: cb_stats(by[k]) for k in by}
+        for k in ("idle", "busy"):
+            s = stats[k]
+            if not s["frames"]:
+                print("  %s: no frames" % k, file=out)
+                continue
+            extra = "" if k == "idle" or not stats["idle"]["frames"] else \
+                ", %+.0f from idle" % (s["mean"] - stats["idle"]["mean"])
+            print("  %s: %d frames, mean %.0f cycles%s, p99 win %d, max win %d"
+                  % (k, s["frames"], s["mean"], extra, s["p99"], s["max"]), file=out)
+        cok, why = ops_cb_verdict(by)
+        print("callback verdict: %s" % ("PASS" if cok else "FAIL (" + "; ".join(why) + ")"), file=out)
+    return 0 if ok else 1
+
+
 def report(lines, out=None):
     out = out or sys.stdout
     lines = strip_host_time(lines)   # read_play's parsers do not know the prefix
@@ -664,6 +900,8 @@ def report(lines, out=None):
 
     if any(_SD_H.match(l.strip()) for l in lines):
         return tail_report(lines, out, ok)
+    if any(_OPS.match(l.strip()) for l in lines):
+        return ops_report(lines, out, ok)
 
     stream = parse_stream(lines)
     st = stream_stats(stream)

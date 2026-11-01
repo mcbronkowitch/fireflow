@@ -16,16 +16,44 @@
 #else
 #define SD_PROBE_TAIL 0
 #endif
+// The operation modes (spec section 5, D1 bank, D2 buffer, D4 patch): one card
+// operation now and then, one line per operation.
+#if SHELL_SD_PROBE_BANK || SHELL_SD_PROBE_BUFFER || SHELL_SD_PROBE_PATCH
+#define SD_PROBE_OPS 1
+#else
+#define SD_PROBE_OPS 0
+#endif
 // The modes that mark their transfers for the pot hold (g_sd_busy; the
 // callback side, sd_hold_block()). In the tail modes the hold runs only when
-// kTailBurst says the transfers are A1's bursts.
-#if SHELL_SD_PROBE_BURST || SD_PROBE_TAIL
+// kTailBurst says the transfers are A1's bursts; the operation modes always
+// hold, with A1's tail of 0 (sd_hold_tail()).
+#if SHELL_SD_PROBE_BURST || SD_PROBE_TAIL || SD_PROBE_OPS
 #define SD_PROBE_HOLD 1
 #else
 #define SD_PROBE_HOLD 0
 #endif
 
+#if SHELL_SD_PROBE_BANK
+#include <atomic>
+#include "synth/wt_bank.h"
+#endif
+#if SHELL_SD_PROBE_BUFFER
+#include <cmath>
+#include "sampler/sample_buffer.h"
+#include "sdram_mem.h"
+#endif
+#if SHELL_SD_PROBE_PATCH
+#include "persist_flash.h"
+#if !SHELL_PERSIST_ON
+#error "SHELL_SD_PROBE=patch copies the persisted record: it needs SHELL_PERSIST_ON (persist_flash.h)"
+#endif
+#endif
+
 namespace shell {
+
+#if SHELL_SD_PROBE_BANK
+int16_t* wt_bank_slot(int i);   // wt_bank_d2.cpp
+#endif
 
 // The foreground's mark on every card transfer (sd_probe.h). Outside the
 // anonymous namespace: panel_scan.cpp's callback reads it through sd_hold_block().
@@ -1167,6 +1195,665 @@ static void tail_pass(bench::Board& hw, const volatile uint32_t& /*win*/)
 }
 #endif // SD_PROBE_TAIL
 
+#if SD_PROBE_OPS
+// Spec 2026-10-31-sd-use-cases-tests-design.md section 5, D1 (bank), D2
+// (buffer) and D4 (patch): what the features that load from and save to the
+// card cost the instrument while it plays, and whether the bytes come back.
+//
+// One operation runs inside one pass and prints its line when it is done; the
+// pass is padded to kPassMs as in the other modes. The buffer's saves and
+// loads take seconds, longer than a pass, and still run in one: read_sd.py's
+// ops_by_phase() prices the callback by the frame after an operation line,
+// so an operation must not be split across frames. (The report loop is held
+// for those seconds; the listener's command poll runs in the callback.)
+//
+// Every card access of these modes, f_open to f_close and f_sync, runs inside
+// an OpMark: g_sd_busy for the whole operation, g_sd_seen again when it ends,
+// so the pot hold drops the readings of every block it touched (A1, 2026-11-01:
+// the hold with tail 0 keeps the pots clean; sd_hold_tail() is 0 here). held=
+// counts those blocks: op_epoch() starts the callback's count over as the
+// operation starts, and the line reads it after the pass's pad.
+//
+// Transfers are kOpChunk, 16 KB: A3 (2026-11-01, docs/hardware/
+// sd-use-cases-measured.md) measured 32 KB reads costing the audio callback
+// more than 16 KB reads on every workload; where the buffer sat (SDRAM or AXI)
+// had no consistent effect.
+//
+// fr is the first failure, sticky (a FRESULT, -2 a short transfer, -3 no card
+// test to start from or, patch, no record to copy, -4 a bank or buffer load
+// that did not compare); the operation's line says it (a compare failure as
+// cmp=bad with fr=0), nothing more runs, and `SHELL_SD_<K|B|P> stop fr=`
+// follows every 10 s. (patch counts a bad compare and goes on: 100 of 100.)
+namespace {
+
+constexpr uint32_t kOpChunk  = 16u * 1024u;
+constexpr uint32_t kOpLineMs = 10u * 1000u;   // the stop and done lines
+static_assert(kOpChunk <= kChunk, "g_buf holds one piece");
+
+struct OpMark
+{
+    OpMark()
+    {
+        g_sd_seen = true;
+        g_sd_busy = true;
+    }
+    ~OpMark()
+    {
+        g_sd_seen = true;
+        g_sd_busy = false;
+    }
+};
+
+struct OpRun
+{
+    bool     begun   = false;
+    int      fr      = 0;   // the first failure, sticky
+    uint32_t t0      = 0;   // System::GetNow() at the first pass
+    uint32_t next    = 0;   // ... when the next operation is due
+    uint32_t line_t0 = 0;   // ... at the last stop or done line
+};
+OpRun g_op;
+
+void op_fail(int fr)
+{
+    if(g_op.fr == 0)
+        g_op.fr = fr;
+}
+
+// The hold's count starts over at the callback's next block (sd_hold_block()).
+void op_epoch() { g_pass_epoch = g_pass_epoch + 1u; }
+
+uint32_t us_since(uint32_t c0) { return (cycles_now() - c0) / kCoreMhz; }
+
+const char* op_path(const char* name)
+{
+    snprintf(g_path, sizeof g_path, "%s%s", g_fs.fsi.GetSDPath(), name);
+    return g_path;
+}
+
+// The first pass: the bring-up left its test file open for the stream; these
+// modes need the FIL. No card test to start from is fr -3, as in the tail modes.
+void op_begin()
+{
+    g_op.begun   = true;
+    g_op.t0      = daisy::System::GetNow();
+    g_op.next    = g_op.t0;
+    g_op.line_t0 = g_op.t0;
+    if(!g_res.ready)
+    {
+        op_fail(-3);
+        return;
+    }
+    OpMark m;
+    f_close(&g_fs.file);
+    g_res.ready = false;
+}
+
+#if SHELL_SD_PROBE_BANK || SHELL_SD_PROBE_BUFFER
+// n bytes from src into the open file in kOpChunk pieces; worst gets the
+// slowest f_write. A FRESULT, or -2 for a short write. (patch moves one
+// record, below a piece, in single calls.)
+int op_write(const uint8_t* src, uint32_t n, uint32_t& worst)
+{
+    for(uint32_t off = 0; off < n; off += kOpChunk)
+    {
+        const UINT     len = n - off < kOpChunk ? n - off : kOpChunk;
+        UINT           bw  = 0;
+        const uint32_t c0  = cycles_now();
+        const FRESULT  fr  = f_write(&g_fs.file, src + off, len, &bw);
+        const uint32_t dt  = us_since(c0);
+        if(dt > worst)
+            worst = dt;
+        if(fr != FR_OK)
+            return static_cast<int>(fr);
+        if(bw != len)
+            return -2;
+    }
+    return 0;
+}
+
+// One kOpChunk piece (or the file's shorter last one) into dst, timed into
+// worst. A FRESULT, or -2 for a short read.
+int op_read_piece(uint8_t* dst, UINT len, uint32_t& worst)
+{
+    UINT           br = 0;
+    const uint32_t c0 = cycles_now();
+    const FRESULT  fr = f_read(&g_fs.file, dst, len, &br);
+    const uint32_t dt = us_since(c0);
+    if(dt > worst)
+        worst = dt;
+    if(fr != FR_OK)
+        return static_cast<int>(fr);
+    return br == len ? 0 : -2;
+}
+#endif
+
+// The pass stays kPassMs long when its operation was shorter, so the frame
+// rate does not change with the schedule.
+void op_pad(bench::Board& hw, uint32_t t0)
+{
+    const uint32_t spent = daisy::System::GetNow() - t0;
+    if(spent < kPassMs)
+        hw.Delay(kPassMs - spent);
+}
+
+// Every 10 s once a failure stopped the mode.
+void op_stop_line(bench::Board& hw, char tag)
+{
+    if(g_op.fr != 0 && daisy::System::GetNow() - g_op.line_t0 >= kOpLineMs)
+    {
+        g_op.line_t0 = daisy::System::GetNow();
+        hw.PrintLine("SHELL_SD_%c stop fr=%d", tag, g_op.fr);
+    }
+}
+
+#if SHELL_SD_PROBE_BANK
+// D1: phases of 10 s, idle and loading in turn, from the first pass. In a
+// loading phase FFBANK.WTB (the factory bank, raw int16 LE in kBankSamples'
+// layout, written once on the first pass) is read every 2 s into the slot
+// the engine does not play (wt_bank_d2.cpp), compared with kBankSamples, and
+// handed to the callback, which swaps at the top of its next block
+// (sd_bank_block()). A load does not start while a swap is pending, so the
+// slot it writes is never one the engine reads. Both slots hold the factory
+// bank: whether a swap between different banks clicks is a feature question
+// (crossfade or not) and not tested here.
+//
+// Lines (longest: load_us and worst_us 7 digits, held 4, fr 2 -- 74 bytes):
+//   SHELL_SD_K export kib= us= worst_us= fr=            once, the first pass
+//   SHELL_SD_K load_us= worst_us= cmp=<ok|bad> held= fr= slot=
+// load_us is f_open to f_close, the copies from g_buf into the slot included,
+// the compare not; worst_us the slowest f_read; slot the slot loaded (0, 1).
+const char         kBankName[]  = "FFBANK.WTB";
+constexpr uint32_t kBankBytes   = sizeof(spky::wt::kBankSamples);   // 65 024
+constexpr uint32_t kBankPhaseMs = 10u * 1000u;
+constexpr uint32_t kBankEveryMs = 2u * 1000u;
+
+// A verified slot, set by the foreground, taken (and cleared) by the callback.
+const int16_t* volatile g_bank_pending = nullptr;
+
+// Through g_buf: the flash constant is neither 32-byte aligned nor in RAM,
+// and the driver's DMA and its cache maintenance want both.
+void bank_export(bench::Board& hw)
+{
+    uint32_t       worst = 0;
+    int            fr;
+    const uint32_t c0 = cycles_now();
+    {
+        OpMark m;
+        fr = f_open(&g_fs.file, op_path(kBankName), FA_CREATE_ALWAYS | FA_WRITE);
+        if(fr == FR_OK)
+        {
+            const uint8_t* src = reinterpret_cast<const uint8_t*>(spky::wt::kBankSamples);
+            for(uint32_t off = 0; off < kBankBytes && fr == 0; off += kOpChunk)
+            {
+                const uint32_t len = kBankBytes - off < kOpChunk ? kBankBytes - off : kOpChunk;
+                std::memcpy(g_buf, src + off, len);
+                fr = op_write(reinterpret_cast<const uint8_t*>(g_buf), len, worst);
+            }
+            const FRESULT cr = f_close(&g_fs.file);
+            if(fr == 0)
+                fr = static_cast<int>(cr);
+        }
+    }
+    const uint32_t us = us_since(c0);
+    if(fr != 0)
+        op_fail(fr);
+    hw.PrintLine("SHELL_SD_K export kib=%u us=%u worst_us=%u fr=%d",
+                 static_cast<unsigned>(kBankBytes / 1024u), static_cast<unsigned>(us),
+                 static_cast<unsigned>(worst), fr);
+}
+
+struct BankLoad
+{
+    uint32_t us    = 0;
+    uint32_t worst = 0;
+    bool     ok    = false;
+    int      fr    = 0;
+    int      slot  = 0;
+};
+
+BankLoad bank_load()
+{
+    BankLoad r;
+    // Read once: nothing else writes the bank pointer while no swap is pending.
+    r.slot             = spky::wt::bank() == wt_bank_slot(0) ? 1 : 0;
+    uint8_t* const dst = reinterpret_cast<uint8_t*>(wt_bank_slot(r.slot));
+    const uint32_t c0  = cycles_now();
+    {
+        OpMark m;
+        r.fr = f_open(&g_fs.file, op_path(kBankName), FA_READ);
+        if(r.fr == FR_OK)
+        {
+            for(uint32_t off = 0; off < kBankBytes && r.fr == 0; off += kOpChunk)
+            {
+                const UINT len = kBankBytes - off < kOpChunk ? kBankBytes - off : kOpChunk;
+                r.fr = op_read_piece(reinterpret_cast<uint8_t*>(g_buf), len, r.worst);
+                if(r.fr == 0)
+                    std::memcpy(dst + off, g_buf, len);
+            }
+            const FRESULT cr = f_close(&g_fs.file);
+            if(r.fr == 0)
+                r.fr = static_cast<int>(cr);
+        }
+    }
+    r.us = us_since(c0);
+    r.ok = r.fr == 0 && std::memcmp(dst, spky::wt::kBankSamples, kBankBytes) == 0;
+    if(r.ok)
+    {
+        // The slot's bytes before the pointer that publishes them.
+        std::atomic_signal_fence(std::memory_order_seq_cst);
+        g_bank_pending = reinterpret_cast<const int16_t*>(dst);
+    }
+    return r;
+}
+
+void bank_pass(bench::Board& hw)
+{
+    OpRun&         s  = g_op;
+    const uint32_t t0 = daisy::System::GetNow();
+    bool           ran = false;
+    BankLoad       r;
+    if(!s.begun)
+    {
+        op_begin();
+        if(s.fr == 0)
+            bank_export(hw);
+    }
+    else if(s.fr == 0)
+    {
+        const bool loading = ((t0 - s.t0) / kBankPhaseMs) % 2u == 1u;
+        if(loading && g_bank_pending == nullptr && static_cast<int32_t>(t0 - s.next) >= 0)
+        {
+            op_epoch();
+            r      = bank_load();
+            ran    = true;
+            s.next = t0 + kBankEveryMs;
+            if(r.fr != 0)
+                op_fail(r.fr);
+            else if(!r.ok)
+                op_fail(-4);   // a bank that does not compare is never swapped in
+        }
+    }
+    op_pad(hw, t0);
+    if(ran)
+        hw.PrintLine("SHELL_SD_K load_us=%u worst_us=%u cmp=%s held=%u fr=%d slot=%d",
+                     static_cast<unsigned>(r.us), static_cast<unsigned>(r.worst),
+                     r.ok ? "ok" : "bad", static_cast<unsigned>(g_held_blocks), r.fr, r.slot);
+    op_stop_line(hw, 'K');
+}
+#endif // SHELL_SD_PROBE_BANK
+
+#if SHELL_SD_PROBE_BUFFER
+// D2: one part's sampler buffer (sdram_mem.cpp's g_sampler[p], kSamplerFrames
+// stereo float frames, 16.1 MB) saved and loaded while the instrument plays.
+// The cycle, one operation per pass and 10 s idle after each:
+//   f32 save  the scratch filled with pattern() (as float bits), written raw
+//             to FFBUF.F32 (16 128 000 B)
+//   f32 load  the scratch cleared, the file read back into it, every word
+//             compared
+//   s16 save  the scratch filled with pattern() mapped to [-1, 1), written as
+//             int16 per channel, lrintf(x * 32767), to FFBUF.S16 (8 064 000 B)
+//   s16 load  the scratch cleared, the file read and converted back to float
+//             (s / 32767), every sample within 1 LSB of the quantised source
+// The saves read from and the loads write to the scratch, never a live
+// buffer. f32 goes straight from and into the scratch in kOpChunk pieces; s16
+// through g_buf, converted piece by piece (the conversion is in ms=, as a
+// sampler's loader pays it).
+//
+// Line (longest: ms 6 digits, worst_us 7, held 5, fr 2, off 8 -- 91 bytes):
+//   SHELL_SD_B fmt=<f32|s16> op=<save|load> ms= worst_us= held= fr= cmp=<ok|bad|-> off=
+// ms is f_open to f_close (System::GetNow(): an operation may outlast the
+// cycle counter's 8.9 s wrap), worst_us the slowest single f_read / f_write;
+// cmp is - for a save and for a load that failed; off is the first bad byte
+// of the file (0 when none).
+//
+// The scratch is declared as 32-bit words, the size of one part's
+// SampleBuffer::Frame array: every access is a word (floats go in and out
+// as bits through memcpy), so nothing reads it through a float lvalue.
+constexpr uint32_t kBufWords = static_cast<uint32_t>(kSamplerFrames) * 2u;
+constexpr uint32_t kF32Bytes = kBufWords * 4u;
+constexpr uint32_t kS16Bytes = kBufWords * 2u;
+alignas(32) uint32_t DSY_SDRAM_BSS g_scratch[kBufWords];
+static_assert(sizeof(g_scratch) == sizeof(spky::SampleBuffer::Frame) * kSamplerFrames,
+              "the scratch is one part's sampler buffer");
+// The driver invalidates the D-cache over a transfer rounded out to 32-byte
+// lines: every piece, the last one too, starts and ends on a line.
+static_assert(kF32Bytes % 32u == 0 && kOpChunk % 32u == 0, "pieces on 32-byte lines");
+static_assert(kOpChunk % 4u == 0 && kS16Bytes % 4u == 0, "s16 pieces hold whole word pairs");
+
+const char         kBufF32[]    = "FFBUF.F32";
+const char         kBufS16[]    = "FFBUF.S16";
+constexpr uint32_t kBufIdleMs   = 10u * 1000u;
+
+// Word i of the s16 source: pattern()'s top 24 bits, mapped to [-1, 1)
+// exactly (a 24-bit integer times a power of two needs no rounding).
+inline float s16_source(uint32_t i)
+{
+    return static_cast<float>(pattern(i) >> 8) * (1.f / 8388608.f) - 1.f;
+}
+inline int32_t s16_quant(float x) { return static_cast<int32_t>(std::lrint(x * 32767.f)); }
+inline uint32_t f2w(float x)
+{
+    uint32_t w;
+    std::memcpy(&w, &x, 4);
+    return w;
+}
+inline float w2f(uint32_t w)
+{
+    float x;
+    std::memcpy(&x, &w, 4);
+    return x;
+}
+
+struct BufOp
+{
+    const char* fmt   = "f32";
+    const char* op    = "save";
+    uint32_t    ms    = 0;
+    uint32_t    worst = 0;
+    int         fr    = 0;
+    Check       cmp   = kSkip;   // kSkip prints as "-"
+    uint32_t    off   = 0;
+};
+
+// Opens the file, runs `body` (which returns 0 or the failure), closes; all
+// marked, the time from the open to the close's return in ms.
+template <typename Body>
+void buf_file(BufOp& r, const char* name, BYTE mode, Body body)
+{
+    const uint32_t t0 = daisy::System::GetNow();
+    OpMark         m;
+    r.fr = f_open(&g_fs.file, op_path(name), mode);
+    if(r.fr == FR_OK)
+    {
+        r.fr             = body();
+        const FRESULT cr = f_close(&g_fs.file);
+        if(r.fr == 0)
+            r.fr = static_cast<int>(cr);
+    }
+    r.ms = daisy::System::GetNow() - t0;
+}
+
+void buf_f32_save(BufOp& r)
+{
+    for(uint32_t i = 0; i < kBufWords; ++i)
+        g_scratch[i] = pattern(i);
+    op_epoch();
+    buf_file(r, kBufF32, FA_CREATE_ALWAYS | FA_WRITE, [&r] {
+        return op_write(reinterpret_cast<const uint8_t*>(g_scratch), kF32Bytes, r.worst);
+    });
+}
+
+void buf_f32_load(BufOp& r)
+{
+    std::memset(g_scratch, 0, sizeof g_scratch);
+    op_epoch();
+    buf_file(r, kBufF32, FA_READ, [&r] {
+        uint8_t* const dst = reinterpret_cast<uint8_t*>(g_scratch);
+        for(uint32_t off = 0; off < kF32Bytes; off += kOpChunk)
+        {
+            const UINT len = kF32Bytes - off < kOpChunk ? kF32Bytes - off : kOpChunk;
+            const int  fr  = op_read_piece(dst + off, len, r.worst);
+            if(fr != 0)
+                return fr;
+        }
+        return 0;
+    });
+    if(r.fr != 0)
+        return;
+    const int32_t b = first_bad(g_scratch, kBufWords, 0);
+    r.cmp           = b < 0 ? kOk : kBad;
+    r.off           = b < 0 ? 0u : static_cast<uint32_t>(b);
+}
+
+void buf_s16_save(BufOp& r)
+{
+    for(uint32_t i = 0; i < kBufWords; ++i)
+        g_scratch[i] = f2w(s16_source(i));
+    op_epoch();
+    buf_file(r, kBufS16, FA_CREATE_ALWAYS | FA_WRITE, [&r] {
+        // Two samples per g_buf word, little-endian, the first in the low half.
+        for(uint32_t off = 0; off < kS16Bytes; off += kOpChunk)
+        {
+            const uint32_t len = kS16Bytes - off < kOpChunk ? kS16Bytes - off : kOpChunk;
+            const uint32_t w0  = off / 2u;   // the scratch word of the piece's first sample
+            for(uint32_t j = 0; j < len / 4u; ++j)
+            {
+                const uint32_t lo = static_cast<uint16_t>(s16_quant(w2f(g_scratch[w0 + 2u * j])));
+                const uint32_t hi = static_cast<uint16_t>(s16_quant(w2f(g_scratch[w0 + 2u * j + 1u])));
+                g_buf[j]          = lo | (hi << 16);
+            }
+            const int fr = op_write(reinterpret_cast<const uint8_t*>(g_buf), len, r.worst);
+            if(fr != 0)
+                return fr;
+        }
+        return 0;
+    });
+}
+
+void buf_s16_load(BufOp& r)
+{
+    std::memset(g_scratch, 0, sizeof g_scratch);
+    op_epoch();
+    buf_file(r, kBufS16, FA_READ, [&r] {
+        for(uint32_t off = 0; off < kS16Bytes; off += kOpChunk)
+        {
+            const UINT len = kS16Bytes - off < kOpChunk ? kS16Bytes - off : kOpChunk;
+            const int  fr  = op_read_piece(reinterpret_cast<uint8_t*>(g_buf), len, r.worst);
+            if(fr != 0)
+                return fr;
+            const uint32_t w0 = off / 2u;
+            for(uint32_t j = 0; j < len / 4u; ++j)
+            {
+                const int16_t lo = static_cast<int16_t>(g_buf[j] & 0xFFFFu);
+                const int16_t hi = static_cast<int16_t>(g_buf[j] >> 16);
+                g_scratch[w0 + 2u * j]      = f2w(lo * (1.f / 32767.f));
+                g_scratch[w0 + 2u * j + 1u] = f2w(hi * (1.f / 32767.f));
+            }
+        }
+        return 0;
+    });
+    if(r.fr != 0)
+        return;
+    r.cmp = kOk;
+    for(uint32_t i = 0; i < kBufWords; ++i)
+    {
+        const int32_t d = s16_quant(w2f(g_scratch[i])) - s16_quant(s16_source(i));
+        if(d > 1 || d < -1)
+        {
+            r.cmp = kBad;
+            r.off = i * 2u;
+            break;
+        }
+    }
+}
+
+uint32_t g_buf_step = 0;   // the cycle's next operation, 0..3
+
+void buffer_pass(bench::Board& hw)
+{
+    OpRun&         s   = g_op;
+    const uint32_t t0  = daisy::System::GetNow();
+    bool           ran = false;
+    BufOp          r;
+    if(!s.begun)
+        op_begin();
+    if(s.fr == 0 && static_cast<int32_t>(t0 - s.next) >= 0)
+    {
+        const uint32_t step = g_buf_step;
+        r.fmt = step < 2 ? "f32" : "s16";
+        r.op  = step % 2 == 0 ? "save" : "load";
+        switch(step)
+        {
+            case 0: buf_f32_save(r); break;
+            case 1: buf_f32_load(r); break;
+            case 2: buf_s16_save(r); break;
+            default: buf_s16_load(r); break;
+        }
+        ran        = true;
+        g_buf_step = (step + 1u) % 4u;
+        s.next     = daisy::System::GetNow() + kBufIdleMs;
+        if(r.fr != 0)
+            op_fail(r.fr);
+        else if(r.cmp == kBad)
+            op_fail(-4);   // the bytes did not come back: the cycle stops on it
+    }
+    op_pad(hw, t0);
+    if(ran)
+        hw.PrintLine("SHELL_SD_B fmt=%s op=%s ms=%u worst_us=%u held=%u fr=%d cmp=%s off=%u",
+                     r.fmt, r.op, static_cast<unsigned>(r.ms), static_cast<unsigned>(r.worst),
+                     static_cast<unsigned>(g_held_blocks), r.fr,
+                     r.cmp == kSkip ? "-" : check_name(r.cmp), static_cast<unsigned>(r.off));
+    op_stop_line(hw, 'B');
+}
+#endif // SHELL_SD_PROBE_BUFFER
+
+#if SHELL_SD_PROBE_PATCH
+// D4: the persisted panel record (persist_latest(), the newest valid one in
+// the QSPI sectors, read memory-mapped) copied to PATCH.FFP with f_sync, read
+// back and compared, kPatchRuns times, one per second. It reads the QSPI
+// record and never writes it: this is a listener image, persist_write() is not
+// linked (check_images_build.py holds that), and the copy stays on the card as
+// the backup D5 needs. After the last run `SHELL_SD_P done n= ok=` every 10 s.
+//
+// Line (longest: i 3 digits, the three times 7, seq 10, held 4, fr 2 -- 104
+// bytes; 119 with every number but i at ten digits):
+//   SHELL_SD_P i= write_us= sync_us= read_us= cmp=<ok|bad|-> seq= held= fr=
+// write_us is f_open (create) and f_write, sync_us the f_sync, read_us the
+// second f_open, the f_read and its f_close; seq the record's. -3: no valid
+// record to copy.
+const char         kPatchName[]  = "PATCH.FFP";
+constexpr uint32_t kPatchRuns    = 100;
+constexpr uint32_t kPatchEveryMs = 1000;
+constexpr uint32_t kRecBytes     = sizeof(PersistRecord);
+// The record at g_buf's start, the read-back kPatchBack words in: both on
+// 32-byte lines, neither overlapping the other.
+constexpr uint32_t kPatchBack    = 4096u / 4u;
+static_assert(kRecBytes <= kPatchBack * 4u && kPatchBack * 4u + kRecBytes <= kChunk,
+              "the record and its read-back fit g_buf");
+
+uint32_t g_patch_i  = 0;
+uint32_t g_patch_ok = 0;
+
+struct PatchRun
+{
+    uint32_t write_us = 0, sync_us = 0, read_us = 0, seq = 0;
+    int      fr       = 0;
+    Check    cmp      = kSkip;
+};
+
+PatchRun patch_once()
+{
+    PatchRun       r;
+    const SlotPick pick = persist_latest();   // memory-mapped read, never a write
+    if(pick.sector < 0)
+    {
+        r.fr = -3;
+        return r;
+    }
+    r.seq = pick.seq;
+    const uint32_t at = (pick.sector == 0 ? kPersistSector0 : kPersistSector1)
+                        + static_cast<uint32_t>(pick.slot) * kPersistStride;
+    std::memcpy(g_buf, reinterpret_cast<const void*>(at), kRecBytes);
+    uint8_t* const back = reinterpret_cast<uint8_t*>(g_buf + kPatchBack);
+    std::memset(back, 0, kRecBytes);
+    op_epoch();
+    {
+        OpMark   m;
+        uint32_t c0 = cycles_now();
+        r.fr        = f_open(&g_fs.file, op_path(kPatchName), FA_CREATE_ALWAYS | FA_WRITE);
+        if(r.fr == FR_OK)
+        {
+            UINT bw = 0;
+            r.fr    = f_write(&g_fs.file, g_buf, kRecBytes, &bw);
+            if(r.fr == FR_OK && bw != kRecBytes)
+                r.fr = -2;
+            r.write_us = us_since(c0);
+            if(r.fr == FR_OK)
+            {
+                c0        = cycles_now();
+                r.fr      = f_sync(&g_fs.file);
+                r.sync_us = us_since(c0);
+            }
+            const FRESULT cr = f_close(&g_fs.file);
+            if(r.fr == FR_OK)
+                r.fr = cr;
+        }
+        if(r.fr == FR_OK)
+        {
+            c0   = cycles_now();
+            r.fr = f_open(&g_fs.file, g_path, FA_READ);
+            if(r.fr == FR_OK)
+            {
+                UINT br = 0;
+                r.fr    = f_read(&g_fs.file, back, kRecBytes, &br);
+                if(r.fr == FR_OK && br != kRecBytes)
+                    r.fr = -2;
+                const FRESULT cr = f_close(&g_fs.file);
+                if(r.fr == FR_OK)
+                    r.fr = cr;
+            }
+            r.read_us = us_since(c0);
+        }
+    }
+    if(r.fr == FR_OK)
+        r.cmp = std::memcmp(g_buf, back, kRecBytes) == 0 ? kOk : kBad;
+    return r;
+}
+
+void patch_pass(bench::Board& hw)
+{
+    OpRun&         s   = g_op;
+    const uint32_t t0  = daisy::System::GetNow();
+    bool           ran = false;
+    PatchRun       r;
+    uint32_t       i = 0;
+    if(!s.begun)
+        op_begin();
+    if(s.fr == 0 && g_patch_i < kPatchRuns && static_cast<int32_t>(t0 - s.next) >= 0)
+    {
+        i      = g_patch_i++;
+        r      = patch_once();
+        ran    = true;
+        s.next = t0 + kPatchEveryMs;
+        if(r.fr != 0)
+            op_fail(r.fr);
+        else if(r.cmp == kOk)
+            ++g_patch_ok;
+    }
+    op_pad(hw, t0);
+    if(ran)
+        hw.PrintLine("SHELL_SD_P i=%u write_us=%u sync_us=%u read_us=%u cmp=%s seq=%u held=%u fr=%d",
+                     static_cast<unsigned>(i), static_cast<unsigned>(r.write_us),
+                     static_cast<unsigned>(r.sync_us), static_cast<unsigned>(r.read_us),
+                     r.cmp == kSkip ? "-" : check_name(r.cmp), static_cast<unsigned>(r.seq),
+                     static_cast<unsigned>(g_held_blocks), r.fr);
+    if(s.fr == 0 && g_patch_i >= kPatchRuns
+       && daisy::System::GetNow() - s.line_t0 >= kOpLineMs)
+    {
+        s.line_t0 = daisy::System::GetNow();
+        hw.PrintLine("SHELL_SD_P done n=%u ok=%u", static_cast<unsigned>(g_patch_i),
+                     static_cast<unsigned>(g_patch_ok));
+    }
+    op_stop_line(hw, 'P');
+}
+#endif // SHELL_SD_PROBE_PATCH
+
+} // namespace
+
+#if SHELL_SD_PROBE_BANK
+void sd_bank_block()
+{
+    const int16_t* const p = g_bank_pending;
+    if(p != nullptr)
+    {
+        spky::wt::set_bank(p);
+        g_bank_pending = nullptr;
+    }
+}
+#endif
+#endif // SD_PROBE_OPS
+
 #if SHELL_SD_PROBE_STREAM
 static void stream_pass(bench::Board& hw, const volatile uint32_t& win)
 {
@@ -1262,6 +1949,16 @@ void sd_stream_pass(bench::Board& hw, const volatile uint32_t& win)
     tail_pass(hw, win);
 #elif SHELL_SD_PROBE_STREAM
     stream_pass(hw, win);
+#elif SD_PROBE_OPS
+    // The operation modes keep their schedule in wall time, not raw windows.
+    static_cast<void>(&win);
+#if SHELL_SD_PROBE_BANK
+    bank_pass(hw);
+#elif SHELL_SD_PROBE_BUFFER
+    buffer_pass(hw);
+#else
+    patch_pass(hw);
+#endif
 #else
 #error "this SHELL_SD_PROBE mode has no pass yet (shell/sd_probe.cpp)"
 #endif

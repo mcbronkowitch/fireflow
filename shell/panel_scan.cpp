@@ -47,6 +47,7 @@
 #endif
 #if SHELL_SD
 #include "sd_probe.h"
+#include "shell_sd_probe.h"
 #endif
 #if SHELL_RGRAIN
 #include <cmath>
@@ -1001,6 +1002,13 @@ void panel_scan_init(bench::Board& hw)
 
 void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
 {
+#if SHELL_SD && SHELL_SD_PROBE_BANK
+    // The SD bank reload (spec 2026-10-31-sd-use-cases-tests-design.md
+    // section 5, D1): a bank the foreground loaded and verified becomes the
+    // engine's here, at the top of the block and ahead of process(), which
+    // reads it per sample through wt::table() (wt_bank.h, set_bank()).
+    sd_bank_block();
+#endif
     g_inst = &inst;
 #if SHELL_REMOTE_MEASURE
     const uint32_t sec0 = cycles_now();   // the scan section starts here

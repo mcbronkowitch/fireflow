@@ -92,6 +92,17 @@ IMAGES = [
                        "SHELL_RAW_SPREAD=1", "SHELL_SD=1", "SHELL_SD_PROBE=burst"]),
     ("reva_sd_probe_no_sd_refused", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1",
                                      "SHELL_SD_PROBE=burst"]),
+    # The operation modes (section 5, D1, D2, D4): the bank reload with its
+    # second D2 slot, the sampler-buffer save and load with its 16.1 MB SDRAM
+    # scratch, and the patch file. `patch` copies the persisted record from
+    # QSPI to the card and must never write the QSPI sectors: the save path
+    # stays unlinked there as in every listener image.
+    ("reva_sd_bank", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
+                      "SHELL_RAW_SPREAD=1", "SHELL_SD=1", "SHELL_SD_PROBE=bank"]),
+    ("reva_sd_buffer", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
+                        "SHELL_RAW_SPREAD=1", "SHELL_SD=1", "SHELL_SD_PROBE=buffer"]),
+    ("reva_sd_patch", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
+                       "SHELL_RAW_SPREAD=1", "SHELL_SD=1", "SHELL_SD_PROBE=patch"]),
     # The reverb grain layer (spec 2026-10-31-sd-use-cases-tests-design.md
     # section 5, B1 and B2): the listener image with throwaway grains summed
     # into the reverb input, in B1's fixed-N sweep. It needs the listener and
@@ -139,12 +150,20 @@ SD_PATH = [
 RGRAIN_PATH = [
     "shell::rgrain_block(",
 ]
+# The bank mode's swap, called by the audio callback: linked in the bank image
+# and nowhere else (the other SD images are its canary).
+BANK_PATH = [
+    "shell::sd_bank_block(",
+]
 SYMBOL_RULES = {
     "reva_play": (SAVE_PATH, SD_PATH),
     "reva_remote": ([], SAVE_PATH + SD_PATH + RGRAIN_PATH),
     "reva_remote_measure": ([], SAVE_PATH),
     "reva_sd": (SD_PATH, SAVE_PATH),
-    "reva_sd_burst": (SD_PATH, SAVE_PATH),
+    "reva_sd_burst": (SD_PATH, SAVE_PATH + BANK_PATH),
+    "reva_sd_bank": (SD_PATH + BANK_PATH, SAVE_PATH),
+    "reva_sd_buffer": (SD_PATH, SAVE_PATH + BANK_PATH),
+    "reva_sd_patch": (SD_PATH, SAVE_PATH + BANK_PATH),
     "reva_rgrain": (RGRAIN_PATH, SAVE_PATH + SD_PATH),
 }
 
@@ -286,7 +305,7 @@ def main():
         held = ""
         if rules:
             for what, path in (("save path", SAVE_PATH), ("SD path", SD_PATH),
-                               ("grain layer", RGRAIN_PATH)):
+                               ("grain layer", RGRAIN_PATH), ("bank swap", BANK_PATH)):
                 if path[0] in rules[0]:
                     held += ", %s linked" % what
                 elif path[0] in rules[1]:

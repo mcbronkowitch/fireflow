@@ -6,6 +6,7 @@
 // (spec section 2.3): deck B 432 k -> 408 k cycles a block on average, the
 // worst block 1 011 k -> 955 k.
 #include <cstring>
+#include "shell_sd_probe.h"
 #include "synth/wt_bank.h"
 
 namespace {
@@ -22,6 +23,13 @@ int16_t __attribute__((section(".dtcmram_bss"))) g_bank_d2[spky::wt::kTotalSampl
 #else
 int16_t __attribute__((section(".d2_bss"))) g_bank_d2[spky::wt::kTotalSamples];
 #endif
+#if SHELL_SD_PROBE_BANK
+// The SD probe's bank reload (spec 2026-10-31-sd-use-cases-tests-design.md
+// section 5, D1; shell/sd_probe.cpp): a second slot the card loads into while
+// the engine reads the other, swapped at the top of a block. In this image
+// alone (write_shell_sd_probe.py deletes this object when the mode changes).
+int16_t __attribute__((section(".d2_bss"))) g_bank_d2b[spky::wt::kTotalSamples];
+#endif
 } // namespace
 
 namespace shell {
@@ -30,6 +38,19 @@ void wt_bank_to_d2()
 {
     std::memcpy(g_bank_d2, spky::wt::kBankSamples, sizeof g_bank_d2);
     spky::wt::set_bank(g_bank_d2);
+}
+
+// Slot 0 is the boot copy above; slot 1 exists with SHELL_SD_PROBE=bank only
+// (nullptr otherwise).
+int16_t* wt_bank_slot(int i)
+{
+    if(i == 0)
+        return g_bank_d2;
+#if SHELL_SD_PROBE_BANK
+    if(i == 1)
+        return g_bank_d2b;
+#endif
+    return nullptr;
 }
 
 } // namespace shell

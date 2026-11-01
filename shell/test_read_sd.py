@@ -576,5 +576,168 @@ test_tail_ring_size()
 test_tail_errors()
 test_tail_report()
 
+
+# --- bank reload, buffer save/load, patch file (spec section 5, D1, D2, D4) ---
+# One line per operation: SHELL_SD_K per bank load (plus the export once),
+# SHELL_SD_B per buffer save or load, SHELL_SD_P per patch-file round trip.
+K_EXPORT = "SHELL_SD_K export kib=63 us=31000 worst_us=9000 fr=0"
+
+
+def k_line(load_us=14000, worst_us=4000, cmp="ok", held=8, fr=0, slot=1):
+    return ("SHELL_SD_K load_us=%d worst_us=%d cmp=%s held=%d fr=%d slot=%d"
+            % (load_us, worst_us, cmp, held, fr, slot))
+
+
+def b_line(fmt, op, ms, worst_us=30000, held=900, fr=0, cmp=None, off=0):
+    if cmp is None:
+        cmp = "-" if op == "save" else "ok"
+    return ("SHELL_SD_B fmt=%s op=%s ms=%d worst_us=%d held=%d fr=%d cmp=%s off=%d"
+            % (fmt, op, ms, worst_us, held, fr, cmp, off))
+
+
+def p_line(i, cmp="ok", seq=42, fr=0, write_us=900, sync_us=6000, read_us=700, held=4):
+    return ("SHELL_SD_P i=%d write_us=%d sync_us=%d read_us=%d cmp=%s seq=%d held=%d fr=%d"
+            % (i, write_us, sync_us, read_us, cmp, seq, held, fr))
+
+
+def ops_capture(op_lines):
+    return [l + "\n" for l in list(CARD) + list(op_lines)]
+
+
+def bank_lines(n=10, bad_at=None, fr_at=None):
+    out = [K_EXPORT]
+    for i in range(n):
+        out.append(k_line(load_us=14000 + 100 * i, worst_us=4000 + i, slot=1 - i % 2,
+                          cmp="bad" if i == bad_at else "ok", fr=5 if i == fr_at else 0))
+    return out
+
+
+def test_bank_stats():
+    st = read_sd.bank_stats(bank_lines())
+    check("bank: ten loads, all ok, pass", st["loads"] == 10 and st["ok"] == 10 and st["pass"])
+    check("bank: load time max and mean", st["load_us_max"] == 14900 and st["load_us_mean"] == 14450)
+    check("bank: the worst f_read over all loads", st["worst_us"] == 4009)
+    check("bank: both slots used", st["slots"] == [0, 1])
+    check("bank: the export is read", st["export"] is not None and st["export"]["kib"] == 63)
+    stamped = ["7.5 " + l for l in bank_lines()]
+    check("bank: host-time prefixes are stripped", read_sd.bank_stats(stamped) == st)
+    check("bank: no load line fails", not read_sd.bank_stats([K_EXPORT])["pass"])
+    code, text = run(ops_capture(bank_lines()))
+    check("bank: report exits 0 and prints the loads", code == 0 and "bank:" in text)
+
+
+def test_bank_cmp_bad_fails():
+    st = read_sd.bank_stats(bank_lines(bad_at=6))
+    check("bank cmp=bad: fails", not st["pass"] and st["ok"] == 9)
+    check("bank cmp=bad: the reason names the load", any("cmp=bad" in w for w in st["why"]))
+    st = read_sd.bank_stats(bank_lines(fr_at=3))
+    check("bank fr: a failed load fails and says fr", not st["pass"] and any("fr=5" in w for w in st["why"]))
+    st = read_sd.bank_stats(bank_lines() + ["SHELL_SD_K stop fr=1"])
+    check("bank: a stop line fails", not st["pass"] and any("fr=1" in w for w in st["why"]))
+    code, text = run(ops_capture(bank_lines(bad_at=6)))
+    check("bank cmp=bad: report exits 1 and says FAIL", code == 1 and "FAIL" in text)
+
+
+def buffer_lines(s16_cmp="ok", s16_off=0):
+    return [b_line("f32", "save", 2000), b_line("f32", "load", 1300),
+            b_line("s16", "save", 1100), b_line("s16", "load", 700, cmp=s16_cmp, off=s16_off)]
+
+
+def test_buffer_times_and_cmp():
+    st = read_sd.buffer_stats(buffer_lines())
+    check("buffer: f32 save 2 000 ms", st["ops"][("f32", "save")]["ms_max"] == 2000)
+    check("buffer: f32 load 1 300 ms", st["ops"][("f32", "load")]["ms_max"] == 1300)
+    check("buffer: cmp ok passes", st["pass"] and not st["why"])
+    check("buffer: per operation the worst call and the held blocks",
+          st["ops"][("s16", "load")]["worst_us"] == 30000 and st["ops"][("s16", "load")]["held_max"] == 900)
+    stamped = ["3.25 " + l for l in buffer_lines()]
+    check("buffer: host-time prefixes are stripped", read_sd.buffer_stats(stamped) == st)
+    st = read_sd.buffer_stats(buffer_lines(s16_cmp="bad", s16_off=123456))
+    check("buffer: an s16 cmp=bad fails", not st["pass"])
+    check("buffer: the reason names the format and its offset",
+          any("s16" in w and "off=123456" in w for w in st["why"]))
+    st = read_sd.buffer_stats(buffer_lines()[:2])
+    check("buffer: a missing format fails and is named",
+          not st["pass"] and any("s16" in w for w in st["why"]))
+    st = read_sd.buffer_stats(buffer_lines() + [b_line("f32", "save", 2100, fr=1)])
+    check("buffer: fr fails", not st["pass"] and any("fr=1" in w for w in st["why"]))
+    code, _ = run(ops_capture(buffer_lines()))
+    check("buffer: report exits 0", code == 0)
+    code, text = run(ops_capture(buffer_lines(s16_cmp="bad", s16_off=123456)))
+    check("buffer: report exits 1 and names the offset", code == 1 and "off=123456" in text)
+
+
+def test_patch_100_of_100():
+    good = [p_line(i) for i in range(100)]
+    st = read_sd.patch_stats(good)
+    check("patch: 100 of 100 passes", st["n"] == 100 and st["ok"] == 100 and st["pass"])
+    check("patch: worst write, sync and read", st["sync_us_max"] == 6000 and st["write_us_max"] == 900
+          and st["read_us_max"] == 700)
+    check("patch: the record's seq", st["seqs"] == [42])
+    one_bad = [p_line(i, cmp="bad" if i == 57 else "ok") for i in range(100)]
+    st = read_sd.patch_stats(one_bad)
+    check("patch: 99 ok + 1 bad fails", not st["pass"] and st["ok"] == 99)
+    check("patch: the bad one is named", any("i=57" in w for w in st["why"]))
+    st = read_sd.patch_stats(good[:99])
+    check("patch: 99 iterations are not 100", not st["pass"] and any("99" in w for w in st["why"]))
+    st = read_sd.patch_stats([p_line(i, fr=1 if i == 3 else 0) for i in range(100)])
+    check("patch: an fr fails", not st["pass"] and any("fr=1" in w for w in st["why"]))
+    check("patch: a done line is not an iteration",
+          read_sd.patch_stats(good + ["SHELL_SD_P done n=100 ok=100"])["n"] == 100)
+    code, _ = run(ops_capture(good))
+    check("patch: report exits 0", code == 0)
+    code, text = run(ops_capture(one_bad))
+    check("patch: report exits 1", code == 1 and "FAIL" in text)
+
+
+def test_ops_by_phase():
+    # A frame belongs to the pass it follows: a frame right after an operation
+    # line measured the pass that ran the operation (busy), the other frames
+    # idle passes. Frames before the first operation line (the card test) are
+    # nobody's.
+    lines = (list(CARD) + [play_win(990000, mean=900000)]
+             + [K_EXPORT, play_win(800000, mean=503000), play_win(700000), play_win(700000)]
+             + [k_line(), play_win(810000, mean=505000), play_win(700000)]
+             + ["SHELL_SD_K stop fr=0", play_win(700000)])
+    by = read_sd.ops_by_phase(lines)
+    check("ops cb: two classes", sorted(by) == ["busy", "idle"])
+    check("ops cb: frames after an operation line are busy",
+          by["busy"]["means"] == [503000.0, 505000.0] and by["busy"]["win"] == [800000, 810000])
+    check("ops cb: the others are idle, a stop line is no operation",
+          by["idle"]["means"] == [500000.0] * 4)
+    check("ops cb: the frame before the first operation is nobody's",
+          900000.0 not in by["idle"]["means"] + by["busy"]["means"])
+    check("ops cb: every mode's operation line counts",
+          [len(read_sd.ops_by_phase([l, play_win(1)])["busy"]["means"])
+           for l in (K_EXPORT, k_line(), b_line("f32", "save", 2000), p_line(0))] == [1, 1, 1, 1])
+    stamped = ["9.5 " + l for l in lines]
+    check("ops cb: host-time prefixes are stripped", read_sd.ops_by_phase(stamped) == by)
+    torn = lines[:-1] + ["SHELL_PLAY_WIN win=999999 gap=0 over=0 n=0 sum=0"]
+    check("ops cb: a torn frame is skipped", len(read_sd.ops_by_phase(torn)["idle"]["means"]) == 3)
+    ok, why = read_sd.ops_cb_verdict(by)
+    check("ops cb: +3 000 / +5 000 passes", ok and not why)
+    far = [l.replace("sum=%d" % (250 * 505000), "sum=%d" % (250 * 510000)) for l in lines]
+    ok, why = read_sd.ops_cb_verdict(read_sd.ops_by_phase(far))
+    check("ops cb: busy 6 500 off idle on average still passes", ok)
+    far = [l.replace("sum=%d" % (250 * 505000), "sum=%d" % (250 * 520000)) for l in lines]
+    ok, why = read_sd.ops_cb_verdict(read_sd.ops_by_phase(far))
+    check("ops cb: busy 11 500 off idle fails", not ok and any("busy" in w for w in why))
+    ok, why = read_sd.ops_cb_verdict(read_sd.ops_by_phase(lines + [K_EXPORT, play_win(945001)]))
+    check("ops cb: a win over the click line fails", not ok and any("945" in w for w in why))
+    ok, why = read_sd.ops_cb_verdict(read_sd.ops_by_phase(lines[:3]))
+    check("ops cb: no busy frames fails", not ok and "no busy frames" in why)
+    # The stream classes do not see these lines.
+    st = read_sd.cb_by_phase(lines)
+    check("ops cb: cb_by_phase ignores the operation lines", not any(st[k]["means"] for k in st))
+    _, text = run([l + "\n" for l in lines])
+    check("ops cb: the report prints the callback by operation", "callback by operation" in text)
+
+
+test_bank_stats()
+test_bank_cmp_bad_fails()
+test_buffer_times_and_cmp()
+test_patch_100_of_100()
+test_ops_by_phase()
+
 print("%d failed" % len(FAILS))
 sys.exit(1 if FAILS else 0)

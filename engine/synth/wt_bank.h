@@ -22,8 +22,11 @@ inline const int16_t* bank_ptr = kBankSamples;
 } // namespace detail
 
 // samples must hold kTotalSamples values in kBankSamples' layout; nullptr goes
-// back to kBankSamples. Not for the audio thread: call it before anything
-// plays.
+// back to kBankSamples. Call before anything plays, or from the audio thread
+// at the top of a block. The bank is read through `bank()` per sample and
+// never cached across blocks (test_wt_bank_swap.cpp holds that). The SD probe
+// (`shell/sd_probe.cpp`, `SHELL_SD_PROBE=bank`) is the only caller that swaps
+// while playing.
 inline void set_bank(const int16_t* samples) {
     detail::bank_ptr = samples ? samples : kBankSamples;
 }
