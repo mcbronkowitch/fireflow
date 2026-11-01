@@ -893,7 +893,7 @@ def ops_report(lines, out, card_ok):
 
 
 _SD_D = re.compile(r"^SHELL_SD_D (.*)$")
-DUPLEX_READ_RING = 32 * 1024      # sd_probe.cpp kReadRing (C1)
+DUPLEX_READ_RING = 1152 * 1024    # sd_probe.cpp kReadRing (C2's stall: one thread serves both)
 DUPLEX_WRITE_RING = 1152 * 1024   # sd_probe.cpp kWriteRing (C2)
 
 

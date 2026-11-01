@@ -1870,22 +1870,25 @@ void sd_bank_block()
 // The foreground keeps both rings going for the whole pass: it refills the
 // read ring from FFSDBIG.DAT (512 MiB, left on the card by rtail's fill; it
 // is not written here, and a missing file stops the mode with fr=4,
-// FR_NO_FILE) with one 16 KB read whenever the ring is below half, and drains
-// the write ring to FFREC.DAT (truncated at the start) in 16 KB writes while
-// at least 16 KB is queued; a refill goes first, an underrun is the one heard.
+// FR_NO_FILE) in 16 KB reads while the ring is below half -- one read per
+// turn of the pass's loop, as many as it takes to get back to half, each
+// ahead of any write -- and drains the write ring to FFREC.DAT (truncated at
+// the start) in 16 KB writes while at least 16 KB is queued and the read ring
+// is at half or above; an underrun is the one heard.
 // Both files wrap: the read at the file's last whole chunk, the record before
 // the FAT32 4 GiB limit. One FatFs and one bus serve both, so a stalled write
-// starves the read ring too -- which is what the test is for. The first pass
-// opens the files and fills the read ring before the callback starts taking
-// (read_sd.py does not judge that pass's window and frame).
+// stops the refills too: the read ring is sized for that (kReadRing). The
+// first pass opens the files and fills the read ring (72 reads) before the
+// callback starts taking (read_sd.py does not judge that pass's window and
+// frame).
 //
 // Every card access, f_open, f_read, f_write, f_lseek and f_close, is marked
 // for the pot hold (DxMark, as OpMark and TailMark) with A1's tail of 0 (A1
 // passed: the hold with tail 0, not back to back).
 //
 // Line, every pass (longest realistic: w 5 digits, under and over 4 -- a pass
-// that a 2 s card stall stretched counts ~1 000 blocks --, rfill 5, wfill 7,
-// the worst calls 7, held 4, fr 2 -- 119 of the 128 bytes):
+// that a 2 s card stall stretched counts ~1 000 blocks --, rfill and wfill 7,
+// the worst calls 7, held 4, fr 2 -- 121 of the 128 bytes):
 //   SHELL_SD_D w= under= over= rfill= wfill= worst_r_us= worst_w_us= held= fr=
 // w: the raw window counter at the pass's start; under / over: blocks of this
 // pass; rfill / wfill: the read ring's lowest and the write ring's highest
@@ -1902,9 +1905,13 @@ namespace {
 // audio callback more than 16 KB ones on every workload.
 constexpr uint32_t kDxChunk = 16u * 1024u;
 // The rings, from C1/C2, board session 2, 2026-11-01 (docs/hardware/
-// sd-use-cases-measured.md, C1/C2 rows). Read: C1's sequential read tail --
-// both runs printed a 32 KB ring at 384 KB/s (worst f_read 24.5 ms).
-constexpr uint32_t kReadRing = 32u * 1024u;
+// sd-use-cases-measured.md, C1/C2 rows). Read: one foreground thread serves
+// both rings, so the read ring has to outlast the longest blocking call of
+// either stream -- C2's worst write stall (1.97 s; 2 x 1.97 s x 288 KB/s
+// rounds to 1152 KB, and at 384 KB/s 1152 KB still holds 3.0 s) as well as
+// C1's read tail (a 32 KB ring at 384 KB/s, worst f_read 24.5 ms) -- and the
+// report loop's prints between two passes, when nothing refills it.
+constexpr uint32_t kReadRing = 1152u * 1024u;
 // Write: the largest ring C2 printed over all write patterns and runs -- one
 // ~2 s card stall in a 16-bit run (worst f_write 1 969 428 us). A card's
 // garbage-collection stall does not depend on the sample format, so it can hit
