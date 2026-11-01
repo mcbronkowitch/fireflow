@@ -36,6 +36,19 @@ every one of these is a dead board if it silently goes missing:
     branches to shell_remote_fault_reset(), and that calls
     remote_enter_bootloader() (a `b .` in the stub is a hang, not an entry).
     The 1 KB alignment sits on g_ram_vectors itself.
+The boot-only listener (SHELL_BOOTCMD, default 1; the Makefile writes 1 only
+for a play image without SHELL_REMOTE). The fault vectors, the bootloader on a
+failed itcm_load() and remote_listen_start() after StartLog() are checked in
+both images that listen (SHELL_REMOTE=1, and SHELL_BOOTCMD=1 alone) and must be
+absent in the image with neither; besides that the boot-only image:
+  - prints `SHELL_REMOTE on build=<hash> cmds=boot` on the first report pass
+    and every 10th (tools/remote_lib.py's confirm_build() regex matches it)
+    and answers each PING with `SHELL_REMOTE pong`;
+  - keeps the persistence save (persist_write() compiles, nothing suppresses);
+  - compiles AudioCallback, and all of panel_scan.cpp outside the report
+    loop, exactly as the image with neither (no guard, no command poll);
+  - links remote_cmd.cpp and remote_listen.cpp, never workload_run.cpp, and
+    the Makefile resolves SHELL_BOOTCMD at parse time (shell_bootcmd.h).
 The workloads (plan Task 5):
   - AudioCallback writes silence instead of calling process() once the
     overrun guard has tripped, under SHELL_REMOTE, and panel_scan_block_end()
@@ -212,6 +225,72 @@ def select_branch(text, macro, value):
                 stack.pop()
             continue
         if all(s is None or s for s in stack):
+            out.append(raw)
+    return "\n".join(out)
+
+
+# The two images that listen, and the one that does not. SHELL_BOOTCMD here is
+# the value the Makefile writes into shell_bootcmd.h: 1 only for a play image
+# without SHELL_REMOTE, so the two are never 1 together.
+REMOTE_IMAGE = {"SHELL_REMOTE": 1, "SHELL_BOOTCMD": 0}
+BOOTCMD_IMAGE = {"SHELL_REMOTE": 0, "SHELL_BOOTCMD": 1}
+NEITHER_IMAGE = {"SHELL_REMOTE": 0, "SHELL_BOOTCMD": 0}
+LISTENING = (REMOTE_IMAGE, BOOTCMD_IMAGE)
+
+
+def eval_cond(cond, values):
+    """True / False when every name in an #if / #elif condition is in
+    `values` and it uses only !, && and ||; None (both branches) otherwise."""
+    c = strip_comment(cond).strip()
+    names = re.findall(r"[A-Za-z_]\w*", c)
+    if not names or any(n not in values for n in names):
+        return None
+    if re.search(r"[^\w\s!&|()]", c) or re.search(r"!=", c):
+        return None
+    expr = c.replace("&&", " and ").replace("||", " or ").replace("!", " not ")
+    expr = re.sub(r"[A-Za-z_]\w*", lambda m: m.group(0) if m.group(0) in ("and", "or", "not")
+                  else str(int(values[m.group(0)])), expr)
+    try:
+        return bool(eval(expr, {"__builtins__": {}}))
+    except Exception:
+        return None
+
+
+def compiled(text, values):
+    """The lines of `text` that compile with the macros in `values` set, as far
+    as conditions over those macros alone decide; every other conditional
+    keeps both branches. Directive lines (#if ... #endif) are dropped, so the
+    result is code and #include / #define lines only."""
+    out = []
+    stack = []   # [state of this branch, taken by an earlier branch]: True / False / None
+    for raw in text.splitlines():
+        m = re.match(r"\s*#\s*(if|ifdef|ifndef|elif|else|endif)\b(.*)", raw)
+        if m:
+            kind, rest = m.group(1), m.group(2)
+            if kind == "if":
+                s = eval_cond(rest, values)
+                stack.append([s, s])
+            elif kind in ("ifdef", "ifndef"):
+                stack.append([None, None])
+            elif kind == "elif" and stack:
+                taken = stack[-1][1]
+                if taken is True:
+                    s = False
+                else:
+                    s = eval_cond(rest, values)
+                    if taken is None and s is False:
+                        s = False
+                    elif taken is None:
+                        s = None
+                stack[-1] = [s, True if (taken is True or s is True) else
+                             (None if (taken is None or s is None) else False)]
+            elif kind == "else" and stack:
+                taken = stack[-1][1]
+                stack[-1] = [None if taken is None else not taken, True]
+            elif kind == "endif" and stack:
+                stack.pop()
+            continue
+        if all(s is not False for s, _ in stack):
             out.append(raw)
     return "\n".join(out)
 
@@ -585,39 +664,52 @@ def measure_writer_deletes_objects(script_text):
 
 
 def fault_vectors_first_in_main(main):
-    tail = statements_after(main, "int main(void)")
-    # The first line after the signature is the opening brace.
-    if tail and tail[0][1] == "{":
-        tail = tail[1:]
-    if not tail or "shell::remote_install_fault_vectors();" not in tail[0][1]:
-        return False
-    return tail[0][0] in remote_lines(main)
+    """In both listening images remote_install_fault_vectors() is main()'s first
+    statement; in the image with neither it is not called at all."""
+    for image in LISTENING:
+        tail = statements_after(compiled(main, image), "int main(void)")
+        # The first line after the signature is the opening brace.
+        if tail and tail[0][1] == "{":
+            tail = tail[1:]
+        if not tail or "shell::remote_install_fault_vectors();" not in tail[0][1]:
+            return False
+    return "remote_install_fault_vectors(" not in code_only(compiled(main, NEITHER_IMAGE))
 
 
-def itcm_failure_enters_bootloader(main):
-    lines = code_lines(main)
-    remote = remote_lines(main)
+def itcm_branch_enters_bootloader(text):
+    lines = code_lines(text)
     for k, (_, s) in enumerate(lines):
         if "if(!shell::itcm_load())" in s.replace(" ", ""):
             # The branch: from the brace after the if to its matching close.
             depth = 0
             for idx, c in lines[k + 1:]:
                 depth += c.count("{") - c.count("}")
-                if "shell::remote_enter_bootloader();" in c and idx in remote:
+                if "shell::remote_enter_bootloader();" in c:
                     return True
                 if depth <= 0 and "}" in c:
                     return False
             return False
-    return False
+    return None   # no such branch at all
+
+
+def itcm_failure_enters_bootloader(main):
+    """A failed itcm_load() enters the bootloader in both listening images, and
+    only blinks in the image with neither."""
+    return all(itcm_branch_enters_bootloader(compiled(main, image)) is True
+               for image in LISTENING) \
+        and itcm_branch_enters_bootloader(compiled(main, NEITHER_IMAGE)) is False
 
 
 def listen_follows_startlog(scan):
-    body = function_body(scan, "void run_panel_scan_report(")
-    tail = statements_after(body, "hw.StartLog(false);")
-    if not tail or tail[0][1] != "remote_listen_start();":
-        return False
-    # Under SHELL_REMOTE, judged in the body's own line numbering.
-    return tail[0][0] in remote_lines(body)
+    """In both listening images remote_listen_start() is the statement right
+    after StartLog(); in the image with neither it is not called."""
+    for image in LISTENING:
+        body = function_body(compiled(scan, image), "void run_panel_scan_report(")
+        tail = statements_after(body, "hw.StartLog(false);")
+        if not tail or tail[0][1] != "remote_listen_start();":
+            return False
+    body = function_body(compiled(scan, NEITHER_IMAGE), "void run_panel_scan_report(")
+    return bool(body) and "remote_listen_start(" not in code_only(body)
 
 
 def includes_switch(text, header="shell_remote.h"):
@@ -651,9 +743,101 @@ def make_sources_only_remote(make):
             continue
         if "remote_listen.cpp" in line or "remote_cmd.cpp" in line:
             hits += 1
-            if "ifeq ($(SHELL_REMOTE),1)" not in stack:
+            if "ifeq ($(SHELL_REMOTE),1)" not in stack and \
+                    "ifeq ($(SHELL_BOOTCMD_ON),1)" not in stack:
                 return False
+        # The workloads and the overrun guard: the listener image alone.
+        if "workload_run.cpp" in line and "ifeq ($(SHELL_REMOTE),1)" not in stack:
+            return False
     return hits >= 1 and "remote_listen.cpp" in make and "remote_cmd.cpp" in make
+
+
+def make_bootcmd_sources(make):
+    """The boot-only image builds remote_cmd.cpp and remote_listen.cpp, and
+    nothing else of the listener: one CPP_SOURCES line under the effective
+    switch."""
+    hits = [s for s in make_stack_lines(make, "CPP_SOURCES")
+            if "ifeq ($(SHELL_BOOTCMD_ON),1)" in s]
+    lines = [l.split("#", 1)[0].strip() for l in make.splitlines()]
+    k = next((n for n, l in enumerate(lines) if l == "ifeq ($(SHELL_BOOTCMD_ON),1)"
+              and n + 1 < len(lines) and lines[n + 1].startswith("CPP_SOURCES")), None)
+    return len(hits) == 1 and k is not None \
+        and lines[k + 1] == "CPP_SOURCES += remote_cmd.cpp remote_listen.cpp"
+
+
+def make_bootcmd_switch(make):
+    """SHELL_BOOTCMD defaults to 1, is validated like the other switches, is
+    effective (SHELL_BOOTCMD_ON) only in a play image without SHELL_REMOTE, and
+    that effective value is written at parse time, deleting main.o and
+    panel_scan.o when it changes."""
+    default = re.search(r"^SHELL_BOOTCMD \?= 1$", make, flags=re.M)
+    valid = re.search(r"^ifneq \(\$\(words \$\(SHELL_BOOTCMD\)\)-\$\(filter \$\(SHELL_BOOTCMD\),0 1\),"
+                      r"1-\$\(SHELL_BOOTCMD\)\)\s*\n\$\(error SHELL_BOOTCMD must be 0 or 1\)",
+                      make, flags=re.M)
+    eff = re.search(r"^ifeq \(\$\(SHELL_BOOTCMD\)\$\(SHELL_PANEL_SCAN\)\$\(SHELL_REMOTE\),110\)\s*\n"
+                    r"SHELL_BOOTCMD_ON := 1\s*\nelse\s*\nSHELL_BOOTCMD_ON := 0\s*\nendif",
+                    make, flags=re.M)
+    m = re.search(r"\$\(shell python write_shell_bootcmd\.py \$\(BUILD_DIR\)/shell_bootcmd\.h "
+                  r"\$\(SHELL_BOOTCMD_ON\)(.*)$", make, flags=re.M)
+    objs = m.group(1) if m else ""
+    edge = re.search(r"^\$\(BUILD_DIR\)/main\.o \$\(BUILD_DIR\)/panel_scan\.o: "
+                     r"\$\(BUILD_DIR\)/shell_bootcmd\.h$", make, flags=re.M)
+    return bool(default and valid and eff and m and edge) \
+        and "$(BUILD_DIR)/main.o" in objs and "$(BUILD_DIR)/panel_scan.o" in objs
+
+
+def bootcmd_announces_and_pongs(scan, remote_lib=None):
+    """The boot-only image's report loop: `SHELL_REMOTE on build=%s cmds=boot`
+    with remote_build() on the first pass and every 10th, and the pong; and
+    the line still matches the host's confirm_build() regex."""
+    body = function_body(compiled(scan, BOOTCMD_IMAGE), "void run_panel_scan_report(")
+    f = flat(code_only(body))
+    fmt = '"SHELL_REMOTE on build=%s cmds=boot"'
+    announce = ('if(bootcmd_pass++%kBootcmdEvery==0)hw.PrintLine(' + flat(fmt) +
+                ',remote_build());')
+    if remote_lib is None:
+        with open(os.path.join(REPO, "tools", "remote_lib.py"), encoding="utf-8") as fh:
+            remote_lib = fh.read()
+    host = re.search(r're\.search\(r"(SHELL_REMOTE on build=[^"]*)"', remote_lib)
+    sample = fmt.strip('"') % "abc1234"
+    hm = re.search(host.group(1), sample) if host else None
+    return announce in f and "constexpruint32_tkBootcmdEvery=10;" in f \
+        and "uint32_tbootcmd_pass=0;" in f \
+        and 'if(remote_take_ping())hw.PrintLine("SHELL_REMOTEpong");' in f \
+        and hm is not None and hm.group(1) == "abc1234"
+
+
+def bootcmd_keeps_saves(scan):
+    """The boot-only image saves the panel state as the play image does:
+    persist_write() compiles there, and the suppression does not."""
+    code = code_only(compiled(scan, BOOTCMD_IMAGE))
+    return re.search(r"\bpersist_write\s*\(", code) is not None \
+        and "save suppressed" not in code
+
+
+def drop_function(text, signature):
+    body = function_body(text, signature)
+    return text.replace(body, "{}", 1) if body else text
+
+
+def bootcmd_callback_unchanged(main, scan):
+    """AudioCallback, and panel_scan.cpp outside run_panel_scan_report(),
+    compile in the boot-only image exactly as in the image with neither (no
+    guard, no command poll, no silence): the boot-only listener lives in the
+    USB interrupt and the report loop alone."""
+    def code(text):
+        """Code lines only: comments, blank lines and #include lines dropped."""
+        return "\n".join(l.rstrip() for l in code_only(text).splitlines()
+                         if l.strip() and not l.strip().startswith("#include"))
+
+    def cb(image):
+        return code(function_body(compiled(main, image), "static void AudioCallback("))
+
+    def rest(image):
+        return code(drop_function(compiled(scan, image), "void run_panel_scan_report("))
+    return bool(cb(NEITHER_IMAGE)) and cb(BOOTCMD_IMAGE) == cb(NEITHER_IMAGE) \
+        and rest(BOOTCMD_IMAGE) == rest(NEITHER_IMAGE) \
+        and "panel_scan_tick(" in rest(NEITHER_IMAGE)
 
 
 # --- Task 6 fix round 1 -------------------------------------------------------
@@ -870,6 +1054,21 @@ def run_line_counts_across_trips(scan):
         and "g_rs_trips=g_run.trips();" in pub and "s.trips=g_rs_trips;" in rd
 
 
+FAULT_FIRST = ("remote_install_fault_vectors() is main()'s first statement in both listening "
+               "images, absent otherwise")
+ITCM_BOOT = "a failed itcm_load() enters the bootloader in both listening images, absent otherwise"
+LISTEN_START = ("remote_listen_start() follows StartLog() in both listening images, absent "
+                "otherwise")
+SOURCES_ONLY = ("the listener's sources build only under SHELL_REMOTE=1 or SHELL_BOOTCMD_ON=1, "
+                "the workloads only under SHELL_REMOTE=1")
+BOOT_MAKE = "the Makefile resolves SHELL_BOOTCMD's effective value at parse time"
+BOOT_SOURCES = "the boot-only image builds remote_cmd.cpp and remote_listen.cpp, nothing else"
+BOOT_ANNOUNCE = "the boot-only image says `SHELL_REMOTE on build= cmds=boot` every 10th pass, pongs"
+BOOT_SAVES = "the boot-only image keeps the persistence save"
+BOOT_SAME_CB = ("the boot-only image compiles AudioCallback and panel_scan.cpp outside the report "
+                "loop as the image with neither")
+
+
 def run_checks(listen, main, scan, make, tick, inst, engine, writer, wl_h, wl_cpp):
     r = {}
     r["on_rx() enters the bootloader on BOOT itself"] = on_rx_enters_bootloader(listen)
@@ -880,17 +1079,22 @@ def run_checks(listen, main, scan, make, tick, inst, engine, writer, wl_h, wl_cp
         entry_is_infinite_and_quiet(listen)
     r["the RAM vector table routes NMI and all four faults and sets a 1 KB-aligned VTOR"] = \
         fault_vectors_installed(listen)
-    r["remote_install_fault_vectors() is main()'s first statement, under SHELL_REMOTE"] = \
-        fault_vectors_first_in_main(main)
-    r["a failed itcm_load() enters the bootloader under SHELL_REMOTE"] = \
-        itcm_failure_enters_bootloader(main)
-    r["remote_listen_start() follows StartLog() in run_panel_scan_report()"] = \
-        listen_follows_startlog(scan)
+    r[FAULT_FIRST] = fault_vectors_first_in_main(main)
+    r[ITCM_BOOT] = itcm_failure_enters_bootloader(main)
+    r[LISTEN_START] = listen_follows_startlog(scan)
     r["main.cpp includes shell_remote.h"] = includes_switch(main)
     r["panel_scan.cpp includes shell_remote.h"] = includes_switch(scan)
     r["the Makefile resolves SHELL_REMOTE at parse time"] = make_parse_time(make)
-    r["the listener's sources build only under SHELL_REMOTE=1"] = make_sources_only_remote(make)
+    r[SOURCES_ONLY] = make_sources_only_remote(make)
     r["the fault chain reaches remote_enter_bootloader()"] = fault_chain_whole(listen)
+    # The boot-only listener (SHELL_BOOTCMD).
+    r["main.cpp includes shell_bootcmd.h"] = includes_switch(main, "shell_bootcmd.h")
+    r["panel_scan.cpp includes shell_bootcmd.h"] = includes_switch(scan, "shell_bootcmd.h")
+    r[BOOT_MAKE] = make_bootcmd_switch(make)
+    r[BOOT_SOURCES] = make_bootcmd_sources(make)
+    r[BOOT_ANNOUNCE] = bootcmd_announces_and_pongs(scan)
+    r[BOOT_SAVES] = bootcmd_keeps_saves(scan)
+    r[BOOT_SAME_CB] = bootcmd_callback_unchanged(main, scan)
     # Task 5.
     r["the tripped guard silences process() in AudioCallback, fed per callback"] = \
         guard_silences_callback(main, scan)
@@ -1044,27 +1248,110 @@ sabotage("VTOR never set",
 sabotage("a 256-byte alignment",
          "the RAM vector table routes NMI and all four faults and sets a 1 KB-aligned VTOR",
          listen=re.sub(r"(alignas|aligned)\s*\(\s*1024\s*\)", r"\1(256)", LISTEN))
+LISTEN_IF = r"#if SHELL_REMOTE \|\| SHELL_BOOTCMD"
 sabotage("board_init() before the vectors",
-         "remote_install_fault_vectors() is main()'s first statement, under SHELL_REMOTE",
+         FAULT_FIRST,
          main=MAIN.replace("int main(void)\n{", "int main(void)\n{\n    bench::board_init(hw);", 1))
 sabotage("the vectors unguarded",
-         "remote_install_fault_vectors() is main()'s first statement, under SHELL_REMOTE",
-         main=re.sub(r"#if SHELL_REMOTE((?:\s*//[^\n]*)*\s*shell::remote_install_fault_vectors\(\);)",
+         FAULT_FIRST,
+         main=re.sub(LISTEN_IF + r"((?:\s*//[^\n]*)*\s*shell::remote_install_fault_vectors\(\);)",
                      r"#if 1\1", MAIN, count=1))
+sabotage("the vectors under SHELL_REMOTE alone",
+         FAULT_FIRST,
+         main=re.sub(LISTEN_IF + r"((?:\s*//[^\n]*)*\s*shell::remote_install_fault_vectors\(\);)",
+                     r"#if SHELL_REMOTE\1", MAIN, count=1))
 sabotage("the ITCM branch blinks only",
-         "a failed itcm_load() enters the bootloader under SHELL_REMOTE",
+         ITCM_BOOT,
          main=MAIN.replace("shell::remote_enter_bootloader();", "hw.SetLed(true);"))
 sabotage("the ITCM bootloader entry unguarded",
-         "a failed itcm_load() enters the bootloader under SHELL_REMOTE",
-         main=re.sub(r"#if SHELL_REMOTE(\s*\n\s*shell::remote_enter_bootloader\(\);)",
+         ITCM_BOOT,
+         main=re.sub(LISTEN_IF + r"(\s*\n\s*shell::remote_enter_bootloader\(\);)",
                      r"#if 1\1", MAIN))
+sabotage("the ITCM bootloader entry under SHELL_REMOTE alone",
+         ITCM_BOOT,
+         main=re.sub(LISTEN_IF + r"(\s*\n\s*shell::remote_enter_bootloader\(\);)",
+                     r"#if SHELL_REMOTE\1", MAIN))
 sabotage("a statement between StartLog() and the listener",
-         "remote_listen_start() follows StartLog() in run_panel_scan_report()",
+         LISTEN_START,
          scan=SCAN.replace("    hw.StartLog(false);\n",
                            "    hw.StartLog(false);\n    hw.Delay(1);\n", 1))
 sabotage("the listener never started",
-         "remote_listen_start() follows StartLog() in run_panel_scan_report()",
+         LISTEN_START,
          scan=SCAN.replace("remote_listen_start();", "(void)0;"))
+BOOT_BLOCK = r"(#if SHELL_BOOTCMD\n(?:[ \t]*//[^\n]*\n)*[ \t]*)"
+sabotage("the boot-only listener never started",
+         LISTEN_START,
+         scan=re.sub(BOOT_BLOCK + r"remote_listen_start\(\);", r"\1(void)0;", SCAN, count=1))
+sabotage("the boot-only listener in every image",
+         LISTEN_START,
+         scan=re.sub(r"#if SHELL_BOOTCMD(\n(?:[ \t]*//[^\n]*\n)*[ \t]*remote_listen_start\(\);)",
+                     r"#if 1\1", SCAN, count=1))
+sabotage("main.cpp without the bootcmd header",
+         "main.cpp includes shell_bootcmd.h",
+         main=MAIN.replace('#include "shell_bootcmd.h"', ""))
+sabotage("panel_scan.cpp without the bootcmd header",
+         "panel_scan.cpp includes shell_bootcmd.h",
+         scan=SCAN.replace('#include "shell_bootcmd.h"', ""))
+sabotage("SHELL_BOOTCMD as a bare -D",
+         BOOT_MAKE,
+         make=re.sub(r"^.*write_shell_bootcmd\.py.*$", "C_DEFS += -DSHELL_BOOTCMD=$(SHELL_BOOTCMD)",
+                     MAKE, flags=re.M))
+sabotage("the raw switch written instead of the effective one",
+         BOOT_MAKE,
+         make=MAKE.replace("shell_bootcmd.h $(SHELL_BOOTCMD_ON)", "shell_bootcmd.h $(SHELL_BOOTCMD)"))
+sabotage("panel_scan.o kept on a flip",
+         BOOT_MAKE,
+         make=re.sub(r"(write_shell_bootcmd\.py.*?) \$\(BUILD_DIR\)/panel_scan\.o", r"\1", MAKE))
+sabotage("the boot-only listener in the SHELL_REMOTE image too",
+         BOOT_MAKE,
+         make=MAKE.replace("ifeq ($(SHELL_BOOTCMD)$(SHELL_PANEL_SCAN)$(SHELL_REMOTE),110)",
+                           "ifeq ($(SHELL_BOOTCMD)$(SHELL_PANEL_SCAN),11)"))
+sabotage("SHELL_BOOTCMD defaulting to 0",
+         BOOT_MAKE,
+         make=MAKE.replace("SHELL_BOOTCMD ?= 1", "SHELL_BOOTCMD ?= 0"))
+sabotage("SHELL_BOOTCMD unvalidated",
+         BOOT_MAKE,
+         make=MAKE.replace("$(error SHELL_BOOTCMD must be 0 or 1)", "$(warning SHELL_BOOTCMD)"))
+sabotage("the boot-only sources under the raw switch",
+         SOURCES_ONLY,
+         make=MAKE.replace("ifeq ($(SHELL_BOOTCMD_ON),1)\nCPP_SOURCES", "ifeq ($(SHELL_BOOTCMD),1)\nCPP_SOURCES", 1))
+sabotage("the workloads in the boot-only image",
+         SOURCES_ONLY,
+         make=MAKE.replace("CPP_SOURCES += remote_cmd.cpp remote_listen.cpp\nendif",
+                           "CPP_SOURCES += remote_cmd.cpp remote_listen.cpp\nCPP_SOURCES += workload_run.cpp\nendif"))
+sabotage("the boot-only image without the listener sources",
+         BOOT_SOURCES,
+         make=MAKE.replace("ifeq ($(SHELL_BOOTCMD_ON),1)\nCPP_SOURCES += remote_cmd.cpp remote_listen.cpp",
+                           "ifeq ($(SHELL_BOOTCMD_ON),1)\nCPP_SOURCES += remote_cmd.cpp"))
+sabotage("no announce line in the boot-only image",
+         BOOT_ANNOUNCE,
+         scan=SCAN.replace('"SHELL_REMOTE on build=%s cmds=boot"', '"SHELL_BOOTCMD on build=%s"'))
+sabotage("the announce line every pass",
+         BOOT_ANNOUNCE,
+         scan=SCAN.replace("if(bootcmd_pass++ % kBootcmdEvery == 0)", "if(true)"))
+sabotage("the announce line every 20th pass",
+         BOOT_ANNOUNCE,
+         scan=SCAN.replace("kBootcmdEvery = 10;", "kBootcmdEvery = 20;"))
+sabotage("a host that wants `build=` last",
+         BOOT_ANNOUNCE,
+         scan=SCAN.replace('"SHELL_REMOTE on build=%s cmds=boot"', '"SHELL_REMOTE on cmds=boot build=%s"'))
+sabotage("no pong in the boot-only image",
+         BOOT_ANNOUNCE,
+         scan=re.sub(r"(#if SHELL_BOOTCMD\n(?:[^\n]*\n){0,12}?)[ \t]*if\(remote_take_ping\(\)\) "
+                     r"hw\.PrintLine\(\"SHELL_REMOTE pong\"\);\n", r"\1", SCAN, count=1))
+sabotage("the save suppressed in the boot-only image",
+         BOOT_SAVES,
+         scan=re.sub(r"#if SHELL_REMOTE(\s*\n\s*// Saves are suppressed)", r"#if SHELL_REMOTE || SHELL_BOOTCMD\1",
+                     SCAN, count=1))
+sabotage("a command poll in the boot-only callback",
+         BOOT_SAME_CB,
+         scan=SCAN.replace("void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)\n{",
+                           "void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)\n{\n"
+                           "#if SHELL_BOOTCMD\n    { Command c; (void)remote_poll(&c); }\n#endif", 1))
+sabotage("a guard in the boot-only AudioCallback",
+         BOOT_SAME_CB,
+         main=MAIN.replace("#if SHELL_REMOTE\n    // The overrun guard",
+                           "#if SHELL_REMOTE || SHELL_BOOTCMD\n    // The overrun guard", 1))
 sabotage("main.cpp without the switch header",
          "main.cpp includes shell_remote.h",
          main=MAIN.replace('#include "shell_remote.h"', ""))
@@ -1079,7 +1366,7 @@ sabotage("main.o not deleted on a flip",
          "the Makefile resolves SHELL_REMOTE at parse time",
          make=re.sub(r"(write_shell_remote\.py.*?) \$\(BUILD_DIR\)/main\.o", r"\1", MAKE))
 sabotage("the listener in every image",
-         "the listener's sources build only under SHELL_REMOTE=1",
+         SOURCES_ONLY,
          make=MAKE.replace("ifeq ($(SHELL_REMOTE),1)\nCPP_SOURCES", "ifeq (1,1)\nCPP_SOURCES", 1))
 
 # The deferred review items of Task 2 (carried in Task 6).

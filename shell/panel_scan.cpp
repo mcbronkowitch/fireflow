@@ -5,6 +5,7 @@
 #include "shell_keys_nc.h"
 #include "shell_raw_spread.h"
 #include "shell_remote.h"
+#include "shell_bootcmd.h"
 #include "shell_remote_measure.h"
 #include "shell_sd.h"
 #include "shell_rgrain.h"
@@ -41,6 +42,14 @@
 #include "workload_run.h"
 // The run line's tog= field: a constexpr 0 outside the measurement image.
 #include "util/probe_toggles.h"
+#endif
+#if SHELL_BOOTCMD
+#if SHELL_REMOTE
+#error "SHELL_BOOTCMD is the play image's boot-only listener; with SHELL_REMOTE the Makefile writes 0"
+#endif
+// The boot-only listener (shell/Makefile, SHELL_BOOTCMD): BOOT and PING only,
+// both handled in the USB interrupt; nothing here ever pops the command ring.
+#include "remote_listen.h"
 #endif
 #if SHELL_REMOTE_MEASURE
 #include <algorithm>
@@ -1467,6 +1476,14 @@ void run_panel_scan_report(bench::Board& hw)
     uint32_t guard_trips_said    = 0;
     uint32_t guard_rearms_said   = 0;
 #endif
+#if SHELL_BOOTCMD
+    // Right after the log, as the full listener: StartLog() brings the CDC port up.
+    remote_listen_start();
+    // The `SHELL_REMOTE on build= cmds=boot` line, at the full listener's
+    // cadence: tools/remote_run.py's --expect-build reads the build from it.
+    constexpr uint32_t kBootcmdEvery = 10;
+    uint32_t           bootcmd_pass  = 0;
+#endif
 #if SHELL_SD
     // The card test, once, here: audio runs and the listener is up, so a card
     // that hangs still leaves BOOT working (sd_probe.h). Its lines go out
@@ -1822,6 +1839,13 @@ void run_panel_scan_report(bench::Board& hw)
                      static_cast<int>(t.n_sinc), static_cast<int>(t.n_rinc));
 #endif
         cb_profile_report(hw);
+#if SHELL_BOOTCMD
+        // cmds=boot: this image answers BOOT and PING only (the line shape
+        // up to the build is the full listener's, which remote_lib.py matches).
+        if(bootcmd_pass++ % kBootcmdEvery == 0)
+            hw.PrintLine("SHELL_REMOTE on build=%s cmds=boot", remote_build());
+        if(remote_take_ping()) hw.PrintLine("SHELL_REMOTE pong");
+#endif
 #if SHELL_REMOTE
         if(remote_pass++ % kRemoteEvery == 0)
         {

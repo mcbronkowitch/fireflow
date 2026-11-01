@@ -45,6 +45,11 @@ IMAGES = [
     ("reva_play_nopersist", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_PERSIST=0"]),
     # The persistence probe image (plan 2026-10-28, Task 6): forced saves.
     ("reva_play_stress", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_PERSIST_STRESS=1"]),
+    # The play image without the boot-only listener (SHELL_BOOTCMD=0): the play
+    # image as it was before the switch; and two values the Makefile refuses.
+    ("reva_play_nobootcmd", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_BOOTCMD=0"]),
+    ("reva_play_bootcmd2_refused", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_BOOTCMD=2"]),
+    ("reva_play_bootcmd_empty_refused", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_BOOTCMD="]),
     ("coupon_play", ["SHELL_PANEL_SCAN=1", "SHELL_COUPON_PROBE=1"]),
     # The remote CPU hunt's listener image (plan 2026-10-29-cpu-hunt-remote):
     # workloads, gestures and the overrun guard, its tables in QSPI.
@@ -119,6 +124,8 @@ IMAGES = [
 
 # Images whose build must be refused, and the refusal's text (name -> text).
 EXPECT_REFUSED = {
+    "reva_play_bootcmd2_refused": "SHELL_BOOTCMD must be 0 or 1",
+    "reva_play_bootcmd_empty_refused": "SHELL_BOOTCMD must be 0 or 1",
     "reva_remote_fm2_refused": "math guard: isfinite guard folded away in",
     "reva_sd_no_listener_refused": "SHELL_SD=1 needs SHELL_REMOTE=1",
     "reva_sd_probe_no_sd_refused": "SHELL_SD_PROBE=burst needs SHELL_SD=1",
@@ -202,6 +209,31 @@ def symbol_problems(nm_text, must_have, must_lack):
             if n.startswith(bad):
                 out.append("linked " + n)
     return out
+
+# The boot-only listener (SHELL_BOOTCMD, default 1; shell/Makefile): the play
+# image links remote_listen.cpp's start and its fault entry beside the save
+# path, and none of the remote CPU hunt's workload code (workload_run.cpp: the
+# overrun guard, the runs). With SHELL_BOOTCMD=0 the play image is the one it
+# was: the save path and neither listener half. The default image is no play
+# image, so the switch must leave it alone. The listener image must link both
+# lists: the canary that the names below are spelled as nm prints them, so no
+# must-not on them can pass on a misspelling. Added here, not in the table
+# above, so that table's rows stay as they are.
+BOOT_PATH = [
+    "shell::remote_listen_start(",
+    "shell::remote_install_fault_vectors(",
+    "shell_remote_fault_entry",
+]
+WORKLOAD_PATH = [
+    "shell::OverrunGuard::",
+    "shell::WorkloadRun::",
+]
+SYMBOL_RULES["reva_play"] = (SYMBOL_RULES["reva_play"][0] + BOOT_PATH,
+                             SYMBOL_RULES["reva_play"][1] + WORKLOAD_PATH)
+SYMBOL_RULES["reva_remote"] = (SYMBOL_RULES["reva_remote"][0] + BOOT_PATH + WORKLOAD_PATH,
+                               SYMBOL_RULES["reva_remote"][1])
+SYMBOL_RULES["reva_play_nobootcmd"] = (SAVE_PATH, BOOT_PATH + WORKLOAD_PATH)
+SYMBOL_RULES["default"] = ([], BOOT_PATH)
 
 TOOLCHAIN_BIN = os.environ.get("DAISY_TOOLCHAIN_BIN",
                                r"C:\Program Files\DaisyToolchain\bin")

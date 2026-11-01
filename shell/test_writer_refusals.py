@@ -45,6 +45,8 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # --- fast_math / remote / sd: OUTPUT {values} [STALE_OBJECT...] --------
     for script, good, bad in (("write_shell_fast_math.py", "1", "3"),
+                              # SHELL_BOOTCMD's effective value (shell/Makefile).
+                              ("write_shell_bootcmd.py", "1", "2"),
                               ("write_shell_remote.py", "1", "2"),
                               ("write_shell_sd.py", "1", "2"),
                               ("write_shell_sd_probe.py", "burst", "nope")):

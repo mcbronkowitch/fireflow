@@ -4252,6 +4252,14 @@ over USB on Rev A #1 (remote measurement and listener images).
 - **Not reached:** the 880 000 stop criterion; 9 of 20 are still above it,
   the worst three within 7 k of the click line. The remaining lever is
   per-engine kernel work (SYNTH, WAVE, SAMPLER; §4 row 11), its own round.
+- **Reflash without hands (2026-11-01, `4f50d99d`).** The play image now
+  answers BOOT and PING over USB (`SHELL_BOOTCMD`, default 1, only with
+  `SHELL_PANEL_SCAN=1` and without `SHELL_REMOTE`); every other command is
+  dropped, and a fault or a failed ITCM load drops into the bootloader. On
+  Rev A #1: `tools/remote_run.py boot` reached DFU with no hands, the reflash
+  confirmed its build, and the persisted patch came back (`seq=581`,
+  `take=1`). `SHELL_BOOTCMD=0` builds the old play image. See
+  `shell/README.md`.
 
 **2026-10-28 — panel-state persistence: Rev A wakes up as it was switched off ✅ built, measured on Rev A #1, merged.**
 Spec `docs/superpowers/specs/2026-10-28-panel-state-persistence-design.md`,
