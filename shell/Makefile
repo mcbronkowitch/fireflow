@@ -451,6 +451,29 @@ play image's report loop)
 endif
 endif
 
+# The boot-only listener in the play image: BOOT and PING on the CDC port,
+# handled in the USB interrupt by remote_listen.cpp as the full listener does,
+# and a failed itcm_load() or a fault entering the bootloader -- so the play
+# image can be reflashed without a hand on BOOT and RESET (Rev A has no SWD).
+# Nothing else of the listener: no workloads, no overrun guard, no command
+# poll in the callback, and the panel-state saves stay as they are. Default
+# ON. It acts only in a play image (SHELL_PANEL_SCAN=1) without SHELL_REMOTE,
+# whose full listener already does all of it; SHELL_BOOTCMD_ON is that
+# effective value, and it is what write_shell_bootcmd.py stamps into
+# shell_bootcmd.h, so every other image compiles as before the switch existed.
+# SHELL_BOOTCMD=0 gives back the play image without it.
+SHELL_BOOTCMD ?= 1
+
+ifneq ($(words $(SHELL_BOOTCMD))-$(filter $(SHELL_BOOTCMD),0 1),1-$(SHELL_BOOTCMD))
+$(error SHELL_BOOTCMD must be 0 or 1)
+endif
+
+ifeq ($(SHELL_BOOTCMD)$(SHELL_PANEL_SCAN)$(SHELL_REMOTE),110)
+SHELL_BOOTCMD_ON := 1
+else
+SHELL_BOOTCMD_ON := 0
+endif
+
 # The measurement image of the remote CPU hunt (spec
 # 2026-10-29-cpu-hunt-remote-design.md sections 5.3-5.5, plan Task 6): the
 # listener image plus the callback's section split (SHELL_SEC, SHELL_SECMAX),
@@ -583,6 +606,11 @@ CPP_SOURCES += remote_cmd.cpp remote_listen.cpp
 # The workloads, gestures and overrun guard (plan Task 5). Its generated tables
 # (generated_workloads.h) go to .qspi_rodata, i.e. QSPI (qspi_cold.ld).
 CPP_SOURCES += workload_run.cpp
+endif
+# The boot-only listener's two files, unchanged (SHELL_BOOTCMD above): its
+# callers in main.cpp and panel_scan.cpp sit under #if SHELL_BOOTCMD.
+ifeq ($(SHELL_BOOTCMD_ON),1)
+CPP_SOURCES += remote_cmd.cpp remote_listen.cpp
 endif
 
 # The card test and the stream, in SHELL_SD images alone; its callers in
@@ -810,6 +838,7 @@ SWITCH_HEADERS := \
   $(shell python write_shell_persist_stress.py $(BUILD_DIR)/shell_persist_stress.h $(SHELL_PERSIST_STRESS) $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o $(BUILD_DIR)/persist_flash.o) \
   $(shell python write_shell_itcm.py $(BUILD_DIR)/shell_itcm.h $(SHELL_ITCM) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_remote.py $(BUILD_DIR)/shell_remote.h $(SHELL_REMOTE) $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o) \
+  $(shell python write_shell_bootcmd.py $(BUILD_DIR)/shell_bootcmd.h $(SHELL_BOOTCMD_ON) $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o) \
   $(shell python write_shell_remote_measure.py $(BUILD_DIR)/shell_remote_measure.h $(SHELL_REMOTE_MEASURE) $(BUILD_DIR)) \
   $(shell python write_shell_sd.py $(BUILD_DIR)/shell_sd.h $(SHELL_SD) $(BUILD_DIR)/panel_scan.o) \
   $(shell python write_shell_fast_math.py $(BUILD_DIR)/shell_fast_math.h $(SHELL_FAST_MATH) $(ENGINE_OBJECTS)) \
@@ -833,6 +862,7 @@ $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/wait_probe.o: $(BUILD_DIR)/shell_pot_ro
 $(BUILD_DIR)/pot_report.o: $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/remote_listen.o: $(BUILD_DIR)/shell_git_hash.h
 $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o: $(BUILD_DIR)/shell_remote.h
+$(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_bootcmd.h
 # The objects that read the header; the writer deletes every object on a flip
 # anyway (the probe defines reach the engine), so this edge is the ordering.
 $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_remote_measure.h

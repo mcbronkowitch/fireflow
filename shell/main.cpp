@@ -18,6 +18,7 @@
 #include "shell_scan_check.h"
 #include "shell_panel_scan.h"
 #include "shell_remote.h"
+#include "shell_bootcmd.h"
 #include "shell_remote_measure.h"
 #include "hw/board.h"
 #include "sdram_mem.h"
@@ -65,7 +66,10 @@ volatile uint32_t g_block_tick = 0;
 #include "scan_check.h"
 #endif
 
-#if SHELL_REMOTE
+// SHELL_BOOTCMD: the play image's boot-only listener (shell/Makefile), which
+// takes the fault vectors and the bootloader on a failed itcm_load() from the
+// full listener and nothing else.
+#if SHELL_REMOTE || SHELL_BOOTCMD
 #include "remote_listen.h"
 #endif
 
@@ -296,7 +300,7 @@ static void adc_use_measured_sampling_time(bench::Board& board)
 
 int main(void)
 {
-#if SHELL_REMOTE
+#if SHELL_REMOTE || SHELL_BOOTCMD
     // FIRST, before board_init(): from here on a hard fault (or MemManage,
     // BusFault, UsageFault) enters the Daisy bootloader instead of libDaisy's
     // HardFault_Handler, whose BKPT locks a board without a debugger up for
@@ -318,11 +322,12 @@ int main(void)
     // QSPI image belongs to another build: running would jump into foreign
     // code, so the board blinks its LED at 5 Hz instead, for ever. The cure
     // is flashing this build's shell-qspi.bin, then its shell-sram.bin.
-    // With SHELL_REMOTE the board goes to the bootloader instead and waits
-    // there for that flash, so a mismatched pair needs no hand on BOOT.
+    // With SHELL_REMOTE or SHELL_BOOTCMD the board goes to the bootloader
+    // instead and waits there for that flash, so a mismatched pair needs no
+    // hand on BOOT.
     if(!shell::itcm_load())
     {
-#if SHELL_REMOTE
+#if SHELL_REMOTE || SHELL_BOOTCMD
         shell::remote_enter_bootloader();
 #endif
         while(1)
