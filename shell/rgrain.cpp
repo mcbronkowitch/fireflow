@@ -24,9 +24,10 @@ constexpr float  kNoiseAmp  = 0.05f;
 // The sample in SDRAM, where the sampler's own recordings live (sdram_mem.cpp):
 // 768 KB, NOLOAD, so rgrain_init() writes every frame before anything reads it.
 spky::SampleBuffer::Frame DSY_SDRAM_BSS g_frames[kFrames];
-// The buffer object and the grains are plain globals in AXI SRAM, like the
-// sampler's: only the frames go to SDRAM (sdram_mem.cpp says why a constructor
-// must not run there).
+// The buffer object and the grains are plain globals; Grain's non-zero default
+// initializers put them in DTCM .data, not in AXI .bss as the sampler's are
+// (about 1 % cheaper on the slope, Task 9 review). Only the frames go to SDRAM
+// (sdram_mem.cpp says why a constructor must not run there).
 spky::SampleBuffer g_buf;
 spky::Grain        g_grains[kRgrainGrains];
 
