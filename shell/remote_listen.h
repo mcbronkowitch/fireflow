@@ -2,7 +2,8 @@
 
 // The remote command channel's board half (CPU hunt, 2026-10-29; spec
 // docs/superpowers/specs/2026-10-29-cpu-hunt-remote-design.md section 5.3).
-// Built only with SHELL_REMOTE=1 (shell/Makefile). Rev A has no SWD pins, so
+// Built with SHELL_REMOTE=1, and with SHELL_BOOTCMD as the play image's
+// boot-only listener (shell/Makefile). Rev A has no SWD pins, so
 // software is the only way back to the bootloader that does not need a hand
 // on BOOT and RESET; this file is that way, and it has to work in the states
 // a measurement image gets into:

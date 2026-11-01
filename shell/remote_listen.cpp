@@ -1,5 +1,6 @@
-// The SHELL_REMOTE listener: see remote_listen.h. Built only with
-// SHELL_REMOTE=1, so this file reads no switch header.
+// The SHELL_REMOTE listener: see remote_listen.h. Built with SHELL_REMOTE=1
+// and, unchanged, as the play image's boot-only listener (SHELL_BOOTCMD); the
+// callers choose what it does, so this file reads no switch header.
 #include "remote_listen.h"
 
 #include <cstdint>
