@@ -147,18 +147,19 @@ const volatile uint32_t* g_win = nullptr;
 #endif
 
 #if SD_PROBE_TAIL
-// ---- Build constants of the tail modes. The board session sets these from
-// A1's result row, in one commit, before the C1 / C2 run (spec section 5: C
-// runs after A, in the transfer pattern A settles on). A1 has not run yet:
-// until it has, the transfers are back to back and the hold is off.
+// ---- Build constants of the tail modes, set from A1's result row (spec
+// section 5: C runs after A, in the transfer pattern A settles on). A1,
+// 2026-11-01 (docs/hardware/sd-use-cases-measured.md section 3): bursts with
+// the hold and no tail keep all 73 pots at the idle floor at 384 and
+// 768 KB/s, so C runs in bursts, the hold on, tail 0.
 //
 // true: the transfers are A1's bursts -- one 32 KB transfer per
 // kTailBurstMs (the 41 ms phases, ~799 KB/s), the pot hold on with
 // kTailHoldTail blocks of tail. false: back to back, no hold. (rtail only for
 // the bursts; wtail's w16 and w24 keep their own rate periods and just get the
 // hold, wmax is back to back and unheld either way.)
-constexpr bool     kTailBurst    = false;
-constexpr uint8_t  kTailHoldTail = 1;    // A1's smallest passing tail; unused while !kTailBurst
+constexpr bool     kTailBurst    = true;
+constexpr uint8_t  kTailHoldTail = 0;    // A1's smallest passing tail
 constexpr uint32_t kTailBurstMs  = 41;
 #endif
 
