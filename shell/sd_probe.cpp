@@ -1267,6 +1267,28 @@ void op_epoch() { g_pass_epoch = g_pass_epoch + 1u; }
 
 uint32_t us_since(uint32_t c0) { return (cycles_now() - c0) / kCoreMhz; }
 
+// A long operation timed in DWT cycles: each lap is a 32-bit delta, far below
+// the counter's 8.9 s wrap (one piece, one open, one close), and the laps sum
+// in 64 bits, so an operation of any length counts. System::GetNow() is not
+// used for this: it runs slow while audio plays (docs/gotchas.md).
+struct Lap
+{
+    uint64_t cyc  = 0;
+    uint32_t last = 0;
+
+    void start() { last = cycles_now(); }
+    void lap()
+    {
+        const uint32_t now = cycles_now();
+        cyc += static_cast<uint32_t>(now - last);
+        last = now;
+    }
+    uint32_t ms() const
+    {
+        return static_cast<uint32_t>(cyc / (static_cast<uint64_t>(kCoreMhz) * 1000u));
+    }
+};
+
 const char* op_path(const char* name)
 {
     snprintf(g_path, sizeof g_path, "%s%s", g_fs.fsi.GetSDPath(), name);
@@ -1293,9 +1315,10 @@ void op_begin()
 
 #if SHELL_SD_PROBE_BANK || SHELL_SD_PROBE_BUFFER
 // n bytes from src into the open file in kOpChunk pieces; worst gets the
-// slowest f_write. A FRESULT, or -2 for a short write. (patch moves one
+// slowest f_write; lap, when given, is lapped after each piece. A FRESULT, or
+// -2 for a short write. (patch moves one
 // record, below a piece, in single calls.)
-int op_write(const uint8_t* src, uint32_t n, uint32_t& worst)
+int op_write(const uint8_t* src, uint32_t n, uint32_t& worst, Lap* lap = nullptr)
 {
     for(uint32_t off = 0; off < n; off += kOpChunk)
     {
@@ -1304,6 +1327,8 @@ int op_write(const uint8_t* src, uint32_t n, uint32_t& worst)
         const uint32_t c0  = cycles_now();
         const FRESULT  fr  = f_write(&g_fs.file, src + off, len, &bw);
         const uint32_t dt  = us_since(c0);
+        if(lap)
+            lap->lap();
         if(dt > worst)
             worst = dt;
         if(fr != FR_OK)
@@ -1316,12 +1341,14 @@ int op_write(const uint8_t* src, uint32_t n, uint32_t& worst)
 
 // One kOpChunk piece (or the file's shorter last one) into dst, timed into
 // worst. A FRESULT, or -2 for a short read.
-int op_read_piece(uint8_t* dst, UINT len, uint32_t& worst)
+int op_read_piece(uint8_t* dst, UINT len, uint32_t& worst, Lap* lap = nullptr)
 {
     UINT           br = 0;
     const uint32_t c0 = cycles_now();
     const FRESULT  fr = f_read(&g_fs.file, dst, len, &br);
     const uint32_t dt = us_since(c0);
+    if(lap)
+        lap->lap();
     if(dt > worst)
         worst = dt;
     if(fr != FR_OK)
@@ -1504,8 +1531,9 @@ void bank_pass(bench::Board& hw)
 //
 // Line (longest: ms 6 digits, worst_us 7, held 5, fr 2, off 8 -- 91 bytes):
 //   SHELL_SD_B fmt=<f32|s16> op=<save|load> ms= worst_us= held= fr= cmp=<ok|bad|-> off=
-// ms is f_open to f_close (System::GetNow(): an operation may outlast the
-// cycle counter's 8.9 s wrap), worst_us the slowest single f_read / f_write;
+// ms is f_open to f_close (DWT cycles summed in 64 bits per piece, Lap: an
+// operation may outlast the counter's 8.9 s wrap, and System::GetNow() runs
+// slow while audio plays), worst_us the slowest single f_read / f_write;
 // cmp is - for a save and for a load that failed; off is the first bad byte
 // of the file (0 when none).
 //
@@ -1556,16 +1584,19 @@ struct BufOp
     int         fr    = 0;
     Check       cmp   = kSkip;   // kSkip prints as "-"
     uint32_t    off   = 0;
+    Lap         t;   // the operation's time, from f_open to f_close
 };
 
-// Opens the file, runs `body` (which returns 0 or the failure), closes; all
-// marked, the time from the open to the close's return in ms.
+// Opens the file, runs `body` (which returns 0 or the failure; it calls
+// r.lap() after each piece), closes; all marked, the time from the open to the
+// close's return in ms, from the cycle counter.
 template <typename Body>
 void buf_file(BufOp& r, const char* name, BYTE mode, Body body)
 {
-    const uint32_t t0 = daisy::System::GetNow();
-    OpMark         m;
+    OpMark m;
+    r.t.start();
     r.fr = f_open(&g_fs.file, op_path(name), mode);
+    r.t.lap();
     if(r.fr == FR_OK)
     {
         r.fr             = body();
@@ -1573,7 +1604,8 @@ void buf_file(BufOp& r, const char* name, BYTE mode, Body body)
         if(r.fr == 0)
             r.fr = static_cast<int>(cr);
     }
-    r.ms = daisy::System::GetNow() - t0;
+    r.t.lap();
+    r.ms = r.t.ms();
 }
 
 void buf_f32_save(BufOp& r)
@@ -1582,7 +1614,7 @@ void buf_f32_save(BufOp& r)
         g_scratch[i] = pattern(i);
     op_epoch();
     buf_file(r, kBufF32, FA_CREATE_ALWAYS | FA_WRITE, [&r] {
-        return op_write(reinterpret_cast<const uint8_t*>(g_scratch), kF32Bytes, r.worst);
+        return op_write(reinterpret_cast<const uint8_t*>(g_scratch), kF32Bytes, r.worst, &r.t);
     });
 }
 
@@ -1595,7 +1627,7 @@ void buf_f32_load(BufOp& r)
         for(uint32_t off = 0; off < kF32Bytes; off += kOpChunk)
         {
             const UINT len = kF32Bytes - off < kOpChunk ? kF32Bytes - off : kOpChunk;
-            const int  fr  = op_read_piece(dst + off, len, r.worst);
+            const int  fr  = op_read_piece(dst + off, len, r.worst, &r.t);
             if(fr != 0)
                 return fr;
         }
@@ -1625,7 +1657,7 @@ void buf_s16_save(BufOp& r)
                 const uint32_t hi = static_cast<uint16_t>(s16_quant(w2f(g_scratch[w0 + 2u * j + 1u])));
                 g_buf[j]          = lo | (hi << 16);
             }
-            const int fr = op_write(reinterpret_cast<const uint8_t*>(g_buf), len, r.worst);
+            const int fr = op_write(reinterpret_cast<const uint8_t*>(g_buf), len, r.worst, &r.t);
             if(fr != 0)
                 return fr;
         }
@@ -1641,7 +1673,7 @@ void buf_s16_load(BufOp& r)
         for(uint32_t off = 0; off < kS16Bytes; off += kOpChunk)
         {
             const UINT len = kS16Bytes - off < kOpChunk ? kS16Bytes - off : kOpChunk;
-            const int  fr  = op_read_piece(reinterpret_cast<uint8_t*>(g_buf), len, r.worst);
+            const int  fr  = op_read_piece(reinterpret_cast<uint8_t*>(g_buf), len, r.worst, &r.t);
             if(fr != 0)
                 return fr;
             const uint32_t w0 = off / 2u;

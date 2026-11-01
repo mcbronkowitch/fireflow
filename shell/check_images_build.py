@@ -229,10 +229,10 @@ WORKLOAD_PATH = [
     "shell::WorkloadRun::",
 ]
 SYMBOL_RULES["reva_play"] = (SYMBOL_RULES["reva_play"][0] + BOOT_PATH,
-                             SYMBOL_RULES["reva_play"][1] + WORKLOAD_PATH)
+                             SYMBOL_RULES["reva_play"][1] + WORKLOAD_PATH + RGRAIN_PATH)
 SYMBOL_RULES["reva_remote"] = (SYMBOL_RULES["reva_remote"][0] + BOOT_PATH + WORKLOAD_PATH,
                                SYMBOL_RULES["reva_remote"][1])
-SYMBOL_RULES["reva_play_nobootcmd"] = (SAVE_PATH, BOOT_PATH + WORKLOAD_PATH)
+SYMBOL_RULES["reva_play_nobootcmd"] = (SAVE_PATH, BOOT_PATH + WORKLOAD_PATH + RGRAIN_PATH)
 SYMBOL_RULES["default"] = ([], BOOT_PATH)
 
 TOOLCHAIN_BIN = os.environ.get("DAISY_TOOLCHAIN_BIN",

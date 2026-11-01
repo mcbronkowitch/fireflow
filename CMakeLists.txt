@@ -872,7 +872,7 @@ add_test(NAME shell_writer_refusals
 # grain layer's image (it must link the layer, the plain listener must not)
 # with its refusal beside the SD image, and the SD bank, buffer, patch and
 # duplex probe images (the list is IMAGES in
-# shell/check_images_build.py, twenty-two entries at the time of writing). Each is a clean ARM build in its own directory under the
+# shell/check_images_build.py, twenty-five entries at the time of writing). Each is a clean ARM build in its own directory under the
 # build tree (shell/build is not touched), with SRAM_EXEC use in the output.
 # Nothing else in ctest compiles shell/, which is how the Rev A play image
 # stayed broken behind a green suite on 2026-10-09 (450eed36). Skipped, not
