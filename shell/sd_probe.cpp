@@ -25,16 +25,18 @@
 #endif
 // The modes that mark their transfers for the pot hold (g_sd_busy; the
 // callback side, sd_hold_block()). In the tail modes the hold runs only when
-// kTailBurst says the transfers are A1's bursts; the operation modes always
-// hold, with A1's tail of 0 (sd_hold_tail()).
-#if SHELL_SD_PROBE_BURST || SD_PROBE_TAIL || SD_PROBE_OPS
+// kTailBurst says the transfers are A1's bursts; the operation modes and the
+// duplex mode always hold, with A1's tail of 0 (sd_hold_tail()).
+#if SHELL_SD_PROBE_BURST || SD_PROBE_TAIL || SD_PROBE_OPS || SHELL_SD_PROBE_DUPLEX
 #define SD_PROBE_HOLD 1
 #else
 #define SD_PROBE_HOLD 0
 #endif
 
-#if SHELL_SD_PROBE_BANK
+#if SHELL_SD_PROBE_BANK || SHELL_SD_PROBE_DUPLEX
 #include <atomic>
+#endif
+#if SHELL_SD_PROBE_BANK
 #include "synth/wt_bank.h"
 #endif
 #if SHELL_SD_PROBE_BUFFER
@@ -1854,6 +1856,404 @@ void sd_bank_block()
 #endif
 #endif // SD_PROBE_OPS
 
+#if SHELL_SD_PROBE_DUPLEX
+// Spec 2026-10-31-sd-use-cases-tests-design.md section 5, D3: idea 2 (a
+// sample streamed from the card) and master recording, end to end and at
+// once, through two rings in SDRAM. Every block the audio callback
+// (sd_duplex_block(), from panel_scan_gate()) takes 96 stereo float frames
+// (768 B, 384 KB/s) out of the read ring and sums them into a volatile
+// checksum -- not played -- and puts the master output, after the boot gate, as
+// 24-bit packed stereo (576 B, 288 KB/s) into the write ring. A block the read
+// ring cannot feed in full is an underrun, one the write ring has no room for
+// an overrun; either is skipped whole, not done in part.
+//
+// The foreground keeps both rings going for the whole pass: it refills the
+// read ring from FFSDBIG.DAT (512 MiB, left on the card by rtail's fill; it
+// is not written here, and a missing file stops the mode with fr=4,
+// FR_NO_FILE) with one 16 KB read whenever the ring is below half, and drains
+// the write ring to FFREC.DAT (truncated at the start) in 16 KB writes while
+// at least 16 KB is queued; a refill goes first, an underrun is the one heard.
+// Both files wrap: the read at the file's last whole chunk, the record before
+// the FAT32 4 GiB limit. One FatFs and one bus serve both, so a stalled write
+// starves the read ring too -- which is what the test is for. The first pass
+// opens the files and fills the read ring before the callback starts taking
+// (read_sd.py does not judge that pass's window and frame).
+//
+// Every card access, f_open, f_read, f_write, f_lseek and f_close, is marked
+// for the pot hold (DxMark, as OpMark and TailMark) with A1's tail of 0 (A1
+// passed: the hold with tail 0, not back to back).
+//
+// Line, every pass (longest realistic: w 5 digits, under and over 4 -- a pass
+// that a 2 s card stall stretched counts ~1 000 blocks --, rfill 5, wfill 7,
+// the worst calls 7, held 4, fr 2 -- 119 of the 128 bytes):
+//   SHELL_SD_D w= under= over= rfill= wfill= worst_r_us= worst_w_us= held= fr=
+// w: the raw window counter at the pass's start; under / over: blocks of this
+// pass; rfill / wfill: the read ring's lowest and the write ring's highest
+// fill this pass in bytes, as the callback left them after its take and put;
+// worst_r_us / worst_w_us: the slowest f_read / f_write of the pass; held: the
+// blocks the pot hold dropped in it; fr: the first failure, sticky (a FRESULT,
+// -2 a short transfer, -3 no card test to start from). From then on nothing is
+// transferred, the callback stops taking and counting, and the line keeps
+// saying why.
+namespace {
+
+// 16 KB per f_read and f_write, not 32 KB: A3 (docs/hardware/
+// sd-use-cases-measured.md section 4) measured 32 KB transfers costing the
+// audio callback more than 16 KB ones on every workload.
+constexpr uint32_t kDxChunk = 16u * 1024u;
+// The rings, from C1/C2, board session 2, 2026-11-01 (docs/hardware/
+// sd-use-cases-measured.md, C1/C2 rows). Read: C1's sequential read tail --
+// both runs printed a 32 KB ring at 384 KB/s (worst f_read 24.5 ms).
+constexpr uint32_t kReadRing = 32u * 1024u;
+// Write: the largest ring C2 printed over all write patterns and runs -- one
+// ~2 s card stall in a 16-bit run (worst f_write 1 969 428 us). A card's
+// garbage-collection stall does not depend on the sample format, so it can hit
+// these 24-bit writes too.
+constexpr uint32_t kWriteRing = 1152u * 1024u;
+// One block: 96 frames (48 kHz / 500 blocks a second), float stereo out of
+// the read ring, 24-bit stereo into the write ring.
+constexpr uint32_t kDxFrames     = 96;
+constexpr uint32_t kDxReadBytes  = kDxFrames * 2u * 4u;   // 768
+constexpr uint32_t kDxWriteBytes = kDxFrames * 2u * 3u;   // 576
+// Refills and drains move whole chunks, so neither ever wraps inside a ring.
+static_assert(kReadRing % kDxChunk == 0 && kWriteRing % kDxChunk == 0,
+              "a ring holds whole chunks");
+static_assert(kReadRing / 2u >= kDxChunk, "a refill below half fits");
+static_assert(kDxChunk <= kChunk, "g_buf holds one chunk");
+// FAT32 files end at 4 GiB - 1: the record wraps to 0 before the last chunk
+// that fits (about 4 h at 288 KB/s; the 10 min run never gets there).
+constexpr uint32_t kRecWrap = 0xFFFFFFFFu - (0xFFFFFFFFu % kDxChunk);
+
+const char kDxReadName[] = "FFSDBIG.DAT";
+const char kDxRecName[]  = "FFREC.DAT";
+
+// One byte ring, one producer and one consumer, on one core: the callback is
+// an interrupt of the foreground, so a compiler fence between the bytes and
+// the position that publishes or frees them is the whole ordering. put and
+// take run over [0, 2 x size) (the mirror trick), so a full ring and an empty
+// one differ; each is written by its own side only.
+struct DxRing
+{
+    uint8_t*          buf;
+    uint32_t          size;
+    volatile uint32_t put;    // the producer's
+    volatile uint32_t take;   // the consumer's
+};
+
+alignas(32) uint8_t DSY_SDRAM_BSS g_rring_buf[kReadRing];
+alignas(32) uint8_t DSY_SDRAM_BSS g_wring_buf[kWriteRing];
+DxRing g_rring = {g_rring_buf, kReadRing, 0, 0};    // foreground puts, callback takes
+DxRing g_wring = {g_wring_buf, kWriteRing, 0, 0};   // callback puts, foreground takes
+
+inline uint32_t dx_fill(const DxRing& r)
+{
+    const uint32_t p = r.put, t = r.take;
+    return p >= t ? p - t : p + 2u * r.size - t;
+}
+inline uint32_t dx_adv(const DxRing& r, uint32_t x, uint32_t n)
+{
+    x += n;
+    return x >= 2u * r.size ? x - 2u * r.size : x;
+}
+inline uint32_t dx_at(const DxRing& r, uint32_t x) { return x >= r.size ? x - r.size : x; }
+
+// n bytes in at the producer's end; the caller has checked the room.
+void dx_put(DxRing& r, const void* src, uint32_t n)
+{
+    const uint32_t at = dx_at(r, r.put);
+    const uint32_t a  = r.size - at < n ? r.size - at : n;
+    std::memcpy(r.buf + at, src, a);
+    std::memcpy(r.buf, static_cast<const uint8_t*>(src) + a, n - a);
+    std::atomic_signal_fence(std::memory_order_seq_cst);   // the bytes, then the position
+    r.put = dx_adv(r, r.put, n);
+}
+// n bytes out at the consumer's end, not yet freed; the caller has checked
+// the fill.
+void dx_peek(const DxRing& r, void* dst, uint32_t n)
+{
+    const uint32_t at = dx_at(r, r.take);
+    const uint32_t a  = r.size - at < n ? r.size - at : n;
+    std::memcpy(dst, r.buf + at, a);
+    std::memcpy(static_cast<uint8_t*>(dst) + a, r.buf, n - a);
+}
+void dx_release(DxRing& r, uint32_t n)
+{
+    std::atomic_signal_fence(std::memory_order_seq_cst);   // read out, then freed
+    r.take = dx_adv(r, r.take, n);
+}
+
+// The record file's FIL beside g_fs.file (which reads FFSDBIG.DAT), in AXI
+// SRAM and on its own 32-byte lines for the same reason as FsBlock: its
+// sector buffer is a DMA target.
+struct alignas(32) DxRec
+{
+    FIL fil;
+};
+DxRec g_rec;
+
+// Every card access of this mode, as OpMark: busy for the call, seen again
+// when it returns.
+struct DxMark
+{
+    DxMark()
+    {
+        g_sd_seen = true;
+        g_sd_busy = true;
+    }
+    ~DxMark()
+    {
+        g_sd_seen = true;
+        g_sd_busy = false;
+    }
+};
+
+struct DxRun
+{
+    bool     begun      = false;
+    int      fr         = 0;   // the first failure, sticky
+    FSIZE_t  read_end   = 0;   // FFSDBIG.DAT's size, down to a whole chunk
+    uint32_t under_said = 0;   // g_dx_under at the last line
+    uint32_t over_said  = 0;
+};
+DxRun g_dx;
+
+// Set by the foreground once the files are open and the read ring is full;
+// cleared on a failure, after which the callback neither takes nor counts.
+volatile bool g_dx_run = false;
+// The callback's: since the start; the line prints the difference.
+volatile uint32_t g_dx_under = 0;
+volatile uint32_t g_dx_over  = 0;
+// The callback's, per pass: started over at the first block that sees a new
+// g_dx_epoch (bumped by the foreground after it has read them, as the hold's
+// counters). The start value differs from every epoch's, so the first block
+// starts them from its own fills, not from 0.
+volatile uint32_t g_dx_rmin     = 0;
+volatile uint32_t g_dx_wmax     = 0;
+volatile uint32_t g_dx_epoch    = 0;
+uint32_t          g_dx_cb_epoch = 0xFFFFFFFFu;
+// The frames taken, summed as words: the file holds the bring-up's pattern,
+// whose words read as floats include NaNs and denormals, and the point is the
+// read out of SDRAM, not the add.
+volatile uint32_t g_dx_sum = 0;
+// The callback's block buffers (in .bss, not on the interrupt's stack).
+uint32_t g_dx_frames[kDxReadBytes / 4u];
+uint8_t  g_dx_pack[kDxWriteBytes];
+
+// One sample as 24-bit little-endian, clamped to [-1, 1] first (a NaN goes
+// to +1); returns the next byte.
+inline uint8_t* dx_pack24(uint8_t* p, float x)
+{
+    x               = x < 1.f ? x : 1.f;
+    x               = x > -1.f ? x : -1.f;
+    const int32_t v = static_cast<int32_t>(x * 8388607.f);
+    p[0]            = static_cast<uint8_t>(v);
+    p[1]            = static_cast<uint8_t>(v >> 8);
+    p[2]            = static_cast<uint8_t>(v >> 16);
+    return p + 3;
+}
+
+void dx_fail(int fr)
+{
+    if(g_dx.fr == 0)
+        g_dx.fr = fr;
+    g_dx_run = false;
+}
+
+// One chunk of FFSDBIG.DAT into the read ring, through g_buf (the driver's
+// DMA and cache maintenance want a 32-byte-aligned buffer of its own).
+void dx_refill(uint32_t& worst)
+{
+    FRESULT  fr = FR_OK;
+    UINT     br = 0;
+    uint32_t dt = 0;
+    {
+        DxMark m;
+        if(f_tell(&g_fs.file) + kDxChunk > g_dx.read_end)
+            fr = f_lseek(&g_fs.file, 0);
+        if(fr == FR_OK)
+        {
+            const uint32_t c0 = cycles_now();
+            fr                = f_read(&g_fs.file, g_buf, kDxChunk, &br);
+            dt                = (cycles_now() - c0) / kCoreMhz;
+        }
+    }
+    if(dt > worst)
+        worst = dt;
+    if(fr != FR_OK || br != kDxChunk)
+    {
+        dx_fail(fr != FR_OK ? static_cast<int>(fr) : -2);
+        return;
+    }
+    dx_put(g_rring, g_buf, kDxChunk);
+}
+
+// The write ring's oldest chunk to FFREC.DAT, through g_buf. The chunk is
+// freed only when the f_write has returned, as a recorder that writes straight
+// out of the ring would free it.
+void dx_drain(uint32_t& worst)
+{
+    dx_peek(g_wring, g_buf, kDxChunk);
+    FRESULT  fr = FR_OK;
+    UINT     bw = 0;
+    uint32_t dt = 0;
+    {
+        DxMark m;
+        if(f_tell(&g_rec.fil) >= kRecWrap)
+            fr = f_lseek(&g_rec.fil, 0);
+        if(fr == FR_OK)
+        {
+            const uint32_t c0 = cycles_now();
+            fr                = f_write(&g_rec.fil, g_buf, kDxChunk, &bw);
+            dt                = (cycles_now() - c0) / kCoreMhz;
+        }
+    }
+    if(dt > worst)
+        worst = dt;
+    if(fr != FR_OK || bw != kDxChunk)
+    {
+        dx_fail(fr != FR_OK ? static_cast<int>(fr) : -2);
+        return;
+    }
+    dx_release(g_wring, kDxChunk);
+}
+
+// The first pass: the bring-up's test file closed, both files opened, the
+// read ring filled, then the callback starts. No card test to start from is
+// fr -3, as in the other modes.
+void dx_begin(uint32_t& worst_r)
+{
+    g_dx.begun = true;
+    if(!g_res.ready)
+    {
+        dx_fail(-3);
+        return;
+    }
+    char    path[24];
+    FRESULT fr;
+    snprintf(path, sizeof path, "%s%s", g_fs.fsi.GetSDPath(), kDxReadName);
+    {
+        DxMark m;
+        f_close(&g_fs.file);   // the bring-up's test file, open for the stream
+        g_res.ready = false;
+        fr          = f_open(&g_fs.file, path, FA_READ);
+    }
+    if(fr != FR_OK)
+    {
+        dx_fail(static_cast<int>(fr));   // FR_NO_FILE: rtail never filled this card
+        return;
+    }
+    const FSIZE_t size = f_size(&g_fs.file);
+    g_dx.read_end      = size - size % kDxChunk;
+    snprintf(path, sizeof path, "%s%s", g_fs.fsi.GetSDPath(), kDxRecName);
+    {
+        DxMark m;
+        fr = f_open(&g_rec.fil, path, FA_CREATE_ALWAYS | FA_WRITE);
+    }
+    if(fr != FR_OK)
+    {
+        dx_fail(static_cast<int>(fr));
+        return;
+    }
+    while(g_dx.fr == 0 && dx_fill(g_rring) < kReadRing)
+        dx_refill(worst_r);
+    if(g_dx.fr == 0)
+        g_dx_run = true;
+}
+
+} // namespace
+
+void sd_duplex_block(const float* l, const float* r, size_t n)
+{
+    if(!g_dx_run)
+        return;
+    if(n > kDxFrames)
+        n = kDxFrames;
+    // The stream: n frames out of the read ring, or an underrun.
+    const uint32_t need_r = static_cast<uint32_t>(n) * 8u;
+    if(dx_fill(g_rring) >= need_r)
+    {
+        dx_peek(g_rring, g_dx_frames, need_r);
+        dx_release(g_rring, need_r);
+        uint32_t s = g_dx_sum;
+        for(uint32_t i = 0; i < need_r / 4u; ++i)
+            s += g_dx_frames[i];
+        g_dx_sum = s;
+    }
+    else
+        g_dx_under = g_dx_under + 1u;
+    // The record: n frames of the output as 24-bit little-endian, left then
+    // right (dx_pack24()), or an overrun.
+    const uint32_t need_w = static_cast<uint32_t>(n) * 6u;
+    if(g_wring.size - dx_fill(g_wring) >= need_w)
+    {
+        uint8_t* p = g_dx_pack;
+        for(size_t i = 0; i < n; ++i)
+        {
+            p = dx_pack24(p, l[i]);
+            p = dx_pack24(p, r[i]);
+        }
+        dx_put(g_wring, g_dx_pack, need_w);
+    }
+    else
+        g_dx_over = g_dx_over + 1u;
+    const uint32_t rf    = dx_fill(g_rring);
+    const uint32_t wf    = dx_fill(g_wring);
+    const uint32_t epoch = g_dx_epoch;
+    if(epoch != g_dx_cb_epoch)
+    {
+        g_dx_cb_epoch = epoch;
+        g_dx_rmin     = rf;
+        g_dx_wmax     = wf;
+    }
+    else
+    {
+        if(rf < g_dx_rmin)
+            g_dx_rmin = rf;
+        if(wf > g_dx_wmax)
+            g_dx_wmax = wf;
+    }
+}
+
+static void duplex_pass(bench::Board& hw, const volatile uint32_t& win)
+{
+    const uint32_t w0      = win;
+    const uint32_t t0      = daisy::System::GetNow();
+    uint32_t       worst_r = 0, worst_w = 0;
+    if(!g_dx.begun)
+        dx_begin(worst_r);
+    // Until the 500 ms are up; a transfer that stalls makes the pass longer.
+    while(g_dx.fr == 0 && daisy::System::GetNow() - t0 < kPassMs)
+    {
+        if(dx_fill(g_rring) < kReadRing / 2u)
+            dx_refill(worst_r);
+        else if(dx_fill(g_wring) >= kDxChunk)
+            dx_drain(worst_w);
+        else
+            daisy::System::Delay(1);
+    }
+    // The pass stays 500 ms long when it stopped early (a failure).
+    const uint32_t spent = daisy::System::GetNow() - t0;
+    if(spent < kPassMs)
+        hw.Delay(kPassMs - spent);
+    // The pass's figures, then the callback starts the per-pass ones over.
+    const uint32_t under = g_dx_under;
+    const uint32_t over  = g_dx_over;
+    const uint32_t rmin  = g_dx_rmin;
+    const uint32_t wmax  = g_dx_wmax;
+    const uint32_t held  = g_held_blocks;
+    g_dx_epoch           = g_dx_epoch + 1u;
+    g_pass_epoch         = g_pass_epoch + 1u;
+    hw.PrintLine("SHELL_SD_D w=%u under=%u over=%u rfill=%u wfill=%u worst_r_us=%u "
+                 "worst_w_us=%u held=%u fr=%d",
+                 static_cast<unsigned>(w0), static_cast<unsigned>(under - g_dx.under_said),
+                 static_cast<unsigned>(over - g_dx.over_said), static_cast<unsigned>(rmin),
+                 static_cast<unsigned>(wmax), static_cast<unsigned>(worst_r),
+                 static_cast<unsigned>(worst_w), static_cast<unsigned>(held), g_dx.fr);
+    g_dx.under_said = under;
+    g_dx.over_said  = over;
+}
+#endif // SHELL_SD_PROBE_DUPLEX
+
 #if SHELL_SD_PROBE_STREAM
 static void stream_pass(bench::Board& hw, const volatile uint32_t& win)
 {
@@ -1949,6 +2349,8 @@ void sd_stream_pass(bench::Board& hw, const volatile uint32_t& win)
     tail_pass(hw, win);
 #elif SHELL_SD_PROBE_STREAM
     stream_pass(hw, win);
+#elif SHELL_SD_PROBE_DUPLEX
+    duplex_pass(hw, win);
 #elif SD_PROBE_OPS
     // The operation modes keep their schedule in wall time, not raw windows.
     static_cast<void>(&win);

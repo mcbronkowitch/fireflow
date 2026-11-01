@@ -103,6 +103,10 @@ IMAGES = [
                         "SHELL_RAW_SPREAD=1", "SHELL_SD=1", "SHELL_SD_PROBE=buffer"]),
     ("reva_sd_patch", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
                        "SHELL_RAW_SPREAD=1", "SHELL_SD=1", "SHELL_SD_PROBE=patch"]),
+    # The stream and record (section 5, D3): two rings in SDRAM, the audio
+    # callback's side of them called from the output gate.
+    ("reva_sd_duplex", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
+                        "SHELL_RAW_SPREAD=1", "SHELL_SD=1", "SHELL_SD_PROBE=duplex"]),
     # The reverb grain layer (spec 2026-10-31-sd-use-cases-tests-design.md
     # section 5, B1 and B2): the listener image with throwaway grains summed
     # into the reverb input, in B1's fixed-N sweep. It needs the listener and
@@ -155,15 +159,21 @@ RGRAIN_PATH = [
 BANK_PATH = [
     "shell::sd_bank_block(",
 ]
+# The duplex mode's ring side, called by the audio callback: linked in the
+# duplex image and nowhere else (the other SD probe images are its canary).
+DUPLEX_PATH = [
+    "shell::sd_duplex_block(",
+]
 SYMBOL_RULES = {
     "reva_play": (SAVE_PATH, SD_PATH),
     "reva_remote": ([], SAVE_PATH + SD_PATH + RGRAIN_PATH),
     "reva_remote_measure": ([], SAVE_PATH),
     "reva_sd": (SD_PATH, SAVE_PATH),
-    "reva_sd_burst": (SD_PATH, SAVE_PATH + BANK_PATH),
-    "reva_sd_bank": (SD_PATH + BANK_PATH, SAVE_PATH),
-    "reva_sd_buffer": (SD_PATH, SAVE_PATH + BANK_PATH),
-    "reva_sd_patch": (SD_PATH, SAVE_PATH + BANK_PATH),
+    "reva_sd_burst": (SD_PATH, SAVE_PATH + BANK_PATH + DUPLEX_PATH),
+    "reva_sd_bank": (SD_PATH + BANK_PATH, SAVE_PATH + DUPLEX_PATH),
+    "reva_sd_buffer": (SD_PATH, SAVE_PATH + BANK_PATH + DUPLEX_PATH),
+    "reva_sd_patch": (SD_PATH, SAVE_PATH + BANK_PATH + DUPLEX_PATH),
+    "reva_sd_duplex": (SD_PATH + DUPLEX_PATH, SAVE_PATH + BANK_PATH),
     "reva_rgrain": (RGRAIN_PATH, SAVE_PATH + SD_PATH),
 }
 
@@ -305,7 +315,8 @@ def main():
         held = ""
         if rules:
             for what, path in (("save path", SAVE_PATH), ("SD path", SD_PATH),
-                               ("grain layer", RGRAIN_PATH), ("bank swap", BANK_PATH)):
+                               ("grain layer", RGRAIN_PATH), ("bank swap", BANK_PATH),
+                               ("duplex rings", DUPLEX_PATH)):
                 if path[0] in rules[0]:
                     held += ", %s linked" % what
                 elif path[0] in rules[1]:

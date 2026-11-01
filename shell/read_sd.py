@@ -64,6 +64,15 @@ priced by operation (ops_by_phase()): the frame right after an operation line
 is busy, every other frame idle, judged as A3's (printed, not in the exit
 code). Exit 0 when the card test and the mode's stats pass.
 
+A capture of the duplex mode (SHELL_SD_PROBE=duplex, spec section 5, D3) is
+told by its SHELL_SD_D lines, one per pass. duplex_stats() totals the
+underruns and overruns, keeps the read ring's lowest and the write ring's
+highest fill and the slowest f_read / f_write, and summarises the pots (the
+burst mode's kept spread per sense pin, over the windows after the first pass)
+and the callback (the frames after the first pass's). Exit 0 when the card test
+passed and the rings had 0 underruns, 0 overruns and no fr; the pot verdict
+(A1's) and the callback's click line are printed, not in the exit code.
+
 Exit 0 when the card test passed and both classes have a judged window;
 1 otherwise (stream mode). The spread is reported, not judged: the row's verdict needs the
 numbers beside the pin's band and Bastian's reading of them.
@@ -883,6 +892,140 @@ def ops_report(lines, out, card_ok):
     return 0 if ok else 1
 
 
+_SD_D = re.compile(r"^SHELL_SD_D (.*)$")
+DUPLEX_READ_RING = 32 * 1024      # sd_probe.cpp kReadRing (C1)
+DUPLEX_WRITE_RING = 1152 * 1024   # sd_probe.cpp kWriteRing (C2)
+
+
+def parse_duplex(lines):
+    """Every `SHELL_SD_D` line, in order, as an int field dict."""
+    out = []
+    for raw in strip_host_time(lines):
+        m = _SD_D.match(raw.strip())
+        if m:
+            out.append({k: int(v) for k, v in _kv(m.group(1)).items()})
+    return out
+
+
+def duplex_frames(lines):
+    """D3's callback frames, in cb_by_phase()'s class shape {"means", "win"}.
+    The duplex mode streams without a break, so there is one class: every
+    SHELL_PLAY_WIN frame after a SHELL_SD_D line (the print order of
+    cb_by_phase(): a frame follows the line of the pass it measured), except
+    the first, which measured the first pass -- the files opened and the read
+    ring primed, not the stream. Frames before the first line (the card test)
+    are nobody's; a frame with n=0 is skipped."""
+    out = {"means": [], "win": []}
+    started = skip = False
+    for raw in strip_host_time(lines):
+        raw = raw.strip()
+        if _SD_D.match(raw):
+            if not started:
+                started = skip = True
+            continue
+        m = _PLAY_WIN.match(raw)
+        if m is None or not started:
+            continue
+        if skip:
+            skip = False
+            continue
+        kv = {k: int(v) for k, v in _INT_KV.findall(m.group(1))}
+        if kv.get("n", 0) <= 0 or "sum" not in kv or "win" not in kv:
+            continue
+        out["means"].append(kv["sum"] / kv["n"])
+        out["win"].append(kv["win"])
+    return out
+
+
+def duplex_stats(lines):
+    """D3, the continuous stream and record: {"passes", "under", "over",
+    "rfill_min", "wfill_max", "worst_r_us", "worst_w_us", "held_share",
+    "windows", "pots", "pots_ok", "cb", "cb_ok", "pass", "why"}.
+
+    under / over: the totals over every line (each line counts its own pass).
+    rfill_min: the read ring's lowest fill, wfill_max the write ring's highest,
+    in bytes, over all passes. pass: at least one line, 0 underruns, 0
+    overruns, no fr -- the rings; the exit code. why names the first line with
+    an fr (sticky on the board: later lines repeat it).
+
+    pots (Task 5's burst_summary(), per sense pin): the kept spread of the raw
+    windows collected after the first pass (counter w - 1 above the first
+    line's w; the first pass opens the files and primes the read ring), with
+    pots_ok A1's pass: no pot over its pin's band, none over kPotTouch. cb
+    (Task 6's cb_stats()) over duplex_frames(), with cb_ok: no block over the
+    click line. Both verdicts are printed, not in the exit code, as A1's and
+    A3's are; A3's 1 % comparison needs an idle mean, which a capture that
+    streams throughout does not hold."""
+    lines = strip_host_time(lines)
+    rows = parse_duplex(lines)
+    why = []
+    if not rows:
+        why.append("no SHELL_SD_D line")
+    under = sum(r.get("under", 0) for r in rows)
+    over = sum(r.get("over", 0) for r in rows)
+    if under:
+        why.append("%d underruns" % under)
+    if over:
+        why.append("%d overruns" % over)
+    bad = next((r for r in rows if r.get("fr", 0) != 0), None)
+    if bad is not None:
+        why.append("fr=%d at w=%d" % (bad["fr"], bad.get("w", -1)))
+    windows = []
+    if rows:
+        first = rows[0].get("w", 0)
+        windows = [win for win in rp.parse_raw_windows(lines) if win["w"] - 1 > first]
+    pots = burst_summary(windows, rp.row_senses())
+    pots_ok = bool(windows) and all(p["over_h"] == 0 and p["over_touch"] == 0 for p in pots.values())
+    cb = cb_stats(duplex_frames(lines))
+    cb_ok = cb["frames"] > 0 and cb["max"] <= CB_CLICK
+    return {"passes": len(rows), "under": under, "over": over,
+            "rfill_min": min((r["rfill"] for r in rows), default=0),
+            "wfill_max": max((r["wfill"] for r in rows), default=0),
+            "worst_r_us": max((r["worst_r_us"] for r in rows), default=0),
+            "worst_w_us": max((r["worst_w_us"] for r in rows), default=0),
+            "held_share": (sum(r["held"] for r in rows) / (BLOCKS_PER_PASS * len(rows))
+                           if rows else 0.0),
+            "windows": len(windows), "pots": pots, "pots_ok": pots_ok,
+            "cb": cb, "cb_ok": cb_ok, "pass": not why, "why": why}
+
+
+def duplex_report(lines, out, card_ok):
+    """The report of a duplex capture. Exit code: 0 when the card test passed
+    and duplex_stats() passes (the rings); the pot and callback verdicts are
+    printed, not in the exit code."""
+    st = duplex_stats(lines)
+    print("duplex: %d passes, %d underruns, %d overruns, read ring min %d of %d B, "
+          "write ring max %d of %d B" % (st["passes"], st["under"], st["over"], st["rfill_min"],
+                                         DUPLEX_READ_RING, st["wfill_max"], DUPLEX_WRITE_RING),
+          file=out)
+    print("duplex: worst f_read %d us, worst f_write %d us, held %.1f %% of the blocks"
+          % (st["worst_r_us"], st["worst_w_us"], 100.0 * st["held_share"]), file=out)
+    print("duplex verdict: %s" % ("PASS" if st["pass"] else "FAIL (" + "; ".join(st["why"]) + ")"),
+          file=out)
+    print("pots (spread of the readings the hold kept, %d windows after the first pass):"
+          % st["windows"], file=out)
+    print("  sense  band  rows  worst/median  over band  over %d" % rp.POT_TOUCH, file=out)
+    for p in range(rp.SENSES):
+        s = st["pots"][p]
+        med = "-" if s["median"] is None else "%.1f" % s["median"]
+        print("  %5d  %4d  %4d  %6s/%-6s  %9d  %8d"
+              % (p, rp.REVA_HYSTERESIS[p], s["rows"], s["worst"], med, s["over_h"], s["over_touch"]),
+              file=out)
+    over_h = sum(s["over_h"] for s in st["pots"].values())
+    over_t = sum(s["over_touch"] for s in st["pots"].values())
+    print("pots verdict: %s (%d over their band, %d over %d)"
+          % ("PASS" if st["pots_ok"] else "FAIL", over_h, over_t, rp.POT_TOUCH), file=out)
+    cb = st["cb"]
+    if cb["frames"]:
+        print("callback: %d frames, mean %.0f cycles, p99 win %d, max win %d"
+              % (cb["frames"], cb["mean"], cb["p99"], cb["max"]), file=out)
+    else:
+        print("callback: no frames", file=out)
+    print("callback verdict: %s (the click line %d; the 1 %% comparison against idle needs "
+          "a run without the stream)" % ("PASS" if st["cb_ok"] else "FAIL", CB_CLICK), file=out)
+    return 0 if card_ok and st["pass"] else 1
+
+
 def report(lines, out=None):
     out = out or sys.stdout
     lines = strip_host_time(lines)   # read_play's parsers do not know the prefix
@@ -902,6 +1045,8 @@ def report(lines, out=None):
         return tail_report(lines, out, ok)
     if any(_OPS.match(l.strip()) for l in lines):
         return ops_report(lines, out, ok)
+    if any(_SD_D.match(l.strip()) for l in lines):
+        return duplex_report(lines, out, ok)
 
     stream = parse_stream(lines)
     st = stream_stats(stream)

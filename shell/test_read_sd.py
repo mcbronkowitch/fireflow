@@ -739,5 +739,117 @@ test_buffer_times_and_cmp()
 test_patch_100_of_100()
 test_ops_by_phase()
 
+
+# --- continuous stream and record (SHELL_SD_PROBE=duplex, spec section 5, D3) --
+# One SHELL_SD_D line per pass: the blocks the read ring could not feed (under)
+# and the write ring could not take (over), the read ring's lowest fill and the
+# write ring's highest, the slowest f_read and f_write, the held blocks, fr.
+# The first pass opens the files and primes the read ring: the raw window it
+# ran in and the frame that measured it are slow and wide, and are not judged.
+def d_line(w, under=0, over=0, rfill=17000, wfill=17000, worst_r=3000, worst_w=9000, held=30, fr=0):
+    return ("SHELL_SD_D w=%d under=%d over=%d rfill=%d wfill=%d worst_r_us=%d worst_w_us=%d "
+            "held=%d fr=%d" % (w, under, over, rfill, wfill, worst_r, worst_w, held, fr))
+
+
+DX_FIRST = 3          # the first pass's counter: the card test ran before it
+DX_PRIME_WIN = 990000  # the priming frame's worst block: over the click line on purpose
+
+
+def duplex_capture(under_at=None, over_at=None, fr_at=None, spread=6, win=700000):
+    """Card lines, then per counter c from DX_FIRST two passes (a D line, then
+    the frame that measured it) and the raw window collected at c (printed
+    w=c+1). The ring figures move with c, so the minimum and maximum come from
+    one known line each. under_at / over_at / fr_at: the counter whose first
+    line says under=1 / over=1 / fr=1."""
+    lines = list(CARD)
+    for c in range(DX_FIRST, COUNTERS):
+        for k in range(2):
+            mine = k == 0
+            lines.append(d_line(c, under=1 if mine and c == under_at else 0,
+                                over=1 if mine and c == over_at else 0,
+                                rfill=16000 + 100 * c, wfill=16384 + 1000 * c,
+                                worst_r=3000 + c, worst_w=9000 + 10 * c,
+                                fr=1 if mine and c == fr_at else 0))
+            prime = c == DX_FIRST and k == 0
+            lines.append(play_win(DX_PRIME_WIN if prime else win, mean=900000 if prime else 510000))
+        s = 300 if c == DX_FIRST else spread
+        for r0 in range(0, ROWS, 6):
+            pairs = " ".join("%d:%d" % (1000, 1000 + s) for _ in range(min(6, ROWS - r0)))
+            lines.append("SHELL_PLAY_R w=%d r=%d %s" % (c + 1, r0, pairs))
+    return [l + "\n" for l in lines]
+
+
+def test_duplex_clean_passes():
+    lines = duplex_capture()
+    st = read_sd.duplex_stats(lines)
+    check("duplex: a clean capture passes", st["pass"] and not st["why"])
+    check("duplex: every pass counted", st["passes"] == 2 * (COUNTERS - DX_FIRST))
+    check("duplex: no underrun, no overrun", st["under"] == 0 and st["over"] == 0)
+    check("duplex: the read ring's lowest fill over all passes",
+          st["rfill_min"] == 16000 + 100 * DX_FIRST)
+    check("duplex: the write ring's highest fill over all passes",
+          st["wfill_max"] == 16384 + 1000 * (COUNTERS - 1))
+    check("duplex: the slowest f_read and f_write",
+          st["worst_r_us"] == 3000 + COUNTERS - 1 and st["worst_w_us"] == 9000 + 10 * (COUNTERS - 1))
+    check("duplex: the held share is held over 250 blocks a pass",
+          abs(st["held_share"] - 30 / 250.0) < 1e-9)
+    # Pots: windows from the one after the priming's (counter DX_FIRST + 1) on.
+    check("duplex: the priming window is not judged, the others are",
+          st["windows"] == COUNTERS - DX_FIRST - 1)
+    rows_by_pin = [SENSE_OF_ROW.count(p) for p in range(rp.SENSES)]
+    check("duplex: the pots' kept spread, per sense pin (Task 5's summary)",
+          all(st["pots"][p]["worst"] == 6 for p in range(rp.SENSES) if rows_by_pin[p]))
+    check("duplex: pots at the floor pass", st["pots_ok"])
+    # The callback: the frame after the first line measured the priming and is
+    # dropped (its 990 000 would fail the click line).
+    check("duplex: the callback frames, the priming's dropped",
+          st["cb"]["frames"] == 2 * (COUNTERS - DX_FIRST) - 1 and st["cb"]["mean"] == 510000.0
+          and st["cb"]["max"] == 700000)
+    check("duplex: the callback under the click line passes", st["cb_ok"])
+    stamped = ["5.125 " + l for l in lines]
+    check("duplex: host-time prefixes are stripped", read_sd.duplex_stats(stamped) == st)
+    code, text = run(lines)
+    check("duplex: the report exits 0", code == 0)
+    check("duplex: the report says the verdict", "duplex verdict: PASS" in text)
+    check("duplex: the report prints the pots and the callback",
+          "pots verdict: PASS" in text and "callback verdict: PASS" in text)
+    # The stream and operation readers do not see these lines.
+    check("duplex: cb_by_phase and ops_by_phase ignore the D lines",
+          not any(v["means"] for v in read_sd.cb_by_phase(lines).values())
+          and not any(v["means"] for v in read_sd.ops_by_phase(lines).values()))
+    # Pots over their band, or a block over the click line, are printed as a
+    # FAIL but leave the exit code to the rings (A1 and A3 print theirs too).
+    st = read_sd.duplex_stats(duplex_capture(spread=150))
+    check("duplex: pots over the band fail the pot verdict only",
+          st["pass"] and not st["pots_ok"])
+    st = read_sd.duplex_stats(duplex_capture(win=945001))
+    check("duplex: a block over the click line fails the callback verdict only",
+          st["pass"] and not st["cb_ok"])
+    code, text = run(duplex_capture(spread=150))
+    check("duplex: the pot verdict does not change the exit code",
+          code == 0 and "pots verdict: FAIL" in text)
+
+
+def test_duplex_underrun_fails():
+    st = read_sd.duplex_stats(duplex_capture(under_at=20))
+    check("duplex: one under=1 fails", not st["pass"] and st["under"] == 1)
+    check("duplex: the reason names the underrun", any("under" in w for w in st["why"]))
+    code, text = run(duplex_capture(under_at=20))
+    check("duplex: an underrun exits 1 and says FAIL", code == 1 and "duplex verdict: FAIL" in text)
+    st = read_sd.duplex_stats(duplex_capture(over_at=30))
+    check("duplex: one over=1 fails and is named",
+          not st["pass"] and st["over"] == 1 and any("over" in w for w in st["why"]))
+    st = read_sd.duplex_stats(duplex_capture(fr_at=12))
+    check("duplex: an fr fails and is named with its pass",
+          not st["pass"] and any("fr=1" in w and "w=12" in w for w in st["why"]))
+    st = read_sd.duplex_stats(CARD)
+    check("duplex: no D line fails", not st["pass"] and st["passes"] == 0)
+    code, _ = run([l for l in duplex_capture() if "SHELL_SD verify" not in l])
+    check("duplex: a failed card test fails", code == 1)
+
+
+test_duplex_clean_passes()
+test_duplex_underrun_fails()
+
 print("%d failed" % len(FAILS))
 sys.exit(1 if FAILS else 0)

@@ -1296,6 +1296,13 @@ void panel_scan_gate(float* l, float* r, size_t n)
 #else
     (void)l; (void)r; (void)n;   // without a take the init patch boots unmuted
 #endif
+#if SHELL_SD && SHELL_SD_PROBE_DUPLEX
+    // The SD stream and record (spec 2026-10-31-sd-use-cases-tests-design.md
+    // section 5, D3): the output as it is played, after the boot gate, into
+    // the recording ring, and a block of the streamed file out of the read
+    // ring -- inside the measured callback, ahead of panel_scan_block_end().
+    sd_duplex_block(l, r, n);
+#endif
 }
 
 void panel_scan_block_end(uint32_t c0)

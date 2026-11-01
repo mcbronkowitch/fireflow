@@ -8,6 +8,7 @@
 // J_SD (Yamaichi PJS008U-3000-0) is on SDMMC1, 4-bit, the module's D2-D7.
 // Nothing here touches QSPI: the persistence record is the listener image's
 // to leave alone (persist_write() is not linked there).
+#include <cstddef>
 #include <cstdint>
 
 #include "hw/board.h"
@@ -32,7 +33,9 @@ void sd_report(bench::Board& hw, uint32_t pass);
 // 5, C1 / C2): SHELL_SD_H lines, documented in sd_probe.cpp and read by
 // read_sd.py's tails(). With bank, buffer or patch (spec section 5, D1, D2,
 // D4) it runs one card operation now and then and prints one line per
-// operation (SHELL_SD_K, SHELL_SD_B, SHELL_SD_P; sd_probe.cpp).
+// operation (SHELL_SD_K, SHELL_SD_B, SHELL_SD_P; sd_probe.cpp). With duplex
+// (spec section 5, D3) it keeps a read stream and a recording going through
+// two rings, one SHELL_SD_D line per pass (sd_probe.cpp).
 void sd_stream_pass(bench::Board& hw, const volatile uint32_t& win);
 
 // SHELL_SD_PROBE=bank only: the audio callback's side of the bank swap, once
@@ -41,10 +44,17 @@ void sd_stream_pass(bench::Board& hw, const volatile uint32_t& win);
 // between two blocks and no read of a block mixes two banks.
 void sd_bank_block();
 
+// SHELL_SD_PROBE=duplex only: the audio callback's side of the stream and
+// the recording, once per block after the output is final (panel_scan_gate(),
+// after the boot gate): n stereo float frames out of the read ring, and the
+// output l / r as 24-bit stereo into the write ring; a block either ring
+// cannot serve in full counts as an underrun or an overrun.
+void sd_duplex_block(const float* l, const float* r, size_t n);
+
 // ---- The pot hold (SHELL_SD_PROBE=burst, spec 2026-10-31-sd-use-cases-tests-
 // design.md section 5, A1; also rtail and wtail, when their build constant
-// kTailBurst says the transfers are A1's bursts, and bank, buffer and patch
-// with A1's tail of 0). The foreground marks each transfer, the audio
+// kTailBurst says the transfers are A1's bursts, and bank, buffer, patch and
+// duplex with A1's tail of 0). The foreground marks each transfer, the audio
 // callback decides once per block whether this block's pot readings are
 // dropped, so the readings that stay can be measured against the noise floor
 // (fault R5: the card makes every pot noisy while it transfers).
@@ -62,8 +72,8 @@ uint8_t sd_hold_tail();
 // The callback's side, once per block, before the step's readings are looked
 // at: true means drop this block's pot readings. Counts the dropped blocks and
 // the longest run of them for the pass line. Always false when nothing sets
-// g_sd_seen (every mode but the burst, bank, buffer, patch and, with
-// kTailBurst, the tail modes), so
+// g_sd_seen (every mode but the burst, bank, buffer, patch, duplex and,
+// with kTailBurst, the tail modes), so
 // the other modes read every block.
 bool sd_hold_block();
 
