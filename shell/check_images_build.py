@@ -92,6 +92,14 @@ IMAGES = [
                        "SHELL_RAW_SPREAD=1", "SHELL_SD=1", "SHELL_SD_PROBE=burst"]),
     ("reva_sd_probe_no_sd_refused", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1",
                                      "SHELL_SD_PROBE=burst"]),
+    # The reverb grain layer (spec 2026-10-31-sd-use-cases-tests-design.md
+    # section 5, B1 and B2): the listener image with throwaway grains summed
+    # into the reverb input, in B1's fixed-N sweep. It needs the listener and
+    # no SD code, so with the SD image around it the build must be refused.
+    ("reva_rgrain", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
+                     "SHELL_RGRAIN=1"]),
+    ("reva_rgrain_with_sd_refused", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
+                                     "SHELL_RAW_SPREAD=1", "SHELL_SD=1", "SHELL_RGRAIN=1"]),
 ]
 
 # Images whose build must be refused, and the refusal's text (name -> text).
@@ -99,6 +107,7 @@ EXPECT_REFUSED = {
     "reva_remote_fm2_refused": "math guard: isfinite guard folded away in",
     "reva_sd_no_listener_refused": "SHELL_SD=1 needs SHELL_REMOTE=1",
     "reva_sd_probe_no_sd_refused": "SHELL_SD_PROBE=burst needs SHELL_SD=1",
+    "reva_rgrain_with_sd_refused": "SHELL_RGRAIN=1 excludes SHELL_SD=1",
 }
 
 # The save path, as linked symbols (nm -C): persist_write() and the QSPI
@@ -124,12 +133,19 @@ SD_PATH = [
     "f_mount",
     "shell::sd_bringup_run(",
 ]
+# The reverb grain layer: linked in the SHELL_RGRAIN image, which is a
+# listener image without SD code; and not in the plain listener image, the
+# canary that shows the throwaway layer stays out of every other build.
+RGRAIN_PATH = [
+    "shell::rgrain_block(",
+]
 SYMBOL_RULES = {
     "reva_play": (SAVE_PATH, SD_PATH),
-    "reva_remote": ([], SAVE_PATH + SD_PATH),
+    "reva_remote": ([], SAVE_PATH + SD_PATH + RGRAIN_PATH),
     "reva_remote_measure": ([], SAVE_PATH),
     "reva_sd": (SD_PATH, SAVE_PATH),
     "reva_sd_burst": (SD_PATH, SAVE_PATH),
+    "reva_rgrain": (RGRAIN_PATH, SAVE_PATH + SD_PATH),
 }
 
 
@@ -269,7 +285,8 @@ def main():
         # among the musts, "absent" when among the must-nots.
         held = ""
         if rules:
-            for what, path in (("save path", SAVE_PATH), ("SD path", SD_PATH)):
+            for what, path in (("save path", SAVE_PATH), ("SD path", SD_PATH),
+                               ("grain layer", RGRAIN_PATH)):
                 if path[0] in rules[0]:
                     held += ", %s linked" % what
                 elif path[0] in rules[1]:

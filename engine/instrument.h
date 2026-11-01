@@ -604,6 +604,17 @@ public:
 
     void process(const float* inL, const float* inR, float* outL, float* outR, size_t n);
 
+#if defined(SPKY_PROBE_REVERB_INJECT)
+    // shell/'s reverb grain layer only (SHELL_RGRAIN; spec
+    // 2026-10-31-sd-use-cases-tests-design.md section 5, B1 and B2): two
+    // block buffers of at least n samples that process() adds, sample by
+    // sample, to the reverb's two inputs; nullptr adds nothing. Read once at
+    // the top of each process() call, never inside its loop. Throwaway
+    // measurement code; without the define (every build but those images)
+    // neither the setter nor the members exist.
+    void set_reverb_inject(const float* l, const float* r) { _inj_l = l; _inj_r = r; }
+#endif
+
 private:
     // The single door, shared by both set_tempo_bpm and set_pace. PACE reaches
     // the transport (_center.set_tempo_bpm(_bpm * _pace)) and the mod lanes
@@ -749,6 +760,11 @@ private:
     uint32_t _probe_tog = 0;
 #else
     static constexpr uint32_t _probe_tog = 0;
+#endif
+#if defined(SPKY_PROBE_REVERB_INJECT)
+    // set_reverb_inject()'s buffers, latched by process() before its loop.
+    const float* _inj_l = nullptr;
+    const float* _inj_r = nullptr;
 #endif
 };
 

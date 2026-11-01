@@ -4,8 +4,8 @@ The Makefile runs these writers while it is parsed and ignores their exit
 status, so a refusal that left the previous build's header, stamp or linker
 script in place would let the build carry on with a stale value (and the
 guards behind it read the stale file and pass). Each writer therefore deletes
-its output on ANY failure. This runs the seven writers that carry that rule
-(reverb_half, fast_math, remote, remote_measure, engine_lean, sd, sd_probe) in a temp
+its output on ANY failure. This runs the eight writers that carry that rule
+(reverb_half, fast_math, remote, remote_measure, rgrain, engine_lean, sd, sd_probe) in a temp
 directory with an old output already in place and checks, per writer:
 
   - a refusal (bad value / bad marker count)       -> non-zero exit, output gone
@@ -82,26 +82,27 @@ with tempfile.TemporaryDirectory() as tmp:
           and out.read_text() == "#define SHELL_SD_PROBE_STREAM 1\n#define SHELL_SD_PROBE 0\n"
           and not stale.exists())
 
-    # --- remote_measure: OUTPUT {0|1} BUILD_DIR ----------------------------
-    script = "write_shell_remote_measure.py"
-    d = tmp / "rm"
-    d.mkdir()
-    out = d / "sw.h"
-    out.write_text("#define OLD 0\n")
-    check("%s: bad value refused" % script, run(script, out, "2", d) != 0)
-    check("%s: bad value leaves no output" % script, not out.exists())
+    # --- remote_measure, rgrain: OUTPUT {values} BUILD_DIR --------------------
+    for script, good, bad in (("write_shell_remote_measure.py", "1", "2"),
+                              ("write_shell_rgrain.py", "2", "3")):
+        d = tmp / ("rm_" + script[:-3])
+        d.mkdir()
+        out = d / "sw.h"
+        out.write_text("#define OLD 0\n")
+        check("%s: bad value refused" % script, run(script, out, bad, d) != 0)
+        check("%s: bad value leaves no output" % script, not out.exists())
 
-    out.write_text("#define OLD 0\n")
-    trap_dir(d, "x.o")                           # the glob("*.o") sweep cannot unlink it
-    rc = run(script, out, "1", d)
-    check("%s: OSError during the sweep is non-zero" % script, rc != 0)
-    check("%s: OSError during the sweep leaves no output" % script, not out.exists())
+        out.write_text("#define OLD 0\n")
+        trap_dir(d, "x.o")                       # the glob("*.o") sweep cannot unlink it
+        rc = run(script, out, good, d)
+        check("%s: OSError during the sweep is non-zero" % script, rc != 0)
+        check("%s: OSError during the sweep leaves no output" % script, not out.exists())
 
-    d2 = tmp / "rm2"
-    d2.mkdir()
-    out2 = d2 / "sw.h"
-    check("%s: good run writes the header" % script,
-          run(script, out2, "1", d2) == 0 and out2.is_file())
+        d2 = tmp / ("rm2_" + script[:-3])
+        d2.mkdir()
+        out2 = d2 / "sw.h"
+        check("%s: good run writes the header" % script,
+              run(script, out2, good, d2) == 0 and out2.is_file())
 
     # --- reverb_half: SOURCE_LD OUTPUT_LD STATE REVERB_HALF MEASURE BUILD_DIR
     script = "write_shell_reverb_half.py"

@@ -271,6 +271,12 @@ void Instrument::process(const float* inL, const float* inR,
     if (_reverb) _reverb->set_half_rate(probe::on(_probe_tog, probe::kBitReverbHalf));
 #endif
 #endif
+#if defined(SPKY_PROBE_REVERB_INJECT)
+    // shell/'s reverb grain layer (set_reverb_inject()), once per block and
+    // never inside the loop below (shell/test_remote_wiring.py holds the place).
+    const float* const inj_l = _inj_l;
+    const float* const inj_r = _inj_r;
+#endif
     SPKY_PROBE_DECL;
     for (size_t i = 0; i < n; ++i) {
         SPKY_PROBE_STAMP(i);
@@ -663,9 +669,13 @@ void Instrument::process(const float* inL, const float* inR,
                 // the room at full level, or the duck would only be audible on
                 // the dry half of a wet patch.
                 float wl, wr;
-                _reverb->process(asl * ga * wga * duck[PART_A] + bsl * gb * wgb * duck[PART_B],
-                                 asr * ga * wga * duck[PART_A] + bsr * gb * wgb * duck[PART_B],
-                                 wl, wr);
+                float send_l = asl * ga * wga * duck[PART_A] + bsl * gb * wgb * duck[PART_B];
+                float send_r = asr * ga * wga * duck[PART_A] + bsr * gb * wgb * duck[PART_B];
+#if defined(SPKY_PROBE_REVERB_INJECT)
+                if (inj_l) send_l += inj_l[i];
+                if (inj_r) send_r += inj_r[i];
+#endif
+                _reverb->process(send_l, send_r, wl, wr);
                 SPKY_PROBE_MIX(i, 2);   // the reverb ends here
                 const bool closing = wga == 0.f && wgb == 0.f &&
                     _rev_wet_target[PART_A] == 0.f && _rev_wet_target[PART_B] == 0.f;

@@ -67,6 +67,12 @@ The final review's fix wave:
     write and the reset.
   - M8: NMI vectors to the fault entry too (in the vector-table check).
   - out_split: busy_window() counts saturated splits, SHELL_OUT prints neg=.
+The reverb grain layer (SHELL_RGRAIN, spec 2026-10-31-sd-use-cases-tests-design.md
+section 5, B1 and B2):
+  - Instrument::process reads set_reverb_inject()'s two pointers once each,
+    ahead of its per-sample loop; the hook exists only under
+    SPKY_PROBE_REVERB_INJECT, which the Makefile defines in the SHELL_RGRAIN
+    images alone, the switch resolved at parse time by its writer.
 Every check has a sabotage below that must turn it red.
 """
 import os
@@ -434,6 +440,57 @@ def toggles_nowhere_else(engine):
         if TOGGLES_CALL.search(code_only(text)):
             return False
     return len(engine) > 0
+
+
+# --- SHELL_RGRAIN: the reverb inject hook (spec 2026-10-31-sd-use-cases-tests,
+# B1 and B2) --------------------------------------------------------------------
+INJECT_MEMBER = re.compile(r"\b_inj_[lr]\b")
+INJECT_ANY = re.compile(r"\b(set_reverb_inject|_inj_[lr]|inj_[lr])\b")
+SAMPLE_LOOP = re.compile(r"\bfor\s*\(\s*size_t\s+i\s*=\s*0\s*;\s*i\s*<\s*n\s*;")
+
+
+def inject_read_before_loop(inst):
+    """set_reverb_inject()'s two pointers (the members _inj_l and _inj_r) are
+    read in instrument.cpp once each, inside Instrument::process, ahead of its
+    per-sample loop -- never per sample (the same rule as the toggle word)."""
+    if sorted(INJECT_MEMBER.findall(code_only(inst))) != ["_inj_l", "_inj_r"]:
+        return False
+    body = code_only(function_body(inst, "void Instrument::process("))
+    loop = SAMPLE_LOOP.search(body)
+    reads = [m.start() for m in INJECT_MEMBER.finditer(body)]
+    return loop is not None and len(reads) == 2 and all(p < loop.start() for p in reads)
+
+
+def under_inject(cond, in_else):
+    """Whether the branch compiles only with SPKY_PROBE_REVERB_INJECT defined."""
+    return not in_else and cond.strip() in ("defined(SPKY_PROBE_REVERB_INJECT)",
+                                            "<ifdef SPKY_PROBE_REVERB_INJECT>")
+
+
+def inject_only_under_define(engine):
+    """Every engine line that names the hook (set_reverb_inject, _inj_l/_r,
+    inj_l/_r) compiles only under SPKY_PROBE_REVERB_INJECT, so without the
+    define the hook does not exist; and both instrument.h and instrument.cpp
+    carry it (the canary that the scan reads the right files)."""
+    seen = set()
+    for path, text in engine.items():
+        guarded = remote_lines(text, under_inject)
+        for i, s in code_lines(text):
+            if INJECT_ANY.search(s):
+                if i not in guarded:
+                    return False
+                seen.add(path.replace("\\", "/"))
+    return {"engine/instrument.h", "engine/instrument.cpp"} <= seen
+
+
+def make_inject_rgrain_only(make):
+    """-DSPKY_PROBE_REVERB_INJECT is added once, under ifneq ($(SHELL_RGRAIN),0)
+    alone, and the switch is resolved at parse time by its writer."""
+    stacks = make_stack_lines(make, "-DSPKY_PROBE_REVERB_INJECT")
+    writer = re.search(r"\$\(shell python write_shell_rgrain\.py "
+                       r"\$\(BUILD_DIR\)/shell_rgrain\.h \$\(SHELL_RGRAIN\) "
+                       r"\$\(BUILD_DIR\)\)", make)
+    return stacks == [["ifneq ($(SHELL_RGRAIN),0)"]] and writer is not None
 
 
 def make_stack_lines(make, needle):
@@ -882,6 +939,13 @@ def run_checks(listen, main, scan, make, tick, inst, engine, writer, wl_h, wl_cp
         guard_rearm_printed(scan)
     r["the run line counts across trips: per-frame tripped=, cumulative trips="] = \
         run_line_counts_across_trips(scan)
+    # SHELL_RGRAIN (SD use-case tests, B1 and B2).
+    r["set_reverb_inject()'s pointers are read in Instrument::process, ahead of the sample loop"] = \
+        inject_read_before_loop(inst)
+    r["the reverb inject hook exists only under SPKY_PROBE_REVERB_INJECT"] = \
+        inject_only_under_define(engine)
+    r["the Makefile defines SPKY_PROBE_REVERB_INJECT in the SHELL_RGRAIN images alone"] = \
+        make_inject_rgrain_only(make)
     return r
 
 
@@ -1298,6 +1362,39 @@ sabotage("trips never published",
 sabotage("tripped= never set",
          TRIPLINE, scan=SCAN.replace("const uint32_t guard_silent = g_guard_silent;",
                                      "const uint32_t guard_silent = 0;"))
+
+# SHELL_RGRAIN: the reverb inject hook.
+INJ_READ = "set_reverb_inject()'s pointers are read in Instrument::process, ahead of the sample loop"
+INJ_GUARD = "the reverb inject hook exists only under SPKY_PROBE_REVERB_INJECT"
+INJ_MAKE = "the Makefile defines SPKY_PROBE_REVERB_INJECT in the SHELL_RGRAIN images alone"
+INST_H = os.path.join("engine", "instrument.h")
+INJ_LATCH = re.search(r"\n[^\n]*=\s*_inj_l;[^\n]*", INST)
+sabotage("the inject pointer read per sample",
+         INJ_READ, inst=INST.replace("inj_l[i]", "_inj_l[i]"))
+sabotage("the inject latch moved into the sample loop",
+         INJ_READ,
+         inst=(INST.replace(INJ_LATCH.group(0), "", 1).replace(
+             PROC_LOOP, PROC_LOOP + INJ_LATCH.group(0).lstrip("\n") + "\n", 1)
+             if INJ_LATCH else INST))
+sabotage("the left pointer never read",
+         INJ_READ, inst=re.sub(r"=\s*_inj_l;", "= nullptr;", INST))
+sabotage("the hook unguarded in the header",
+         INJ_GUARD,
+         engine=dict(ENGINE, **{INST_H: ENGINE.get(INST_H, "").replace(
+             "#if defined(SPKY_PROBE_REVERB_INJECT)", "#if 1", 1)}))
+sabotage("the hook unguarded in process()",
+         INJ_GUARD,
+         engine=dict(ENGINE, **{os.path.join("engine", "instrument.cpp"):
+                                INST.replace("#if defined(SPKY_PROBE_REVERB_INJECT)", "#if 1", 1)}))
+sabotage("the inject define in every image",
+         INJ_MAKE,
+         make=MAKE.replace("C_DEFS += -DSPKY_PROBE_REVERB_INJECT=1",
+                           "endif\nC_DEFS += -DSPKY_PROBE_REVERB_INJECT=1\n"
+                           "ifneq ($(SHELL_RGRAIN),0)"))
+sabotage("the rgrain switch as a bare -D",
+         INJ_MAKE,
+         make=re.sub(r"^.*write_shell_rgrain\.py.*$", "C_DEFS += -DSHELL_RGRAIN=$(SHELL_RGRAIN)",
+                     MAKE, flags=re.M))
 
 print("%d failed" % len(FAILS) if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

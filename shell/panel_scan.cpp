@@ -7,6 +7,7 @@
 #include "shell_remote.h"
 #include "shell_remote_measure.h"
 #include "shell_sd.h"
+#include "shell_rgrain.h"
 
 #if SHELL_PANEL_SCAN
 
@@ -46,6 +47,11 @@
 #endif
 #if SHELL_SD
 #include "sd_probe.h"
+#endif
+#if SHELL_RGRAIN
+#include <cmath>
+#include "rgrain.h"
+#include "sd_schedule.h"
 #endif
 #if !SHELL_COUPON_PROBE
 #include "control/clock_law.hpp"
@@ -830,6 +836,119 @@ void remote_block()
 }
 #endif
 
+#if SHELL_RGRAIN
+#if !SHELL_REMOTE
+#error "SHELL_RGRAIN needs SHELL_REMOTE (shell/Makefile refuses it)"
+#endif
+// The reverb grain layer (SHELL_RGRAIN, rgrain.h; spec
+// 2026-10-31-sd-use-cases-tests-design.md section 5, B1 and B2). Throwaway.
+// rgrain_tick() runs in panel_scan_tick() right after the scan's step, so
+// inside the measured callback and ahead of process(): it decides this block's grain count n,
+// runs the layer into g_rg_l / g_rg_r and points the engine's reverb input at
+// them (nullptr for n = 0, so a block without grains plays the engine as it
+// is). panel_scan_block_end() adds the block to the frame's figures, reset
+// with the WIN window, and the foreground prints them as SHELL_RGRAIN.
+//
+// The frame: the foreground bumps g_rgrain_frame right before it asks for the
+// WIN reset, and the callback latches it (g_rg_frame) in the block that
+// resets, so a frame's n is constant over exactly the blocks of its WIN
+// window. Mode 1: n = rgrain_n(frame). Mode 2: n = rgrain_grant() from the
+// previous block (its callback cycles, its grant, whether the guard silenced
+// it) while rgrain_cap_on(frame), else 0. A block the overrun guard silences
+// runs no grains: process() does not run, and the guard is there to free the
+// CPU.
+float             g_rg_l[kRgrainFrames];
+float             g_rg_r[kRgrainFrames];
+uint32_t          g_rg_frames = 0;          // the board's block, 0: layer off
+volatile uint32_t g_rgrain_frame = 0;       // foreground: one per SHELL_PLAY_WIN
+uint32_t          g_rg_frame = 0;           // callback: the frame this window plays
+uint8_t           g_rg_blk_n = 0;           // this block's n, for the block end
+float             g_rg_blk_sq = 0.f;        // this block's sum of l^2 + r^2
+uint8_t           g_rg_last_n = 0;          // the previous block's n
+bool              g_rg_last_silenced = false;
+
+// The frame's figures, as a sequence lock like g_rs_seq's: g_rg_seq is odd
+// while the callback writes, and the foreground copies between two equal,
+// even readings.
+struct RgrainWin
+{
+    uint32_t frame;     // the frame the window played
+    uint32_t granted;   // the sum of n over its blocks
+    uint32_t blocks;
+    uint32_t swing;     // the largest |n - the previous block's n|
+    float    sq;        // the sum of l^2 + r^2 over its blocks
+};
+RgrainWin         g_rg_win = {0, 0, 0, 0, 0.f};
+volatile uint32_t g_rg_seq = 0;
+
+void rgrain_tick(spky::Instrument& inst)
+{
+    if(g_win_reset) g_rg_frame = g_rgrain_frame;   // the block that starts a window
+    uint8_t n = 0;
+    if(g_rg_frames != 0 && !panel_scan_guard_tripped())
+    {
+#if SHELL_RGRAIN == 1
+        n = rgrain_n(g_rg_frame);
+#else
+        n = rgrain_cap_on(g_rg_frame)
+                ? rgrain_grant(g_cb_cycles_last, g_rg_last_n, g_rg_last_silenced, kRgrainBudget,
+                               kRgrainCycles, kRgrainGrains)
+                : 0;
+#endif
+    }
+    float sq = 0.f;
+    if(n > 0)
+    {
+        rgrain_block(n, g_rg_l, g_rg_r, g_rg_frames);
+        for(uint32_t i = 0; i < g_rg_frames; ++i) sq += g_rg_l[i] * g_rg_l[i] + g_rg_r[i] * g_rg_r[i];
+        inst.set_reverb_inject(g_rg_l, g_rg_r);
+    }
+    else
+        inst.set_reverb_inject(nullptr, nullptr);
+    g_rg_blk_n  = n;
+    g_rg_blk_sq = sq;
+}
+
+// panel_scan_block_end(): the block into the frame's figures, a reset first
+// when the WIN window resets in this block; `silenced` is whether the guard
+// silenced it (the next block's grant reads it).
+void rgrain_block_end(bool reset, bool silenced)
+{
+    g_rg_seq = g_rg_seq + 1u;   // odd: writing
+    std::atomic_signal_fence(std::memory_order_seq_cst);
+    if(reset) g_rg_win = {g_rg_frame, 0, 0, 0, 0.f};
+    const uint8_t  n = g_rg_blk_n;
+    const uint32_t d = n > g_rg_last_n ? n - g_rg_last_n : g_rg_last_n - n;
+    if(d > g_rg_win.swing) g_rg_win.swing = d;
+    g_rg_win.granted += n;
+    g_rg_win.blocks  += 1u;
+    g_rg_win.sq      += g_rg_blk_sq;
+    std::atomic_signal_fence(std::memory_order_seq_cst);
+    g_rg_seq = g_rg_seq + 1u;   // even: done
+    g_rg_last_n        = n;
+    g_rg_last_silenced = silenced;
+}
+
+// Foreground only.
+RgrainWin read_rgrain_win()
+{
+    RgrainWin s;
+    uint32_t  q;
+    do
+    {
+        q = g_rg_seq;
+        std::atomic_signal_fence(std::memory_order_seq_cst);
+        s.frame   = g_rg_win.frame;
+        s.granted = g_rg_win.granted;
+        s.blocks  = g_rg_win.blocks;
+        s.swing   = g_rg_win.swing;
+        s.sq      = g_rg_win.sq;
+        std::atomic_signal_fence(std::memory_order_seq_cst);
+    } while((q & 1u) != 0 || q != g_rg_seq);
+    return s;
+}
+#endif
+
 } // namespace
 
 void panel_scan_init(bench::Board& hw)
@@ -871,6 +990,13 @@ void panel_scan_init(bench::Board& hw)
     spky::probe_law_clock = &DWT->CYCCNT;
 #endif
     cb_profile_init();
+#if SHELL_RGRAIN
+    // The grain layer's sample, into SDRAM (up since board_init()); a block
+    // longer than the layer's buffers leaves it off.
+    rgrain_init();
+    g_rg_frames = hw.AudioBlockSize() <= kRgrainFrames
+                      ? static_cast<uint32_t>(hw.AudioBlockSize()) : 0u;
+#endif
 }
 
 void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
@@ -896,6 +1022,13 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
         for(PotOwner& o : g_owner) pot_release(o);
         g_mod_cleared = true;   // held for led_tick(): a step < 0 returns first
     }
+#if SHELL_RGRAIN
+    // The grain layer: after the scan's step, whose read and next select must
+    // stay one block apart (a cost that changes from block to block ahead of
+    // it would move them), and before the early return, so it runs every
+    // block.
+    rgrain_tick(inst);
+#endif
     if(step < 0) return;
 
 #if SHELL_SD
@@ -1210,6 +1343,9 @@ void panel_scan_block_end(uint32_t c0)
     // the interval even when its own cycles do not. The foreground asks for
     // the reset; the callback does it, so the counters have one writer.
     // SHELL_CB_WINDOW resets it once per printed frame instead.
+#if SHELL_RGRAIN
+    const bool rg_reset = g_win_reset;   // the grain layer's frame resets with it
+#endif
     if(g_win_reset)
     {
         g_win_gap_max = 0;
@@ -1229,6 +1365,11 @@ void panel_scan_block_end(uint32_t c0)
     if(dc > kWinOverCycles) g_win_over = g_win_over + 1u;
     g_win_blocks = g_win_blocks + 1u;
     g_win_cb_sum = g_win_cb_sum + dc;
+#if SHELL_RGRAIN
+    // was_tripped: the guard as the callback asked it, so whether this block
+    // was silence (no MEASURE image here, so nothing overrides it).
+    rgrain_block_end(rg_reset, was_tripped);
+#endif
 #endif
 #if SHELL_REMOTE_MEASURE
     sec_block(dc, processed);
@@ -1516,6 +1657,12 @@ void run_panel_scan_report(bench::Board& hw)
 #if SHELL_REMOTE_MEASURE
             const SecSnap sec = read_sec();   // the same window, reset with it
 #endif
+#if SHELL_RGRAIN
+            // The grain layer's frame, the same window; the next frame's
+            // number goes in ahead of the reset that latches it.
+            const RgrainWin rg = read_rgrain_win();
+            g_rgrain_frame = g_rgrain_frame + 1u;
+#endif
             g_win_reset = true;
 #endif
             const RunSnap after   = read_run();
@@ -1544,6 +1691,28 @@ void run_panel_scan_report(bench::Board& hw)
                          static_cast<unsigned>(win), static_cast<unsigned>(gap),
                          static_cast<unsigned>(over), static_cast<unsigned>(n),
                          static_cast<unsigned>(sum));
+#if SHELL_RGRAIN
+            // Right after the WIN line, for the same window (read_rgrain.py):
+            // the mode, the frame's fixed n (mode 1, else -1), whether the cap
+            // was on (mode 2, else 0), the sum of n over its blocks, the
+            // blocks, the largest step of n from one block to the next (does
+            // the cap oscillate), and the rms of the layer's output over the
+            // frame x 1e6 (> 0 exactly when grains ran: a layer that runs
+            // but writes nothing fails the reader). At most 108 bytes, every
+            // field at its widest, inside the 128-byte log buffer.
+            {
+                const float samples =
+                    2.0f * static_cast<float>(rg.blocks) * static_cast<float>(g_rg_frames);
+                const float rms6 = samples > 0.f ? std::sqrt(rg.sq / samples) * 1e6f : 0.f;
+                hw.PrintLine("SHELL_RGRAIN mode=%d n=%d cap=%d granted_sum=%u blocks=%u swing=%u "
+                             "rms_x1e6=%u",
+                             SHELL_RGRAIN, SHELL_RGRAIN == 1 ? static_cast<int>(rgrain_n(rg.frame)) : -1,
+                             SHELL_RGRAIN == 2 && rgrain_cap_on(rg.frame) ? 1 : 0,
+                             static_cast<unsigned>(rg.granted), static_cast<unsigned>(rg.blocks),
+                             static_cast<unsigned>(rg.swing),
+                             rms6 < 4.0e9f ? static_cast<unsigned>(rms6) : 4000000000u);
+            }
+#endif
 #if SHELL_REMOTE_MEASURE
             // The window's worst block and its own sections (they add up to
             // worst less the unsectioned rest, see SEC_COUNT), then each

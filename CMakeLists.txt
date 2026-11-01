@@ -774,6 +774,15 @@ add_test(NAME read_sd_guard
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_read_sd.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
 
+# The reverb grain layer's reader (SHELL_RGRAIN, spec
+# 2026-10-31-sd-use-cases-tests-design.md section 5, B1 and B2): the grain's
+# slope and its halves, the cap verdict and the layer check, on generated
+# captures.
+add_test(NAME read_rgrain_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_read_rgrain.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
+
 # The Rev A panel as the firmware sees it: shell/generated_panel_map.h is
 # regenerated and compared, and every check the spec names proves its RED
 # (spec 2026-10-02-rev-a-p6a-panel-scan-design.md section 4; a few purely
@@ -840,7 +849,7 @@ add_test(NAME shell_math_guard
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
 
 # The build-switch writers (reverb_half, fast_math, remote, remote_measure,
-# engine_lean) run while the Makefile is parsed and the Makefile ignores their
+# rgrain, engine_lean, sd, sd_probe) run while the Makefile is parsed and the Makefile ignores their
 # exit status: a refusal or crash that left the old header / stamp / linker
 # script behind would build on a stale value. This holds that each deletes its
 # output on any failure.
@@ -858,9 +867,10 @@ add_test(NAME shell_writer_refusals
 # default to 1) at 0, a full -ffast-math build that must be REFUSED by the
 # math guard, and the SD bring-up image (it must link FatFs and the card test,
 # the others must not) with its refusal without the listener, and the SD
-# burst probe image with its refusal without the SD image (the list is
-# IMAGES in shell/check_images_build.py, sixteen entries at the time of
-# writing). Each is a clean ARM build in its own directory under the
+# burst probe image with its refusal without the SD image, and the reverb
+# grain layer's image (it must link the layer, the plain listener must not)
+# with its refusal beside the SD image (the list is IMAGES in
+# shell/check_images_build.py, eighteen entries at the time of writing). Each is a clean ARM build in its own directory under the
 # build tree (shell/build is not touched), with SRAM_EXEC use in the output.
 # Nothing else in ctest compiles shell/, which is how the Rev A play image
 # stayed broken behind a green suite on 2026-10-09 (450eed36). Skipped, not

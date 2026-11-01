@@ -524,6 +524,43 @@ $(error SHELL_SD_PROBE=$(SHELL_SD_PROBE) needs SHELL_SD=1: the probe modes run o
 endif
 endif
 
+# The reverb grain layer of the SD use-case tests (spec
+# 2026-10-31-sd-use-cases-tests-design.md section 5, B1 and B2): throwaway
+# measurement code, not a feature. Up to eight sampler grains (spky::Grain,
+# unchanged) play a generated 2 s sample from SDRAM and are summed into the
+# reverb input through Instrument::set_reverb_inject(), so a board session can
+# price a grain in callback cycles. 1 is B1's fixed-N sweep (rgrain_n(): N =
+# 0, 8, 2, 4, 4, 2, 8, 0 per 20 frames), 2 is B2's load-dependent cap
+# (rgrain_cap_on() alternates off and on per 60 frames, rgrain_grant() decides
+# per block). It runs on the listener image (the price of a grain does not
+# depend on where its sample came from, spec B1), so it needs SHELL_REMOTE=1;
+# it excludes the SD image (its card traffic would land in the price) and the
+# measurement image (its probe stamps change the engine it prices). A non-zero
+# position compiles the engine with the inject hook, which reaches
+# Instrument's layout -- which is why write_shell_rgrain.py deletes EVERY
+# object of the build directory when the switch flips.
+SHELL_RGRAIN ?= 0
+
+ifneq ($(words $(SHELL_RGRAIN))-$(filter $(SHELL_RGRAIN),0 1 2),1-$(SHELL_RGRAIN))
+$(error SHELL_RGRAIN must be 0, 1 or 2)
+endif
+
+ifneq ($(SHELL_RGRAIN),0)
+ifneq ($(SHELL_REMOTE),1)
+$(error SHELL_RGRAIN=$(SHELL_RGRAIN) needs SHELL_REMOTE=1: the board tests load their \
+workloads through the listener)
+endif
+ifeq ($(SHELL_SD),1)
+$(error SHELL_RGRAIN=$(SHELL_RGRAIN) excludes SHELL_SD=1: the card traffic would land in \
+the grain's price)
+endif
+ifeq ($(SHELL_REMOTE_MEASURE),1)
+$(error SHELL_RGRAIN=$(SHELL_RGRAIN) excludes SHELL_REMOTE_MEASURE=1: its probe stamps \
+change the engine the grains are priced on)
+endif
+C_DEFS += -DSPKY_PROBE_REVERB_INJECT=1
+endif
+
 CPP_SOURCES = \
 	main.cpp \
 	cb_profile.cpp \
@@ -607,6 +644,13 @@ endif
 # panel_scan.cpp sit under #if SHELL_SD.
 ifeq ($(SHELL_SD),1)
 CPP_SOURCES += sd_probe.cpp sd_schedule.cpp
+endif
+
+# The reverb grain layer and the schedules it runs on, in SHELL_RGRAIN images
+# alone (SHELL_SD, the other user of sd_schedule.cpp, is excluded there); its
+# callers in panel_scan.cpp sit under #if SHELL_RGRAIN.
+ifneq ($(SHELL_RGRAIN),0)
+CPP_SOURCES += rgrain.cpp sd_schedule.cpp
 endif
 
 # -O3, und das ist nicht optional. libDaisys core/Makefile setzt `OPT ?= -O2`,
@@ -758,6 +802,13 @@ C_DEFS += -DSPKY_LEAN_EXP2=1
 endif
 
 ENGINE_OBJECTS := $(addprefix $(BUILD_DIR)/,$(patsubst %.cpp,%.o,$(notdir $(filter ../engine/%,$(CPP_SOURCES)))))
+# The grain layer's object counts as an engine object: its grain loop is the
+# sampler's kernel (sampler/grain.h, inlined), and B1 prices it compiled the
+# way SamplerEngine is, fast-math flags included; write_shell_fast_math.py
+# then deletes it on a flip like the others.
+ifneq ($(SHELL_RGRAIN),0)
+ENGINE_OBJECTS += $(BUILD_DIR)/rgrain.o
+endif
 
 ifeq ($(SHELL_FAST_MATH),1)
 $(ENGINE_OBJECTS): override OPT += -ffast-math -fno-finite-math-only
@@ -831,6 +882,7 @@ SWITCH_HEADERS := \
   $(shell python write_shell_remote_measure.py $(BUILD_DIR)/shell_remote_measure.h $(SHELL_REMOTE_MEASURE) $(BUILD_DIR)) \
   $(shell python write_shell_sd.py $(BUILD_DIR)/shell_sd.h $(SHELL_SD) $(BUILD_DIR)/panel_scan.o) \
   $(shell python write_shell_sd_probe.py $(BUILD_DIR)/shell_sd_probe.h $(SHELL_SD_PROBE) $(BUILD_DIR)/sd_probe.o $(BUILD_DIR)/panel_scan.o) \
+  $(shell python write_shell_rgrain.py $(BUILD_DIR)/shell_rgrain.h $(SHELL_RGRAIN) $(BUILD_DIR)) \
   $(shell python write_shell_fast_math.py $(BUILD_DIR)/shell_fast_math.h $(SHELL_FAST_MATH) $(ENGINE_OBJECTS)) \
   $(shell python write_shell_engine_lean.py $(BUILD_DIR)/shell_engine_lean.h SVF1=$(SHELL_LEAN_SVF1) GRAIN_WIN=$(SHELL_LEAN_GRAIN_WIN) EXP2=$(SHELL_LEAN_EXP2) -- $(BUILD_DIR)) \
   $(shell python write_shell_reverb_half.py itcm_hot.ld $(BUILD_DIR)/itcm_hot.ld $(BUILD_DIR)/shell_reverb_half.state $(SHELL_REVERB_HALF) $(SHELL_REMOTE_MEASURE) $(BUILD_DIR)) \
@@ -857,6 +909,9 @@ $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/control_tick.o: $(BUI
 $(BUILD_DIR)/main.o $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_remote_measure.h
 $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_sd.h
 $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/sd_probe.o: $(BUILD_DIR)/shell_sd_probe.h
+# The rgrain writer deletes every object on a flip (the inject define reaches
+# the engine); this edge is the ordering for the object that reads the header.
+$(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_rgrain.h
 $(ENGINE_OBJECTS): $(BUILD_DIR)/shell_fast_math.h
 # The lean stamp: the writer deletes every object on a change; this edge is
 # the ordering for the objects that read the defines it stands for.
