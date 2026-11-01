@@ -110,7 +110,7 @@ Reading:
 - `sdram16` and `axi16` stay within ±9 k cycles of idle on every workload (≤ 1 %). In the per-phase check, axi16 on 99 is +12.1 ± 5.8 k.
 - 32 KB chunks cost more than 16 KB on every workload, by up to +22 k, so 16 KB is the chunk size to keep.
 - Location (SDRAM against AXI SRAM) shows no consistent sign.
-- The FAIL on 145 is inside that run's own phase-to-phase noise. On 90 and 99 the noise does not explain the sdram32 excess.
+- The FAIL on 145 is inside that run's own phase-to-phase noise. On 90 the per-phase sdram32 contrast is +12.9 ± 6.7 k (1.9 standard errors); on 99 it is +8.3 ± 5.8 k, within two standard errors. The chunk-size recommendation stands either way.
 
 ## 5. Setup, board session 2 (plan Task 10), 2026-11-01
 
@@ -120,11 +120,12 @@ Reading:
   - B1: `de5faea`, `SHELL_PANEL_SCAN=1 SHELL_KEYS_NC=1 SHELL_REMOTE=1 SHELL_RGRAIN=1`, no SD code.
   - B2: `f39d228` (B1's slope in `kRgrainCycles`), the same flags with `SHELL_RGRAIN=2`.
 - **Hold.** C1 and C2 run A1's bursts with the hold and tail 0 (§3); C2's `wmax` runs back to back and is unmarked.
+- **Clock caveat.** The probes of §3-§7 time their burst periods, phase lengths and transfer rates with `System::GetNow()`, which runs slow while audio plays (`docs/gotchas.md`). The call counts show it: C2's `w16` and `w24` made 3 852 and 5 689 calls in a "600 s" phase, where 3 600 and 5 400 fit, and C1's `seq` made 15 257 where 14 634 fit. So A1's labelled rates, A3's MiB/s and the "10 min" phases of C1 and C2 are 4-7 % off in the same direction. The latencies (`worst`, buckets) come from the DWT counter and are exact. No verdict changes. D2's save/load time uses DWT since commit `706375af`.
 - **End.** See §10.
 
 ## 6. C1: read latency tail and seeks
 
-- **Mode.** `rtail` writes `FFSDBIG.DAT` once (512 MiB in 72.8 s, `fr=0`), then reads 32 KB chunks in A1's burst pattern at 384 KB/s: sequential (`seq`), random offsets with FatFs fast seek off (`rand`), and random offsets with fast seek on (`randfs`), 10 min each.
+- **Mode.** `rtail` writes `FFSDBIG.DAT` once (512 MiB in 72.8 s, `fr=0`), then reads 32 KB chunks in A1's burst pattern, one chunk per 41 ms (A1's faster rate, about 780 KB/s): sequential (`seq`), random offsets with FatFs fast seek off (`rand`), and random offsets with fast seek on (`randfs`), 10 min each. The ring column sizes a ring for a 384 KB/s player, not for this test rate.
 - **Contiguity.** `clmt at=pre frags=1` and `at=randfs frags=1` in both runs: the file is one fragment.
 - **Captures.** Two runs of 34 min (`c1-run1`, `c1-run2`). A first run-2 attempt was discarded: the controller left out the `boot` step, so `flash` found no DFU device and the capture holds only lines after the probe had finished.
 
@@ -190,7 +191,7 @@ No guard trip in either run, no `fr` other than 0.
 
 ## 9. B2: a load-dependent grain cap
 
-- **Mode.** `SHELL_RGRAIN=2`: per block, `rgrain_grant()` grants floor((920 000 − previous block's cycles) / 16 400) grains, at most 8. The cap is off and on in alternating 60-frame phases, off first.
+- **Mode.** `SHELL_RGRAIN=2`: per block, `rgrain_grant()` grants floor((920 000 − base) / 16 400) grains, at most 8, where base is the previous block's cycles without its grains (its cycles minus its grant × 16 400). The cap is off and on in alternating 60-frame phases, off first.
 - **Runs.** 1 200 s each via `remote_run.py run --load <id>`, on 90, 99, 127, 117 and 145. None was voided.
 - **Measure.** `read_rgrain.py` per workload and phase: frames, worst `win`, mean of the frames' mean block, guard trips, and the per-frame mean grant. Each capture also holds one frame of the previous load (the frame counter runs across loads); the reader's verdict then names that workload too. The table judges each workload from its own frames only.
 - **Pass.** Worst with the cap ≤ worst without grains + 16 400, and trips with the cap ≤ trips without.
