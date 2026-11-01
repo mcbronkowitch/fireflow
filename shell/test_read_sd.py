@@ -848,8 +848,25 @@ def test_duplex_underrun_fails():
     check("duplex: a failed card test fails", code == 1)
 
 
+def test_duplex_malformed_line_skipped():
+    # A line cut short (a USB drop mid-line) is counted as malformed and left
+    # out, not read as a KeyError; the rest of the capture is judged as usual.
+    lines = duplex_capture()
+    cut = d_line(20)[:40] + "\n"            # "SHELL_SD_D w=20 under=0 over=0 rfill=17"
+    junk = "SHELL_SD_D w=21 under=x over=0 rfill=1 wfill=1 worst_r_us=1 worst_w_us=1 held=0 fr=0\n"
+    try:
+        st = read_sd.duplex_stats(lines[:200] + [cut, junk] + lines[200:])
+    except Exception as e:   # noqa: BLE001 -- the old reader raised here
+        check("duplex: a malformed line does not raise (%s)" % type(e).__name__, False)
+        return
+    check("duplex: malformed lines are counted and left out",
+          st["malformed"] == 2 and st["passes"] == 2 * (COUNTERS - DX_FIRST))
+    check("duplex: the rest still passes", st["pass"] and st["rfill_min"] == 16000 + 100 * DX_FIRST)
+
+
 test_duplex_clean_passes()
 test_duplex_underrun_fails()
+test_duplex_malformed_line_skipped()
 
 print("%d failed" % len(FAILS))
 sys.exit(1 if FAILS else 0)

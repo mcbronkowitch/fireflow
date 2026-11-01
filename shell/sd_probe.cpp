@@ -1870,11 +1870,14 @@ void sd_bank_block()
 // The foreground keeps both rings going for the whole pass: it refills the
 // read ring from FFSDBIG.DAT (512 MiB, left on the card by rtail's fill; it
 // is not written here, and a missing file stops the mode with fr=4,
-// FR_NO_FILE) in 16 KB reads while the ring is below half -- one read per
-// turn of the pass's loop, as many as it takes to get back to half, each
-// ahead of any write -- and drains the write ring to FFREC.DAT (truncated at
-// the start) in 16 KB writes while at least 16 KB is queued and the read ring
-// is at half or above; an underrun is the one heard.
+// FR_NO_FILE) and drains the write ring to FFREC.DAT (truncated at the
+// start), one 16 KB transfer per turn of the pass's loop: a read while the
+// read ring is below half (the emergency, ahead of everything), else a write
+// while at least 16 KB is queued, else a top-up read while a chunk fits in
+// the read ring, else a 1 ms wait. So the write ring runs near empty and the
+// read ring near full -- its steady level, not half. Every 4 MiB written,
+// FFREC.DAT is synced (f_sync: the FAT and the directory entry, as a real
+// recorder must now and then), and the sync's time counts in worst_w_us.
 // Both files wrap: the read at the file's last whole chunk, the record before
 // the FAT32 4 GiB limit. One FatFs and one bus serve both, so a stalled write
 // stops the refills too: the read ring is sized for that (kReadRing). The
@@ -1882,9 +1885,9 @@ void sd_bank_block()
 // callback starts taking (read_sd.py does not judge that pass's window and
 // frame).
 //
-// Every card access, f_open, f_read, f_write, f_lseek and f_close, is marked
-// for the pot hold (DxMark, as OpMark and TailMark) with A1's tail of 0 (A1
-// passed: the hold with tail 0, not back to back).
+// Every card access, f_open, f_read, f_write, f_sync, f_lseek and f_close, is
+// marked for the pot hold (DxMark, as OpMark and TailMark) with A1's tail of
+// 0 (A1 passed: the hold with tail 0, not back to back).
 //
 // Line, every pass (longest realistic: w 5 digits, under and over 4 -- a pass
 // that a 2 s card stall stretched counts ~1 000 blocks --, rfill and wfill 7,
@@ -1893,7 +1896,8 @@ void sd_bank_block()
 // w: the raw window counter at the pass's start; under / over: blocks of this
 // pass; rfill / wfill: the read ring's lowest and the write ring's highest
 // fill this pass in bytes, as the callback left them after its take and put;
-// worst_r_us / worst_w_us: the slowest f_read / f_write of the pass; held: the
+// worst_r_us / worst_w_us: the slowest f_read / the slowest f_write or f_sync
+// of the pass; held: the
 // blocks the pot hold dropped in it; fr: the first failure, sticky (a FRESULT,
 // -2 a short transfer, -3 no card test to start from). From then on nothing is
 // transferred, the callback stops taking and counting, and the line keeps
@@ -1907,10 +1911,12 @@ constexpr uint32_t kDxChunk = 16u * 1024u;
 // The rings, from C1/C2, board session 2, 2026-11-01 (docs/hardware/
 // sd-use-cases-measured.md, C1/C2 rows). Read: one foreground thread serves
 // both rings, so the read ring has to outlast the longest blocking call of
-// either stream -- C2's worst write stall (1.97 s; 2 x 1.97 s x 288 KB/s
-// rounds to 1152 KB, and at 384 KB/s 1152 KB still holds 3.0 s) as well as
-// C1's read tail (a 32 KB ring at 384 KB/s, worst f_read 24.5 ms) -- and the
-// report loop's prints between two passes, when nothing refills it.
+// either stream -- C2's worst write stall (1.97 s) as well as C1's read tail
+// (a 32 KB ring at 384 KB/s, worst f_read 24.5 ms) -- and the report loop's
+// prints between two passes, when nothing refills it. 1152 KB holds 3.0 s at
+// 384 KB/s; that cover holds because the pass's top-up reads keep the ring
+// near full (duplex_pass()). Below half is the emergency, not the steady
+// level: from half, 576 KB would last 1.5 s, under C2's stall.
 constexpr uint32_t kReadRing = 1152u * 1024u;
 // Write: the largest ring C2 printed over all write patterns and runs -- one
 // ~2 s card stall in a 16-bit run (worst f_write 1 969 428 us). A card's
@@ -1930,6 +1936,11 @@ static_assert(kDxChunk <= kChunk, "g_buf holds one chunk");
 // FAT32 files end at 4 GiB - 1: the record wraps to 0 before the last chunk
 // that fits (about 4 h at 288 KB/s; the 10 min run never gets there).
 constexpr uint32_t kRecWrap = 0xFFFFFFFFu - (0xFFFFFFFFu % kDxChunk);
+// FFREC.DAT is synced every 4 MiB written (about 15 s at 288 KB/s): a real
+// recorder must write its FAT and directory entry now and then, and that write
+// is part of the stall profile the test is after.
+constexpr uint32_t kDxSyncBytes = 4u * 1024u * 1024u;
+static_assert(kDxSyncBytes % kDxChunk == 0, "a sync falls on a chunk");
 
 const char kDxReadName[] = "FFSDBIG.DAT";
 const char kDxRecName[]  = "FFREC.DAT";
@@ -2019,6 +2030,7 @@ struct DxRun
     bool     begun      = false;
     int      fr         = 0;   // the first failure, sticky
     FSIZE_t  read_end   = 0;   // FFSDBIG.DAT's size, down to a whole chunk
+    uint32_t unsynced   = 0;   // bytes written to FFREC.DAT since its last f_sync
     uint32_t under_said = 0;   // g_dx_under at the last line
     uint32_t over_said  = 0;
 };
@@ -2122,6 +2134,22 @@ void dx_drain(uint32_t& worst)
         return;
     }
     dx_release(g_wring, kDxChunk);
+    // Every kDxSyncBytes: the FAT and the directory entry, timed as a write.
+    g_dx.unsynced += kDxChunk;
+    if(g_dx.unsynced >= kDxSyncBytes)
+    {
+        g_dx.unsynced = 0;
+        {
+            DxMark         m;
+            const uint32_t c0 = cycles_now();
+            fr                = f_sync(&g_rec.fil);
+            dt                = (cycles_now() - c0) / kCoreMhz;
+        }
+        if(dt > worst)
+            worst = dt;
+        if(fr != FR_OK)
+            dx_fail(static_cast<int>(fr));
+    }
 }
 
 // The first pass: the bring-up's test file closed, both files opened, the
@@ -2229,12 +2257,17 @@ static void duplex_pass(bench::Board& hw, const volatile uint32_t& win)
     if(!g_dx.begun)
         dx_begin(worst_r);
     // Until the 500 ms are up; a transfer that stalls makes the pass longer.
+    // One transfer per turn: a read ring below half first (the emergency),
+    // then a queued write chunk, then a top-up read while a chunk fits -- so
+    // in steady state the read ring sits near full (kReadRing).
     while(g_dx.fr == 0 && daisy::System::GetNow() - t0 < kPassMs)
     {
         if(dx_fill(g_rring) < kReadRing / 2u)
             dx_refill(worst_r);
         else if(dx_fill(g_wring) >= kDxChunk)
             dx_drain(worst_w);
+        else if(dx_fill(g_rring) <= kReadRing - kDxChunk)
+            dx_refill(worst_r);
         else
             daisy::System::Delay(1);
     }

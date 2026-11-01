@@ -897,14 +897,24 @@ DUPLEX_READ_RING = 1152 * 1024    # sd_probe.cpp kReadRing (C2's stall: one thre
 DUPLEX_WRITE_RING = 1152 * 1024   # sd_probe.cpp kWriteRing (C2)
 
 
+DUPLEX_KEYS = ("w", "under", "over", "rfill", "wfill", "worst_r_us", "worst_w_us", "held", "fr")
+
+
 def parse_duplex(lines):
-    """Every `SHELL_SD_D` line, in order, as an int field dict."""
-    out = []
+    """Every `SHELL_SD_D` line, in order, as an int field dict, and the count
+    of malformed ones: a line without every field of DUPLEX_KEYS as an
+    integer (cut short by a USB drop, say) is counted and left out."""
+    out, malformed = [], 0
     for raw in strip_host_time(lines):
         m = _SD_D.match(raw.strip())
-        if m:
-            out.append({k: int(v) for k, v in _kv(m.group(1)).items()})
-    return out
+        if not m:
+            continue
+        kv = _kv(m.group(1))
+        try:
+            out.append({k: int(kv[k]) for k in DUPLEX_KEYS})
+        except (KeyError, ValueError):
+            malformed += 1
+    return out, malformed
 
 
 def duplex_frames(lines):
@@ -938,10 +948,12 @@ def duplex_frames(lines):
 
 
 def duplex_stats(lines):
-    """D3, the continuous stream and record: {"passes", "under", "over",
-    "rfill_min", "wfill_max", "worst_r_us", "worst_w_us", "held_share",
+    """D3, the continuous stream and record: {"passes", "malformed", "under",
+    "over", "rfill_min", "wfill_max", "worst_r_us", "worst_w_us", "held_share",
     "windows", "pots", "pots_ok", "cb", "cb_ok", "pass", "why"}.
 
+    malformed: lines left out by parse_duplex() (printed, not judged; the
+    passes they stood for are missing from the totals).
     under / over: the totals over every line (each line counts its own pass).
     rfill_min: the read ring's lowest fill, wfill_max the write ring's highest,
     in bytes, over all passes. pass: at least one line, 0 underruns, 0
@@ -957,7 +969,7 @@ def duplex_stats(lines):
     A3's are; A3's 1 % comparison needs an idle mean, which a capture that
     streams throughout does not hold."""
     lines = strip_host_time(lines)
-    rows = parse_duplex(lines)
+    rows, malformed = parse_duplex(lines)
     why = []
     if not rows:
         why.append("no SHELL_SD_D line")
@@ -978,7 +990,7 @@ def duplex_stats(lines):
     pots_ok = bool(windows) and all(p["over_h"] == 0 and p["over_touch"] == 0 for p in pots.values())
     cb = cb_stats(duplex_frames(lines))
     cb_ok = cb["frames"] > 0 and cb["max"] <= CB_CLICK
-    return {"passes": len(rows), "under": under, "over": over,
+    return {"passes": len(rows), "malformed": malformed, "under": under, "over": over,
             "rfill_min": min((r["rfill"] for r in rows), default=0),
             "wfill_max": max((r["wfill"] for r in rows), default=0),
             "worst_r_us": max((r["worst_r_us"] for r in rows), default=0),
@@ -998,8 +1010,10 @@ def duplex_report(lines, out, card_ok):
           "write ring max %d of %d B" % (st["passes"], st["under"], st["over"], st["rfill_min"],
                                          DUPLEX_READ_RING, st["wfill_max"], DUPLEX_WRITE_RING),
           file=out)
-    print("duplex: worst f_read %d us, worst f_write %d us, held %.1f %% of the blocks"
+    print("duplex: worst f_read %d us, worst f_write or f_sync %d us, held %.1f %% of the blocks"
           % (st["worst_r_us"], st["worst_w_us"], 100.0 * st["held_share"]), file=out)
+    if st["malformed"]:
+        print("duplex: %d malformed SHELL_SD_D lines left out" % st["malformed"], file=out)
     print("duplex verdict: %s" % ("PASS" if st["pass"] else "FAIL (" + "; ".join(st["why"]) + ")"),
           file=out)
     print("pots (spread of the readings the hold kept, %d windows after the first pass):"
