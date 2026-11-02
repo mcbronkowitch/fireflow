@@ -229,6 +229,20 @@ transfers), kept outside the repo like the earlier captures.
 
 ---
 
+## Deferred solder jobs
+
+Decided by Bastian on 2026-11-02: both DNP fallbacks below stay empty on
+Rev A #1 for now. They are done together at the end of bring-up, each with
+its re-measurement, and the result goes into the Rev B BOM decision. Both
+have firmware workarounds that are measured and in use.
+
+| Part | Fault, check | What it should fix | Workaround meanwhile | Re-measure after fitting |
+|---|---|---|---|---|
+| C_SENSE0 | R3, 5.3/5.5 | SENSE_0's floor, about 3× the other sense pins, at mid travel | SENSE_0's persistence band is 64; SENSE_1-3 use 32 (roadmap 2026-10-28) | `SHELL_RAW_SPREAD=1` rest capture at mid travel; can the band come down from 64? |
+| C_SD2 (10 µF) | R5, 11.2 | Pot raw spread leaving its band while the card streams | Read in 16 KB bursts and drop the pot readings of a block that saw a transfer (4.7-10 % of blocks; `sd-use-cases-measured.md` §18) | 11.2 again, then the SD plan's H1 (Task 15 of `2026-10-31-sd-use-cases-tests.md`) |
+
+---
+
 ## Assumptions the board settles
 
 When a row above measures one of these, the measured value goes into the

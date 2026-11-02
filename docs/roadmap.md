@@ -4260,6 +4260,10 @@ over USB on Rev A #1 (remote measurement and listener images).
   confirmed its build, and the persisted patch came back (`seq=581`,
   `take=1`). `SHELL_BOOTCMD=0` builds the old play image. See
   `shell/README.md`.
+- **Solder jobs deferred (2026-11-02).** C_SENSE0 (fault R3) and C_SD2
+  (fault R5, SD plan H1) stay unfitted until the end of bring-up. Both
+  have measured firmware workarounds; see "Deferred solder jobs" in
+  `docs/hardware/reva-bring-up.md`.
 
 **2026-10-28 — panel-state persistence: Rev A wakes up as it was switched off ✅ built, measured on Rev A #1, merged.**
 Spec `docs/superpowers/specs/2026-10-28-panel-state-persistence-design.md`,
