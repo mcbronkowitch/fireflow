@@ -5,7 +5,7 @@ Rev A #1, branch `claude/sd-firmware-5a16f8`. Spec:
 plan [`2026-10-31-sd-use-cases-tests.md`](../superpowers/plans/2026-10-31-sd-use-cases-tests.md).
 The board printed every number below. The captures are not in the repo. Like the 11.2
 captures, they sit in the moderating session's notes folder as
-`sd-captures-2026-11-01/reva-sd-2026-11-01-*.txt`.
+`sd-captures-2026-11-01/reva-sd-2026-11-01-*.txt`. §18 sums up the round per idea.
 
 ## 1. Setup, board session 1 (plan Task 7), 2026-11-01
 
@@ -311,3 +311,35 @@ Callback: busy +7 404 against idle (100 and 113 frames), PASS.
 
 - **Image left on the board.** The play image of main `8648a74` with the boot-only listener (`SHELL_PANEL_SCAN=1 SHELL_KEYS_NC=1`). It printed `SHELL_PERSIST boot ex=0,0 eng=1,1 take=1`, `src=flash seq=581` and `SHELL_REMOTE on build=8648a74 cmds=boot`.
 - **Next flash.** `remote_run.py boot --expect-build 8648a74`, no hands.
+
+## 17. D5: firmware from the card
+
+Run by the top session with Bastian, 2026-11-02 (plan Task 14).
+
+- **File.** `FW.BIN` was `shell-sram.bin` from a clean build of `8648a74`: the play image the board was running, 218 312 B (sha256 `b425c959…caa24`). It was copied to the card root, as the only `.bin` there. The QSPI image was not put on the card (spec, D5). `PATCH.FFP` from D4 (540 B) was on the card as the patch backup.
+- **Before.** The card already held `daisy_boot_log.txt` with 13 lines, all `Encountered error when attempting to flash "FFSDTEST.BIN" to address 0x90040000: file does not contain executable code`. These lines date from the boots before P1 renamed the test file. So the Daisy bootloader scans the card root on every boot and logs failures. It rejected the old data file and went on to boot the board.
+- **Boot.** Bastian cut 12 V and USB and power-cycled several times. He saw the Patch SM's LED pulse 3 times. The board came up on `8648a74` with `SHELL_PERSIST src=flash seq=581 chg=0` and `boot ex=0,0 eng=1,1 take=1`. `PING` answered `pong`; `cb_last` was about 505 k, in line with §10.
+- **After.**
+  - `daisy_boot_log.txt` was byte-identical to the copy saved before: no new line.
+  - `FW.BIN` was unchanged: same sha256, same mtime as the copy, not renamed.
+- **Cleanup.** Bastian deleted `FW.BIN` by hand. The root then held no `.bin`, `PATCH.FFP` was still there, and the card went back into the powered board.
+
+**Result.** The board boots normally with the same stamp and seq, the patch sectors survive, and the bootloader logs no error. Whether it flashed `FW.BIN` or skipped it as identical cannot be told from this run, because the file matched what the board already held.
+
+**Next step before a packer.** Put a play image with a different stamp on the card (for example a play build one commit later) and power-cycle. If the new stamp boots, the bootloader flashes from the card; if the old one boots, it does not. That needs Bastian and the card reader again. The packer that joins the QSPI and SRAM images into one file stays out of scope (spec, D5).
+
+## 18. Summary per idea
+
+The five ideas are the spec's §1. "Pass" and "fail" are the readers' verdicts as printed; the sections above say where a printed FAIL is narrower than it looks. Every test ran without C_SD2 (H1 open).
+
+| idea | tests | verdicts | numbers a feature spec would quote | open |
+|---|---|---|---|---|
+| all | P1, A1, A3 | P1 pass (root line; LED not observed). A1 pass with tail 0. A3 pass at 16 KB, FAIL at 32 KB on 145, 90, 99 | Read in bursts and drop the pot readings of a block that saw a transfer, with no tail: this costs 4.7-5.3 % of the blocks at 384 KB/s and about 10 % at 768 KB/s. Use 16 KB chunks: they stay within ±9 k cycles (1 %) of idle; 32 KB cost up to +22 k. SDRAM against AXI SRAM makes no consistent difference | H1: whether C_SD2 removes R5 and with it the hold |
+| 1. reverb grains from card files | C1, B1, B2 | C1 `seq` and `randfs` pass, `rand` FAIL (2.51×). B1 pass. B2 FAIL on all five workloads | 16 400 cycles per grain (B1 slope). 7-8 grains fit under 945 k on 145 and 108; 8 do not on 90, 99, 127. Random seeks need FatFs fast seek: 1.4 ms against up to 126 ms without | A grain cap that holds: B2's previous-block grant fills every workload to 905-912 k and spikes reach 1 044 k. A lower budget or a grant over several blocks is unmeasured. Loading short files was not tested on its own; D1's 63 KiB in 12 ms is the nearest figure |
+| 2. long field recordings, streamed | C1, D3 | C1 as above. D3 FAIL (403 underruns, all at the first write after mount) | A read-only stream needs a 32 KB ring at 384 KB/s (worst sequential read 24.5 ms). Next to a recorder the ring is 1 152 KB, because one thread serves both and a write can stall it 2 s. After the first write, 1 074 passes ran with no underrun, the pots at the floor and the callback at most 752 k | D3 again with the first write made before playback. Grains on top of a stream (B2's cap) |
+| 3. wavetable banks from the card | D1 | FAIL as printed: one busy block of 959 k on workload 127, which reaches about 963 k without card traffic. 96 of 96 loads compare | A 63 KiB bank loads in about 12 ms (worst 13.8 ms) and swaps at the top of a block. Callback mean +62 cycles. A second slot of 65 024 B in D2 SRAM | Whether a swap between two different banks clicks (both slots held the factory bank) |
+| 4. sampler buffer to and from the card | D2 | Pass | A 16.1 MB float buffer saves in 3.0 s and loads in 2.0 s; as 16-bit it saves in 4.1 s (with conversion) and loads in 1.1 s. Float loads are bit-exact, 16-bit loads within 1 LSB. No callback cost. The pots are held up to 4.5 s per operation | The live buffer (D2 used a scratch copy). What the panel does while the pots are held |
+| 5a. patch library | D4 | Pass | A 540 B patch saves with its sync in about 20 ms and reads back in 2.5 ms. 100 of 100 compare. QSPI is only read | — |
+| 5b. recording the master out | C2, D3 | C2 `w24`, `wmax` pass, `w16` FAIL (6.4×: one 1.97 s stall). D3 as above | Writes stall far longer than reads: p99.9 is 65-131 ms. One 1.97 s stall sets the write ring at 1 152 KB for 24-bit stereo (288 KB/s). The first write after mount took 1.95 s (D4) and 3.84 s (D3) on the 64 GB FAT32 card; a free-cluster search is the inferred cause | D3 with the first write (or the file's allocation) before playback. Why the first write is slow is unmeasured |
+| 5c. firmware update from the card | P1, D5 | P1 pass. D5: the board boots with the same stamp and seq | The bootloader scans the root on every boot and logs only failures, to `daisy_boot_log.txt`; it skips a file without executable code and boots on | Whether it flashes a different image (§17). A packer for the QSPI + SRAM pair |
+| 5d. logging measurements to the card | — | not tested this round | — | — |
