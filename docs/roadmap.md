@@ -37,7 +37,13 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-10-30 (**the CPU hunt on Rev A brought every worst
+- **Last updated:** 2026-11-02 (**the SD card on Rev A is measured** —
+  bring-up and the use-case tests merged and pushed, `9bb67b2b`; the C_SENSE0
+  and C_SD2 solder jobs are deferred to the end of bring-up; see the M6
+  entry of that date and `docs/hardware/sd-use-cases-measured.md` §18.
+  2026-11-01: the play image reflashes without hands (`SHELL_BOOTCMD`).
+  2026-10-31: CPU round 2, per-engine kernels, merged. Earlier, 2026-10-30:
+  **the CPU hunt on Rev A brought every worst
   case under the click line** — five class-1 savings plus the half-rate reverb
   and `-ffast-math` in the firmware, merged into main `47f3901b`; see the M6
   entry of that date and `docs/hardware/cpu-hunt-measured.md`. Earlier,
@@ -3107,7 +3113,9 @@ host had been building `mods.csv` from all along.
 - **Four by-ear constants** — `kFloor`, `kGamma`, `kEnvFall`, `kEnvOff` — are
   candidates awaiting Bastian's eye on real hardware. `kEnvOff` in particular
   came from arithmetic rather than from looking, and today that flag survives
-  only in a comment in `control/led_law.hpp`.
+  only in a comment in `control/led_law.hpp`. *(Since P6b-2 only `kGamma`
+  is live; `kFloor`, `kEnvFall` and `kEnvOff` are unused,
+  `reva-bring-up.md` §0.3. The by-eye pass is bring-up §7.)*
 - **The 8:1-versus-16:1 mux width** (`docs/hardware/io-budget.md` §6), which is
   why `duty()` takes the step count as a parameter rather than a constant.
 - **Three lamps are still deliberately dark**: `FLOW_A_L`, `FLOW_B_L` and
@@ -4197,6 +4205,31 @@ the coupon has nothing else open.
 **Next:** part 2 — the 70-pot table, the four keys on the 165 and the 19
 LEDs on the 595 — waits for the control PCB's pin map, which should give one
 spare channel to AGND and one to the rail (spec §8).
+*(Superseded: part 2 was built on the Rev A pin map, entries 2026-10-02
+onward, and the Rev A bring-up has run since 2026-10-24.)*
+
+**2026-11-02 — SD card on Rev A: bring-up and use-case tests ✅ measured, merged.**
+Specs `docs/superpowers/specs/2026-10-31-sd-bring-up-design.md` and
+`…/2026-10-31-sd-use-cases-tests-design.md`, plans of the same names; branch
+`claude/sd-firmware-5a16f8`, fast-forwarded into main and pushed
+(`9bb67b2b`). Numbers in `docs/hardware/sd-use-cases-measured.md`; §18 is the
+verdict per idea. All of it ran without C_SD2.
+- **Works:** sampler buffer to and from the card (16.1 MB float: 3.0 s save,
+  2.0 s load), patch library (a 540 B patch in ~20 ms), wavetable banks
+  (63 KiB in ~12 ms, swapped at a block top). The Daisy bootloader scans the
+  card root on every boot and logs only failures to `daisy_boot_log.txt`.
+- **Costs:** the pots must be dropped for every block that saw a transfer
+  (fault R5; 4.7-10 % of blocks, 16 KB bursts). One grain from the card costs
+  16 400 cycles; 7-8 fit on the lighter workloads, and no grain cap held on
+  all five of B2's.
+- **Fails:** the first write after mount stalls 2-4 s, which alone failed D3
+  (duplex); later writes can still stall ~2 s, so a recorder needs a
+  1 152 KB ring. Random seeks need FatFs fast seek (1.4 ms against 126 ms).
+- **Open:** H1 (C_SD2, deferred with C_SENSE0 to the end of bring-up),
+  whether the bootloader flashes a *different* `FW.BIN`, D3 with the first
+  write made before playback, and a lower grain budget for B2.
+- **Also merged with it:** the play image reflashes without hands
+  (`SHELL_BOOTCMD`, see the 2026-10-30 entry below).
 
 **2026-10-31 — CPU round 2 on Rev A: per-engine kernels ✅ measured, merged.**
 Spec `docs/superpowers/specs/2026-10-30-cpu-engine-kernels-design.md`, plan
@@ -4260,6 +4293,9 @@ over USB on Rev A #1 (remote measurement and listener images).
   confirmed its build, and the persisted patch came back (`seq=581`,
   `take=1`). `SHELL_BOOTCMD=0` builds the old play image. See
   `shell/README.md`.
+- **Stress patches on Rev A (2026-11-02, bring-up 10.2): pass.** W2 and F2
+  ran 10 min each with no click: `cb_max` 737 566 and 643 100, against
+  894 446 and 810 105 on the coupon before the hunt.
 - **Solder jobs deferred (2026-11-02).** C_SENSE0 (fault R3) and C_SD2
   (fault R5, SD plan H1) stay unfitted until the end of bring-up. Both
   have measured firmware workarounds; see "Deferred solder jobs" in
@@ -4600,7 +4636,8 @@ items 1 and 2 **failed** (the small caps stood 5.3 mm apart edge to edge), item
   and the jack row's MOD A / CLOCK edges line up with the fields above.
   Print layer only: `FireflowHW-print.svg`, the VCV panel and the legend
   baselines changed; holes, cut file and every control position did not.
-  Guard: `test_every_seam_is_box_gap`. The print is not ordered yet.
+  Guard: `test_every_seam_is_box_gap`. The print is not ordered yet
+  *(it was, 2026-10-13, as the UV print on the Schaeffer plate below)*.
 
 - **Boards ordered (2026-10-13).** JLCPCB, from the released package in
   `hardware/reva/fab/` (uploaded unchanged): 5 boards, 4 layers, 300.8 ×
@@ -4658,6 +4695,8 @@ items 1 and 2 **failed** (the small caps stood 5.3 mm apart edge to edge), item
   Thonk set at roughly 290 € delivered. Not counted: the Daisy Seed, the ST-Link, tools and the
   measurement rig.
 
+*(Superseded: the boards arrived and the bring-up has run since
+2026-10-24; J_SD was fitted 2026-10-31.)*
 **Next:** bring-up (P7) when the boards arrive. Its checklist and fault list
 are [`docs/hardware/reva-bring-up.md`](hardware/reva-bring-up.md) (compiled
 2026-10-19 from every open P7 item; its §0 lists five firmware/tool gaps to
