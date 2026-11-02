@@ -4296,6 +4296,9 @@ over USB on Rev A #1 (remote measurement and listener images).
 - **Stress patches on Rev A (2026-11-02, bring-up 10.2): pass.** W2 and F2
   ran 10 min each with no click: `cb_max` 737 566 and 643 100, against
   894 446 and 810 105 on the coupon before the hunt.
+- **Aluminium plate mounted (reported 2026-11-02).** The Schaeffer plate
+  ordered 2026-10-13 is on Rev A #1 (bring-up 12.9). Its arrival date was
+  not recorded.
 - **Solder jobs deferred (2026-11-02).** C_SENSE0 (fault R3) and C_SD2
   (fault R5, SD plan H1) stay unfitted until the end of bring-up. Both
   have measured firmware workarounds; see "Deferred solder jobs" in

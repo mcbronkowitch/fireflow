@@ -229,7 +229,7 @@ transfers), kept outside the repo like the earlier captures.
 | 12.6 | Alpha anti-rotation tab: present? where? | recorded | `grip-test.md` | |
 | 12.7 | Depth behind the panel against the Intellijel Palette 62 (45.5 mm, 37.4 mm at the outermost HP): module 15 mm + board 1.6 mm + gap + power header (unmeasured) | fits | master plan; P1 spec §6 | |
 | 12.8 | The board hangs on the pot and jack nuts, with no standoffs: does it stay put under playing? | Bastian | P4-1 spec; P1 spec | |
-| 12.9 | Aluminium plate (Schaeffer): hole diameters pot 7.2, jack 6.2, LED 3.2, key 6.2 mm fit the parts; the slots fit the rails | fit | roadmap P5 entry | |
+| 12.9 | Aluminium plate (Schaeffer): hole diameters pot 7.2, jack 6.2, LED 3.2, key 6.2 mm fit the parts; the slots fit the rails | fit | roadmap P5 entry | **Mounted, reported 2026-11-02** (Bastian): the Schaeffer plate is on Rev A #1 with the parts through it. The individual hole fits and the rail slots were not reported one by one; 12.2 (nuts hold) follows from the mounting |
 | 12.10 | Width of a bought 60 HP blank, if at hand (the cut assumes 304.4 mm) | recorded | `grip-test.md` | |
 | 12.11 | Ergonomics on the real aluminium: playing the full panel | Bastian | hardware roadmap Phase 2 | |
 
