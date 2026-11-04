@@ -9,16 +9,51 @@
 #include "render/scenario.h"
 using namespace spky;
 
-TEST_CASE("tide: ladder is reciprocal-symmetric with x1 at centre") {
-    CHECK(kTideCount == 9);
-    CHECK(tide_index(0.5f) == 4);
-    CHECK(kTideRatios[4] == 1.f);
-    for (int i = 0; i < kTideCount; ++i)
-        CHECK(kTideRatios[i] * kTideRatios[kTideCount - 1 - i]
-              == doctest::Approx(1.f));
+// The ladder is asymmetric since 2026-11-04: x1/8 was added at the slow end
+// only, so the left half of the knob carries five rungs below x1 and the
+// right half the four old ones above it. The centre must stay exactly x1.
+TEST_CASE("tide: ladder runs x1/8..x4 with x1 exactly at the centre") {
+    CHECK(kTideCount == 10);
+    CHECK(kTideRatios[0] == doctest::Approx(0.125f));
+    CHECK(kTideRatios[kTideCount - 1] == 4.f);
+    for (int i = 0; i + 1 < kTideCount; ++i)
+        CHECK(kTideRatios[i] < kTideRatios[i + 1]);
+    CHECK(tide_index(0.f) == 0);
+    CHECK(tide_index(0.1f) == 1);                     // x1/4: the factory patch
+    CHECK(kTideRatios[tide_index(0.1f)] == doctest::Approx(0.25f));
+    CHECK(tide_index(0.5f) == 5);
+    CHECK(kTideRatios[tide_index(0.5f)] == 1.f);
+    CHECK(tide_index(1.f) == kTideCount - 1);
+    // The right half is the old ladder, rung for rung, at the old positions.
+    const float old_right[] = { 1.f, 1.5f, 2.f, 3.f, 4.f };
+    for (int k = 0; k <= 4; ++k)
+        CHECK(kTideRatios[tide_index(0.5f + 0.125f * k)]
+              == doctest::Approx(old_right[k]));
+}
+
+TEST_CASE("tide: a knob sweep reaches every rung, in order") {
+    int last = 0, hits[kTideCount] = {};
+    for (int s = 0; s <= 10000; ++s) {
+        const int i = tide_index(static_cast<float>(s) / 10000.f);
+        REQUIRE(i >= 0);
+        REQUIRE(i < kTideCount);
+        CHECK(i >= last);
+        last = i;
+        ++hits[i];
+    }
+    for (int i = 0; i < kTideCount; ++i) CHECK(hits[i] > 0);
+}
+
+TEST_CASE("tide: free curve runs x1/8..x4, exactly x1 at the centre") {
     CHECK(tide_free(0.5f) == 1.f);                    // exakt: 2^0 (IEEE-754)
-    CHECK(tide_free(0.f) == doctest::Approx(0.25f));
+    CHECK(tide_free(0.f) == doctest::Approx(0.125f));
     CHECK(tide_free(1.f) == doctest::Approx(4.f));
+    float last = 0.f;
+    for (int s = 0; s <= 1000; ++s) {
+        const float v = tide_free(static_cast<float>(s) / 1000.f);
+        CHECK(v > last);
+        last = v;
+    }
 }
 
 TEST_CASE("tide: 0.5 is a bit-identical no-op (free and synced)") {
@@ -62,11 +97,11 @@ TEST_CASE("tide: free scaling drives texture lanes only") {
 TEST_CASE("tide: synced snaps to the ratio ladder, free is continuous") {
     SuperModulator m; m.init(48000.f, 1u);
     m.set_tempo_bpm(120.f);
-    m.set_tide(0.3f);                                 // frei: 2^(4*(-0.2))
-    CHECK(m.tide_mult() == doctest::Approx(std::pow(2.f, -0.8f)));
-    m.set_synced(true);                               // rechnet um: Index 2 = x1/2
+    m.set_tide(0.3f);                                 // free: 2^(6*(-0.2))
+    CHECK(m.tide_mult() == doctest::Approx(std::pow(2.f, -1.2f)));
+    m.set_synced(true);                               // re-derived: index 3 = x1/2
     CHECK(m.tide_mult() == doctest::Approx(0.5f));
-    m.set_tide(0.f);  CHECK(m.tide_mult() == doctest::Approx(0.25f));
+    m.set_tide(0.f);  CHECK(m.tide_mult() == doctest::Approx(0.125f));
     m.set_tide(1.f);  CHECK(m.tide_mult() == doctest::Approx(4.f));
     m.set_tide(0.5f); CHECK(m.tide_mult() == 1.f);
 }

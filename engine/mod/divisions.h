@@ -60,23 +60,33 @@ inline float free_hz(float norm) {
     return kRateFreeMin * std::pow(kRateFreeMax / kRateFreeMin, clampf(norm, 0.f, 1.f));
 }
 
-// TIDE: texture-lane rate scale (spec 2026-07-17 mod-tide). 9 rungs,
-// reciprocal-symmetric so the knob centre (index 4) is exactly x1 — that is
-// what makes TIDE 0.5 a bit-identical no-op. Names appear verbatim in the
+// TIDE: texture-lane rate scale (spec 2026-07-17 mod-tide). 10 rungs since
+// 2026-11-04, when x1/8 was added at the slow end only. The knob is therefore
+// split like PACE: the left half holds the five rungs x1/8..x1 (0.1 apart),
+// the right half the four old ones above x1 (0.125 apart, at their old
+// positions). Index kTideCentre sits exactly at 0.5 and is exactly x1 -- that
+// is what makes TIDE 0.5 a bit-identical no-op. Names appear verbatim in the
 // VCV TIDE tooltip.
 inline constexpr float kTideRatios[] =
-    { 0.25f, 1.f/3.f, 0.5f, 2.f/3.f, 1.f, 1.5f, 2.f, 3.f, 4.f };
+    { 0.125f, 0.25f, 1.f/3.f, 0.5f, 2.f/3.f, 1.f, 1.5f, 2.f, 3.f, 4.f };
 inline constexpr const char* kTideNames[] =
-    { "x1/4", "x1/3", "x1/2", "x2/3", "x1", "x3/2", "x2", "x3", "x4" };
-inline constexpr int kTideCount = 9;
+    { "x1/8", "x1/4", "x1/3", "x1/2", "x2/3", "x1", "x3/2", "x2", "x3", "x4" };
+inline constexpr int kTideCount  = 10;
+inline constexpr int kTideCentre = 5;   // index of x1
 
 inline int tide_index(float norm) {
-    return static_cast<int>(clampf(norm, 0.f, 1.f) * (kTideCount - 1) + 0.5f);
+    const float n = clampf(norm, 0.f, 1.f);
+    if (n <= 0.5f)
+        return static_cast<int>(n * (2.f * kTideCentre) + 0.5f);
+    return kTideCentre + static_cast<int>(
+        (n - 0.5f) * (2.f * (kTideCount - 1 - kTideCentre)) + 0.5f);
 }
 
-// free (unsynced) curve: 1/4 .. 4, exactly 1 at centre (2^0)
+// free (unsynced) curve: 1/8 .. 4, exactly 1 at centre (2^0) from both sides
 inline float tide_free(float norm) {
-    return std::pow(2.f, 4.f * (clampf(norm, 0.f, 1.f) - 0.5f));
+    const float n = clampf(norm, 0.f, 1.f);
+    return n <= 0.5f ? std::pow(2.f, 6.f * (n - 0.5f))
+                     : std::pow(2.f, 4.f * (n - 0.5f));
 }
 
 // PACE: the global modulation time-stretch (spec 2026-08-12 modulation-pace).

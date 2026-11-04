@@ -4,6 +4,7 @@
 #include <doctest/doctest.h>
 #include <cmath>
 #include "control/params.hpp"
+#include "control/control_law.h"   // kCoupleZoneSplit
 #include "vcv/src/generated_panel.hpp"
 #include "vcv/src/init_patch.hpp"
 
@@ -27,6 +28,15 @@ TEST_CASE("params: mod layer and init values are VCV's") {
     }
     for (int i = 0; i < ffctl::NUM_PARAMS; ++i)
         CHECK(ffctl::kInitParamDefaults[i] == spkyvcv::kInitParamDefaults[i]);
+}
+
+// NewInit.vcvm dialled TIDE hard left, which was x1/4 then. The x1/8 rung
+// (2026-11-04) took hard left, so the factory value moved to keep the sound.
+// The factory patch runs in the GRID zone (COUPLE 1.0), i.e. on the ladder.
+TEST_CASE("params: the factory patch boots TIDE on the x1/4 rung") {
+    REQUIRE(ffctl::kInitParamDefaults[ffctl::COUPLE] >= control::kCoupleZoneSplit);
+    const float t = ffctl::kInitParamDefaults[ffctl::TIDE];
+    CHECK(spky::kTideRatios[spky::tide_index(t)] == doctest::Approx(0.25f));
 }
 
 TEST_CASE("params: every init value lies in its range") {

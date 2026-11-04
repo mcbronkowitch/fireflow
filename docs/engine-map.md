@@ -193,19 +193,33 @@ survive; its explanation of them does not.
 
 **The slow end of the panel quantises SMOOTH, and used to freeze the lane
 outright.** τ is proportional to the cycle now, so at RATE 0 (0.02 Hz) × PACE 0
-(×1/32) × TIDE 0 (×1/4) the per-tick coefficient `k = 1/(τ·sr)` reaches ~1e-8.
+(×1/32) × TIDE ×1/4 (TIDE 0 until 2026-11-04) the per-tick coefficient `k = 1/(τ·sr)` reaches ~1e-8.
 The tick twin's coefficient is `1 − (1−k)^96`, and computed in **float** `1.f - k`
 rounds to exactly `1.0f` below half an ulp, so the coefficient collapses. Driving
 `ModLane` directly at 0.0003125 Hz (what RATE 0 + PACE 0 hand LANE_SIZE): p2p
 **0.000000000 over 60 s** at SMOOTH 0.50/0.70/1.00, and one single coefficient
 shared by every knob position from 0.15 to 0.40. Through the whole instrument the
 outright freeze is **not** reachable — other per-tick motion keeps p2p off zero —
-but the quantisation is: deck A's SOURCE at TIDE 0 read 0.00352925 / 0.00240338 /
+but the quantisation is: deck A's SOURCE at TIDE ×1/4 read 0.00352925 / 0.00240338 /
 0.00240338 at SMOOTH 0.20 / 0.60 / 1.00, the last two identical to the digit.
 Fixed 2026-08-15 by deriving that coefficient in double (0.00398457 / 0.00293958
 / 0.00272623, strictly decreasing); gated by `tests/test_smooth_law.cpp`'s G6.
 The per-sample slew is deliberately still float — `k` itself is representable and
 was measured tracking the analytic settling curve at the same τ values.
+
+**One octave further down, SMOOTH stops resolving again (accepted, 2026-11-04).**
+TIDE gained an x1/8 end (`kTideRatios`, `tide_free`: hard left is now x1/8; the
+free curve's x1/4 sits at TIDE 1/6, the ladder's at 0.1). The figures above
+were all taken at the old corner, which is now TIDE free 1/6, and they reproduce
+to the digit there. At the new corner — RATE 0 × PACE 0 × TIDE 0, free, the
+SOURCE lane cycling in ~6400 s — deck A's SOURCE p2p reads 0.00534749 /
+0.00534734 / 0.00534731 at SMOOTH 0.20 / 0.60 / 1.00 over 20 s, and 0.00714761 /
+0.00635952 / 0.00635949 over 60 s: monotone only by ~3e-8, i.e. SMOOTH has no
+reach there. The mechanism has **not** been probed; the float state of the tick
+slew (`OnePole _slew_tick`, `_value += _kof * diff` against a `_kof` near 1e-6)
+is the suspect, not a finding. Accepted by Bastian rather than fixed, because a
+1.8-hour lane cycle is a near-static offset anyway; G6 stays at the x1/4 corner,
+where it is still a gate that can go red.
 
 **`_melodic` is not a choice.** `super_modulator.cpp:14` sets it unconditionally
 to `i == LANE_PITCH`. Exactly one lane of five is melodic, on every deck, always.

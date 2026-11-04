@@ -908,7 +908,9 @@ INIT_DEFAULTS = {
     "CHOKE": 0.000000000,
     "FILT_A": -0.302811146,
     "FILT_B": -0.064000070,
-    "TIDE": 0.000000000,
+    # x1/4, as NewInit.vcvm dialled it (hard left). The x1/8 rung added
+    # 2026-11-04 took hard left, so the same sound now sits at 0.1.
+    "TIDE": 0.100000000,
     "FLUXRATE_A": 1.000000000,
     "FLUXRATE_B": 1.000000000,
     "FLUXFB_A": 0.426666766,

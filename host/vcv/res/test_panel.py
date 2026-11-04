@@ -3174,7 +3174,7 @@ def test_sampler_preset_init_snapshot():
         "CHOKE": 0.0,
         "FILT_A": -0.302811146,
         "FILT_B": -0.064000070,
-        "TIDE": 0.0,
+        "TIDE": 0.1,
         "FLUXRATE_A": 1.0,
         "FLUXRATE_B": 1.0,
         "FLUXFB_A": 0.426666766,

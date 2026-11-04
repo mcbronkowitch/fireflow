@@ -56,7 +56,7 @@ static constexpr float kInitParamDefaults[] = {
     0.0f, // CHOKE
     -0.302811146f, // FILT_A
     -0.06400007f, // FILT_B
-    0.0f, // TIDE
+    0.1f, // TIDE
     1.0f, // FLUXRATE_A
     1.0f, // FLUXRATE_B
     0.426666766f, // FLUXFB_A

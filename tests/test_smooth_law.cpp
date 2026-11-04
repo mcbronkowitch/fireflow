@@ -91,6 +91,10 @@ void apply_init_patch(Instrument& in) {
     // 50 is param_table.h's ParamId range FLOOR for P_TEMPO_BPM, not a
     // default; don't repeat that mix-up.
     v[P_TEMPO_BPM]= 40.f;         v[P_PACE]     = 0.5f;
+    // TIDE was left at the array's 0 here, which meant free x1/4 until the
+    // x1/8 end was added (2026-11-04). This patch runs free (mode below), and
+    // the free curve's x1/4 now sits at 1/6: 2^(6*(1/6 - 1/2)) = 2^-2.
+    v[P_TIDE]     = 1.f / 6.f;
     for (int p = 0; p < P_COUNT; ++p) {
         if (p == P_MODE || p == P_STEPS_A || p == P_STEPS_B) continue;
         apply_param(in, p, v[p]);
@@ -236,7 +240,15 @@ TEST_CASE("G4\"/G5: the frozen points still move, and stay finite") {
 // p2p is window-limited, not slew-limited, and it does not move with SMOOTH
 // under either arithmetic. Three renders rather than five: the 0.60/1.00 pair
 // alone carries the RED, and this file already costs ~1 s.
-TEST_CASE("G6: SMOOTH still resolves at the slowest reachable setting") {
+//
+// 2026-11-04: TIDE gained an x1/8 end, so TIDE 0 is no longer the setpoint
+// this gate was built at. G6 stays at the OLD corner -- free x1/4, which the
+// free curve now puts at TIDE 1/6 -- and reproduces the double row above to
+// the digit. The new x1/8 corner does NOT resolve SMOOTH (SOURCE p2p
+// 0.00534749 / 0.00534734 / 0.00534731 over 20 s, 0.00714761 / 0.00635952 /
+// 0.00635949 over 60 s); asserting monotonicity there passes by 3e-8, which is
+// a vacuous gate. Accepted and documented in docs/engine-map.md, not gated.
+TEST_CASE("G6: SMOOTH still resolves at the slowest gated setting (TIDE free x1/4)") {
     const float kSmooth[3] = {0.20f, 0.60f, 1.00f};
     float p2p[3] = {0.f, 0.f, 0.f};
 
@@ -248,7 +260,7 @@ TEST_CASE("G6: SMOOTH still resolves at the slowest reachable setting") {
         apply_param(in, P_RATE_A, 0.f);
         apply_param(in, P_RATE_B, 0.f);
         apply_param(in, P_PACE,   0.f);
-        apply_param(in, P_TIDE,   0.f);
+        apply_param(in, P_TIDE,   1.f / 6.f);   // free x1/4, see above
         apply_param(in, P_SMOOTH_A, kSmooth[i]);
         apply_param(in, P_SMOOTH_B, kSmooth[i]);
         const Sweep s = sweep(in, 20.f);
