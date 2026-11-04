@@ -724,7 +724,7 @@ TEST_CASE("part: gate sustains the composed STEP note, releasing before the next
     p.mod().set_density(0.f);      // anchor-only: notes at steps 0 and 8 (L=8)
     p.mod().set_synced(true);
     p.mod().set_tempo_bpm(60.f);
-    p.mod().set_rate(0.5f);        // -> PITCH lane 2 Hz: 3000 samples/step
+    p.mod().set_rate(division_knob(11)); // 1/4 -> PITCH lane 2 Hz: 3000 samples/step
     const int step_samples = 3000;
     std::vector<char> gate;
     float l, r;

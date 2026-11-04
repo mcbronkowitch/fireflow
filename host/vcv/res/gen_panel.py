@@ -809,7 +809,12 @@ PARAMS = PANEL_PARAMS + HIDDEN_PARAMS + APPENDED_PANEL_PARAMS + MOD_LAYER_PARAMS
 # carried: only params reach this table, and with no SAMPLER/BODY deck at boot
 # nothing in that blob is audible anyway.
 INIT_DEFAULTS = {
-    "RATE_A": 0.112000011,
+    # RATE_A/B moved +3/16 (three rungs) on 2026-11-04 when the lane RATE
+    # window slid three rungs slower (mod/divisions.h, kLaneRateCount), so the
+    # synced boot sound stays on its rungs: A on "2 bars", B on "1 bar". The
+    # preset stored 0.112000011 and 0.163855359. The boot is synced (COUPLE
+    # 1.0), so only the free world -- COUPLE below its split -- hears the move.
+    "RATE_A": 0.299500011,
     "SHAPE_A": 0.000000000,
     "DENSITY_A": 0.604819179,
     # SMOOTH_A/B are transcribed, not derived. The 2026-08-14 conversion note
@@ -860,7 +865,7 @@ INIT_DEFAULTS = {
     # two generators. Both decks sit on rung 0 in this patch -- the previous
     # one deliberately spread them to opposite ends (0 and 13).
     "SONG_A": 0.000000000,
-    "RATE_B": 0.163855359,
+    "RATE_B": 0.351355359,   # see RATE_A
     "SHAPE_B": 0.000000000,
     "DENSITY_B": 0.386746973,
     "SMOOTH_B": 0.971359313,

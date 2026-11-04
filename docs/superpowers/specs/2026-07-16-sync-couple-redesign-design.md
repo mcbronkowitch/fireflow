@@ -88,6 +88,13 @@ Sorted by speed, dotted/straight/triplet interleaved — 17 detents:
 8bar 4bar 2bar 1bar 1/2. 1/2 1/4. 1/2T 1/4 1/8. 1/4T 1/8 1/16. 1/8T 1/16 1/16T 1/32
 ```
 
+> **Amended 2026-11-04 (owner):** a name is one lane cycle, and a STEP deck
+> plays 8 steps per cycle, so this window put 32nd-note steps at noon and
+> 1/256 at the right stop. The RATE window now reads three rungs slower --
+> `64bar 32bar 16bar 8bar … 1/2 (noon) … 1/8T`, 16th-note steps at noon. The
+> table (`engine/mod/divisions.h`) keeps its three fastest entries for FLUX,
+> and COUPLE's free-world grid gravity still snaps to the ladder above.
+
 (Strictly speed-sorted so the knob is monotonic — 1/2T (0.75 cpb) is faster than 1/4. (0.667 cpb).)
 
 Per part — one part on 1/4 against the other on 1/8T replaces the old

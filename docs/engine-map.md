@@ -619,6 +619,18 @@ the root while gravity is on, `pitch/quantizer.h:138`), and how often an offset 
 same sign pins part of a song at the span edge (0 or 36 semitones) when TUNE is far
 from centre.
 
+### Measured: the RATE window, in steps per beat (2026-11-04)
+
+Deck B STEP 8, SYNC on, 120 BPM, PACE x1, 16 s, counting `lane_fired(PITCH)`
+(scratchpad `probe_rate.cpp`). A ladder name is one lane cycle; a step is an
+eighth of it whatever STEPS says. The old window ("8 bars" … "1/32") read
+0.28 … **8.03 at noon** … 64.03 steps per beat; the window since 2026-11-04
+reads 0.06 ("64 bars") … **4.03 at noon** ("1/2", 16ths) … 24.03 ("1/8T").
+The extra 0.03 is the step that fires at t = 0. At PACE x1/16 every figure is
+16 times smaller. The slowest synced corner (64 bars, PACE x1/32, 50 BPM,
+1.0e-4 Hz) still moves at the commanded rate: 0.020345 of a cycle in 200 s,
+against 0.020345 expected (`probe_corner.cpp`) -- the lane phase is double.
+
 ### Measured: CLOCK and RESET (2026-10-19)
 
 Spec `2026-10-19-clock-and-reset-jacks-design.md` §3 holds the originals. Setups

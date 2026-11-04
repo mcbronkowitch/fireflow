@@ -208,8 +208,8 @@ TEST_CASE("center grid: pitch sits on the division and the transport phase") {
     Rig r; r.init();
     r.a.set_tempo_bpm(120.f); r.b.set_tempo_bpm(120.f); r.c.set_tempo_bpm(120.f);
     r.a.set_synced(true); r.b.set_synced(true); r.c.set_sync(true);
-    r.a.set_rate(0.5f);            // 1/4 -> 2 Hz
-    r.b.set_rate(13.f / 16.f);     // 1/8T -> 6 Hz
+    r.a.set_rate(division_knob(11)); // 1/4 -> 2 Hz
+    r.b.set_rate(division_knob(16)); // 1/8T -> 6 Hz
     r.c.set_couple(1.f); r.c.set_drift(1.f);
     run_synced(r, 5000);           // 10 s: converge
     // rate: master pinned to the division despite full COUPLE + DRIFT
@@ -399,7 +399,7 @@ TEST_CASE("center grid: RST resyncs the loops onto the bar start, drag-free") {
     Rig r; r.init();
     r.a.set_tempo_bpm(120.f); r.b.set_tempo_bpm(120.f); r.c.set_tempo_bpm(120.f);
     r.a.set_synced(true); r.b.set_synced(true); r.c.set_sync(true);
-    r.a.set_rate(0.5f); r.b.set_rate(0.5f);
+    r.a.set_rate(division_knob(11)); r.b.set_rate(division_knob(11));   // 1/4
     r.a.set_step(true, 8); r.b.set_step(true, 8);
     r.c.set_couple(1.f); r.c.set_drift(0.f);
     run_synced(r, 5000);
@@ -445,7 +445,7 @@ TEST_CASE("center grid: step-clock — a 16-step bank locks at half the division
     Rig r; r.init();
     r.a.set_tempo_bpm(120.f); r.b.set_tempo_bpm(120.f); r.c.set_tempo_bpm(120.f);
     r.a.set_synced(true); r.b.set_synced(true); r.c.set_sync(true);
-    r.a.set_rate(0.5f); r.b.set_rate(0.5f);          // same rung: 1/4 -> 2 Hz
+    r.a.set_rate(division_knob(11)); r.b.set_rate(division_knob(11)); // same rung: 1/4 -> 2 Hz
     r.a.set_step(true, 8); r.b.set_step(true, 16);   // same step tempo, B twice as long
     r.c.set_couple(1.f); r.c.set_drift(0.f);
     run_synced(r, 5000);                             // 10 s: converge
@@ -737,6 +737,9 @@ TEST_CASE("center: the FLOW->STEP snap reaches the sampler's slice cursor") {
     c.init(48000.f, 123u); pa.init(48000.f, 1u); pb.init(48000.f, 2u);
     pa.set_engine(ENGINE_SAMPLER);
     pa.mod().set_shuffle(1.f);
+    // "1/4", the rung the RATE default (0.5) named until the window moved
+    // (2026-11-04); the tick count below was derived at that rate.
+    pa.mod().set_rate(division_knob(11)); pb.mod().set_rate(division_knob(11));
     auto run = [&](int n) {
         for (int k = 0; k < n; ++k) {
             c.update(pa.mod(), pb.mod(), pa, pb);

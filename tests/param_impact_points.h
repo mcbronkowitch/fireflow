@@ -65,6 +65,11 @@
 // above exists for the insertion case only; a removal announces itself for
 // free.
 //
+// A VALUE SHIFT, 2026-11-04: the lane RATE window slid three rungs slower
+// (mod/divisions.h, kLaneRateCount). The two STEP points run synced, so their
+// P_RATE_A/B moved +3/16 to stay on the rungs they were frozen on; the FLOW
+// points run free (free_hz, unchanged) and kept theirs.
+//
 // HOW TO TELL WHICH HAPPENED: compare P_COUNT and P_MODE against
 // tests/test_param_table.cpp's inventory-marker case (`P_MODE == 62` plus a
 // `<last id> == P_COUNT - 1` line). The second marker is deliberately
@@ -247,8 +252,8 @@ inline constexpr FrozenPoint kStepPoints[kPer] = {
       4.0f, // P_STEPS_B
       0.37105608f, // P_TUNE_A
       0.580794275f, // P_TUNE_B
-      0.6875f, // P_RATE_A
-      0.5f, // P_RATE_B
+      0.875f, // P_RATE_A   (0.6875 before the RATE window moved, 2026-11-04)
+      0.6875f, // P_RATE_B  (0.5 before)
       0.644438863f, // P_SHAPE_A
       0.443576097f, // P_SHAPE_B
       0.408827245f, // P_DENSITY_A
@@ -317,8 +322,8 @@ inline constexpr FrozenPoint kStepPoints[kPer] = {
       7.0f, // P_STEPS_B
       0.504173517f, // P_TUNE_A
       0.355049491f, // P_TUNE_B
-      0.25f, // P_RATE_A
-      0.1875f, // P_RATE_B
+      0.4375f, // P_RATE_A  (0.25 before the RATE window moved, 2026-11-04)
+      0.375f, // P_RATE_B   (0.1875 before)
       0.195671588f, // P_SHAPE_A
       0.0562787838f, // P_SHAPE_B
       0.135651812f, // P_DENSITY_A

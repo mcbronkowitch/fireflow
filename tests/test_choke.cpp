@@ -169,8 +169,8 @@ TEST_CASE("choke -0.6 (held zone): B starts only while A's note is not held; the
     }
     inst.set_density(PART_A, 0.5f);              // A has rests (DENSE 1 = legato)
     inst.set_density(PART_B, 1.f);
-    inst.set_rate(PART_A, 0.0625f);              // A slow, B fast: rates differ
-    inst.set_rate(PART_B, 0.5f);
+    inst.set_rate(PART_A, division_knob(4));     // A slow (4 bars), B fast (1/4): rates differ
+    inst.set_rate(PART_B, division_knob(11));
     inst.set_choke(-0.6f);                       // held zone: 0.5 < |c| <= 0.75
     std::vector<float> l(1), r(1);
     bool prevB = false;

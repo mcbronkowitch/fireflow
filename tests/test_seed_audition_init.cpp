@@ -424,7 +424,7 @@ TEST_CASE("Seed audition's factory init pins every engine-side observable "
 
     // --- flux delay target: the tape echo time TIME/FLUXRATE resolves to. ---
     // TEMPO == 0.197333470, so bpm == 40 + 0.197333470 * 200 == 79.46669.
-    // Both decks sit at FLUXRATE index 1, which is kDivisions[5 + 1] == "1/4."
+    // Both decks sit at FLUXRATE index 1, which is kDivisions[8 + 1] == "1/4."
     // at cpb 2/3: hz == (bpm/60) * (2/3) == bpm/90, delay == 90/bpm ==
     // 1.132549 s. Well inside the 5.46 s the 262144-sample tape holds at
     // 48 kHz, so the clamp in update_time_target never bites and this is the

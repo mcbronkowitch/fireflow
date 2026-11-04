@@ -4,12 +4,17 @@
 
 namespace spky {
 
-// The musical rate ladder for SYNC mode: 17 detents, strictly speed-sorted,
+// The musical rate ladder for SYNC mode: strictly speed-sorted,
 // dotted/straight/triplet interleaved. cpb = cycles per beat; the bar-length
 // entries assume 4/4. Names appear verbatim in the VCV RATE tooltip.
+//
+// A name is the length of one LANE CYCLE, not of a step: a STEP deck plays 8
+// steps per cycle whatever STEPS says (clock_scale() = 8/steps cancels the
+// slot count), so a step is an eighth of the named length.
 struct Division { float cpb; const char* name; };
 
 inline constexpr Division kDivisions[] = {
+    {1.f/256.f, "64 bars"}, {1.f/128.f, "32 bars"}, {1.f/64.f, "16 bars"},
     {1.f/32.f, "8 bars"}, {1.f/16.f, "4 bars"}, {1.f/8.f, "2 bars"},
     {1.f/4.f,  "1 bar"},  {1.f/3.f,  "1/2."},   {1.f/2.f, "1/2"},
     {2.f/3.f,  "1/4."},   {3.f/4.f,  "1/2T"},   {1.f,     "1/4"},
@@ -17,11 +22,31 @@ inline constexpr Division kDivisions[] = {
     {8.f/3.f,  "1/16."},  {3.f,      "1/8T"},   {4.f,     "1/16"},
     {6.f,      "1/16T"},  {8.f,      "1/32"},
 };
-inline constexpr int kDivisionCount = 17;
+inline constexpr int kDivisionCount = 20;
+
+// The lane RATE knob's window onto the ladder: entries 0 .. 16, "64 bars" ..
+// "1/8T", with "1/2" at noon -- 16th-note steps on a STEP deck (Bastian,
+// 2026-11-04). Until then the window was "8 bars" .. "1/32" with "1/4" at
+// noon, i.e. 32nd-note steps at noon and 1/256 at the right stop: only the
+// first few rungs on the left were musically usable. The window moved three
+// rungs slower; the three fastest entries stay in the table for FLUX.
+inline constexpr int kLaneRateCount = 17;
 
 inline int division_index(float norm) {
-    return static_cast<int>(clampf(norm, 0.f, 1.f) * (kDivisionCount - 1) + 0.5f);
+    return static_cast<int>(clampf(norm, 0.f, 1.f) * (kLaneRateCount - 1) + 0.5f);
 }
+
+// The RATE knob position at the centre of ladder entry `idx` (0 .. 16): the
+// inverse of division_index(), so a caller names a rung instead of a knob
+// number that silently moves with the window.
+inline constexpr float division_knob(int idx) {
+    return static_cast<float>(idx) / static_cast<float>(kLaneRateCount - 1);
+}
+
+// The rungs COUPLE's free-world grid gravity snaps to (nearest_division):
+// "8 bars" .. "1/32", the ladder as it stood before the three slow entries
+// were added, so the free world's snapping did not move with the RATE window.
+inline constexpr int kGridFirst = 3;
 
 inline float division_hz(int idx, float bpm) {
     return (bpm / 60.f) * kDivisions[idx].cpb;
@@ -29,24 +54,26 @@ inline float division_hz(int idx, float bpm) {
 
 // nearest ladder rung to a free rate, compared in log space (ratio symmetry)
 inline int nearest_division(float hz, float bpm) {
-    int best = 0;
+    int best = kGridFirst;
     float best_d = 1e30f;
-    for (int i = 0; i < kDivisionCount; ++i) {
+    for (int i = kGridFirst; i < kDivisionCount; ++i) {
         const float d = std::fabs(std::log(hz / division_hz(i, bpm)));
         if (d < best_d) { best_d = d; best = i; }
     }
     return best;
 }
 
-// FLUX synced-delay rate: a slice of kDivisions starting at "1/2" (idx 5)
+// FLUX synced-delay rate: a slice of kDivisions starting at "1/2" (idx 8)
 // through "1/32" (idx 16) — 12 rungs, incl. dotted & triplet. Since FLUX
 // became a BBD the ladder is a TONE control as much as a time control: the
 // 16x span in time is roughly 8x in BBD bandwidth once the 32 kHz clock
 // ceiling is applied (8 kHz at "1/32" down to 1.0 kHz at "1/2" at 120 BPM),
 // and further down as the tempo drops. There is no buffer to fit inside any
 // more. Names come from kDivisions[kFluxRateOffset + i].
-inline constexpr int kFluxRateOffset = 5;
+inline constexpr int kFluxRateOffset = 8;
 inline constexpr int kFluxRateCount  = 12;
+static_assert(kFluxRateOffset + kFluxRateCount == kDivisionCount,
+              "FLUX's slice ends on the ladder's last entry");
 
 inline int flux_division_index(float norm) {
     return static_cast<int>(clampf(norm, 0.f, 1.f) * (kFluxRateCount - 1) + 0.5f);

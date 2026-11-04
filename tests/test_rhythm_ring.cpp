@@ -297,7 +297,7 @@ TEST_CASE("rhythm ring: SuperModulator::rhythm() forwards the PITCH lane") {
     m.init(48000.f, 1u);
     m.set_synced(true);
     m.set_tempo_bpm(120.f);
-    m.set_rate(0.5f);   // division idx 8 ("1/4", cpb=1) -> base_hz = 2 Hz ->
+    m.set_rate(division_knob(11));   // division idx 11 ("1/4", cpb=1) -> base_hz = 2 Hz ->
                          // PITCH (ratio x1) cycles every 48000/2 = 24000 samples.
     // Validity (>= 3 onsets) needs a 4th wrap, not a 3rd, because the ring's
     // latch (on wrapped()) reads the ring from BEFORE the current wrap's own
