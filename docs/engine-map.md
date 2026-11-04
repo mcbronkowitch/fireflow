@@ -623,10 +623,12 @@ from centre.
 
 Deck B STEP 8, SYNC on, 120 BPM, PACE x1, 16 s, counting `lane_fired(PITCH)`
 (scratchpad `probe_rate.cpp`). A ladder name is one lane cycle; a step is an
-eighth of it whatever STEPS says. The old window ("8 bars" … "1/32") read
-0.28 … **8.03 at noon** … 64.03 steps per beat; the window since 2026-11-04
-reads 0.06 ("64 bars") … **4.03 at noon** ("1/2", 16ths) … 24.03 ("1/8T").
-The extra 0.03 is the step that fires at t = 0. At PACE x1/16 every figure is
+eighth of it whatever STEPS says. The old window ("8 bars" … "1/32", 17 even
+rungs) read 0.28 … **8.03 at noon** … 64.03 steps per beat. The reshaped
+window (12 rungs: five at 0.1 left of noon, six at 1/12 right of it) reads
+0.06 ("64 bars") … **1.03 at noon** ("2 bars", one step per beat) … 8.03
+("1/4", 32nds). An intermediate same-day version with "1/2" at noon (4.03)
+was still too fast by ear. The extra 0.03 is the step that fires at t = 0. At PACE x1/16 every figure is
 16 times smaller. The slowest synced corner (64 bars, PACE x1/32, 50 BPM,
 1.0e-4 Hz) still moves at the commanded rate: 0.020345 of a cycle in 200 s,
 against 0.020345 expected (`probe_corner.cpp`) -- the lane phase is double.

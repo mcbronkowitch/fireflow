@@ -26,16 +26,16 @@ TEST_CASE("super: synced rate snaps to the division ladder") {
     m.init(48000.f, 1u);
     m.set_tempo_bpm(120.f);
     m.set_synced(true);
-    m.set_rate(0.5f);                                  // center detent = 1/2
-    CHECK(m.base_hz() == doctest::Approx(1.f));        // 1/2 cpb at 120 bpm
+    m.set_rate(0.5f);                                  // center detent = 2 bars
+    CHECK(m.base_hz() == doctest::Approx(0.25f));      // 1/8 cpb at 120 bpm
     m.set_rate(0.52f);                                 // still inside the same detent
-    CHECK(m.base_hz() == doctest::Approx(1.f));
+    CHECK(m.base_hz() == doctest::Approx(0.25f));
     m.set_rate(division_knob(11));                     // 1/4
     CHECK(m.base_hz() == doctest::Approx(2.f));        // 1 cpb at 120 bpm
     m.set_rate(0.f);
     CHECK(m.base_hz() == doctest::Approx(1.f / 128.f)); // 64 bars
     m.set_rate(1.f);
-    CHECK(m.base_hz() == doctest::Approx(6.f));        // 1/8T = 3 cpb
+    CHECK(m.base_hz() == doctest::Approx(2.f));        // the right stop is 1/4
 }
 
 TEST_CASE("super: triplet rungs live on the ladder") {
@@ -43,9 +43,9 @@ TEST_CASE("super: triplet rungs live on the ladder") {
     m.init(48000.f, 1u);
     m.set_tempo_bpm(120.f);
     m.set_synced(true);
-    m.set_rate(16.f / 16.f);                           // index 16 = 1/8T
-    CHECK(m.base_hz() == doctest::Approx(6.f));
-    CHECK(std::string(kDivisions[m.division()].name) == "1/8T");
+    m.set_rate(division_knob(10));                     // index 10 = 1/2T
+    CHECK(m.base_hz() == doctest::Approx(1.5f));       // 3/4 cpb at 120 bpm
+    CHECK(std::string(kDivisions[m.division()].name) == "1/2T");
 }
 
 TEST_CASE("super: synced getter and free default") {

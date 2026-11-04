@@ -24,23 +24,43 @@ inline constexpr Division kDivisions[] = {
 };
 inline constexpr int kDivisionCount = 20;
 
-// The lane RATE knob's window onto the ladder: entries 0 .. 16, "64 bars" ..
-// "1/8T", with "1/2" at noon -- 16th-note steps on a STEP deck (Bastian,
-// 2026-11-04). Until then the window was "8 bars" .. "1/32" with "1/4" at
-// noon, i.e. 32nd-note steps at noon and 1/256 at the right stop: only the
-// first few rungs on the left were musically usable. The window moved three
-// rungs slower; the three fastest entries stay in the table for FLUX.
-inline constexpr int kLaneRateCount = 17;
+// The lane RATE knob's window onto the ladder: entries 0 .. 11, "64 bars" ..
+// "1/4", with "2 bars" at noon -- ONE STEP PER BEAT on a STEP deck, so at full
+// DENS every note lands on the TEMPO lamp (Bastian, 2026-11-04). In steps:
+//
+//   left half, 5 rungs at 0.1:   8 bars, 4 bars, 2 bars, 1 bar, 1/2 per step
+//   noon:                        1/4 (one step per beat)
+//   right half, 6 rungs at 1/12: 1/8, 1/16., 1/16, 1/32., 1/16T, 1/32
+//
+// The left half is coarse on purpose (powers of two, ending at today's left
+// stop of one step per 8 bars; slower is PACE's job), the right half keeps
+// the dotted/triplet interleave and stops at 32nds -- what was noon before,
+// and the fastest a melody needs. History: the window was "8 bars" .. "1/32"
+// with "1/4" at noon (32nd steps at noon, 1/256 at the right stop); earlier
+// on 2026-11-04 it slid three rungs to "1/2" at noon, which was still too
+// fast. The entries above "1/4" stay in the table for FLUX.
+inline constexpr int   kLaneRateCount = 12;
+inline constexpr int   kLaneRateNoon  = 5;      // "2 bars"
+inline constexpr float kLaneRateLeftStep  = 0.5f / 5.f;   // knob per rung, left half
+inline constexpr float kLaneRateRightStep = 0.5f / 6.f;   // knob per rung, right half
 
 inline int division_index(float norm) {
-    return static_cast<int>(clampf(norm, 0.f, 1.f) * (kLaneRateCount - 1) + 0.5f);
+    const float n = clampf(norm, 0.f, 1.f);
+    // Both arguments are >= 0, so truncation is floor: round to nearest
+    // without a libm call. 0.5 is noon from either side.
+    const int k = n <= 0.5f
+        ? static_cast<int>(n / kLaneRateLeftStep + 0.5f)
+        : kLaneRateNoon + static_cast<int>((n - 0.5f) / kLaneRateRightStep + 0.5f);
+    return k < kLaneRateCount ? k : kLaneRateCount - 1;
 }
 
-// The RATE knob position at the centre of ladder entry `idx` (0 .. 16): the
+// The RATE knob position at the centre of ladder entry `idx` (0 .. 11): the
 // inverse of division_index(), so a caller names a rung instead of a knob
 // number that silently moves with the window.
 inline constexpr float division_knob(int idx) {
-    return static_cast<float>(idx) / static_cast<float>(kLaneRateCount - 1);
+    return idx <= kLaneRateNoon
+        ? static_cast<float>(idx) * kLaneRateLeftStep
+        : 0.5f + static_cast<float>(idx - kLaneRateNoon) * kLaneRateRightStep;
 }
 
 // The rungs COUPLE's free-world grid gravity snaps to (nearest_division):

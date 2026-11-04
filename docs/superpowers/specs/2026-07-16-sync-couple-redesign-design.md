@@ -90,10 +90,12 @@ Sorted by speed, dotted/straight/triplet interleaved — 17 detents:
 
 > **Amended 2026-11-04 (owner):** a name is one lane cycle, and a STEP deck
 > plays 8 steps per cycle, so this window put 32nd-note steps at noon and
-> 1/256 at the right stop. The RATE window now reads three rungs slower --
-> `64bar 32bar 16bar 8bar … 1/2 (noon) … 1/8T`, 16th-note steps at noon. The
-> table (`engine/mod/divisions.h`) keeps its three fastest entries for FLUX,
-> and COUPLE's free-world grid gravity still snaps to the ladder above.
+> 1/256 at the right stop. The RATE window is now 12 rungs, not evenly
+> spaced: `64bar 32bar 16bar 8bar 4bar` at 0.1 apart, **`2bar` at noon (one
+> step per beat)**, then `1bar 1/2. 1/2 1/4. 1/2T 1/4` at 1/12 apart -- 32nd
+> steps at the right stop. The table (`engine/mod/divisions.h`) keeps its
+> fast entries for FLUX, and COUPLE's free-world grid gravity still snaps to
+> the ladder above.
 
 (Strictly speed-sorted so the knob is monotonic — 1/2T (0.75 cpb) is faster than 1/4. (0.667 cpb).)
 

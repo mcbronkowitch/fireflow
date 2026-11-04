@@ -3101,9 +3101,10 @@ def test_sampler_preset_init_snapshot():
         # The MOD-layer depths are NOT transcribed here. They are pinned in
         # test_mod_layer below, where the dead-zone pre-image arithmetic that
         # makes sense of them already lives.
-        # RATE_A/B: the preset's 0.112000011 / 0.163855359 plus 0.1875, three
-        # rungs of the lane RATE window that slid slower on 2026-11-04.
-        "RATE_A": 0.299500011,
+        # RATE_A/B: the preset stored 0.112000011 / 0.163855359 ("2 bars" /
+        # "1 bar"); since the RATE window was reshaped on 2026-11-04 those
+        # rungs sit at noon and at noon + 1/12.
+        "RATE_A": 0.5,
         "SHAPE_A": 0.0,
         "DENSITY_A": 0.604819179,
         "SMOOTH_A": 0.0,
@@ -3133,7 +3134,7 @@ def test_sampler_preset_init_snapshot():
         "DETUNE_A": 0.0,
         # Ladder rung 0 == {TwoMotif, Off}. Both decks sit on rung 0 here.
         "SONG_A": 0.0,
-        "RATE_B": 0.351355359,
+        "RATE_B": 0.583333313,
         "SHAPE_B": 0.0,
         "DENSITY_B": 0.386746973,
         "SMOOTH_B": 0.971359313,

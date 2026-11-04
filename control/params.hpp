@@ -228,7 +228,7 @@ inline constexpr ModTarget kModLayer[] = {
 };
 
 inline constexpr float kInitParamDefaults[] = {
-    0.299500011f, // RATE_A
+    0.5f, // RATE_A
     0.0f, // SHAPE_A
     0.604819179f, // DENSITY_A
     0.0f, // SMOOTH_A
@@ -248,7 +248,7 @@ inline constexpr float kInitParamDefaults[] = {
     3.0f, // ENGINE_A
     0.0f, // DETUNE_A
     0.0f, // SONG_A
-    0.351355359f, // RATE_B
+    0.583333313f, // RATE_B
     0.0f, // SHAPE_B
     0.386746973f, // DENSITY_B
     0.971359313f, // SMOOTH_B

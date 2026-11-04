@@ -209,12 +209,12 @@ TEST_CASE("center grid: pitch sits on the division and the transport phase") {
     r.a.set_tempo_bpm(120.f); r.b.set_tempo_bpm(120.f); r.c.set_tempo_bpm(120.f);
     r.a.set_synced(true); r.b.set_synced(true); r.c.set_sync(true);
     r.a.set_rate(division_knob(11)); // 1/4 -> 2 Hz
-    r.b.set_rate(division_knob(16)); // 1/8T -> 6 Hz
+    r.b.set_rate(division_knob(10)); // 1/2T -> 1.5 Hz
     r.c.set_couple(1.f); r.c.set_drift(1.f);
     run_synced(r, 5000);           // 10 s: converge
     // rate: master pinned to the division despite full COUPLE + DRIFT
     CHECK(r.a.master_hz() == doctest::Approx(2.f).epsilon(0.02));
-    CHECK(r.b.master_hz() == doctest::Approx(6.f).epsilon(0.02));
+    CHECK(r.b.master_hz() == doctest::Approx(1.5f).epsilon(0.02));
     // phase: each bank tracks its own grid target
     double beats = r.c.transport().beats();
     float ta = (float)(beats * 1.0 - std::floor(beats * 1.0));

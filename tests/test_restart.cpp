@@ -214,12 +214,15 @@ TEST_CASE("restart: back-dating") {
 TEST_CASE("restart: back-dating across a step keeps the followers on the deck step") {
     Instrument inst;
     setup(inst, /*a_step=*/false, /*b_step=*/true);
-    // The fastest division at PACE x4: a step is shorter than the window
-    // (1/8T: 96 steps per beat, 5.2 ms at 120 BPM). Until the RATE window
-    // moved (2026-11-04) the right stop alone was 1/32, 7.8 ms a step; 1/8T at
-    // x1 is 20.8 ms, longer than the 10 ms window.
+    // The fastest division at PACE x4 and 240 BPM: a step is shorter than the
+    // window (right stop "1/4": 8 steps per beat x4 = 32, 7.8 ms at 240 BPM).
+    // Until the RATE window was reshaped (2026-11-04) the right stop alone was
+    // 1/32 at 120 BPM, 7.8 ms a step; "1/4" at x1 is 62.5 ms, far longer than
+    // the 10 ms window. The engine takes any positive tempo; 240 is past the
+    // panel's range on purpose.
     inst.set_rate(PART_B, 1.f);
     inst.set_pace(1.f);
+    inst.set_tempo_bpm(240.f);
     run(inst, 48000);
 
     constexpr uint32_t kAge = 480;   // the whole 10 ms window

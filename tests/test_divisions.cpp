@@ -10,18 +10,38 @@ TEST_CASE("divisions: 20 entries, strictly speed-sorted") {
         CHECK(kDivisions[i].cpb > kDivisions[i - 1].cpb);
 }
 
-TEST_CASE("divisions: the lane RATE window puts 16th steps at noon") {
+TEST_CASE("divisions: the lane RATE window puts one step per beat at noon") {
     // A name is one lane cycle; a STEP deck plays 8 steps per cycle, so the
-    // "1/2" cycle at noon is a 16th-note step (Bastian, 2026-11-04).
+    // "2 bars" cycle at noon is one step per beat (Bastian, 2026-11-04).
+    CHECK(std::string(kDivisions[division_index(0.5f)].name) == "2 bars");
+    CHECK(kDivisions[division_index(0.5f)].cpb * 8.f == 1.f);
+    // Left stop: one step per 8 bars. Right stop: 32nds.
     CHECK(division_index(0.f) == 0);
-    CHECK(std::string(kDivisions[division_index(0.f)].name) == "64 bars");
-    CHECK(std::string(kDivisions[division_index(0.5f)].name) == "1/2");
-    CHECK(kDivisions[division_index(0.5f)].cpb * 8.f == 4.f);   // 4 steps per beat
+    CHECK(kDivisions[division_index(0.f)].cpb * 8.f == 1.f / 32.f);
     CHECK(division_index(1.f) == kLaneRateCount - 1);
-    CHECK(std::string(kDivisions[division_index(1.f)].name) == "1/8T");
-    // The factory patch's rungs, three up from where the preset stored them.
-    CHECK(std::string(kDivisions[division_index(0.299500011f)].name) == "2 bars");
-    CHECK(std::string(kDivisions[division_index(0.351355359f)].name) == "1 bar");
+    CHECK(std::string(kDivisions[division_index(1.f)].name) == "1/4");
+    CHECK(kDivisions[division_index(1.f)].cpb * 8.f == 8.f);
+    // Five coarse rungs left, six fine ones right, each at its own spacing.
+    for (int k = 0; k < kLaneRateCount; ++k) {
+        CAPTURE(k);
+        CHECK(division_index(division_knob(k)) == k);
+    }
+    CHECK(division_knob(kLaneRateNoon) == 0.5f);
+    CHECK(division_index(0.049f) == 0);
+    CHECK(division_index(0.051f) == 1);
+    CHECK(division_index(0.54f) == kLaneRateNoon);
+    CHECK(division_index(0.55f) == kLaneRateNoon + 1);
+    // Never falls, never leaves the window.
+    int prev = 0;
+    for (int i = 0; i <= 1000; ++i) {
+        const int k = division_index(float(i) * 0.001f);
+        CHECK(k >= prev);
+        CHECK(k < kLaneRateCount);
+        prev = k;
+    }
+    // The factory patch's rungs.
+    CHECK(std::string(kDivisions[division_index(0.5f)].name) == "2 bars");
+    CHECK(std::string(kDivisions[division_index(0.583333313f)].name) == "1 bar");
 }
 
 TEST_CASE("divisions: FLUX's slice is the ladder's last twelve") {

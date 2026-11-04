@@ -65,9 +65,11 @@
 // above exists for the insertion case only; a removal announces itself for
 // free.
 //
-// A VALUE SHIFT, 2026-11-04: the lane RATE window slid three rungs slower
-// (mod/divisions.h, kLaneRateCount). The two STEP points run synced, so their
-// P_RATE_A/B moved +3/16 to stay on the rungs they were frozen on; the FLOW
+// A VALUE SHIFT, 2026-11-04: the lane RATE window was reshaped (mod/
+// divisions.h, kLaneRateCount: "2 bars" at noon, "1/4" at the right stop).
+// The two STEP points run synced, so their P_RATE_A/B were re-placed on the
+// rungs they were frozen on -- except "master 3"'s deck A, frozen on "1/8",
+// which the window no longer reaches and which sits on "1/4" now. The FLOW
 // points run free (free_hz, unchanged) and kept theirs.
 //
 // HOW TO TELL WHICH HAPPENED: compare P_COUNT and P_MODE against
@@ -252,8 +254,8 @@ inline constexpr FrozenPoint kStepPoints[kPer] = {
       4.0f, // P_STEPS_B
       0.37105608f, // P_TUNE_A
       0.580794275f, // P_TUNE_B
-      0.875f, // P_RATE_A   (0.6875 before the RATE window moved, 2026-11-04)
-      0.6875f, // P_RATE_B  (0.5 before)
+      1.0f, // P_RATE_A   (frozen at 0.6875, "1/8"; nearest rung now "1/4")
+      1.0f, // P_RATE_B   (frozen at 0.5, "1/4")
       0.644438863f, // P_SHAPE_A
       0.443576097f, // P_SHAPE_B
       0.408827245f, // P_DENSITY_A
@@ -322,8 +324,8 @@ inline constexpr FrozenPoint kStepPoints[kPer] = {
       7.0f, // P_STEPS_B
       0.504173517f, // P_TUNE_A
       0.355049491f, // P_TUNE_B
-      0.4375f, // P_RATE_A  (0.25 before the RATE window moved, 2026-11-04)
-      0.375f, // P_RATE_B   (0.1875 before)
+      0.666666687f, // P_RATE_A  (frozen at 0.25, "1/2.")
+      0.583333313f, // P_RATE_B  (frozen at 0.1875, "1 bar")
       0.195671588f, // P_SHAPE_A
       0.0562787838f, // P_SHAPE_B
       0.135651812f, // P_DENSITY_A
