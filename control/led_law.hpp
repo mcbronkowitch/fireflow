@@ -317,12 +317,12 @@ inline void fill(const spky::Instrument& inst, Panel& p, float dt,
     duty_out[LVL_B_L] = inst.deck_out_level(1) > kLvlFloor ? steps - 1 : 0;
 
     // FTIME: one flash per FLUX time period, only while FLUX is engaged
-    // (mix > 0 -- the gate that switches the block on). The phase runs free
-    // over the delay time, so a period is a phase that DECREASED since the
-    // last engaged read. It can read >= 1 for a moment right after the delay
-    // time shrinks, so wrap it on read. While FLUX is idle the phase is
-    // frozen: drop the priming so the first engaged read cannot see a stale
-    // value as a wrap.
+    // (mix > 0 -- the gate that switches the block on). The phase is counted
+    // on the transport (Instrument::flux_repeat_phase), so the flash lands on
+    // the TEMPO lamp's beat; a period is a phase that DECREASED since the last
+    // engaged read. Wrapped on read as a guard. While FLUX is idle the phase
+    // reads 0: drop the priming so the first engaged read cannot see the jump
+    // back to the transport's phase as a wrap.
     const int ftimeId[2] = {FTIME_A_L, FTIME_B_L};
     for (int part = 0; part < 2; ++part) {
         if (!inst.flux_engaged(part)) {

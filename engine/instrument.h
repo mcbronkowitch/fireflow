@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <cstddef>
+#include <cmath>
 #include "parts/part.h"
 #include "mod/lane_id.h"
 #include "fx/reverb.h"
@@ -515,8 +516,23 @@ public:
     float input_peak() const { return _in_peak; }
     // FLUX is on (or fading) on this deck.
     bool  flux_engaged(int p) const { return _parts[p].fx().flux().engaged(); }
-    // Where the FLUX time period stands, [0, 1). See Flux::period_phase().
-    float flux_repeat_phase(int p) const { return _parts[p].fx().flux().period_phase(); }
+    // Where the FLUX time period stands, [0, 1), for the FTIME lamp; 0 while
+    // FLUX is off. Counted on the TRANSPORT, not in FLUX: the echo period is
+    // 1/cpb raw beats and the transport runs at _pace paced beats per raw
+    // beat, so beats * cpb / _pace advances at exactly the echo's rate -- and
+    // it wraps where the TEMPO lamp's beat does whenever one divides the
+    // other (PACE is a power-of-two ladder, divisions.h). The free-running
+    // counter this replaced started wherever FLUX was switched on and sat a
+    // fixed, arbitrary offset off the beat. A PACE change jumps the phase
+    // once, as it re-anchors the transport's grid; an external clock pulse
+    // moves it with the beat it snaps.
+    float flux_repeat_phase(int p) const {
+        if (!flux_engaged(p)) return 0.f;
+        const double t = _center.transport().beats()
+                       * static_cast<double>(_parts[p].fx().flux().rate_cpb())
+                       / static_cast<double>(_pace);
+        return static_cast<float>(t - std::floor(t));
+    }
     // Counts engine swaps that have taken effect, per deck.
     uint32_t engine_epoch(int p) const { return _parts[p].engine_epoch(); }
     // Counts set_scale() calls that changed the scale index.

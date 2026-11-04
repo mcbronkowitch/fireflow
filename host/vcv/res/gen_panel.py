@@ -929,10 +929,10 @@ INIT_DEFAULTS = {
     "REV_MIX_A": 0.772287607,
     "REV_MIX_B": 0.789153814,
     "SHUFFLE": 0.000000000,
-    # PACE (spec 2026-08-12 modulation-pace): 0.5 is exactly x1, and below the
-    # centre pace_mult(n) == 32^(2n-1). This patch sits at 0.1, which is
-    # 32^-0.8 == 2^-4 == x1/16 exactly -- the modulation clock boots four
-    # octaves slow, where FM-INIT sat at 0.168 (about x1/10).
+    # PACE (spec 2026-08-12 modulation-pace): 0.5 is exactly x1, and since
+    # 2026-11-04 pace_mult() is a power-of-two ladder (mod/divisions.h). This
+    # patch sits at 0.1, its x1/16 rung -- the modulation clock boots four
+    # octaves slow, where FM-INIT sat at 0.168 (about x1/10, now the x1/8 rung).
     "PACE": 0.099999927,
     # DPTH is the LANE_MOTION base on every engine -- the FM index on deck A's
     # FEED, width+drift on deck B's WAVE. Deck A is dialled below

@@ -95,6 +95,43 @@ TEST_CASE("observers: the FLUX phase wraps once per repeat period") {
     CHECK(std::fabs(static_cast<float>(wraps) - want) <= 1.f);
 }
 
+TEST_CASE("observers: the FLUX phase wraps on the TEMPO lamp's beat, wherever FLUX came on") {
+    // The FTIME lamp used to count its own period from the moment FLUX was
+    // switched on, so it sat a fixed, arbitrary offset off the TEMPO lamp
+    // (Bastian, 2026-11-04). Every beat wrap must now be a FLUX wrap on the
+    // same sample. FLUX comes on at an odd time (0.37 s) on purpose, and
+    // PACE x1/4 checks the raw-tempo echo against the paced beat.
+    struct C { float pace_knob; int rate_slice; };
+    for (C c : {C{0.5f, 3}, C{0.5f, 11}, C{0.3f, 3}, C{0.3f, 0}}) {
+        CAPTURE(c.pace_knob); CAPTURE(c.rate_slice);
+        ObsTape tape;
+        spky::Instrument inst;
+        inst.init(48000.f, tape.mem());
+        inst.set_tempo_bpm(120.f);
+        inst.set_pace(c.pace_knob);
+        inst.set_flux_rate(spky::PART_A, c.rate_slice);
+        inst.set_flux_mix(spky::PART_A, 1.f);
+        run_silence(inst, 17760);                          // 0.37 s
+        inst.set_fx_on(spky::PART_A, spky::FxBlock::Flux, true);
+        run_silence(inst, 480);
+        REQUIRE(inst.flux_engaged(spky::PART_A));
+
+        int beats = 0, missed = 0;
+        float bp = inst.beat_phase();
+        float fp = inst.flux_repeat_phase(spky::PART_A);
+        float l = 0.f, r = 0.f;
+        for (int i = 0; i < 480000; ++i) {                 // 10 s
+            inst.process(nullptr, nullptr, &l, &r, 1);
+            const float b = inst.beat_phase();
+            const float f = inst.flux_repeat_phase(spky::PART_A);
+            if (b < bp) { ++beats; if (!(f < fp)) ++missed; }
+            bp = b; fp = f;
+        }
+        REQUIRE(beats >= 4);
+        CHECK(missed == 0);
+    }
+}
+
 TEST_CASE("observers: the FLUX phase stays at rest and engaged() is false when FLUX is off") {
     ObsTape tape;
     spky::Instrument inst;

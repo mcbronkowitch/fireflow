@@ -1830,11 +1830,18 @@ from the source and were measured by a throwaway probe (48 kHz, plain
   deck read 0.0022 (FEED at LVL 0.05; a SYNTH deck read 0.0040). The LVL lamp's
   `kLvlFloor` (1e-3, `control/led_law.hpp`) sits in that gap. It is a by-eye
   candidate from this probe, not an invariant.
-- **`flux_repeat_phase` runs over `delay_time()`, not over the repeat counter.**
-  It reads a free-running, observer-only phase in `Flux` (`period_phase()`, one
-  period of `delay_time()`), because `_repeat_phase_samples` advances only while
-  THIN is thinning (LINK > 0 with a valid rhythm) and would leave the FTIME lamp
-  dark at the factory LINK = 0.
+- **`flux_repeat_phase` is counted on the transport, not in `Flux`** (since
+  2026-11-04): `frac(beats() * cpb / pace)`, 0 while FLUX is off. Not
+  `_repeat_phase_samples`, which advances only while THIN is thinning (LINK > 0
+  with a valid rhythm) and would leave the FTIME lamp dark at the factory
+  LINK = 0. The free-running `Flux::period_phase()` it replaced started when
+  FLUX was switched on; probed at 120 BPM, FLUX 1/4, PACE x1 it sat a constant
+  **−130 ms** off the TEMPO lamp's tick (−24 ms after one FLUX off/on), and with
+  PACE ×0.87 (the old continuous knob at 0.48) it slid **74 ms per beat**. With
+  the transport count and the power-of-two PACE ladder the probe sees every
+  beat wrap and a FLUX wrap in the same 48-sample block; gate
+  `observers: the FLUX phase wraps on the TEMPO lamp's beat` in
+  `tests/test_led_observers.cpp`.
 
 ## Where a board block goes (2026-10-30)
 

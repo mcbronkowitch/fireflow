@@ -90,22 +90,40 @@ inline float tide_free(float norm) {
 }
 
 // PACE: the global modulation time-stretch (spec 2026-08-12 modulation-pace).
-// Piecewise so both halves meet at EXACTLY 1.0 at the centre -- that identity
-// is what makes PACE 0.5 a bit-identical no-op, the same property that makes
-// TIDE 0.5 one. Asymmetric on purpose: the fast end is already reachable
-// through RATE, so the resolution goes where it was missing.
+// A ladder of powers of two since 2026-11-04 -- it was continuous before. FLUX's
+// delay stays on the raw tempo (Instrument::_apply_tempo), so only a
+// power-of-two PACE keeps a FLUX division a whole fraction of the paced beat:
+// at any rung the echo period divides the TEMPO lamp's beat (or the beat
+// divides it), so the two lamps meet and the repeats land on the notes' grid.
+// A continuous PACE left both free to slide past each other. Continuity bought
+// little: in FLOW, RATE and TIDE already run on continuous free curves.
 //
-//   0.0 -> x1/32   0.25 -> x1/5.7   0.5 -> x1   0.75 -> x2   1.0 -> x4
+// The rungs sit where the old piecewise curve (32^(2n-1) left, 4^(2n-1)
+// right) passed through them, so a saved knob on a rung keeps its value:
+//
+//   0.0 x1/32  0.1 x1/16  0.2 x1/8  0.3 x1/4  0.4 x1/2  0.5 x1  0.75 x2  1.0 x4
+//
+// and a knob between two rungs takes the nearer one in log2 (the old
+// curve's exponent, rounded). 0.5 is still exactly 1.0, the identity that
+// makes PACE 0.5 a bit-identical no-op. No pow: a table of exact values.
 //
 // Lives here rather than in the host for the reason stated at the top of
 // free_hz: the curve belongs where the engine reads it, so a tooltip cannot
-// drift from what actually runs. The NAME does not follow it here -- PACE is
-// continuous, unlike kTideNames' 9 rungs, so a label has to be formatted and
-// the host owns that.
+// drift from what actually runs. The host formats the name.
+inline constexpr float kPaceRungs[] =
+    { 1.f / 32.f, 1.f / 16.f, 1.f / 8.f, 1.f / 4.f, 1.f / 2.f, 1.f, 2.f, 4.f };
+inline constexpr int kPaceRungCount = 8;
+inline constexpr int kPaceUnityRung = 5;   // kPaceRungs[5] == 1
+
 inline float pace_mult(float norm) {
     const float n = clampf(norm, 0.f, 1.f);
-    return n <= 0.5f ? std::pow(32.f, 2.f * n - 1.f)
-                     : std::pow(4.f,  2.f * n - 1.f);
+    // The old curve's log2: 5(2n-1) on the left half, 2(2n-1) on the right.
+    const float e = n <= 0.5f ? 10.f * n - 5.f : 4.f * n - 2.f;
+    // e >= -5, so the argument is positive and truncation is floor: round
+    // to nearest without a libm call.
+    int k = static_cast<int>(e + 0.5f + static_cast<float>(kPaceUnityRung));
+    if (k >= kPaceRungCount) k = kPaceRungCount - 1;
+    return kPaceRungs[k];
 }
 
 } // namespace spky

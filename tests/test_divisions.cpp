@@ -43,16 +43,36 @@ TEST_CASE("pace: the curve meets exactly 1 at centre") {
     // position where it provably does not exist. Exact, not Approx: the
     // no-op claim is a bit-identity claim (spec 2026-08-12 PACE §2).
     CHECK(spky::pace_mult(0.5f) == 1.0f);
-    CHECK(spky::pace_mult(0.f)  == doctest::Approx(1.f / 32.f));
-    CHECK(spky::pace_mult(1.f)  == doctest::Approx(4.f));
-    CHECK(spky::pace_mult(0.75f) == doctest::Approx(2.f));
-    // Monotone rising across the knee, and clamped outside 0..1.
-    float prev = spky::pace_mult(0.f);
-    for (int i = 1; i <= 100; ++i) {
-        const float m = spky::pace_mult(float(i) * 0.01f);
-        CHECK(m > prev);
-        prev = m;
-    }
     CHECK(spky::pace_mult(-1.f) == spky::pace_mult(0.f));
     CHECK(spky::pace_mult(2.f)  == spky::pace_mult(1.f));
+}
+
+TEST_CASE("pace: a power-of-two ladder on the old curve's rung positions") {
+    // Exact values at the positions the continuous curve passed through them,
+    // so a saved knob on a rung keeps its value -- the factory patch's 0.1
+    // (stored as 0.099999927f) among them.
+    struct R { float knob; float mult; };
+    for (R r : {R{0.f, 1.f / 32.f}, R{0.1f, 1.f / 16.f}, R{0.099999927f, 1.f / 16.f},
+                R{0.2f, 1.f / 8.f}, R{0.3f, 1.f / 4.f}, R{0.4f, 1.f / 2.f},
+                R{0.5f, 1.f}, R{0.75f, 2.f}, R{1.f, 4.f}}) {
+        CAPTURE(r.knob);
+        CHECK(spky::pace_mult(r.knob) == r.mult);
+    }
+    // Between rungs: the nearer one in log2. x1 spans 0.45 .. 0.625.
+    CHECK(spky::pace_mult(0.46f) == 1.f);
+    CHECK(spky::pace_mult(0.48f) == 1.f);
+    CHECK(spky::pace_mult(0.62f) == 1.f);
+    CHECK(spky::pace_mult(0.44f) == 0.5f);
+    CHECK(spky::pace_mult(0.63f) == 2.f);
+    // Every value is a rung, and the ladder never falls.
+    float prev = spky::pace_mult(0.f);
+    for (int i = 0; i <= 1000; ++i) {
+        const float m = spky::pace_mult(float(i) * 0.001f);
+        bool on_rung = false;
+        for (float rung : spky::kPaceRungs) on_rung = on_rung || m == rung;
+        CAPTURE(i);
+        CHECK(on_rung);
+        CHECK(m >= prev);
+        prev = m;
+    }
 }

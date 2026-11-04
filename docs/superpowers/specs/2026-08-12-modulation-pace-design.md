@@ -6,6 +6,17 @@ Status: design, revision 3. Reviewed adversarially five times across two rounds
 consistency/implementability). Claims that did not survive are kept in §10
 rather than deleted, so the next reader does not re-derive them.
 
+> **Amended 2026-11-04 (owner): PACE is no longer continuous.** `pace_mult()`
+> is a ladder of powers of two, x1/32 … x4, on the positions the curve below
+> passed through them (0.0, 0.1 … 0.5, 0.75, 1.0; a knob between two takes the
+> nearer one in log2). FLUX still runs on the raw tempo (§3.3), and only a
+> power-of-two PACE keeps a FLUX division a whole fraction of the paced beat:
+> the continuous knob let the echo and the FTIME lamp slide off the TEMPO
+> lamp's beat. Coupling FLUX to PACE instead was rejected: at the factory
+> x1/16 it turns a 94 ms echo into 1.5 s and runs every rate from 1/8 down
+> into the 5.5 s tape cap. The curve, tables and the "continuous" wording
+> below describe the pre-ladder design.
+
 ## 1. The problem
 
 There is no control anywhere in FireFlow that slows the modulation layer down.
