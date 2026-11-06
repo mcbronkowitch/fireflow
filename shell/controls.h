@@ -115,6 +115,10 @@ struct KeyResult
 {
     bool mod_changed = false;   // MODBTN toggled
     bool mod_cleared = false;   // SHIFT + MOD cleared the depth twins
+    // SHIFT + REC A / B: that deck's take is to be cleared (the caller runs
+    // Instrument::sampler_clear, O(1)), and its REC latch was released.
+    // Spec 2026-11-06-sampler-takes-on-sd section 4.5.
+    bool rec_cleared[2] = {false, false};
 };
 KeyResult apply_key_edges(uint8_t edges, uint8_t held, const KeyMap& map, float* knobs);
 

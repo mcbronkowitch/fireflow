@@ -84,8 +84,22 @@ KeyResult apply_key_edges(uint8_t edges, uint8_t held, const KeyMap& map, float*
         int id;
         switch(map.fn[i])
         {
-            case KeyFn::RecA: id = ffctl::REC_A; break;
-            case KeyFn::RecB: id = ffctl::REC_B; break;
+            case KeyFn::RecA:
+            case KeyFn::RecB:
+            {
+                const int deck = map.fn[i] == KeyFn::RecA ? 0 : 1;
+                id = deck == 0 ? ffctl::REC_A : ffctl::REC_B;
+                if(shift)
+                {
+                    // SHIFT + REC: clear the deck's take (spec
+                    // 2026-11-06-sampler-takes-on-sd 4.5) and release the
+                    // latch, so the law does not start a new take at once.
+                    knobs[id] = 0.0f;
+                    r.rec_cleared[deck] = true;
+                    continue;
+                }
+                break;
+            }
             case KeyFn::Mod:
                 if(shift)
                 {
