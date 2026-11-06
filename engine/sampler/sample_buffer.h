@@ -55,6 +55,13 @@ public:
     float  feedback() const { return _feedback; }
     float  fill() const { return _buffer_size ? float(_size) / float(_buffer_size) : 0.f; }
     size_t rec_size() const { return _size; }
+    // The written-frame watermark (spec 2026-11-06-sampler-takes-on-sd §4.7):
+    // frames at or past it count as silence, whatever the memory holds. The
+    // overdub read in write() never sees past it, and the reads never see
+    // past rec_size() <= written(). So the host's memory need not be zeroed
+    // (Daisy SDRAM is not), and clear() needs no memset. Follows the write
+    // head up; clear() sets it to 0, set_rec_size() to the declared length.
+    size_t written() const { return _written; }
     bool   is_empty() const { return _size == 0; }
     bool   valid() const { return _buffer != nullptr && _buffer_size > 0; }
     size_t capacity() const { return _buffer_size; }
@@ -72,6 +79,7 @@ private:
     size_t  _buffer_size = 0;
     float   _feedback    = 0.f;   // linear factor; set by set_feedback()
     size_t  _size        = 0;     // recorded content length, in frames
+    size_t  _written     = 0;     // watermark: frames [0, _written) hold content
     size_t  _write_head  = 0;
     size_t  _fade_ctr    = 0;
     State   _state       = State::idle;

@@ -1,5 +1,7 @@
 #include <doctest/doctest.h>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <limits>
 #include <vector>
 #include "sampler/sample_buffer.h"
@@ -206,7 +208,11 @@ TEST_CASE("sample_buffer: clear returns it to empty") {
     CHECK(f.buf.is_empty());
     CHECK(f.buf.fill() == doctest::Approx(0.f));
     CHECK_FALSE(f.buf.is_recording());
-    CHECK(f.mem[1200].l == 0.f);
+    // The frames themselves stay (no memset since the watermark, spec
+    // 2026-11-06-sampler-takes-on-sd §4.7); what makes them unreachable is
+    // the watermark at 0. "buffer: clear does not touch the frames" below
+    // proves a take after the clear does not hear them.
+    CHECK(f.buf.written() == 0u);
 }
 
 TEST_CASE("sample_buffer: set_rec_size(0) does not lock the buffer") {
@@ -724,4 +730,99 @@ TEST_CASE("K-02: a NaN in the input does not poison the buffer") {
     INFO("read after NaN then clean overdub: " << o0);
     CHECK(o0 == o0);            // kein NaN
     CHECK(std::isfinite(o0));
+}
+
+// --- Written-frame watermark (spec 2026-11-06-sampler-takes-on-sd §4.7) ---
+// Daisy SDRAM is not zeroed at boot, and a fresh take adds onto whatever the
+// memory holds (feedback 1 while the loop is not cut). The watermark makes
+// that memory unreachable, so these tests run the same gestures on zeroed and
+// on garbage-filled memory and demand bitwise-equal content.
+namespace {
+constexpr size_t kWmCap = 48000;
+
+void fill_garbage(std::vector<SampleBuffer::Frame>& m, uint32_t seed) {
+    uint32_t s = seed;
+    for (auto& f : m) {
+        s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+        f.l = (static_cast<float>(s >> 8) / 16777216.f) * 6.f - 3.f;
+        s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+        f.r = (static_cast<float>(s >> 8) / 16777216.f) * 6.f - 3.f;
+    }
+}
+
+// A 0.5 s sine take, released and faded out, then one overdub pass over the
+// locked loop at the default feedback, released and faded out again.
+void take_and_overdub(SampleBuffer& b) {
+    auto in = [](size_t i) { return 0.5f * std::sin(6.2831853f * 220.f * float(i) / 48000.f); };
+    size_t n = 0;
+    b.set_recording(true);
+    for (; n < 24000; ++n) b.write(in(n), -in(n));
+    b.set_recording(false);
+    for (size_t i = 0; i < sampler_cfg::kRecordFade + 2; ++i, ++n) b.write(in(n), -in(n));
+    b.set_recording(true);
+    for (size_t i = 0; i < b.rec_size(); ++i, ++n) b.write(in(n + 777), in(n));
+    b.set_recording(false);
+    for (size_t i = 0; i < sampler_cfg::kRecordFade + 2; ++i, ++n) b.write(in(n), in(n));
+}
+
+bool same_content(const std::vector<SampleBuffer::Frame>& a,
+                  const std::vector<SampleBuffer::Frame>& b, size_t n) {
+    for (size_t i = 0; i < n; ++i)
+        if (std::memcmp(&a[i], &b[i], sizeof(SampleBuffer::Frame)) != 0) return false;
+    return true;
+}
+}  // namespace
+
+TEST_CASE("buffer: fresh take on dirty memory equals clean memory") {
+    std::vector<SampleBuffer::Frame> clean(kWmCap), dirty(kWmCap);
+    fill_garbage(dirty, 0x9E3779B9u);
+    SampleBuffer a, b;
+    a.init(clean.data(), kWmCap, 48000.f);
+    b.init(dirty.data(), kWmCap, 48000.f);
+    take_and_overdub(a);
+    take_and_overdub(b);
+    REQUIRE(a.rec_size() == b.rec_size());
+    REQUIRE(a.rec_size() > 20000u);
+    CHECK(same_content(clean, dirty, a.rec_size()));
+}
+
+TEST_CASE("buffer: clear does not touch the frames") {
+    std::vector<SampleBuffer::Frame> clean(kWmCap), dirty(kWmCap);
+    SampleBuffer a, b;
+    a.init(clean.data(), kWmCap, 48000.f);
+    b.init(dirty.data(), kWmCap, 48000.f);
+    take_and_overdub(b);
+    const std::vector<SampleBuffer::Frame> before = dirty;
+
+    b.clear();
+    CHECK(b.rec_size() == 0u);
+    CHECK(b.written() == 0u);
+    CHECK(same_content(before, dirty, kWmCap));   // no memset: the callback can afford it
+
+    // ...and what is left behind is unreachable: a new take equals one on
+    // zeroed memory.
+    take_and_overdub(a);
+    take_and_overdub(b);
+    REQUIRE(a.rec_size() == b.rec_size());
+    CHECK(same_content(clean, dirty, a.rec_size()));
+}
+
+TEST_CASE("buffer: set_rec_size sets the watermark") {
+    std::vector<SampleBuffer::Frame> mem(kWmCap);
+    for (auto& f : mem) f = {0.25f, 0.25f};
+    SampleBuffer b;
+    b.init(mem.data(), kWmCap, 48000.f);
+    b.set_rec_size(1000);
+    CHECK(b.written() == 1000u);
+    CHECK(b.rec_size() == 1000u);
+    // An overdub of silence at feedback 0 dB... the loop is cut, so it only
+    // ever writes [0, 1000): the old 0.25 is read back below 1000, the
+    // frames past the watermark are never touched.
+    b.set_feedback(1.f);
+    b.set_recording(true);
+    for (int i = 0; i < 500; ++i) b.write(0.f, 0.f);
+    CHECK(mem[400].l != 0.f);         // read old content below the watermark
+    CHECK(mem[1500].l == 0.25f);      // untouched past it
+    b.set_rec_size(kWmCap * 10);
+    CHECK(b.written() == kWmCap);
 }

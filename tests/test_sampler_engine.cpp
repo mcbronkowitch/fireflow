@@ -1557,10 +1557,10 @@ TEST_CASE("sample_data exposes the loaded content at rec_size length") {
 
 TEST_CASE("a host can carry content across a re-init by copying it out") {
     // This is exactly what the VCV host does on a sample-rate change, and the
-    // reason sample_data() exists. init() memsets the injected buffer
-    // (SampleBuffer::clear), so the snapshot MUST be taken into separate
-    // storage first -- copying out of the buffer after init() would read
-    // zeroes, and that mistake is what this case is here to catch.
+    // reason sample_data() exists. init() empties the buffer (rec_size 0,
+    // watermark 0), so the snapshot MUST be taken into separate storage first
+    // -- after init() there is no valid length left to copy out, and that
+    // mistake is what this case is here to catch.
     std::vector<SampleBuffer::Frame> mem(4096);
     SamplerEngine eng;
     eng.set_memory(mem.data(), mem.size());
@@ -1576,8 +1576,7 @@ TEST_CASE("a host can carry content across a re-init by copying it out") {
                                      sr[i] = eng.sample_data()[i].r; }
 
     eng.init(44100.f);
-    CHECK(eng.rec_size() == 0);
-    CHECK(eng.sample_data()[10].l == doctest::Approx(0.f));  // init DID wipe it
+    CHECK(eng.rec_size() == 0);   // init DID empty it
 
     eng.load_sample(sl.data(), sr.data(), n);
     CHECK(eng.rec_size() == 800);
@@ -1586,36 +1585,40 @@ TEST_CASE("a host can carry content across a re-init by copying it out") {
     CHECK(eng.sample_data()[799].r == doctest::Approx(-0.75f));
 }
 
-TEST_CASE("clear() erases stale content, not just rec_size") {
-    // I-3 fix: SampleBuffer::clear() now skips its memset when _size == 0
-    // going in, to avoid an unconditional ~16 MB stall on a buffer that is
-    // already empty (see the factory-drone autoload in host/vcv, which hits
-    // exactly that case on the audio thread). This pins the property that
-    // must NOT regress: when the buffer HAD content (_size != 0 going into
-    // clear()), the memset still runs and the stale frames are actually
-    // erased -- not merely hidden behind rec_size() reporting 0.
-    // sample_data() returns the raw buffer pointer regardless of rec_size(),
-    // so it can see past the "valid" length exactly the way a naive host bug
-    // (reading past rec_size after a load) would. A clear() that skipped the
-    // memset unconditionally (not just when _size == 0) would leave the old
-    // 0.5f/-0.75f content sitting here and fail this loop.
-    std::vector<SampleBuffer::Frame> mem(4096);
-    SamplerEngine eng;
+TEST_CASE("clear() makes stale content unreachable, not just rec_size 0") {
+    // Since the written-frame watermark (spec 2026-11-06-sampler-takes-on-sd
+    // §4.7) clear() no longer memsets: the old frames stay in memory and the
+    // watermark makes them unreachable. The property that must NOT regress is
+    // the one the old memset bought: a fresh take after a clear sounds as it
+    // would on zeroed memory. A fresh take adds onto the old frame (feedback
+    // is 1 until the loop is cut), so a clear that only reset rec_size would
+    // leave the 0.5 / -0.75 load in this take and fail the comparison.
+    auto fresh_take = [](SamplerEngine& e) {
+        e.set_recording(true);
+        for (int i = 0; i < 600; ++i) e.process_in(0.1f, 0.2f);
+        e.set_recording(false);
+        for (size_t i = 0; i < sampler_cfg::kRecordFade + 2; ++i) e.process_in(0.1f, 0.2f);
+    };
+    std::vector<SampleBuffer::Frame> mem(4096), ref_mem(4096);
+    SamplerEngine eng, ref;
     eng.set_memory(mem.data(), mem.size());
-    eng.set_seed(1);
-    eng.init(48000.f);
+    ref.set_memory(ref_mem.data(), ref_mem.size());
+    eng.set_seed(1); ref.set_seed(1);
+    eng.init(48000.f); ref.init(48000.f);
 
     std::vector<float> l(800, 0.5f), r(800, -0.75f);
     eng.load_sample(l.data(), r.data(), 800);
     REQUIRE(eng.rec_size() == 800);
-    REQUIRE(eng.sample_data()[400].l == doctest::Approx(0.5f));
-    REQUIRE(eng.sample_data()[400].r == doctest::Approx(-0.75f));
 
     eng.clear();
     CHECK(eng.rec_size() == 0);
-    for (size_t i = 0; i < 800; ++i) {
-        CHECK(eng.sample_data()[i].l == doctest::Approx(0.f));
-        CHECK(eng.sample_data()[i].r == doctest::Approx(0.f));
+    fresh_take(eng);
+    fresh_take(ref);
+    REQUIRE(eng.rec_size() == ref.rec_size());
+    REQUIRE(eng.rec_size() > 500);
+    for (size_t i = 0; i < eng.rec_size(); ++i) {
+        CHECK(eng.sample_data()[i].l == ref.sample_data()[i].l);
+        CHECK(eng.sample_data()[i].r == ref.sample_data()[i].r);
     }
 }
 

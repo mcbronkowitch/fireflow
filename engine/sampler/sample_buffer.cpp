@@ -3,7 +3,6 @@
 #include "util/math.h"
 #include "util/fast_tanh.h"
 #include <cmath>
-#include <cstring>
 
 namespace spky {
 
@@ -163,7 +162,9 @@ void SampleBuffer::write(float in0, float in1) {
     const float fb_ceil = _feedback > 1.f ? _feedback : 1.f;
     const float fb_fade = clampf(1.f - fade * (1.f - fb), 0.f, fb_ceil);
 
-    Frame f = _buffer[_write_head];
+    // Past the watermark the memory holds nothing of this buffer's (Daisy
+    // SDRAM is never zeroed, and clear() no longer memsets): read silence.
+    Frame f = _write_head < _written ? _buffer[_write_head] : Frame{0.f, 0.f};
     // Saturate what was read back BEFORE the feedback multiply -- the order
     // that keeps BbdEcho::Process stable at its 1.2 coefficient
     // (engine/fx/bbd.h; the coefficient itself is set by Flux::set_feedback,
@@ -189,6 +190,7 @@ void SampleBuffer::write(float in0, float in1) {
     if (!(f.l > -1e6f && f.l < 1e6f)) f.l = 0.f;
     if (!(f.r > -1e6f && f.r < 1e6f)) f.r = 0.f;
     _buffer[_write_head] = f;
+    if (_write_head >= _written) _written = _write_head + 1;
 
     ++_write_head;
     if (_cut.is_on()) {
@@ -219,22 +221,22 @@ void SampleBuffer::set_rec_size(size_t frames) {
         return;
     }
     _size = frames > _buffer_size ? _buffer_size : frames;
+    // The caller declares [0, frames) as content (the load and restore
+    // paths write it first), so the watermark moves with it.
+    _written = _size;
     cut();
 }
 
 void SampleBuffer::clear() {
-    // Skip the memset when the buffer is already empty (_size == 0): init()
-    // always ends in clear() before content can exist, so an empty buffer
-    // is already zeroed (or was never written), and _size == 0 means
-    // read_linear() returns silence unconditionally regardless of what the
-    // memory holds -- nothing past the write head is reachable either way.
-    // This is the fix for I-3: on a 42 s buffer the unconditional memset was
-    // ~1.5-3 ms inside one process() call, and the factory-drone autoload
-    // (Fireflow.cpp pushParams) hits exactly this empty-buffer case on the
-    // audio thread. Every other line below stays unconditional -- a buffer
-    // that DID hold content (_size != 0) still gets the full memset.
-    if (_buffer && _buffer_size && _size != 0)
-        std::memset(_buffer, 0, sizeof(Frame) * _buffer_size);
+    // No memset (spec 2026-11-06-sampler-takes-on-sd §4.5, §4.7). The
+    // watermark going to 0 makes every old frame unreachable: write() reads
+    // silence past it and read_linear() never passes rec_size(). The memset
+    // this replaces was a byte loop of ~48 M cycles over a 42 s buffer on the
+    // Daisy (docs/gotchas.md), about 50 audio blocks, which is why a clear
+    // from the panel could not afford it; on VCV it was the I-3 stall of
+    // ~1.5-3 ms inside one process() call. The frames stay in memory until
+    // a take overwrites them -- a host must read only rec_size() of them.
+    _written             = 0;
     _write_head          = 0;
     _size                = 0;
     _fade_ctr            = 0;

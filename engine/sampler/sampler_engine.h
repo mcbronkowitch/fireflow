@@ -138,14 +138,13 @@ public:
     // when no memory was injected.
     //
     // Note for callers carrying content across an init(): copy OUT first.
-    // init() ends in clear(), but clear() only memsets the buffer when it
-    // held content going in (_size != 0) -- see SampleBuffer::clear()'s I-3
-    // fast path. A buffer that never held content (_size == 0, e.g. memory
-    // a host just injected and has not written to yet) is NOT zeroed by
-    // init()/clear(). Hosts must inject already-zeroed memory: this matters
-    // for any host that carves buffers out of memory the platform does not
-    // zero at startup (e.g. Daisy SDRAM), where the overdub read-before-
-    // write path would otherwise read uninitialised garbage.
+    // init() ends in clear(), which empties the buffer (rec_size 0) without
+    // touching the frames. Injected memory need not be zeroed: the buffer's
+    // written-frame watermark (SampleBuffer::written(), spec
+    // 2026-11-06-sampler-takes-on-sd §4.7) keeps the overdub read away from
+    // anything a take has not written, so Daisy SDRAM's power-up garbage is
+    // unreachable. What lies past rec_size() is either that garbage or an
+    // older take: never read it.
     const SampleBuffer::Frame* sample_data() const { return _buf.raw(); }
 
     // --- edit layer ---
