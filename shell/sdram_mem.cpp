@@ -23,7 +23,17 @@ float DSY_SDRAM_BSS g_bbd[spky::PART_COUNT][2][spky::BbdEngine::kCells];
 // groesste Posten der Firmware ueberhaupt: 32,3 MB. Bleibt er nullptr,
 // laeuft der Sampler des Parts still -- was ein Host verdient, der ihn
 // vergessen hat, aber nicht das, was diese Firmware tun soll.
-spky::SampleBuffer::Frame DSY_SDRAM_BSS
+//
+// alignas(32): the take image moves this buffer to and from the SD card by
+// DMA (spec 2026-11-06-sampler-takes-on-sd section 4.3, "D-cache"), and
+// sd_diskio.c cleans / invalidates the D-cache over each transfer rounded
+// out to 32-byte lines. Both decks' buffers must start on a line, so a line
+// is never shared with a neighbour the audio interrupt writes. Before this
+// it was aligned only because everything ahead of it in .sdram_bss happened
+// to be a multiple of 32 B. take_card.cpp prints the runtime address check.
+static_assert(sizeof(spky::SampleBuffer::Frame) * kSamplerFrames % 32 == 0,
+              "each deck's buffer must end on a 32-byte line");
+alignas(32) spky::SampleBuffer::Frame DSY_SDRAM_BSS
     g_sampler[spky::PART_COUNT][kSamplerFrames];
 
 // --- SRAM -------------------------------------------------------------
