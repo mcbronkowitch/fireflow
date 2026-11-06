@@ -176,7 +176,34 @@ void SamplerEngine::process_in(float inL, float inR) {
     }
 }
 
-void SamplerEngine::set_recording(bool on) { _buf.set_recording(on); }
+void SamplerEngine::set_recording(bool on) {
+    if (_loading && on) return;   // REC locked out while a take loads
+    _buf.set_recording(on);
+}
+
+void SamplerEngine::begin_load() {
+    clear();
+    _loading = true;
+}
+
+bool SamplerEngine::restore(size_t frames, const uint32_t* marker_frame,
+                            const uint8_t* marker_strength, int n_markers) {
+    _loading = false;
+    if (!_buf.valid()) return false;
+    _kill_all();
+    const size_t n = frames > _buf.capacity() ? _buf.capacity() : frames;
+    _buf.set_rec_size(n);          // n == 0: clear()
+    _buf.settle_loop();            // as after any overdub (SampleBuffer::settle_loop)
+    const bool ok = _slices.import_markers(marker_frame, marker_strength, n_markers, n);
+    if (!ok) _buf.clear();
+    ++_gen_own;
+    return ok;
+}
+
+void SamplerEngine::abort_load() {
+    clear();
+    _loading = false;
+}
 
 void SamplerEngine::load_sample(const float* l, const float* r, size_t frames) {
     if (!_buf.valid() || l == nullptr) return;

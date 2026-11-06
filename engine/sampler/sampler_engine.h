@@ -137,6 +137,29 @@ public:
     void   set_monitor(bool on) { _monitor = on; }
     void   load_sample(const float* l, const float* r, size_t frames);
 
+    // --- Restoring a saved take (spec 2026-11-06-sampler-takes-on-sd §4.4,
+    // §4.7). Callback side: the firmware's foreground writes the frames into
+    // raw_buffer() between begin_load() and restore() and never calls these
+    // itself (a mailbox hands them to the audio callback).
+    // begin_load: grains killed, the deck emptied (clear(), O(1)), REC locked
+    //   out -- set_recording(true) is ignored until restore() or abort_load(),
+    //   so the law's every-tick REC push starts the take once the load ends
+    //   if REC is still latched.
+    // restore: declares [0, frames) of the buffer as the take, imports the
+    //   markers, moves the generation, unlocks REC. Rejected markers leave an
+    //   empty deck and return false. frames == 0 is an empty take.
+    // abort_load: an empty deck, REC unlocked.
+    void   begin_load();
+    bool   loading() const { return _loading; }
+    bool   restore(size_t frames, const uint32_t* marker_frame,
+                   const uint8_t* marker_strength, int n_markers);
+    void   abort_load();
+    SampleBuffer::Frame* raw_buffer() { return _buf.raw(); }
+    size_t capacity() const { return _buf.capacity(); }
+    int    export_markers(uint32_t* frame, uint8_t* strength, int max) const {
+        return _slices.export_markers(frame, strength, max);
+    }
+
     // Read the recorded content back out: Save sample..., the patch-storage
     // autosave, and the host's sample-rate snapshot all need it. This hands
     // back the very pointer the host injected, so the caller must respect
@@ -366,6 +389,7 @@ private:
     SampleBuffer _buf;
     SliceMap _slices;
     uint32_t _gen_own = 0;   // content_gen()'s own bumps: clear, load, restore
+    bool     _loading = false;   // begin_load() .. restore() / abort_load()
     SampleBuffer::Frame* _mem = nullptr;
     size_t _mem_frames = 0;
 

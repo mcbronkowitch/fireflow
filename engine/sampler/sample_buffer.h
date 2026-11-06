@@ -48,6 +48,12 @@ public:
     void cut();                       // lock the loop length at the fill
     void clear();
     void set_rec_size(size_t frames); // load path + tests: declare content
+    // A locked loop's feedback switch jumps to fully on, where any overdub
+    // leaves it. cut() only arms it, and its 4 ms rise runs inside the next
+    // overdub's fade-in -- right at the moment of the cut, never again. A take
+    // restored after a power cycle has no such moment, so the restore settles
+    // it (spec 2026-11-06-sampler-takes-on-sd §4.7). No-op on an uncut buffer.
+    void settle_loop() { if (_cut.is_on()) _cut.set_on(true, true); }
 
     // --- queries ---
     // The linear feedback coefficient. Exposed for tests: above unity it is

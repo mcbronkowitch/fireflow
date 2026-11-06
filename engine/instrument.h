@@ -488,6 +488,18 @@ public:
     size_t sampler_rec_size(int p) const { return _parts[p].sampler().rec_size(); }
     // Deck p's content generation (SamplerEngine::content_gen()).
     uint32_t sampler_content_gen(int p) const { return _parts[p].sampler().content_gen(); }
+    // Saved-take restore, audio-callback side (SamplerEngine::begin_load()).
+    void sampler_begin_load(int p)       { _parts[p].sampler().begin_load(); }
+    bool sampler_loading(int p) const    { return _parts[p].sampler().loading(); }
+    bool sampler_restore(int p, size_t frames, const uint32_t* mf, const uint8_t* ms, int n) {
+        return _parts[p].sampler().restore(frames, mf, ms, n);
+    }
+    void sampler_abort_load(int p)       { _parts[p].sampler().abort_load(); }
+    SampleBuffer::Frame* sampler_buffer(int p) { return _parts[p].sampler().raw_buffer(); }
+    size_t sampler_capacity(int p) const { return _parts[p].sampler().capacity(); }
+    int  sampler_export_markers(int p, uint32_t* f, uint8_t* s, int max) const {
+        return _parts[p].sampler().export_markers(f, s, max);
+    }
 
     float lane_output(int p, int s)  const { return _parts[p].lane_output(s); }
     float lane_output_stepped(int p, int s) const {
