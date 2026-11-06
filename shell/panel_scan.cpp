@@ -58,6 +58,14 @@
 #include "sd_probe.h"
 #include "shell_sd_probe.h"
 #endif
+// The pot hold for card traffic (sd_hold.h): the SD probe image and the take
+// image, which the Makefile never builds together.
+#if SHELL_SD || (defined(SHELL_TAKES) && SHELL_TAKES)
+#define SHELL_POT_HOLD 1
+#include "sd_hold.h"
+#else
+#define SHELL_POT_HOLD 0
+#endif
 #if SHELL_RGRAIN
 #include <cmath>
 #include "rgrain.h"
@@ -1048,18 +1056,19 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
 #endif
     if(step < 0) return;
 
-#if SHELL_SD
-    // The SD burst probe's pot hold (spec 2026-10-31-sd-use-cases-tests-design
-    // section 5, A1), decided once per block: while a card transfer runs and
-    // for a tail of blocks after it, none of this step's readings counts --
-    // not the raw window below, not the calibration pair, not the pot filter.
-    // What is left is what the board test judges against the noise floor.
-    // False in every other SD mode.
+#if SHELL_POT_HOLD
+    // The pot hold (spec 2026-10-31-sd-use-cases-tests-design section 5, A1),
+    // decided once per block: while a card transfer runs and for a tail of
+    // blocks after it, none of this step's readings counts -- not the raw
+    // window below, not the calibration pair, not the pot filter. In the SD
+    // probe image what is left is what the board test judges against the
+    // noise floor (false in its non-hold modes); in the take image it keeps
+    // the take traffic off the pots (tail 0, sd_hold.cpp).
     const bool sd_drop = sd_hold_block();
 #endif
     for(int s = 0; s < kActiveChain.sense_pins; ++s)
     {
-#if SHELL_SD
+#if SHELL_POT_HOLD
         if(sd_drop) continue;
 #endif
         // A pin with no live channel this step floats; group_at() says so.
