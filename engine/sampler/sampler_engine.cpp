@@ -190,6 +190,7 @@ void SamplerEngine::load_sample(const float* l, const float* r, size_t frames) {
     }
     _buf.set_rec_size(n);
     _slices.scan(dst, n);
+    ++_gen_own;
 }
 
 void SamplerEngine::trigger(float pitch_norm) {

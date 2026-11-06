@@ -62,6 +62,11 @@ public:
     // (Daisy SDRAM is not), and clear() needs no memset. Follows the write
     // head up; clear() sets it to 0, set_rec_size() to the declared length.
     size_t written() const { return _written; }
+    // Counts the state machine's idle edges: +1 when a take or overdub
+    // leaves idle, +1 when its fade-out reaches idle. Between two equal
+    // readings with is_recording() false the content did not change. clear()
+    // does not count (init() calls it); SamplerEngine adds its own bumps.
+    uint32_t gen() const { return _gen; }
     bool   is_empty() const { return _size == 0; }
     bool   valid() const { return _buffer != nullptr && _buffer_size > 0; }
     size_t capacity() const { return _buffer_size; }
@@ -80,6 +85,7 @@ private:
     float   _feedback    = 0.f;   // linear factor; set by set_feedback()
     size_t  _size        = 0;     // recorded content length, in frames
     size_t  _written     = 0;     // watermark: frames [0, _written) hold content
+    uint32_t _gen        = 0;     // idle edges, see gen()
     size_t  _write_head  = 0;
     size_t  _fade_ctr    = 0;
     State   _state       = State::idle;

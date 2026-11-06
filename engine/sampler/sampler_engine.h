@@ -127,7 +127,13 @@ public:
     float  buffer_fill() const  { return _buf.fill(); }
     bool   is_empty() const     { return _buf.is_empty(); }
     size_t rec_size() const     { return _buf.rec_size(); }
-    void   clear()              { _kill_all(); _buf.clear(); _slices.clear(); }
+    void   clear()              { _kill_all(); _buf.clear(); _slices.clear(); ++_gen_own; }
+    // The content generation (spec 2026-11-06-sampler-takes-on-sd §4.3): it
+    // changes when a take or overdub starts, when its fade-out ends, on
+    // clear(), load_sample() and a restore -- and on nothing else. Equal
+    // readings with is_recording() false in between mean the frames and the
+    // slice map did not change. init() does not move it.
+    uint32_t content_gen() const { return _buf.gen() + _gen_own; }
     void   set_monitor(bool on) { _monitor = on; }
     void   load_sample(const float* l, const float* r, size_t frames);
 
@@ -359,6 +365,7 @@ private:
 
     SampleBuffer _buf;
     SliceMap _slices;
+    uint32_t _gen_own = 0;   // content_gen()'s own bumps: clear, load, restore
     SampleBuffer::Frame* _mem = nullptr;
     size_t _mem_frames = 0;
 

@@ -486,6 +486,8 @@ public:
         return _parts[p].sampler().sample_data();
     }
     size_t sampler_rec_size(int p) const { return _parts[p].sampler().rec_size(); }
+    // Deck p's content generation (SamplerEngine::content_gen()).
+    uint32_t sampler_content_gen(int p) const { return _parts[p].sampler().content_gen(); }
 
     float lane_output(int p, int s)  const { return _parts[p].lane_output(s); }
     float lane_output_stepped(int p, int s) const {

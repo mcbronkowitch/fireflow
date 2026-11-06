@@ -61,6 +61,7 @@ void SampleBuffer::set_recording(bool on) {
                 _write_head = 0;
                 _state     = State::fadein;
                 _fade_ctr  = 0;
+                ++_gen;    // leaves idle (gen())
             }
             break;
         case State::fadeout:
@@ -145,9 +146,10 @@ void SampleBuffer::write(float in0, float in1) {
                 // record again until clear(). Nothing was recorded, so there
                 // is nothing to lock.
                 _state = State::idle;
+                ++_gen;    // reaches idle (gen())
                 return;
             }
-            if (--_fade_ctr == 0) { cut(); _state = State::idle; return; }
+            if (--_fade_ctr == 0) { cut(); _state = State::idle; ++_gen; return; }
             break;
     }
 

@@ -1370,3 +1370,30 @@ TEST_CASE("sampler part: the SOURCE curve leaves a synth deck alone") {
     // not asserted here as a ratio for the same reason as above; the linear
     // deck simply has no exponent to pin an identity-at-1 promise for.
 }
+
+TEST_CASE("gen: late fade-out end moves the generation") {
+    // Spec 2026-11-06-sampler-takes-on-sd P5: process_in reaches the sampler
+    // only on a SAMPLER deck, so a take whose deck is switched away keeps
+    // fading out "forever". The generation must not move while it is stuck,
+    // and must move once the deck is back and the fade-out ends -- that is
+    // what lets the save policy pick the take up late instead of never.
+    InstRig rig;
+    rig.inst.set_engine(0, ENGINE_SAMPLER);
+    rig.render(9600, 0.2f);
+    const uint32_t g0 = rig.inst.sampler_content_gen(0);
+    rig.inst.sampler_record(0, true);
+    rig.render(14400, 0.2f);                        // 0.3 s into the take
+    REQUIRE(rig.inst.sampler_is_recording(0));
+    rig.inst.set_engine(0, ENGINE_SYNTH);
+    rig.render(4800, 0.2f);
+    rig.inst.sampler_record(0, false);             // what the law does off SAMPLER
+    rig.render(96000, 0.2f);                        // 2 s on SYNTH
+    CHECK(rig.inst.sampler_is_recording(0));        // stuck in the fade-out
+    CHECK(rig.inst.sampler_content_gen(0) == g0 + 1);
+
+    rig.inst.set_engine(0, ENGINE_SAMPLER);
+    int n = 0;
+    while (rig.inst.sampler_is_recording(0) && n < 96000) { rig.render(48, 0.2f); n += 48; }
+    REQUIRE_FALSE(rig.inst.sampler_is_recording(0));
+    CHECK(rig.inst.sampler_content_gen(0) == g0 + 2);
+}

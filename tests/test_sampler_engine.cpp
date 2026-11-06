@@ -3491,3 +3491,48 @@ TEST_CASE("sampler: the SCAN curve is linear below the knee") {
     CHECK(test_scan_rate(0.5f) > 0.5f);
 }
 
+
+// --- Content generation (spec 2026-11-06-sampler-takes-on-sd §4.3) ---
+namespace {
+struct GenRig {
+    std::vector<SampleBuffer::Frame> mem = std::vector<SampleBuffer::Frame>(48000);
+    SamplerEngine eng;
+    GenRig() { eng.set_memory(mem.data(), mem.size()); eng.set_seed(7); eng.init(48000.f); }
+};
+}  // namespace
+
+TEST_CASE("gen: take start and end move it, nothing else does") {
+    GenRig r;
+    const uint32_t g0 = r.eng.content_gen();
+    r.eng.set_recording(true);
+    CHECK(r.eng.content_gen() == g0 + 1);           // leaves idle
+    for (int i = 0; i < 4800; ++i) r.eng.process_in(0.3f, -0.3f);
+    CHECK(r.eng.content_gen() == g0 + 1);           // writing does not count
+    r.eng.set_recording(false);
+    int steps = 0;
+    while (r.eng.is_recording() && steps < 10000) {
+        CHECK(r.eng.content_gen() == g0 + 1);       // still fading out
+        r.eng.process_in(0.3f, -0.3f);
+        ++steps;
+    }
+    REQUIRE_FALSE(r.eng.is_recording());
+    CHECK(r.eng.content_gen() == g0 + 2);           // the sample idle was reached
+
+    // Idle traffic, a feedback and a SCAN change: nothing.
+    r.eng.set_feedback(0.3f);
+    r.eng.set_scan(0.5f);
+    for (int i = 0; i < 480000; ++i) r.eng.process_in(0.5f, 0.5f);
+    CHECK(r.eng.content_gen() == g0 + 2);
+}
+
+TEST_CASE("gen: clear and load_sample move it; init does not") {
+    GenRig r;
+    const uint32_t g0 = r.eng.content_gen();
+    std::vector<float> l(500, 0.2f);
+    r.eng.load_sample(l.data(), l.data(), 500);
+    CHECK(r.eng.content_gen() == g0 + 1);
+    r.eng.clear();
+    CHECK(r.eng.content_gen() == g0 + 2);
+    r.eng.init(48000.f);
+    CHECK(r.eng.content_gen() == g0 + 2);
+}
