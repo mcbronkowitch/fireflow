@@ -16,7 +16,12 @@ namespace shell {
 
 inline constexpr uint32_t kTakeQuietBlocks      = 2500;    // 5 s unchanged before a save
 inline constexpr uint32_t kTakePieceBytes       = 16384;   // one paced f_write (A3: 16 KB)
-inline constexpr uint32_t kTakePieceEveryBlocks = 21;      // 42 ms between pieces (spec §4.3, Task 9 may move it)
+// 80 ms between pieces. Spec §4.3 started at 21 (42 ms); board session A,
+// 2026-11-06 (docs/hardware/takes-measured.md): at 21 the pot hold dropped
+// 10.8-15.8 % of the blocks of every one of 40 saves, up to 3.9 held blocks
+// per 16 KB piece, against the gate of 10 %. 40 keeps 3.9 / (40 + ~1.5)
+// under it.
+inline constexpr uint32_t kTakePieceEveryBlocks = 40;
 inline constexpr int      kTakeFailLimit        = 3;       // failed saves in a row, then saving stops
 
 // What the foreground reads of one deck per tick (published by the callback).
