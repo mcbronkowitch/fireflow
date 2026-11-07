@@ -46,11 +46,13 @@ void apply_law_events(const control::Events& ev, float* knobs, PotOwner* owners,
                       const int flux_idx[2]);
 
 // excite_other_deck on the hardware, in the persistent Options the law is
-// handed: on at a deck's entry into BBD (bbd_edge, as VCV's checkbox is set),
-// off on every tick the law reports the deck off BBD (!bbd_part). VCV's is a
-// checkbox the player can clear; the panel has none, so without this one BBD
-// visit would leave a sampler recording the other deck and two BODY decks
-// coupled for good. Takes effect from the next tick on, as in VCV.
+// handed: on at a deck's entry into BBD (bbd_edge, as VCV's checkbox is set)
+// and on every tick the deck runs SAMPLER (sampler_part: a sampler records
+// the other deck, spec 2026-11-07-sampler-records-other-deck-on-the-bar
+// §4.1); off on every other tick the law reports the deck off BBD
+// (!bbd_part). VCV's is a checkbox the player can clear; the panel has none,
+// so without the clear one BBD visit would leave two BODY decks coupled for
+// good. Takes effect from the next tick on, as in VCV.
 void apply_excite_events(const control::Events& ev, control::Options& opt);
 
 // Panel-state persistence (spec 2026-10-28 section 4.3), after

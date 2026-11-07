@@ -68,6 +68,8 @@ struct Options {
 struct Events {
     bool bbd_edge[2]    = {};   // genuine entry into BBD: FLUX to 0, exciteOtherDeck on
     bool bbd_part[2]    = {};   // this tick's engine choice is BBD (level, not edge)
+    bool sampler_part[2] = {};  // the running engine is SAMPLER (level): the deck route stays open
+                                // on the hardware (spec 2026-11-07-sampler-records-other-deck-on-the-bar §4.1)
     bool rec_started[2] = {};   // REC began: the buffer no longer matches its source
 };
 
@@ -706,6 +708,7 @@ private:
                 _bbdEdge[p].rearm();
             }
             ev.bbd_part[p] = bbdPart;
+            ev.sampler_part[p] = inst.engine_id(p) == spky::ENGINE_SAMPLER;
             if (_bbdEdge[p].tick(bbdPart)) {
                 // Entry into BBD, a player-driven one: a restore is re-armed
                 // and held until its engine has landed (_bbdRestoring above).
