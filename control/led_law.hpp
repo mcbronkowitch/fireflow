@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include "instrument.h"
+#include "sampler/rec_snap.h"
 #include "control/params.hpp"
 
 namespace spkyled {
@@ -158,6 +159,20 @@ inline bool tempo_on(float beat_phase) {
     return beat_phase < kTempoPulse;
 }
 
+// With the REC snap on (spec 2026-11-07-sampler-records-other-deck-on-the-
+// bar §4.3) the TEMPO pulse shows the bar: beat 1 at full light, the other
+// three at this light level. Bastian asked for beat 1 "brighter"; the level
+// is a by-ear candidate for the board session, not an invariant.
+constexpr float kTempoOffBeatLight = 0.35f;
+
+// A REC press held for the next bar line blinks the REC lamp evenly at this
+// rate, read off Panel::blink (1 Hz), so it must divide 1 s exactly.
+constexpr float kRecHeldHz = 8.f;
+
+inline bool rec_held_on(float blink) {
+    return std::fmod(blink * kRecHeldHz, 1.f) < 0.5f;
+}
+
 // The MOD latch's lamp: two short flashes, then a long dark tail, twice a
 // second. The latch re-points every wreathed knob on the plate at once, so
 // forgetting it is engaged is the expensive mistake this lamp exists to
@@ -281,7 +296,14 @@ inline void fill(const spky::Instrument& inst, Panel& p, float dt,
     // Metronome: a short pulse on the transport downbeat. Hard on/off, no
     // envelope -- this reports where the beat is, which is the question the
     // lamp at TEMPO is there to answer.
-    duty_out[TEMPO_L] = tempo_on(inst.beat_phase()) ? steps - 1 : 0;
+    // With the REC snap on and the beat short enough for it to act, beat 1
+    // of the bar is brighter than the other three (kTempoOffBeatLight).
+    if (!tempo_on(inst.beat_phase()))
+        duty_out[TEMPO_L] = 0;
+    else if (inst.rec_snap() && spky::rec_snap_enabled_at(inst.frames_per_beat()))
+        duty_out[TEMPO_L] = duty_from_light(inst.beat_in_bar() == 0 ? 1.f : kTempoOffBeatLight, steps);
+    else
+        duty_out[TEMPO_L] = steps - 1;
 
     p.blink += dt;
     if (p.blink >= 1.f) p.blink -= 1.f;
@@ -425,7 +447,11 @@ inline void fill(const spky::Instrument& inst, Panel& p, float dt,
     for (int part = 0; part < 2; ++part) {
         float v = 0.f;
         const bool sampler = inst.engine_id(part) == spky::ENGINE_SAMPLER;
-        if (inst.sampler_is_recording(part))
+        // A start or stop held for the next bar line (REC snap) wins over
+        // "recording": an even 8 Hz blink at full light, dark in between.
+        if (inst.sampler_rec_held(part))
+            v = rec_held_on(p.blink) ? 1.f : 0.f;
+        else if (inst.sampler_is_recording(part))
             v = recPh < 0.5f ? 1.f : 0.25f;
         else if (sampler && !inst.sampler_empty(part))
             v = 0.15f + 0.55f * inst.sampler_fill(part);
