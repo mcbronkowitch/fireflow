@@ -511,6 +511,32 @@ public:
     // Transport beat in [0, 1). The TEMPO lamp's metronome pulse reads this;
     // it already carries PACE (the transport ticks at _bpm * _pace).
     float beat_phase() const { return _center.transport().beat_phase(); }
+
+    // --- the bar clock (spec 2026-11-07-sampler-records-other-deck-on-the-bar
+    // §4.2). The engine has no bar of its own; a bar here is kBarBeats
+    // transport beats, the RATE ladder's "2 bars = 8 steps" reading.
+    static constexpr int kBarBeats = 4;
+    // Samples processed since init(): the frame index the next sample gets.
+    uint64_t frame_now() const      { return _frame; }
+    // The frame of the last bar line: where the transport crossed a multiple
+    // of kBarBeats, interpolated inside the control block. The value a tick
+    // leaves is read as standing at that tick's frame, so a line crossed by
+    // the tick at frame f lies in (f - 96, f]. RST and RESET log their own
+    // frame (beat 0 is a downbeat); an external clock edge that snaps the
+    // count backwards logs nothing, and the line it re-crosses is not logged
+    // twice. Always <= frame_now().
+    uint64_t last_bar_frame() const { return _last_bar; }
+    // Counts the lines logged; a change means a new last_bar_frame().
+    uint32_t bar_seq() const        { return _bar_seq; }
+    // floor(beats) mod kBarBeats, 0 = beat 1 -- for the TEMPO lamp.
+    int beat_in_bar() const {
+        const double b = std::floor(_center.transport().beats());
+        const int k = static_cast<int>(std::fmod(b, double(kBarBeats)));
+        return k < 0 ? k + kBarBeats : k;
+    }
+    // One transport beat in frames: sample rate * 60 / (bpm * pace).
+    float frames_per_beat() const { return _sr * 60.f / (_bpm * _pace); }
+
     float target_value(int p, int s) const { return _parts[p].target_value(s); }
     bool  lane_fired(int p, int s)   const { return _parts[p].lane_fired(s); }
     bool  gate(int p)  const { return _parts[p].gate(); }
@@ -589,17 +615,18 @@ public:
     // zone exists so 12 o'clock on a real pot is reliably off.
     void set_pull(float p) { _pull = clampf(p, -1.f, 1.f); }
     static constexpr float kPullDead = 0.03f;
-    void clock_pulse()     { _center.clock_pulse(_pace); }
+    void clock_pulse()     { _center.clock_pulse(_pace); _bar_after_pulse(); }
     // The pulse control::ClockOut marks counted: the clock starting after a
     // RESET at its first edge lands one pace step after that restart instead
     // of rounding (Transport::clock_pulse_counted, spec 2026-10-19 §10).
-    void clock_pulse_counted() { _center.clock_pulse_counted(_pace); }
+    void clock_pulse_counted() { _center.clock_pulse_counted(_pace); _bar_after_pulse(); }
     // RST = bar resync: zero the downbeat, drop the grid offsets a live STEPS
     // turn left behind, and restart the loops at phase 0 — everything lands on
     // the fresh bar start together (no servo drag).
     void reset_transport() {
         _center.reset_transport();
         for (auto& p : _parts) p.mod().reset_phases();
+        _bar_after_reset(_frame);
     }
     // RESET at the jack (spec 2026-10-19 clock-and-reset-jacks §2.2): restart
     // the music, not only the bar. Returns false and changes nothing when no
@@ -621,6 +648,7 @@ public:
         for (auto& p : _parts) p.mod().reset_phases(age);
         for (auto& p : _parts)
             if (p.mod().step_mode()) p.mod().restart_song();
+        _bar_after_reset(_frame - (age < _frame ? age : _frame));
         return true;
     }
     void spot()   { _center.spot(_parts[PART_A].mod(),   _parts[PART_B].mod()); }
@@ -772,6 +800,20 @@ private:
                                // (boots true: the FLOW drone predates any fire)
     float _pull = 0.f;         // -1..+1 chord-gravity knob (dead zone at noon)
     float _sr = 48000.f;
+    // The bar clock (see last_bar_frame()).
+    uint64_t _frame    = 0;
+    uint64_t _last_bar = 0;
+    int64_t  _bar_max  = 0;    // highest bar index logged (floor(beats / kBarBeats))
+    uint32_t _bar_seq  = 0;
+    void _bar_log(uint64_t frame, int64_t idx) { _last_bar = frame; _bar_max = idx; ++_bar_seq; }
+    int64_t _bar_index() const {
+        return static_cast<int64_t>(std::floor(_center.transport().beats() / double(kBarBeats)));
+    }
+    // After a clock edge: a forward snap across a line logs it here.
+    void _bar_after_pulse() { const int64_t k = _bar_index(); if (k > _bar_max) _bar_log(_frame, k); }
+    // After RST / RESET: the jump's frame is a line, whatever the count was.
+    void _bar_after_reset(uint64_t frame) { _bar_log(frame, _bar_index()); }
+    void _bar_tick(double b0, double b1);
     // Lamp-observer state (see deck_out_level() and friends). Written in
     // process() / set_scale(); read by nothing on the audio path.
     float    _deck_level[PART_COUNT] = { 0.f, 0.f };

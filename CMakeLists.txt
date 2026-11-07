@@ -50,6 +50,7 @@ add_executable(spky_tests
     tests/test_divisions.cpp
     tests/test_lane_len.cpp
     tests/test_transport.cpp
+    tests/test_bar_clock.cpp
     tests/test_waveforms.cpp
     tests/test_range.cpp
     engine/mod/lane.cpp

@@ -199,7 +199,25 @@ void Instrument::init(float sample_rate, const FxMem& mem) {
     _pan_c_ok = false;     // the mix memos belong to the old init
     _ck_ok = false;
     _ctrl_ctr = 0;
+    _frame = 0; _last_bar = 0; _bar_max = 0; _bar_seq = 0;   // beat 0 is a line
     set_tempo_bpm(_bpm);
+}
+
+// The bar clock's per-tick half (instrument.h, last_bar_frame()). b0 and b1
+// are the beat count before and after this tick; the tick's value is read as
+// standing at its own frame, so the count runs linearly from b0 at
+// _frame - kCtrlInterval to b1 at _frame and a crossing lies in between.
+void Instrument::_bar_tick(double b0, double b1) {
+    const int64_t k = static_cast<int64_t>(std::floor(b1 / double(kBarBeats)));
+    if (k <= _bar_max) return;
+    const double line = double(k) * kBarBeats;
+    double f = b1 > b0 ? (line - b0) / (b1 - b0) : 1.0;
+    f = f < 0.0 ? 0.0 : (f > 1.0 ? 1.0 : f);
+    const uint64_t blk = Center::kCtrlInterval;
+    const uint64_t start = _frame >= blk ? _frame - blk : 0;
+    uint64_t at = start + static_cast<uint64_t>(std::floor(f * double(blk)));
+    if (at > _frame) at = _frame;
+    _bar_log(at, k);
 }
 
 void Instrument::set_reverb_mix(int part, float n) {
@@ -283,8 +301,10 @@ void Instrument::process(const float* inL, const float* inR,
         const float in_l = inL ? inL[i] : 0.f;
         const float in_r = inR ? inR[i] : 0.f;
         if (_ctrl_ctr == 0) {                 // control-rate center update (per 96 samples)
+            const double bar_b0 = _center.transport().beats();
             _center.update(_parts[PART_A].mod(), _parts[PART_B].mod(),
                            _parts[PART_A], _parts[PART_B]);
+            _bar_tick(bar_b0, _center.transport().beats());
             // The pan gains are read from the PAN smoothers, which only
             // update() advances (and Center::init resets), so they are
             // constant until the next tick -- read them once here instead of
@@ -387,6 +407,7 @@ void Instrument::process(const float* inL, const float* inR,
             _ctrl_ctr = Center::kCtrlInterval;
         }
         --_ctrl_ctr;
+        ++_frame;    // the bar clock's sample count (frame_now())
 
         // MORPH/LEVEL gains, hoisted above the CHOKE block because the duck's
         // detector needs them (see below). Value-identical to reading them at
