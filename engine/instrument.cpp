@@ -203,6 +203,10 @@ void Instrument::init(float sample_rate, const FxMem& mem) {
     _ck_ok = false;
     _ctrl_ctr = 0;
     _frame = 0; _last_bar = 0; _bar_max = 0; _bar_seq = 0;   // beat 0 is a line
+    // The REC snap: the host's setting survives a re-init if the rings do;
+    // nothing held or requested survives it (the decks were just emptied).
+    for (int p = 0; p < PART_COUNT; ++p) _snap_req[p] = _held_start[p] = _held_stop[p] = false;
+    if (!(_parts[PART_A].sampler().has_ring() && _parts[PART_B].sampler().has_ring())) _snap = false;
     set_tempo_bpm(_bpm);
 }
 

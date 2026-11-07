@@ -35,9 +35,9 @@ struct RigT {
     std::vector<SampleBuffer::Frame> ring[PART_COUNT];
     std::unique_ptr<AmbientReverb> reverb = std::make_unique<AmbientReverb>();
     std::unique_ptr<Inst> inst = std::make_unique<Inst>();
+    FxMem m;
 
     explicit RigT(bool snap, bool rings = true) {
-        FxMem m;
         for (int p = 0; p < PART_COUNT; ++p) {
             for (int ch = 0; ch < 2; ++ch) {
                 echo[p][ch].assign(Flux::kMaxSamples, 0.f);
@@ -280,6 +280,22 @@ TEST_CASE("snap: RST while a start is held starts on the reset line") {
     const uint64_t e = r + 6 * kBeat;                  // mid-bar after the reset
     equivalent({ { L(1) - kOff, START }, { r, RST }, { e, STOP } },
                { { r, RST }, { r, START }, { e, STOP } }, e + 3 * kBeat);
+}
+
+TEST_CASE("snap: a re-init drops what is held and keeps the setting") {
+    Rig b(true);
+    play(b, { { L(1) - kOff, START } }, L(1) - kOff + 1);
+    REQUIRE(b.inst->sampler_rec_held(PART_A));
+    b.inst->init(kSr, b.m);
+    b.inst->set_tempo_bpm(120.f);
+    b.inst->set_pace(0.5f);
+    b.inst->set_engine(PART_A, ENGINE_SAMPLER);
+    CHECK(b.inst->rec_snap());
+    CHECK_FALSE(b.inst->sampler_rec_held(PART_A));
+    CHECK_FALSE(b.inst->sampler_rec_requested(PART_A));
+    b.run_to(b.now() + 3 * 4 * kBeat);                 // past three lines
+    CHECK_FALSE(b.deck().is_recording());
+    CHECK(b.deck().rec_size() == 0);
 }
 
 TEST_CASE("snap: set_rec_snap refused without rings") {
