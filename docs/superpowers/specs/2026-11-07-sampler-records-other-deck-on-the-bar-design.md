@@ -1,6 +1,8 @@
 # Sampler records the other deck, on the bar
 
-Date: 2026-11-07. Status: design, not built; revised the same day after an
+Date: 2026-11-07. Status: built on `feat/rec-snap` and checked on Rev A #1 the
+same day ([`docs/hardware/rec-snap-measured.md`](../../hardware/rec-snap-measured.md));
+the audio-input items (§7 L5) are not heard yet. Revised the same day after an
 independent review (§9). Engine: `engine/sampler/`, `engine/instrument.h`.
 Control: `control/control_law.h`, `control/led_law.hpp`. Firmware:
 `shell/panel_step.cpp`. Hosts: Rev A play image first; VCV and the render host
