@@ -93,6 +93,8 @@ void SamplerEngine::init(float sample_rate) {
     _sr = sample_rate;
     _buf.init(_mem, _mem_frames, sample_rate);
     _slices.init(sample_rate);
+    // The delayed writer starts over; the ring itself (set_ring) is kept.
+    _now = 0; _rw = 0; _ring_since = 0; _delay = 0; _npend = 0;
     // MUST differ from the constant Part::init XORs in (0x5A11E20Du). With
     // the same constant on both sides the XOR cancels and the sampler is
     // seeded with seed_base exactly -- which is also what SuperModulator
@@ -161,8 +163,39 @@ void SamplerEngine::process_in(float inL, float inR) {
     _in_r = inR;
     _mon_l = inL;    // set_monitor_in() may replace these for this sample
     _mon_r = inR;
+
+    // The delayed writer (set_ring(), set_delay(), rec_at()). Without a ring
+    // and pending targets this is two compares and today's write of the live
+    // input. The ring index wraps by compare, never by a 64-bit modulo: on
+    // the Cortex-M7 that is a library call per sample.
+    float wl = inL, wr = inR;
+    if (_ring) {
+        _ring[_rw] = SampleBuffer::Frame{ inL, inR };
+        if (_delay) {
+            const uint64_t w = writer_frame();
+            if (_now >= _delay && w >= _ring_since) {
+                const size_t ri = _rw >= _delay ? _rw - _delay : _rw + _ring_frames - _delay;
+                wl = _ring[ri].l;
+                wr = _ring[ri].r;
+            } else {
+                wl = 0.f;      // before the ring's history: silence
+                wr = 0.f;
+            }
+        }
+        if (++_rw >= _ring_frames) _rw = 0;
+    }
+    if (_npend) {
+        const uint64_t w = writer_frame();
+        while (_npend && _pend[0].at <= w) {
+            set_recording(_pend[0].on);
+            _pend[0] = _pend[1];
+            --_npend;
+        }
+    }
+    ++_now;
+
     const size_t head = _buf.write_head();
-    _buf.write(inL, inR);              // no-op unless recording
+    _buf.write(wl, wr);                // no-op unless recording
     // is_recording() before the call is NOT proof a frame landed at `head`:
     // write()'s fadeout early-return (sample_buffer.cpp, _fade_ctr == 0 on
     // entry -- two REC toggles inside one block) can leave is_recording()
@@ -181,6 +214,19 @@ void SamplerEngine::process_in(float inL, float inR) {
 void SamplerEngine::set_recording(bool on) {
     if (_loading && on) return;   // REC locked out while a take loads
     _buf.set_recording(on);
+}
+
+void SamplerEngine::rec_at(uint64_t frame, bool on) {
+    if (_loading && on) return;
+    const uint64_t w = writer_frame();
+    if (frame < w) frame = w;
+    const Pend p{ frame, on };
+    if (_npend == 0)                 { _pend[0] = p; _npend = 1; }
+    else if (_npend == 1) {
+        if (frame < _pend[0].at)     { _pend[1] = _pend[0]; _pend[0] = p; }
+        else                         { _pend[1] = p; }
+        _npend = 2;
+    } else                           { _pend[1] = p; }   // full: replaces the later one
 }
 
 void SamplerEngine::begin_load() {

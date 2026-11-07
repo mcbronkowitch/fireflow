@@ -162,6 +162,8 @@ void Instrument::init(float sample_rate, const FxMem& mem) {
                         mem.echo[PART_B][0], mem.echo[PART_B][1],
                         mem.sampler_buf[PART_B], mem.sampler_frames,
                         mem.bbd[PART_B][0], mem.bbd[PART_B][1]);
+    for (int p = 0; p < PART_COUNT; ++p)
+        _parts[p].sampler().set_ring(mem.rec_ring[p], mem.rec_ring_frames);
     if (_reverb) _reverb->init(sample_rate);
     for (int p = 0; p < PART_COUNT; ++p) {
         _rev_dry[p].init(sample_rate, kMixSmoothS);

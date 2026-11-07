@@ -31,6 +31,11 @@ struct FxMem {
     // nullptr -> that deck's BBD engine runs silent.
     //
     float* bbd[PART_COUNT][2] = {};
+    // The REC snap's ring per part (spec 2026-11-07-sampler-records-other-
+    // deck-on-the-bar §4.2): the deck's last input frames, which the delayed
+    // writer records from. nullptr -> no ring, and the snap stays off.
+    SampleBuffer::Frame* rec_ring[PART_COUNT] = {};
+    size_t rec_ring_frames = 0;
 };
 
 static_assert(BbdEngine::kCells == bbd_tuning::kMaxStages / 2,

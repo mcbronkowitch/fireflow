@@ -3757,3 +3757,126 @@ TEST_CASE("gen: restore moves it") {
     for (int i = 0; i < 48000; ++i) b.eng.process_in(0.3f, 0.3f);
     CHECK(b.eng.content_gen() == g1);
 }
+
+// --- The ring and the delayed writer (spec 2026-11-07-sampler-records-other-
+// deck-on-the-bar §4.2, plan Task 4) ----------------------------------------
+
+namespace {
+
+// Deterministic input: noise at 0.2 plus a 0.9 burst every 6000 frames, so the
+// slice detector has transients to mark.
+struct Feed {
+    uint32_t x = 0x2468ACE1u;
+    uint64_t n = 0;
+    SampleBuffer::Frame next() {
+        x ^= x << 13; x ^= x >> 17; x ^= x << 5;
+        float v = (float(x) / 4294967296.f * 2.f - 1.f) * 0.2f;
+        if (n % 6000 < 200) v += (n % 6000 < 100 ? 0.9f : -0.9f);
+        ++n;
+        return { v, -0.5f * v };
+    }
+};
+
+std::vector<uint32_t> markers_of(const SamplerEngine& e) {
+    std::vector<uint32_t> f(sampler_cfg::kMaxSlices);
+    std::vector<uint8_t> s(sampler_cfg::kMaxSlices);
+    const int n = e.export_markers(f.data(), s.data(), sampler_cfg::kMaxSlices);
+    f.resize(size_t(n));
+    for (int i = 0; i < n; ++i) f[size_t(i)] = f[size_t(i)] * 256u + s[size_t(i)];
+    return f;
+}
+
+} // namespace
+
+TEST_CASE("writer: delayed writer equals live writer") {
+    // 6 s of storage (Rig's 2 s is too short for a take plus an overdub).
+    struct Big {
+        std::vector<SampleBuffer::Frame> mem = std::vector<SampleBuffer::Frame>(48000 * 6);
+        SamplerEngine e;
+        Big() { e.set_seed(4242); e.set_memory(mem.data(), mem.size()); e.init(48000.f); }
+    };
+    auto* a = new Big;                      // live: no ring, D = 0
+    auto* b = new Big;                      // delayed: D = 24 000
+    std::vector<SampleBuffer::Frame> ring(30000);
+    b->e.set_ring(ring.data(), ring.size());
+    REQUIRE(b->e.set_delay(24000));
+    for (Big* g : {a, b}) { g->e.rec_at(48000, true); g->e.rec_at(192000, false); }
+
+    Feed fa, fb;
+    for (uint64_t i = 0; i < 300000; ++i) {
+        if (i == 220000)                    // both writers past the first stop
+            for (Big* g : {a, b}) { g->e.rec_at(240000, true); g->e.rec_at(260000, false); }
+        const auto xa = fa.next(), xb = fb.next();
+        a->e.process_in(xa.l, xa.r);
+        b->e.process_in(xb.l, xb.r);
+    }
+    REQUIRE_FALSE(a->e.writer_busy());
+    REQUIRE_FALSE(b->e.writer_busy());
+    REQUIRE(a->e.rec_size() > 100000);      // a take was made, then overdubbed
+    CHECK(b->e.rec_size() == a->e.rec_size());
+    size_t diff = 0;
+    for (size_t i = 0; i < a->e.rec_size(); ++i)
+        if (a->mem[i].l != b->mem[i].l || a->mem[i].r != b->mem[i].r) ++diff;
+    CHECK(diff == 0);
+    const auto ma = markers_of(a->e), mb = markers_of(b->e);
+    REQUIRE(ma.size() > 3);
+    CHECK(ma == mb);
+    delete a;
+    delete b;
+}
+
+TEST_CASE("writer: snap off has no ring and D = 0") {
+    Rig a(0), b(0);
+    CHECK_FALSE(a.e.has_ring());
+    CHECK_FALSE(a.e.set_delay(100));
+    CHECK(a.e.delay() == 0);
+    // rec_at on a live writer acts on exactly the sample set_recording would.
+    Feed fa, fb;
+    for (int i = 0; i < 40000; ++i) {
+        if (i == 1000)  a.e.set_recording(true);
+        if (i == 30000) a.e.set_recording(false);
+        if (i == 0) { b.e.rec_at(1000, true); b.e.rec_at(30000, false); }
+        const auto xa = fa.next(), xb = fb.next();
+        a.e.process_in(xa.l, xa.r);
+        b.e.process_in(xb.l, xb.r);
+    }
+    REQUIRE(a.e.rec_size() > 20000);
+    CHECK(b.e.rec_size() == a.e.rec_size());
+    size_t diff = 0;
+    for (size_t i = 0; i < a.e.rec_size(); ++i)
+        if (a.mem[i].l != b.mem[i].l) ++diff;
+    CHECK(diff == 0);
+}
+
+TEST_CASE("writer: the ring's history before a reset reads as silence") {
+    Rig g(0);
+    std::vector<SampleBuffer::Frame> ring(30000);
+    g.e.set_ring(ring.data(), ring.size());
+    REQUIRE(g.e.set_delay(24000));
+    for (int i = 0; i < 50000; ++i) g.e.process_in(0.5f, 0.5f);   // ring full of 0.5
+    g.e.ring_reset();                                           // as a landing on SAMPLER
+    g.e.rec_at(g.e.writer_frame(), true);                       // start at once
+    for (int i = 0; i < 40000; ++i) g.e.process_in(0.5f, 0.5f);
+    // The writer's first 24 000 frames lie before the reset: silence. After
+    // that the live 0.5 arrives (sustain, nothing under it: exactly 0.5).
+    REQUIRE(g.e.rec_size() >= 39000);
+    bool silent = true;
+    for (size_t i = 0; i < 23900; ++i) if (g.mem[i].l != 0.f) silent = false;
+    CHECK(silent);
+    CHECK(g.mem[24500].l == 0.5f);
+    CHECK(g.mem[38000].l == 0.5f);
+}
+
+TEST_CASE("writer: cancel drops a pending target") {
+    Rig g(0);
+    g.e.rec_at(1000, true);
+    CHECK(g.e.rec_pending() == 1);
+    g.e.rec_cancel_pending();
+    for (int i = 0; i < 5000; ++i) g.e.process_in(0.3f, 0.3f);
+    CHECK_FALSE(g.e.is_recording());
+    CHECK(g.e.rec_size() == 0);
+    // clear() drops it too.
+    g.e.rec_at(g.e.frame_now() + 100, true);
+    g.e.clear();
+    CHECK(g.e.rec_pending() == 0);
+}

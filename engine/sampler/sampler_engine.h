@@ -127,7 +127,47 @@ public:
     float  buffer_fill() const  { return _buf.fill(); }
     bool   is_empty() const     { return _buf.is_empty(); }
     size_t rec_size() const     { return _buf.rec_size(); }
-    void   clear()              { _kill_all(); _buf.clear(); _slices.clear(); ++_gen_own; }
+    // Also drops any start or stop the delayed writer still has pending.
+    void   clear()              { _kill_all(); _buf.clear(); _slices.clear(); ++_gen_own; _npend = 0; }
+
+    // --- The ring and the delayed writer (spec 2026-11-07-sampler-records-
+    // other-deck-on-the-bar §4.2). With a ring and a delay D > 0 the buffer
+    // is written from the ring, D frames behind live, and a start or stop
+    // takes effect on the sample where the writer's index reaches its target
+    // frame: a target up to D frames in the past is still ahead of the
+    // writer. The take is built in order, exactly as a live writer would
+    // have built it from the same input; the fades, the overdub feedback
+    // and the slice detector are the ones of today. No ring, or D == 0, is
+    // today's record path. The monitor never goes through the ring.
+    static constexpr size_t kRingSlack = 128;   // the ring holds D + this
+    void     set_ring(SampleBuffer::Frame* mem, size_t frames) {
+        _ring = mem; _ring_frames = mem ? frames : 0;
+        _rw = 0; _ring_since = _now; _delay = 0; _npend = 0;
+    }
+    bool     has_ring() const      { return _ring != nullptr; }
+    // This deck's sample counter: advances once per process_in().
+    uint64_t frame_now() const     { return _now; }
+    // Frames the writer runs behind live. Refused (false, D unchanged) while
+    // the writer is busy, without a ring, or past the ring's size.
+    bool     set_delay(uint32_t d) {
+        if (writer_busy()) return false;
+        if (d != 0 && (!_ring || size_t(d) + kRingSlack > _ring_frames)) return false;
+        _delay = d;
+        return true;
+    }
+    uint32_t delay() const         { return _delay; }
+    // The writer's index: the frame it writes on the next process_in().
+    uint64_t writer_frame() const  { return _now >= _delay ? _now - _delay : 0; }
+    // Start (on) or stop the buffer when the writer reaches `frame`. A frame
+    // the writer has passed acts on its next sample. Two may be pending (a
+    // start and its stop); a third replaces the later one. A start is
+    // refused while a take loads, as set_recording(true) is.
+    void     rec_at(uint64_t frame, bool on);
+    void     rec_cancel_pending()  { _npend = 0; }
+    int      rec_pending() const   { return _npend; }
+    bool     writer_busy() const   { return _buf.is_recording() || _npend != 0; }
+    // The ring's history starts over: called when the deck lands on SAMPLER.
+    void     ring_reset()          { _ring_since = _now; }
     // The content generation (spec 2026-11-06-sampler-takes-on-sd §4.3): it
     // changes when a take or overdub starts, when its fade-out ends, on
     // clear(), load_sample() and a restore -- and on nothing else. Equal
@@ -477,6 +517,17 @@ private:
 
     float _in_l = 0.f, _in_r = 0.f;     // the record input (process_in)
     float _mon_l = 0.f, _mon_r = 0.f;   // the monitor's input (process_in, set_monitor_in)
+
+    // The ring and the delayed writer (set_ring()).
+    struct Pend { uint64_t at; bool on; };
+    SampleBuffer::Frame* _ring = nullptr;
+    size_t   _ring_frames = 0;
+    size_t   _rw          = 0;   // the ring's write index, == _now mod _ring_frames
+    uint64_t _now         = 0;
+    uint64_t _ring_since  = 0;   // ring frames before this one read as silence
+    uint32_t _delay       = 0;
+    Pend     _pend[2]     = {};
+    int      _npend       = 0;
 
     bool _flow    = false;
     bool _hold    = false;
