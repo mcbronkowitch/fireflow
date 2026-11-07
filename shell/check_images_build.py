@@ -43,6 +43,11 @@ IMAGES = [
     ("default", []),
     ("reva_play", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1"]),
     ("reva_play_nopersist", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_PERSIST=0"]),
+    # REC on the bar is on in reva_play (SHELL_REC_SNAP defaults to 1); the
+    # board session's A/B image has no rings and REC acts at the press; and a
+    # value the Makefile refuses (plan 2026-11-07, Task 8).
+    ("reva_play_no_snap", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REC_SNAP=0"]),
+    ("reva_play_snap2_refused", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REC_SNAP=2"]),
     # The persistence probe image (plan 2026-10-28, Task 6): forced saves.
     ("reva_play_stress", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_PERSIST_STRESS=1"]),
     # The play image without the boot-only listener (SHELL_BOOTCMD=0): the play
@@ -140,6 +145,7 @@ IMAGES = [
 EXPECT_REFUSED = {
     "reva_play_bootcmd2_refused": "SHELL_BOOTCMD must be 0 or 1",
     "reva_play_bootcmd_empty_refused": "SHELL_BOOTCMD must be 0 or 1",
+    "reva_play_snap2_refused": "SHELL_REC_SNAP must be 0 or 1",
     "reva_remote_fm2_refused": "math guard: isfinite guard folded away in",
     "reva_sd_no_listener_refused": "SHELL_SD=1 needs SHELL_REMOTE=1",
     "reva_sd_probe_no_sd_refused": "SHELL_SD_PROBE=burst needs SHELL_SD=1",

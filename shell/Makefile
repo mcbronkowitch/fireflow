@@ -641,6 +641,17 @@ endif
 USE_FATFS = 1
 endif
 
+# REC on the bar (spec 2026-11-07-sampler-records-other-deck-on-the-bar
+# §4.2). 1: each deck gets a one-beat ring in SDRAM (2 x 72128 frames,
+# 1.15 MB) and a REC press snaps to the bar line; 0: no rings, and REC acts
+# at the press exactly as before -- the A/B image for the board session.
+# Read by main.cpp (set_rec_snap) and sdram_mem.cpp (the rings).
+SHELL_REC_SNAP ?= 1
+
+ifneq ($(words $(SHELL_REC_SNAP))-$(filter $(SHELL_REC_SNAP),0 1),1-$(SHELL_REC_SNAP))
+$(error SHELL_REC_SNAP must be 0 or 1)
+endif
+
 CPP_SOURCES = \
 	main.cpp \
 	cb_profile.cpp \
@@ -979,6 +990,7 @@ SWITCH_HEADERS := \
   $(shell python write_shell_rgrain.py $(BUILD_DIR)/shell_rgrain.h $(SHELL_RGRAIN) $(BUILD_DIR)) \
   $(shell python write_shell_takes.py $(BUILD_DIR)/shell_takes.h $(SHELL_TAKES) $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/take_card.o $(BUILD_DIR)/sd_hold.o $(BUILD_DIR)/main.o) \
   $(shell python write_shell_takes_stress.py $(BUILD_DIR)/shell_takes_stress.h $(SHELL_TAKES_STRESS) $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/take_card.o $(BUILD_DIR)/sd_hold.o $(BUILD_DIR)/main.o) \
+  $(shell python write_shell_rec_snap.py $(BUILD_DIR)/shell_rec_snap.h $(SHELL_REC_SNAP) $(BUILD_DIR)/main.o $(BUILD_DIR)/sdram_mem.o) \
   $(shell python write_shell_fast_math.py $(BUILD_DIR)/shell_fast_math.h $(SHELL_FAST_MATH) $(ENGINE_OBJECTS)) \
   $(shell python write_shell_engine_lean.py $(BUILD_DIR)/shell_engine_lean.h SVF1=$(SHELL_LEAN_SVF1) GRAIN_WIN=$(SHELL_LEAN_GRAIN_WIN) EXP2=$(SHELL_LEAN_EXP2) -- $(BUILD_DIR)) \
   $(shell python write_shell_reverb_half.py itcm_hot.ld $(BUILD_DIR)/itcm_hot.ld $(BUILD_DIR)/shell_reverb_half.state $(SHELL_REVERB_HALF) $(SHELL_REMOTE_MEASURE) $(BUILD_DIR)) \
@@ -1010,6 +1022,7 @@ $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/sd_probe.o $(BUILD_DIR)/wt_bank_d2.o: $(B
 # the engine); this edge is the ordering for the object that reads the header.
 $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_rgrain.h
 $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/take_card.o: $(BUILD_DIR)/shell_takes.h $(BUILD_DIR)/shell_takes_stress.h
+$(BUILD_DIR)/main.o $(BUILD_DIR)/sdram_mem.o: $(BUILD_DIR)/shell_rec_snap.h
 $(ENGINE_OBJECTS): $(BUILD_DIR)/shell_fast_math.h
 # The lean stamp: the writer deletes every object on a change; this edge is
 # the ordering for the objects that read the defines it stands for.

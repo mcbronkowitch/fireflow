@@ -20,6 +20,7 @@
 #include "shell_remote.h"
 #include "shell_bootcmd.h"
 #include "shell_remote_measure.h"
+#include "shell_rec_snap.h"
 #include "hw/board.h"
 #include "sdram_mem.h"
 #include "itcm_load.h"
@@ -354,6 +355,9 @@ int main(void)
     // bank yet, and nothing reads it while the copy runs.
     shell::wt_bank_to_d2();
     inst.init(shell::kSampleRate, shell::fx_mem());
+    // REC on the bar (SHELL_REC_SNAP, spec 2026-11-07-sampler-records-other-
+    // deck-on-the-bar). Without the rings (switch 0) the engine refuses it.
+    inst.set_rec_snap(SHELL_REC_SNAP != 0);
 
 #if SHELL_XTALK_PROBE
     // The board under test is the coupon, and the question is whether the

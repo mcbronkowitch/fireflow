@@ -1,4 +1,5 @@
 #include "sdram_mem.h"
+#include "shell_rec_snap.h"
 #include "hw/board.h"   // zieht daisy_core.h und damit DSY_SDRAM_BSS herein
 
 namespace shell {
@@ -35,6 +36,16 @@ static_assert(sizeof(spky::SampleBuffer::Frame) * kSamplerFrames % 32 == 0,
               "each deck's buffer must end on a 32-byte line");
 alignas(32) spky::SampleBuffer::Frame DSY_SDRAM_BSS
     g_sampler[spky::PART_COUNT][kSamplerFrames];
+
+#if SHELL_REC_SNAP
+// The REC snap's rings (sdram_mem.h, kRecRingFrames): the deck's last input
+// frames, which the delayed writer records from. Same idiom as above. No
+// DMA touches them; the alignment only keeps each ring on its own lines.
+static_assert(sizeof(spky::SampleBuffer::Frame) * kRecRingFrames % 32 == 0,
+              "each deck's ring must end on a 32-byte line");
+alignas(32) spky::SampleBuffer::Frame DSY_SDRAM_BSS
+    g_rec_ring[spky::PART_COUNT][kRecRingFrames];
+#endif
 
 // --- SRAM -------------------------------------------------------------
 // Der Reverb liegt in AXI-SRAM, NICHT in SDRAM -- eine bewusste Abweichung
@@ -79,8 +90,14 @@ const spky::FxMem& fx_mem()
             g_mem.bbd[p][0]  = g_bbd[p][0];
             g_mem.bbd[p][1]  = g_bbd[p][1];
             g_mem.sampler_buf[p] = g_sampler[p];
+#if SHELL_REC_SNAP
+            g_mem.rec_ring[p] = g_rec_ring[p];
+#endif
         }
         g_mem.sampler_frames = kSamplerFrames;
+#if SHELL_REC_SNAP
+        g_mem.rec_ring_frames = kRecRingFrames;
+#endif
         g_mem.reverb = &g_reverb;
         g_mem_ready = true;
     }

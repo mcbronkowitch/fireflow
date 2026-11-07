@@ -18,6 +18,7 @@
 #include "instrument.h"
 #include "fx/reverb.h"
 #include "sampler/sampler_config.h"
+#include "sampler/rec_snap.h"
 
 namespace shell {
 
@@ -36,6 +37,13 @@ constexpr float kSampleRate = 48000.f;
 // Spec-Schritt still auseinander.
 constexpr size_t kSamplerFrames =
     static_cast<size_t>(spky::sampler_cfg::kSizeCeilS * kSampleRate);
+
+// The REC snap's ring per deck (spec 2026-11-07-sampler-records-other-deck-
+// on-the-bar §4.2): the longest beat the snap acts on, plus the writer's
+// slack. 72 128 frames = 577 KB per deck. Allocated only in SHELL_REC_SNAP
+// images (sdram_mem.cpp).
+constexpr size_t kRecRingFrames =
+    static_cast<size_t>(spky::kSnapMaxBeatFrames) + spky::SamplerEngine::kRingSlack;
 
 // Einmalig gebaut, lebt bis zum Reset. Reine Zeigerarbeit -- der Aufruf
 // selbst fasst kein SDRAM an. Was SDRAM anfasst, ist Instrument::init(), das
