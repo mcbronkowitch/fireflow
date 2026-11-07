@@ -715,6 +715,43 @@ Nothing here was run in Rack or on a board.
   same setup, edge 1 at 1.015 beats) still rounds: 170 BPM goes 1.015 -> 1.000,
   50 BPM 1.015 -> 3.000.
 
+### Measured: the deck route on SAMPLER, and the bar clock (2026-11-07)
+
+Spec `2026-11-07-sampler-records-other-deck-on-the-bar-design.md` §3 holds the
+probes in full; the facts a design needs:
+
+- **The route.** With `excite_other_deck` on, a SAMPLER deck records
+  `fast_tanh(audio_in + other_deck_tap)`. The tap is the other deck after
+  GRIT / FLUX / COMP, before CHOKE, MORPH, the reverb return and the limiter,
+  one sample late. Off: take RMS **0.00000**; on: **0.06932** against the
+  tap's 0.0697 (A = SAMPLER, B = SYNTH init, 120 BPM). The tanh costs the
+  audio input nothing at amplitude 0.1, **−0.5 dB** at 0.5 and **−1.5 dB**
+  at 0.9. The monitor plays the raw audio input only (`set_monitor_in`), so
+  the other deck is not heard twice: before that, master RMS went 0.0425 ->
+  **0.0706** during REC. Two SAMPLER decks recording each other stay bounded
+  (taps peak 2.59 with the old monitor, 1.41 without).
+- **The board route.** The shell turns the route on for a SAMPLER deck every
+  tick (`Events::sampler_part`, `panel_step.cpp`); from 2026-10-27 to
+  2026-11-07 only a BBD entry did, so SAMPLER recorded the input alone.
+- **A bar is 4 transport beats** -- the REC snap's choice; the engine had no
+  bar before. `Instrument::last_bar_frame()` interpolates the line inside its
+  96-sample control block and floors it: lines a bar apart at 120 BPM land
+  **96 000 ± 1** frames apart, and within 1 frame of a per-sample reference
+  at 120 and 130 BPM and at PACE x1/4 and x4 (`tests/test_bar_clock.cpp`).
+  RST logs a line at its own frame, RESET (`restart(age)`) at its back-dated
+  frame, and a clock edge that snaps the count backwards logs nothing and
+  repeats no line (same file).
+- **The delayed writer.** With the snap on, the sampler writes from its ring
+  one beat (`D` frames) behind the input, `D` fixed while the writer is busy.
+  A snap-on press 0.3 beat off a line records the same take, frame for frame,
+  buffer, `rec_size()` and markers, as a snap-off press on the line
+  (`tests/test_rec_snap_instrument.cpp`). Snap off is `D = 0`, no ring read,
+  and every render hash is unchanged.
+- **`init()` and the monitor.** `Instrument::init()` does not reset a
+  sampler's monitor flag; a probe that reuses one `Instrument` inherits a
+  monitor left on by the case before. Use a fresh instrument per case. (The
+  REC snap's own held and requested state *is* reset by `init()`.)
+
 ---
 
 ## 7. Reachability: where the melody lives on the axes
