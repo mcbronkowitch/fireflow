@@ -124,6 +124,13 @@ public:
     // --- material ---
     void   set_recording(bool on);
     bool   is_recording() const { return _buf.is_recording(); }
+    bool   is_writing() const   { return _buf.is_writing(); }   // fade-in or sustain
+    // The target of a pending start, if one is pending (rec_at()).
+    bool   pending_start(uint64_t* at) const {
+        for (int i = 0; i < _npend; ++i)
+            if (_pend[i].on) { if (at) *at = _pend[i].at; return true; }
+        return false;
+    }
     float  buffer_fill() const  { return _buf.fill(); }
     bool   is_empty() const     { return _buf.is_empty(); }
     size_t rec_size() const     { return _buf.rec_size(); }

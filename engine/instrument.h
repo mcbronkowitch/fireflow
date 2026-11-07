@@ -386,7 +386,12 @@ public:
     float deck_tap(int p, int ch) const { return _deck_tap[p][ch]; }
 
     // --- M2 synth voice API (spec "Instrument API") ---
-    void set_engine(int p, EngineId e)       { _parts[p].set_engine(e); }
+    void set_engine(int p, EngineId e) {
+        // Snap on: leaving SAMPLER stops the writer at once and drops what
+        // is held or pending (spec §4.2); the take ends D short of the change.
+        if (_snap && e != ENGINE_SAMPLER) _snap_leave(p);
+        _parts[p].set_engine(e);
+    }
     void set_voice_attack(int p, float n)    { _parts[p].set_voice_attack(n); }
     void set_voice_decay(int p, float n)     { _parts[p].set_voice_decay(n); }
     void set_voice_resonance(int p, float n) { _parts[p].set_voice_resonance(n); }
@@ -428,12 +433,33 @@ public:
 
     // --- M5 sampler API (spec "Instrument API") ---
     void sampler_record(int p, bool on) {
+        if (_snap) { _snap_record(p, on); return; }
         _parts[p].sampler().set_recording(on);
         // Monitoring follows REC automatically, in one place, so both hosts
         // get it right (plan: deliberate deviation 3).
         _parts[p].sampler().set_monitor(on);
     }
-    void  sampler_clear(int p)              { _parts[p].sampler().clear(); }
+    void  sampler_clear(int p)              { _snap_drop(p); _parts[p].sampler().clear(); }
+
+    // --- REC on the bar (spec 2026-11-07-sampler-records-other-deck-on-the-
+    // bar §4.2). Off by default; refused (stays off) unless both decks have a
+    // ring (FxMem::rec_ring). On, a REC press goes through rec_snap.h: the
+    // deck's writer runs one beat behind live (D, fixed while it is busy),
+    // and the press becomes a target frame -- the last bar line when it came
+    // late, the next one when it came early (held until the line), the press
+    // itself otherwise or at slow settings. The monitor follows the press,
+    // live.
+    void set_rec_snap(bool on);
+    bool rec_snap() const { return _snap; }
+    // What the control law compares REC against. Snap off: is_recording(),
+    // as before. Snap on: the last accepted press -- true from a start press
+    // (held or not) to the stop press, so a held request is not pushed again
+    // and the fade-out's re-push is no press.
+    bool sampler_rec_requested(int p) const {
+        return _snap ? _snap_req[p] : _parts[p].sampler().is_recording();
+    }
+    // A start or a stop waits for the next bar line (the REC lamp's blink).
+    bool sampler_rec_held(int p) const { return _held_start[p] || _held_stop[p]; }
     float sampler_fill(int p) const         { return _parts[p].sampler().buffer_fill(); }
     bool  sampler_empty(int p) const        { return _parts[p].sampler().is_empty(); }
     bool  sampler_is_recording(int p) const { return _parts[p].sampler().is_recording(); }
@@ -494,7 +520,7 @@ public:
     // Deck p's content generation (SamplerEngine::content_gen()).
     uint32_t sampler_content_gen(int p) const { return _parts[p].sampler().content_gen(); }
     // Saved-take restore, audio-callback side (SamplerEngine::begin_load()).
-    void sampler_begin_load(int p)       { _parts[p].sampler().begin_load(); }
+    void sampler_begin_load(int p)       { _snap_drop(p); _parts[p].sampler().begin_load(); }
     bool sampler_loading(int p) const    { return _parts[p].sampler().loading(); }
     bool sampler_restore(int p, size_t frames, const uint32_t* mf, const uint8_t* ms, int n) {
         return _parts[p].sampler().restore(frames, mf, ms, n);
@@ -810,7 +836,21 @@ private:
     uint64_t _last_bar = 0;
     int64_t  _bar_max  = 0;    // highest bar index logged (floor(beats / kBarBeats))
     uint32_t _bar_seq  = 0;
-    void _bar_log(uint64_t frame, int64_t idx) { _last_bar = frame; _bar_max = idx; ++_bar_seq; }
+    void _bar_log(uint64_t frame, int64_t idx) {
+        _last_bar = frame; _bar_max = idx; ++_bar_seq;
+        if (_snap) _snap_on_line();
+    }
+    // REC on the bar (set_rec_snap()).
+    bool _snap = false;
+    bool _snap_req[PART_COUNT]   = { false, false };
+    bool _held_start[PART_COUNT] = { false, false };
+    bool _held_stop[PART_COUNT]  = { false, false };
+    void _snap_record(int p, bool on);
+    void _snap_on_line();                 // a bar line was logged: release what is held
+    void _snap_drop(int p);               // clear / load: nothing held, nothing pending
+    void _snap_leave(int p);              // engine change: and the buffer stops now
+    // An Instrument frame (the bar clock's) in deck p's sampler frames.
+    uint64_t _to_deck_frame(int p, uint64_t f) const;
     int64_t _bar_index() const {
         return static_cast<int64_t>(std::floor(_center.transport().beats() / double(kBarBeats)));
     }

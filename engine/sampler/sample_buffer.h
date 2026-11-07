@@ -43,6 +43,9 @@ public:
     void set_recording(bool on);
     bool is_recording() const { return _state != State::idle; }
     bool is_overdubbing() const { return _cut.is_on() && is_recording(); }
+    // Fade-in or sustain: a take is being written and not yet ending. Unlike
+    // is_recording(), false during the fade-out.
+    bool is_writing() const { return _state == State::fadein || _state == State::sustain; }
     void set_feedback(float knob);    // 0..1 knob -> -60..0 dB linear factor
     void write(float in0, float in1); // call once per sample, always
     void cut();                       // lock the loop length at the fill

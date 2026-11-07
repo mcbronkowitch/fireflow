@@ -291,6 +291,7 @@ private:
         float lane_output_stepped(int p, int s) const { return to.lane_output_stepped(p, s); }
         spky::EngineId engine_id(int p) const         { return to.engine_id(p); }
         bool  sampler_is_recording(int p) const       { return to.sampler_is_recording(p); }
+        bool  sampler_rec_requested(int p) const      { return to.sampler_rec_requested(p); }
 
         // events, never cached (the law edge-gates them itself)
         void settle()                       { to.settle(); }
@@ -639,9 +640,15 @@ private:
             // NOT ppb(REC_A, p): REC is not part-strided (see the static_assert
             // block near the top of host/vcv/src/Fireflow.cpp, where the VCV
             // accessors live).
+            //
+            // Compared against sampler_rec_requested(), not is_recording():
+            // with the REC snap on (spec 2026-11-07-sampler-records-other-
+            // deck-on-the-bar §4.2) a held or delayed request is not yet
+            // recording, and pushing it again every tick would re-press it.
+            // Snap off, the two are the same.
             const bool wantRec = prm(p ? REC_B : REC_A) > 0.5f
                                  && inst.engine_id(p) == spky::ENGINE_SAMPLER;
-            if (wantRec != inst.sampler_is_recording(p)) {
+            if (wantRec != inst.sampler_rec_requested(p)) {
                 inst.sampler_record(p, wantRec);
                 // path/factoryLoaded mean "the buffer still holds exactly
                 // what that source provided" -- once recording starts, the
