@@ -135,6 +135,17 @@ public:
     // slice map did not change. init() does not move it.
     uint32_t content_gen() const { return _buf.gen() + _gen_own; }
     void   set_monitor(bool on) { _monitor = on; }
+    // The monitor plays what process_in() received, unless this call, made
+    // after process_in() for the same sample, hands it something else. Part
+    // uses it while the deck route is on: the buffer records tanh(in + other
+    // deck), the monitor plays the raw audio input, so the other deck is not
+    // heard twice (spec 2026-11-07-sampler-records-other-deck-on-the-bar §4.1).
+    void   set_monitor_in(float l, float r) { _mon_l = l; _mon_r = r; }
+    // Observer only, for tests: the record input process_in() last received.
+    // Since the monitor no longer has to carry it, the deck bus tests read
+    // the record path here (tests/test_deck_bus.cpp).
+    float  rec_in_l() const { return _in_l; }
+    float  rec_in_r() const { return _in_r; }
     void   load_sample(const float* l, const float* r, size_t frames);
 
     // --- Restoring a saved take (spec 2026-11-06-sampler-takes-on-sd §4.4,
@@ -464,7 +475,8 @@ private:
     float _feel = 0.f;                // FEEL: accent depth, 0..1
     float _dec_ref[kGrains] = {};    // dec samples per slot, for gate-fall release
 
-    float _in_l = 0.f, _in_r = 0.f;
+    float _in_l = 0.f, _in_r = 0.f;     // the record input (process_in)
+    float _mon_l = 0.f, _mon_r = 0.f;   // the monitor's input (process_in, set_monitor_in)
 
     bool _flow    = false;
     bool _hold    = false;

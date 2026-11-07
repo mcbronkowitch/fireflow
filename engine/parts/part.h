@@ -472,6 +472,15 @@ public:
             }
 #endif
             _engine->process_in(el, er);
+#if SPKY_DECK_BUS
+            // The sampler records the sum but monitors the raw audio input,
+            // so the other deck is not heard twice while it is being
+            // recorded, and two monitoring decks form no one-sample loop
+            // (spec 2026-11-07-sampler-records-other-deck-on-the-bar §4.1).
+            // With _src_deck off the monitor already holds these samples.
+            if (_src_deck && _engine_id == ENGINE_SAMPLER)
+                _sampler.set_monitor_in(inL, inR);
+#endif
         }
         _engine->process(outL, outR);
         outL *= fade;

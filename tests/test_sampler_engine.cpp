@@ -300,6 +300,32 @@ TEST_CASE("sampler: monitoring passes the dry input at unity") {
     CHECK(cloud_heard);
 }
 
+TEST_CASE("sampler: set_monitor_in replaces the monitored input, not the recorded one") {
+    // Spec 2026-11-07-sampler-records-other-deck-on-the-bar §4.1: with the
+    // deck route on, Part records tanh(in + other deck) but monitors the raw
+    // input. Same two-rig shape as the test above: identical clouds, so the
+    // on/off difference is the monitor term alone, and it must be the value
+    // handed to set_monitor_in(), not the one handed to process_in().
+    Rig on(24000, 909), off(24000, 909);
+    on.e.set_flow(true);
+    off.e.set_flow(true);
+    on.e.set_monitor(true);
+    off.e.set_monitor(false);
+    on.render(4800);
+    off.render(4800);
+    for (int i = 0; i < 2000; ++i) {
+        float al = 0.f, ar = 0.f, bl = 0.f, br = 0.f;
+        on.e.process_in(0.37f, -0.21f);
+        on.e.set_monitor_in(0.10f, 0.05f);
+        on.e.process(al, ar);
+        off.e.process_in(0.37f, -0.21f);
+        off.e.set_monitor_in(0.10f, 0.05f);
+        off.e.process(bl, br);
+        CHECK(al == doctest::Approx(bl + 0.10f).epsilon(0.001));
+        CHECK(ar == doctest::Approx(br + 0.05f).epsilon(0.001));
+    }
+}
+
 TEST_CASE("sampler: CHOKE hold fades the cloud out and re-arms on release") {
     Rig g;
     g.e.set_flow(true);

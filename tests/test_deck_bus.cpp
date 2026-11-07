@@ -7,15 +7,17 @@ using namespace spky;
 #include "instrument.h"
 #include <vector>
 
-// Deck A monitors deck B through the bus; deck B makes a signal. Deck A's
-// output at sample n must be the bound applied to deck B's output at n-1,
-// for every CHOKE position -- that is the whole contract.
+// Deck A records deck B through the bus; deck B makes a signal. Deck A's
+// record input at sample n must be the bound applied to deck B's output at
+// n-1, for every CHOKE position -- that is the whole contract. Read on the
+// record path (SamplerEngine::rec_in_l): the monitor plays the raw audio
+// input since spec 2026-11-07-sampler-records-other-deck-on-the-bar §4.1, so
+// it no longer carries the bus.
 static void check_latency_one_sample(float choke, int src, int dst) {
     Instrument inst;
     inst.init(48000.f);                       // no FxMem: the FX chain stays off
     inst.set_engine(src, ENGINE_TEST_TONE);
     inst.set_engine(dst, ENGINE_SAMPLER);
-    inst.sampler_monitor(dst, true);
     inst.set_excitation_sources(dst, true, /*other_deck=*/true, /*audio_in=*/false);
     inst.set_excitation_sources(src, true, /*other_deck=*/false, /*audio_in=*/false);
     inst.set_choke(choke);
@@ -26,7 +28,7 @@ static void check_latency_one_sample(float choke, int src, int dst) {
     for (int n = 0; n < kN; ++n) {
         inst.process(nullptr, nullptr, outL, outR, 1);
         tap_src[n] = inst.deck_tap(src, 0);
-        tap_dst[n] = inst.deck_tap(dst, 0);
+        tap_dst[n] = inst.part(dst).sampler().rec_in_l();
     }
 
     // Skip the engine-swap fade and the first control block. set_engine()
@@ -100,8 +102,12 @@ TEST_CASE("deck bus: with the source on the tap reaches the engine") {
     float l, r, sl, sr;
     p.set_deck_in(0.01f, -0.01f);
     p.process(0.f, 0.f, l, r, sl, sr);
-    CHECK(l == doctest::Approx(fast_tanh(0.01f)));
-    CHECK(r == doctest::Approx(fast_tanh(-0.01f)));
+    CHECK(p.sampler().rec_in_l() == doctest::Approx(fast_tanh(0.01f)));
+    CHECK(p.sampler().rec_in_r() == doctest::Approx(fast_tanh(-0.01f)));
+    // ...and the monitor plays the raw audio input (0 here), not the bus
+    // (spec 2026-11-07-sampler-records-other-deck-on-the-bar §4.1).
+    CHECK(l == 0.f);
+    CHECK(r == 0.f);
 }
 
 TEST_CASE("deck bus: the engine input is bounded") {
@@ -116,10 +122,12 @@ TEST_CASE("deck bus: the engine input is bounded") {
     for (float drive : {1.f, 10.f, 1000.f}) {
         p.set_deck_in(drive, -drive);
         p.process(0.f, 0.f, l, r, sl, sr);
-        CHECK(std::fabs(l) <= 1.f);
-        CHECK(std::fabs(r) <= 1.f);
-        CHECK(std::isfinite(l));
-        CHECK(std::isfinite(r));
+        const float il = p.sampler().rec_in_l(), ir = p.sampler().rec_in_r();
+        CHECK(std::fabs(il) <= 1.f);
+        CHECK(std::fabs(ir) <= 1.f);
+        CHECK(std::fabs(il) > 0.5f);     // the drive actually arrived
+        CHECK(std::isfinite(il));
+        CHECK(std::isfinite(ir));
     }
 }
 
@@ -273,12 +281,14 @@ TEST_CASE("deck bus: with the source off, a hostile tap changes nothing -- "
 
 // Runs the sampler<->sampler scenario for 10 s at 48 kHz with a hot,
 // constant, asymmetric input, and reports the output peak plus each deck's
-// final tap. `routed` selects whether other_deck is actually wired in --
-// false reproduces the "routing never established" case in-tree, so the
-// dead-routing baseline below is measured fresh on every run rather than
-// hardcoded from a one-off exploration.
+// final tap and record input. `routed` selects whether other_deck is
+// actually wired in -- false reproduces the "routing never established" case
+// in-tree, so the dead-routing baseline below is measured fresh on every run
+// rather than hardcoded from a one-off exploration.
 static float run_mutual_scenario(bool routed, float* tapA_out = nullptr,
-                                  float* tapB_out = nullptr) {
+                                  float* tapB_out = nullptr,
+                                  float* recA_out = nullptr,
+                                  float* recB_out = nullptr) {
     Instrument inst;
     inst.init(48000.f);
     for (int p = 0; p < PART_COUNT; ++p) {
@@ -301,71 +311,42 @@ static float run_mutual_scenario(bool routed, float* tapA_out = nullptr,
     }
     if (tapA_out) *tapA_out = inst.deck_tap(PART_A, 0);
     if (tapB_out) *tapB_out = inst.deck_tap(PART_B, 0);
+    if (recA_out) *recA_out = inst.part(PART_A).sampler().rec_in_l();
+    if (recB_out) *recB_out = inst.part(PART_B).sampler().rec_in_l();
     return peak;
 }
 
 TEST_CASE("deck bus: sampler <-> sampler mutual routing stays finite") {
-    // Dead-routing baseline, measured here rather than assumed: with
-    // other_deck off, SamplerEngine's dry-at-unity monitor still passes the
-    // constant +-0.5 input straight through the MORPH/reverb mix, settling
-    // at a fixed, non-zero peak that has nothing to do with the cross-deck
-    // bus. A broken _src_deck guard (routing silently never established)
-    // would make the "live" run below indistinguishable from this number.
-    const float baseline_peak = run_mutual_scenario(/*routed=*/false);
+    // Since spec 2026-11-07-sampler-records-other-deck-on-the-bar §4.1 the
+    // monitor plays the raw audio input, not the record input, so two
+    // monitoring SAMPLER decks no longer form the one-sample loop this test
+    // used to bound: each deck's output (no buffer, FX off) is exactly the
+    // +-0.5 input, and each deck RECORDS tanh(0.5 + 0.5). Asserted on both
+    // sides: the record input proves the route is live, the taps prove the
+    // loop through the monitor is gone. The old fixed point (deck_tap ~0.881,
+    // x = tanh(0.5 + x)) is what a monitor that carried the sum again would
+    // read.
+    float base_recA = 0.f;
+    run_mutual_scenario(/*routed=*/false, nullptr, nullptr, &base_recA);
+    CHECK(base_recA == 0.5f);            // unrouted: the record input is the input
 
-    float tapA = 0.f, tapB = 0.f;
-    const float mutual_peak = run_mutual_scenario(/*routed=*/true, &tapA, &tapB);
-    MESSAGE("baseline_peak=", baseline_peak, " mutual_peak=", mutual_peak,
-            " tapA=", tapA, " tapB=", tapB);
+    float tapA = 0.f, tapB = 0.f, recA = 0.f, recB = 0.f;
+    const float mutual_peak = run_mutual_scenario(/*routed=*/true, &tapA, &tapB, &recA, &recB);
+    MESSAGE("mutual_peak=", mutual_peak, " tapA=", tapA, " tapB=", tapB,
+            " recA=", recA, " recB=", recB);
 
-    // Liveness: the mutual loop must clear the dead-routing baseline by a
-    // margin no unrouted run could produce (measured live/dead gap here is
-    // ~0.29; 0.15 leaves comfortable room on both sides without being loose
-    // enough to pass a no-op).
-    CHECK(mutual_peak > baseline_peak + 0.15f);
-    CHECK(std::fabs(tapA) > 1e-3f);
-    CHECK(std::fabs(tapB) > 1e-3f);
+    // Liveness: the route reaches the record input of both decks.
+    CHECK(recA == doctest::Approx(fast_tanh(1.0f)));
+    CHECK(recB == doctest::Approx(fast_tanh(1.0f)));
+    // No loop: each deck's output is its raw input, nothing more.
+    CHECK(tapA == 0.5f);
+    CHECK(tapB == 0.5f);
 
-    // Bound: per channel this is a two-step loop, x[n] = bound(k + x[n-2])
-    // with k = +-0.5 the constant input. Three failure modes are worth
-    // naming, because isfinite() on the FINAL output cannot tell any of
-    // them apart: the master Limiter (instrument.cpp, applied to l/r after
-    // MORPH, downstream of _deck_tap) hard-ceilings whatever reaches it to
-    // ~1.0, so a genuinely unbounded internal recursion and a merely
-    // saturating one both come out of `mutual_peak` looking the same
-    // (measured: a wrong-ordered bound below ALSO reads mutual_peak == 1,
-    // just like the correct one's 0.998 -- too close to separate with an
-    // output-side ceiling). The discriminating quantity is `_deck_tap`
-    // itself, captured before the limiter and before the MORPH mix:
-    //  - bound correctly on the sum (fast_tanh(el + _deck_in_l), part.h):
-    //    converges to the fixed point of x = tanh(0.5 + x) -- measured
-    //    deck_tap ~ 0.881, comfortably inside fast_tanh's contract
-    //    |y| <= 1.0 (fast_tanh.h: hard-clamped on the return value, not
-    //    merely on the threshold).
-    //  - bound on the wrong side (el + fast_tanh(_deck_in_l)): still a
-    //    contraction, since the exogenous term is a fixed constant rather
-    //    than something that grows -- so it does NOT diverge to inf/NaN
-    //    either. It converges instead to the fixed point of
-    //    x = 0.5 + tanh(x) -- measured deck_tap ~ 1.381, which breaches
-    //    fast_tanh's |y| <= 1.0 contract because the sum was never actually
-    //    passed through the bound.
-    //  - bound removed entirely: x[n] = 0.5 + x[n-2] is unbounded linear
-    //    growth -- not inf/NaN inside a 10 s run, but it blows past 1.0
-    //    within a few hundred samples, so the same ceiling catches it too.
-    // 1.0 is not a round number chosen for convenience: it is fast_tanh's
-    // own hard-clamped range, so any deck_tap that exceeds it is direct,
-    // structural proof the bound was not applied to that sum.
-    //
-    // Scoped to this fixture: `inst.init(48000.f)` above leaves the FX chain
-    // off (no FxMem passed in), so `_deck_tap` here is exactly the engine's
-    // raw, unbounded-except-for-fast_tanh output. With the FX chain engaged
-    // (Grit/Flux/Comp/Reverb, as bench's `inst_worst_deck_bus` row runs),
-    // gain staged downstream of `_deck_tap` can legitimately push a deck's
-    // post-FX output above 1.0 -- fast_tanh only bounds what reaches the
-    // *engine input*, not what a deck emits after its own FX chain. The
-    // `<= 1.0f` proof above is specific to this fixture's FX-off setup, not
-    // a claim that `deck_tap` is bounded in general.
-    CHECK(std::fabs(tapA) <= 1.0f);
-    CHECK(std::fabs(tapB) <= 1.0f);
+    // The bound sits on the sum: fast_tanh(0.5 + 0.5) = 0.76 above. A bound
+    // on the wrong side (0.5 + fast_tanh(0.5) = 0.96) or none (1.0) fails the
+    // Approx checks, and fast_tanh's hard clamp keeps any sum inside 1.0.
+    CHECK(std::fabs(recA) <= 1.0f);
+    CHECK(std::fabs(recB) <= 1.0f);
+    CHECK(mutual_peak <= 1.0f);
 }
 

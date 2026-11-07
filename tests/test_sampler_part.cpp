@@ -1397,3 +1397,61 @@ TEST_CASE("gen: late fade-out end moves the generation") {
     REQUIRE_FALSE(rig.inst.sampler_is_recording(0));
     CHECK(rig.inst.sampler_content_gen(0) == g0 + 2);
 }
+
+// Spec 2026-11-07-sampler-records-other-deck-on-the-bar §4.1: with the deck
+// route on, a recording deck's monitor plays the audio input only. Two rigs
+// fed the same, one with A's monitor forced off after REC: with no audio
+// input the two must be identical, since the other deck may not reach A's
+// output through the monitor (the probe in spec §3 measured it doubling).
+static void monitor_rig(InstRig& r, EngineId b) {
+    r.inst.set_engine(PART_A, ENGINE_SAMPLER);
+    r.inst.set_engine(PART_B, b);
+    r.inst.set_excitation_sources(PART_A, true, true, false);
+    r.render(24000);                       // engine swaps land
+}
+
+TEST_CASE("monitor: the other deck is not doubled") {
+    auto* x = new InstRig;
+    auto* y = new InstRig;
+    monitor_rig(*x, ENGINE_SYNTH);
+    monitor_rig(*y, ENGINE_SYNTH);
+    x->inst.sampler_record(PART_A, true);
+    y->inst.sampler_record(PART_A, true);
+    y->inst.sampler_monitor(PART_A, false);
+    float b_energy = 0.f;
+    int diff = 0;
+    for (int i = 0; i < 24000; ++i) {
+        x->render(1);
+        y->render(1);
+        if (x->inst.deck_tap(PART_A, 0) != y->inst.deck_tap(PART_A, 0)) ++diff;
+        b_energy += std::fabs(x->inst.deck_tap(PART_B, 0));
+    }
+    REQUIRE(b_energy > 10.f);              // deck B really plays
+    CHECK(diff == 0);
+    delete x;
+    delete y;
+}
+
+TEST_CASE("monitor: the audio input is still heard") {
+    // B is an empty SAMPLER (silent). A's monitor must still carry the input:
+    // the on/off difference of A's output is of the input's order.
+    auto* x = new InstRig;
+    auto* y = new InstRig;
+    monitor_rig(*x, ENGINE_SAMPLER);
+    monitor_rig(*y, ENGINE_SAMPLER);
+    x->inst.sampler_record(PART_A, true);
+    y->inst.sampler_record(PART_A, true);
+    y->inst.sampler_monitor(PART_A, false);
+    double e = 0.0;
+    for (int i = 0; i < 24000; ++i) {
+        float in = 0.3f * std::sin(6.2831853f * 220.f * float(i) / 48000.f);
+        float l, r;
+        x->inst.process(&in, &in, &l, &r, 1);
+        y->inst.process(&in, &in, &l, &r, 1);
+        const double d = double(x->inst.deck_tap(PART_A, 0)) - y->inst.deck_tap(PART_A, 0);
+        e += d * d;
+    }
+    CHECK(std::sqrt(e / 24000.0) > 0.1);   // the sine's RMS is 0.212
+    delete x;
+    delete y;
+}

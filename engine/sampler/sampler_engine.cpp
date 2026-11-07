@@ -159,6 +159,8 @@ void SamplerEngine::set_gate(bool on) {
 void SamplerEngine::process_in(float inL, float inR) {
     _in_l = inL;
     _in_r = inR;
+    _mon_l = inL;    // set_monitor_in() may replace these for this sample
+    _mon_r = inR;
     const size_t head = _buf.write_head();
     _buf.write(inL, inR);              // no-op unless recording
     // is_recording() before the call is NOT proof a frame landed at `head`:
@@ -1002,7 +1004,7 @@ void SamplerEngine::process(float& outL, float& outR) {
     r *= gain;
 
     // --- monitoring: dry input at unity, ahead of the part chain (pre-GRIT) ---
-    if (_monitor) { l += _in_l; r += _in_r; }
+    if (_monitor) { l += _mon_l; r += _mon_r; }
 
     outL = l;
     outR = r;
