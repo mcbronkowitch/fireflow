@@ -1,288 +1,170 @@
-# Chord-and-melody song mode: audition plan
+# PICKUP: a chord-and-melody song mode on one deck
+
+Status: design draft after two blind listening rounds and one adversarial review (three lenses: citations, design, tests). Not yet an approved spec; the open questions at the end need Bastian's answers.
 
 ## Goal
 
-The goal is a song mode with long sustained chords and, between them, short melodies drawn from the scale or the chord tones. Nobody knows yet how the melody should relate to the chords in time, so this plan auditions five audibly different shapes as WAV renders before any engine work. The renders use the real FireFlow synth voice, ChordBuilder and reverb. Only the winning shape gets a spec.
+One deck plays long chords and short melodies by turns. A chord is struck at the top of each phrase and rings; in the last quarter of the phrase a small pickup of 2–4 notes from the scale leads into the next chord, and the next chord is rooted on the pickup's last note. Same deck, same four voices, same PITCH lane. It is a SONG arrangement, chosen on the SONG ladder, not a second deck, not a reserved voice and not a new deck mode.
 
-Scope for now: planning and scratch renders only. Status: brainstorm, not an approved spec.
+**Citations** are pinned to `main` at b2c11633 (this branch adds only this document). "Measured" means a probe printed it; the probe sources lived in a session scratch directory and are not kept, so the printed numbers are quoted here. Findings marked *(review probe)* were printed by the reviewers' probes on a real Part or SynthEngine.
 
-**Citations.** Another session was editing `engine/instrument.*`, `engine/parts/part.*` and the sampler on `feat/rec-snap` while this was written, and committed twice during the run. Every `instrument.*` and `part.*` line number below is pinned to **286c3030** (`feat/rec-snap`); everything else is pinned to `main` at b2c11633. Re-check `git status` and re-resolve the citations before each round. C2, C3 and C4 all hook into the PULL/CHOKE block in `instrument.cpp`, which rec-snap touches, so engine work waits until rec-snap is merged.
+## How the shape was chosen
 
-**Probe artifacts.** The probes and pre-listen renders cited as "measured" ran in a session scratch directory that does not survive the session. The numbers are quoted here; the rig is rebuilt in the session that runs round 1.
+Two blind rounds of WAV renders through the real SynthEngine, ChordBuilder and AmbientReverb (one engine for both roles, so the shared DEC and the voice steal were heard as on the instrument), loudness-matched to one BS.1770 level.
 
-## What the engine does today
+**Round 1** — four timings, 4 seeds each. Ranked: **R4 Pickup** = **R2 Dissolve** (the fill eats the chord in the second half), then R1 Turns (2 bars chord, 2 bars tune, a gap between), R3 Long turns (HHM) last. Bastian: "the ones with the long decay are better".
 
-**Measured (planning-run probes against the real engine sources; artifacts not kept):**
-- **Chords come from one note.** ChordBuilder turns the single quantized PITCH note into 1–4 tones at COLOR edges 0.125/0.375/0.625 (chord.h:29-34). In A Dorian at COLOR 0.7 the intervals are `[0,-5,+3,+10]`, and above 0.85 the ninth replaces the fifth below. Voice-leading keeps common tones (chord probe, section B).
-- **FLOW holds a chord indefinitely.** A 4-note chord held at env 0.701 after 30 s (voice.cpp:48). In the real Instrument, deck A at FLOW / COLOR 0.7 / DENSE 0 sustained 4 voices for 24 s with one gate rise (`explicit_probe.csv`).
-- **One deck cannot hold a chord under a melody in FLOW.** One extra trigger re-strikes the whole chord (env 0.70→0.98), and the melody pitch is pulled back to the chord root within 3 ms (synth_engine.cpp:218, :383-389).
-- **In STEP, a melody note steals the chord root.** On a 4-note chord the oldest voice (the root) goes first. A 3-note chord leaves the fourth voice free (synth_engine.cpp:193-210).
-- **One decay per deck.** The same DEC goes to all 4 voices on every tick (synth_engine.cpp:314, :326). Dropping DEC mid-ring cut a chord voice from env 0.18 to 0.004.
-- **The STEP note length never reaches a synth.** Lane-level hold is capped at 4 steps; at DENSE 0, 106 of 200 seeds held only 1 step. Only BBD and SAMPLER override `set_gate` (bbd_engine.h:110, sampler_engine.h:117), so on SYNTH/WAVE/BODY the DEC knob alone sets note length (engine_iface.h:97-102).
-- **SONG only picks snapshot A or B.** `song_symbol_at` returns 0/1 per phrase, and every mode starts on A (song_form.h:75-105). One phrase = STEPS steps; with sync at noon RATE that is one step per beat (engine-map.md:622-634).
-- **ModLane has no room.** `sizeof(ModLane)` = 920 on the desktop. The gate `(sizeof(ModLane) - 412) * 10u < 5u*1024u` (test_song_form.cpp:310-319) gives 5080 < 5120 at 920 and fails at 924, so **one more float in ModLane turns it red**. The headroom is about 3 B per lane, shared across ten lanes; the board figure is UNMEASURED. Any new per-mode state goes in Part or Instrument, not ModLane.
-- **The SONG ladder has 14 rungs** (song_ladder.h:27). Up to 18 keeps `hyst_step` lossless on the VCV path only; on hardware `std::round` in `knob_from_pot` defeats the hysteresis (999 of 1000 re-rolls at a seam in the probe). Changing the count changes the persist layout hash.
-- **The scratch render chain is fast.** SynthEngine + ChordBuilder (header-only) + AmbientReverb compile from 9 .cpp files (six synth/body, `fx/reverb.cpp`, two DaisySP) in about 3 s and render 12 s in 96 ms.
+**Round 2** — five A/B pairs, seed k0 (k1 not heard):
 
-**Read from code, not measured:**
-- **PULL** binds a follower note to the leader's chord pitch-class mask with probability (|PULL|−0.03)/0.97 (instrument.cpp:313-351, part.h:380-389). It has never had a listening pass (by-ear-decisions.md:436-458).
-- **CHOKE's Held zone** blocks the yielding deck only while the priority deck's `gate()` is high or it is in FLOW (instrument.cpp:472-529). In STEP, `gate()` is pulse plus `pitch_sustain()` (part.h:302-304), 1–4 steps, so **with a STEP pad CHOKE −0.6 already lets B fire in A's tail**; the window start is set by note length, not by a controllable fraction. The real gaps: B is the deck that gets ducked under A's tail (depth 1 from |c| ≥ 0.5), and the window cannot be set. A pad duck with B as detector is CHOKE in (0, 0.5], duck-only with events free, and probably needs no new code. All of this is read from code, UNMEASURED (probe 4).
-- **`set_inhibit` demotes.** `Part::set_inhibit` calls `_engine->set_hold(on)` (part.h:185-189), and `SynthEngineT::set_hold(true)` runs `_demote_all()` (synth_engine.cpp:129-139). An inhibited FLOW deck loses its drone, and releasing the inhibit re-strikes it. Any "suppress this deck's fires" gate in C2–C4 needs a path that suppresses lane fires **without** `set_hold`.
-- **No progression concept.** The chord root is always the melody note (part.cpp:636-654). At STEP DENSE 0 only rank 0 fires, rank 0 is pinned to slot 0, and `derive_turnaround` skips slot 0 (`if (slot == 0) continue;`, song_form.h:206). The timeline probe printed slot 0 identical in A and B (+0.003 at 8 steps, −0.138 at 16). So with VARY 0, **a STEP DENSE 0 chord deck plays the same root every phrase in every SONG mode**. Whether VARY's evolve touches slot 0 is UNMEASURED.
-
-**Unmeasured, and needed later:**
-- confirm by probe that deck A's own lane gives one root forever at STEP DENSE 0, VARY 0 (code says so, above), and what VARY > 0 does to slot 0
-- how varied real cadence notes are under `bind_song_cadence`
-- the Part tick order (gravity set before the quantizer runs?)
-- whether PULL's 40 ms live-follow audibly bends a ringing STEP voice
-- the std::round hover on the Rev A SONG pot
-
-## The candidates
-
-Scored 1–5 (5 = best; for cost, 5 = cheapest).
-
-| Draft variant | Ambient promise | Distinct | Cost | Risk | Verdict |
-|---|---|---|---|---|---|
-| two-deck 1 Overlay / music-first V2 Drift | 3 / 4 | 4 | 5 | 4 | merged → **C0** |
-| one-deck V3 Overlay (reserved voice) | 4 | sounds like C0 | 1 | 2 | dropped (an engine question, not an ear question) |
-| one-deck V1 Antiphon | 3 | 5 | 4 | 3 | **C1** |
-| two-deck 2 Answer / music-first V1 / one-deck V2 Tail fill | 5 | 4 | 3 | 3 | merged → **C2**; the tail fill's voice-steal dissolve becomes a round-2 sibling |
-| two-deck 3 Cadence | 4 | 5 | 3 | 3 | **C3** |
-| music-first V3 Suspension | 5 | 5 | 2 | 2 | **C4** |
-
-The five candidates span one axis: how the melody relates to the chord in time. In C0 they are simultaneous and unrelated. In C1 they alternate by phrase. In C2 the melody sits in the chord's tail. In C3 the chord follows the melody. In C4 the melody holds across the chord change.
-
-### C0 Drift (control: what the instrument can do today)
-
-**What you hear:** a held pad that changes chord every 2 bars. Over it, a 3-note loop over 7 beats repeats unchanged and keeps landing at a new place against the chords. Each note is snapped to the chord that is sounding. The figure is hypnotic, never breathes, and has no cadence.
-
-**Rules:**
-- Pad in FLOW.
-- Loop: N=3 notes over P=7 beats.
-- Each note is bound to the sounding chord's tones (p=1).
-- Register: semis 26..33.
-
-**Later engine shape:** the melody half exists today: deck B in STEP, STEPS 7, DENSE 0.4 (k = round(0.4·7) = 3 from code, lane.cpp:767 / phrase_gen.h:65-74, UNMEASURED), PULL −1 (instrument.h:584-591). **The chord half does not.** Deck A in STEP, STEPS 16, DENSE 0, COLOR 0.7 plays one root forever (see above), and STEPS 16 at noon RATE is 4 bars per fire, not 2. The rig's C0 plays a FLOW pad over a fixed progression, so it is "today's melody against a progression that does not exist yet", not "what the instrument can do today".
-
-**Cost:** zero for the melody; C0 still needs a progression source to be real (question 2). This is also PULL's first listening pass.
-
-### C1 Antiphon (whole phrases take turns)
-
-**What you hear:**
-- A 4-note chord rings alone for 2 bars and decays.
-- A tune plays alone for the next 2 bars.
-- The next chord is rooted on the tune's last note.
-- The two never overlap: a clear call and response.
-
-**Rules:**
-- Role table: H M per 2-bar span.
-- Melody source: the real lane pattern A/B at DENSE 0.45, one octave above the chord root.
-- Chord at COLOR 0.7; the melody plays at COLOR 0.
-
-**Later engine shape:**
-- A new `SongMode::Chords` value with its own case.
-- A pure function `phrase_role(mode, idx)`, so no new ModLane state.
-- Force k=1 in hold phrases (lane.cpp:754).
-- Part picks the chord size per role (part.cpp:636-654).
-- Single deck.
-
-**Cost:** small. The role switching is reproducible in the real Instrument with timed `set_density` / `set_color` events, but "the next chord is rooted on the tune's last note" is not: a k=1 hold phrase fires `pitch[0]`, which is the same in A and B. That rule needs the `_last_melody_q` code. On one deck DEC is shared by all voices, and a long chord DEC overlaps the next melody span and loses its root to the first melody note (synth_engine.cpp:193-210), so "never overlap" is a rule the engine must enforce, not a given. Risk: it is the most "armed mode"-like candidate, and the chord-layer spec (2026-07-17, lines 13-16) rejected armed chord modes.
-
-### C2 Answer in the tail (chord calls, melody answers)
-
-**What you hear:**
-- A chord is struck on the downbeat and sounds alone for 4 beats.
-- A 3–5-note fragment answers in beats 5–8, over the ringing tail.
-- The pad dips about 5 dB under the fragment.
-- The fragment ends on a held chord tone, and fragment lengths alternate (3, 5).
-
-**Rules:**
-- Window: beats 4..8 of each 8-beat span.
-- Fragment:
-  - the first note is the nearest chord tone
-  - inner notes are scale passing tones by step
-  - at most one leap, no larger than a fifth
-  - the last note is held at least 1.5 beats
-- Span roles H M M H M M M C over 8 spans (the density arc): H = chord alone, M = chord plus answer, C = cadence span (the answer ends on the root and the chord holds two spans).
-
-**Later engine shape:**
-- Two decks.
-- An Instrument "tail gate" next to the PULL block: B may fire only while A's chord age is at least 4/8 of its span (the "beats 5–8" window). It must suppress B's lane fires without `set_inhibit`, which demotes through `set_hold`.
-- First check whether CHOKE in STEP already gives an acceptable window (probe 4); the tail gate is only needed if the window must be controllable.
-- A pad duck with B as the detector: CHOKE in (0, 0.5] may already do it.
-- A SONG rung on B decides which spans get an answer.
-
-**Cost:** medium (Instrument, Part, ladder).
-
-### C3 Cadence (melody leads, chord punctuates)
-
-**What you hear:**
-- A scale tune of 6–9 notes plays alone.
-- It lands on a held cadence note, and at that instant a 4-note chord blooms an octave below.
-- The chord holds through the rest of the phrase and under the next tune.
-- Harmony changes irregularly, and every change is caused by the melody.
-
-**Rules:**
-- One chord per melody phrase.
-- Chord root = cadence note − 12.
-- Melody: an 8th grid at fire probability 0.6, a Dorian stepwise walk with a 35 % pull to the cadence target.
-
-**Later engine shape:**
-- A FOLLOW role on deck A:
-  - its own lane fires are suppressed by a new path, not `set_inhibit` (which would demote A's FLOW drone and re-strike it on release)
-  - Instrument calls `trigger_manual()` on A when B fires its final open slot
-  - a new Part override sets the pitch for that manual fire (part.cpp:243-266)
-- A lane observer for "final open slot" built from `rank_of_slot` and `_groove_k`.
-
-**Cost:** medium-low. Risk: static harmony if cadence notes repeat. The first pre-listen render of the two-deck draft gave 3 identical Cmaj7 chords (reported by that probe; no artifact kept).
-
-### C4 Suspension line (the line holds across chord changes)
-
-**What you hear:**
-- A slow legato line, one note every 1–3 beats, in arcs of about 4 bars.
-- At each chord change the line does not move. It holds its note into the new chord and then resolves down by step.
-- The line moves while the chord holds, and holds while the chord moves.
-
-**Rules:**
-- No onset on beat 1 of a chord change.
-- A held note that is not a tone of the new chord resolves down to the nearest chord tone 1–2 beats later.
-- Register: semis 24..33.
-
-**Later engine shape:**
-- Deck B in FLOW (legato through demote, synth_engine.cpp:217-218).
-- An anti-sync gate: no B fire within ±1 beat of an A fire. Not built on `set_inhibit`, which would demote B's held note at exactly the moment the suspension must hold.
-- A "bind at fire, then hold" flag on the gravity path (part.h:118-122, quantizer.h:101-145). Today's live-follow would erase the suspension.
-- A one-shot resolve rule.
-
-**Cost:** the highest of the five. The latched bind must be a separate mode, not a change to PULL.
-
-## The audition rig
-
-**Tool.** One unified rig outside `engine/` (a scratch directory, or `tools/chord_audition/` on its own branch if it should be kept). The pre-listen renders from this planning run came from two rigs with different mixes (one-deck draft: dry + 0.35 wet; two-deck draft: send 0.4, gains 0.8/1.8), so they cannot be compared blind and serve as a pre-listen only.
-
-The rig has three stages:
-
-1. **`lane_dump.cpp`**: a real ModLane in the probe skeleton of engine-map.md §6.
-   - Setup: one real ModLane; `set_melodic` before `init`; STEP 16; VARY 0; SONG AAAB.
-   - Runs at every STEPS a candidate uses (7, 8, 16), not 16 only.
-   - Output: `lane_s<steps>_k<k>.csv` with pattern A/B pitch, fired slots per DENSE value, and rank order.
-   - Pitch mapping: lane values are bipolar and reach notes through `Part::pitch_pre_quant` (base + mod + TUNE + song offset, reflected, part.cpp:200-206), the by-ear RANGE law (D1 centre at semitone 18) and the quantizer. The dump replicates that mapping and writes semitones, or the registers in `compose.py` are arbitrary.
-   - Why: melody material from the engine's own generator. **This transfers for C0 and C1 only.** C2, C3 and C4 use hand rules (nearest chord tone plus passing tones; a Dorian walk with a cadence pull; a legato line). Either drive those rules from the lane dump (lane pitches as the contour, the rule only snaps and times them) or state plainly that their verdict is about the rule, not the engine's generator.
-2. **`compose.py`** (stdlib only, run without `-I`). It applies each candidate's rule to the lane material and the fixed progression, then writes `score_<cand>_k<k>.csv` with the columns `t_s, layer, kind, semis_or_root, dur_s, vel`.
-   - Chord tones come from a Python copy of ChordBuilder's stack rule.
-   - It asserts the lays a probe printed during planning (12/7/15/22, 10/5/14/21, 17/12/21/15); re-print them from the real `ChordBuilder` before trusting the copy.
-   - Roots must be in-scale: the music-first probe reported that `build()` stacks chromatic tones on an off-scale root. Re-print that too.
-   - Its own RNG is seeded from k. Without that, the three seeds give identical files for every candidate that ignores the lane material.
-3. **`play.cpp`**: reads a score CSV and drives real SynthEngines with explicit chord and note events.
-   - Pad: one SynthEngine on the real ChordBuilder, `set_chord` before `trigger_chord`.
-   - **One pad law for all five candidates**: a long-DEC STEP strike that rings 2 bars. Otherwise raters score sustain versus decay instead of how the melody relates to the chord in time. A FLOW-pad variant of the winner goes to round 2.
-   - Melody: a second SynthEngine with its own short `set_cycle` (FLOW for C4) — **except C1**, which is a one-deck design and renders on **one** SynthEngine with per-role `set_decay`, so the shared-DEC and root-steal behaviour is heard as it would be on the instrument.
-   - Reverb: AmbientReverb on a 0.4 send.
-   - Levels: one fixed melody/pad level for all files. Melody +8 dB is a choice, based on one probe mix where it sat 10.6 dB under the pad. Every file is RMS-normalised to −20 dBFS so loudness does not decide.
-   - Build: `build.sh` sources the repo's `env.sh` inside the script, uses clang `-O2`, and compiles the 9 .cpp files of the synth + reverb chain. No `cd`, nothing written to the repo or `build/`, no cmake.
-
-**Fixed parameters:**
-- 80 BPM, 4/4, A Dorian, root A at contract semi 12 (220 Hz).
-- COLOR 0.7 (4 notes).
-- Harmonic rhythm 2 bars per chord.
-- Progression i–III–VII–IV–i–III–VII–i for all candidates except C3, whose roots come from its cadence notes. All moves share at least 2 common tones except the final VII–i, which shares 1 (measured).
-- Length 16 bars = 48 s, plus a 4 s tail.
-
-**Seed policy.** Part-style seeds `0x1234abcd + (k+2)*2654435761` with k=0,1,2,3. k=0 is deck A's real PITCH-lane seed (engine-map.md:537-539), so round 3 can match a round-1 file. Never small seeds: xorshift32 cold-starts bias phrases low (engine-map.md:535-553).
-
-**Outputs:**
-- **Round 1:** `r1_<letter>_k<k>.wav`, 5 candidates × 3 seeds = 15 files. Letters P–T are assigned at random by `compose.py`, and the key goes to `key_r1.txt`, which stays unopened until scoring is done.
-- **Round 2 (winner only):** pairs `r2_<pair>_{x,y}.wav`. Examples:
-  - scale vs chord tones
-  - PULL p=1 vs p=0.5 (C0)
-  - guide-tone anticipation vs none (C2)
-  - clean answer vs voice-steal dissolve (C2)
-  - 100 % vs 50 % suspended changes (C4)
-  - 2 vs 4 bars per chord
-
-  Each pair also has a hidden key.
-- **Round 3:** the winner through the real Instrument. Either a scenario JSON for a copy of `render.exe` (C0 and C1 need no code), or a prototype patch in a worktree off main with its own Release build dir. Checked against the CSV observers, because unknown actions are silent no-ops (scenario.cpp:407).
-
-**Approximations to state when the files are played:**
-- no FLUX, GRIT or master bus
-- fixed timbre
-- notes snapped without the quantizer's 0.30-semitone hysteresis and 40 ms slew
-- PULL emulated as a bind probability, not the engine's per-fire draw
-- the blinding is weak: C1's turn-taking and C3's melody-driven harmony are recognisable by ear, and the "harmony moves enough?" column can only separate C3, because the other four share one fixed progression
-
-## Listening protocol
-
-1. **Round 1, blind.**
-   - Bastian gets P–T for seed k=1 in a shuffled order. He plays each file for at least 30 s, at one fixed monitor level.
-   - Then seeds k=2 and k=3 in a different order, to check the verdict holds across seeds.
-   - Scoring: 1–5 per file on the sheet below. He ranks the top two only after hearing everything.
-   - Then the key is opened.
-2. **Round 2.** A/B pairs for the winner, order randomised per pair. He picks x or y, or "no difference". A "no difference" means that sub-rule is not worth building.
-3. **Round 3.** The winner through the real chain, one file. He judges whether it still sounds like the round-1 file.
-
-Score sheet (one line per file):
-
-| File | Between-ness: does the melody sit between the chords? | Little melodies: do they have a beginning and an end? | Does the harmony move enough? | Would I leave it running 10 min? | One word |
-|---|---|---|---|---|---|
-| P | 1–5 | 1–5 | 1–5 | 1–5 | |
-
-## From winner to engine
-
-**Shared steps for any winner except C0:**
-- Append `SongMode::Chords` (=7) before `kCount` and give it its own case in `song_symbol_at`. Without one it falls into Mirror's parity branch (song_form.h:88-104). It must start on symbol 0 for the RESET contract (lane.h:75-81), and the spec must say what A and B mean for the winner.
-- Appending moves `clamp_song`'s top value (song_form.h:19-24): an out-of-range `set_song` then lands on Chords instead of Off. Decide whether that is wanted.
-- Say which deck's SONG governs a cross-deck winner (C2–C4: SongMode is per lane and per deck) and what the other deck's SONG does meanwhile.
-- A rung change fires `new_phrase`, plus `sampler_punch` on a SAMPLER deck (control/control_law.h:851-863); the new rung inherits that.
-- `param_table.h:76` → 0..7, 8 steps.
-- Append a ladder rung (14→15, never insert; rung 0 stays Off, pinned by test_song_ladder.cpp:16-18).
-- Add the word to `kSongWords` (Fireflow.cpp:489-496; `kSongWords[r.song]` reads out of bounds without it) and to its pin in test_panel.py:1084-1091.
-- Update the tests that hard-code 13: test_control_params.cpp:62, test_controls_map.cpp:59, test_song_rung_state.cpp, and the comment in test_song_ladder.cpp:30-35 ("14 rungs … norm = x / 13").
-- The persist hash changes, which is acceptable under dev alpha.
-- The SONG lamp shows the role only if the role table equals the A/B table; C1's `phrase_role()` is separate from `active_pattern`, so it needs its own lamp hook or must be defined as A/B.
-
-| Winner | Hooks | New state |
+| Pair | Pick | Consequence |
 |---|---|---|
-| C0 | none, or one preset rung | none |
-| C1 | `phrase_role()` pure function; `_groove_k` override (lane.cpp:754); role-to-chord-size in `Part::_fire_trigger` | one float `_last_melody_q` in Part |
-| C2 | tail gate in Instrument beside PULL (instrument.cpp:313-351); lane phase observer; optional guide-tone look-ahead | about 3 floats in Instrument |
-| C3 | FOLLOW block; final-open-slot observer; Part override pitch for the next manual fire | one float plus a flag in Part |
-| C4 | anti-sync gate; latched-bind flag; resolve-down rule | about 2 floats plus a flag |
+| R1 with long DEC vs R2 | R2 | chord and tune must touch; the long decay alone is not it |
+| R4 vs R2 | R4 | the pickup shape wins |
+| scale vs chord tones (R2) | scale | melody from the scale |
+| scale vs chord tones (R4) | scale | consistent across shapes |
+| ABAB vs ABBB (R2) | ABBB | mostly pattern B |
 
-A progression source other than the melody note (a degree walk indexed by `phrase_index`, quantized before `build()`) is a separate decision; see question 2.
+Two-deck designs (chords on A, melody on B via PULL/CHOKE) and a reserved melody voice over a held pad were dropped before round 1: Bastian wants one deck, alternating.
 
-**Probes that must print before the spec:**
-1. Part tick order (confirm): the code says the PULL draw happens in front of the fire's own `_control_tick()` (part.h:380-389); print it.
-2. Deck A's own lane at STEP DENSE 0 over 16 phrases (confirm one root forever at VARY 0), and what VARY > 0 does to slot 0.
-3. `sizeof(ModLane)` if anything is added at all: the gate fails at 924 B (about 3 B per lane of headroom), and the board size is unmeasured.
-4. CHOKE −0.6 against a long-DEC **STEP** deck A: record B's fire times and both decks' duck gains. The code says B may fire in A's tail but gets ducked; this decides whether C2 needs new code at all.
-5. For C3: cadence-note variety under `bind_song_cadence` over seeds k=1..8.
-6. For C4: does PULL's live follow audibly bend a ringing voice?
-7. Leader-mask lag near chord changes (confirm): the code says up to `Center::kCtrlInterval` samples, about 2 ms (instrument.cpp:333-351); print it.
-8. Rev A SONG pot hover at a rung seam (`knob_from_pot`'s `std::round` defeats `hyst_step`: 999 of 1000 re-rolls in the probe).
+## The mode, precisely
 
-**Tests:**
-- the new mode's symbol table, and symbol 0 at phase 0
-- role gate behaviour, with the RED proved once
-- ladder structure
-- `ctrl_identity` and `wave_formant_sweep` hashes unchanged: the COLOR-0 path must still bail out at n≤1 before `_stab_rng` (gotchas.md:22-26)
-- `ctest -E "^reva_"`
+On a SYNTH or WAVE deck in STEP with SONG on the new mode, per phrase of L = STEPS slots:
 
-**Where the work happens:** a worktree off main after rec-snap merges, built Release with the main repo's `env.sh` sourced in a script. VCV work ends with `build-local.sh install`.
+1. **Slot 0 strikes a chord.** Size from COLOR as today (ChordBuilder edges 0.125/0.375/0.625, chord.h:31-33). Slot 0 fires in every phrase at every DENSE, DENSE 0 included (measured: 6144 of 6144 phrases, no STEPS turns; rank 0 is pinned to slot 0 by every pattern builder and mutation, song_form.h:152-161, :287, :361, :402, and `k >= 1` at lane.cpp:768). Exception: a live STEPS turn re-slots the lane without a boundary fire (lane.cpp:256-296) and can skip one chord; the mode recovers at the next wrap *(review probe: 16→8 inside slot 8 landed on slot 0 with no fire)*. Accepted, not engineered around.
+2. **Slots 1 .. W−1 are silent**, W = `song_zones(L).turn_start` = 3L/4 (song_form.h:64-73) — the arrangement's existing turnaround boundary, no new constant.
+3. **Slots W .. L−1 play single notes** wherever the lane fires (normal groove ranks at DENSE), at any COLOR. Each takes one voice by SynthEngine's normal rule: a free voice round-robin first, otherwise the oldest non-sustaining voice (synth_engine.cpp:188-210). **With a 4-note chord** every voice is busy, so the first pickup steals the chord's root and the chord thins as the pickup plays — the sound that won (the rig always struck 4). **With a 1–3-note chord** the previous phrase's last pickup voice is older than the chord, so the first pickup takes it and the chord thins one note later *(review probe: n=4 → first pickup took the chord root; n=3 → it took the old pickup voice)*. This happens every phrase at COLOR < 0.375 and in some phrases at COLOR 0.7 (MOTION's COLOR swing). Accepted for now; see open question 6.
+4. **The next chord's root** is computed at the slot-0 strike from integer semitones:
+   - **candidate**: the last *struck* pickup note − 12, if a pickup was struck since the previous chord; otherwise the previous root. "Struck" means `_fire_trigger` ran: a fire swallowed by CHOKE, a window the DENSE left empty, or a STEPS re-slot all count as "no pickup";
+   - **snap**: `ChordBuilder::nearest(candidate, mask, root, floor)` with mask = `Part::_chord_mask()` (part.h:857-859; CHROM_MASK in CHROM), root = `_quant.root_semis()` (masks are root-relative, chord.h:160-164, quantizer.h:133,143-145). The snap matters on a bound PULL follower, whose pickups are quantized to the leader's absolute mask;
+   - **anti-repeat**: a root equal to either of the last two roots moves a scale fourth up in that mask (a fifth where the fourth would be a tritone; +5 semitones in CHROM, where "degree + 3" would be a minor third), then single degrees up until it differs from both.
+5. **Register:** let c be the semitone of the pitch path's centre (lane value 0: base 0.5 + TUNE + song offset, part.cpp:200-205). The chord root is folded into [c − 12, c); a pickup below c is lifted an octave, so the tune sits above the chord. The relation of c − 12 to the note floor (−12 semis, quantizer.h:73, `_pitch_floor_semis()`) is unmeasured: for roots −12 … −8 ChordBuilder rejects the fifth-below lay and flips it above the root (chord.h:95, 201), which changes the voicing shape inside the octave. A probe at implementation decides whether c needs a floor clamp.
+6. **Material:** the mode's A/B table is ABBB (`song_symbol_at(ABBB, i)`), phrase 0 = A (RESET contract, lane.h:75-81).
+7. **One DEC** rings both chord and pickup. No per-role decay.
 
-**Explicitly out of scope:**
-- extra voices (no CPU headroom: 939 k worst against clicks from about 945 k)
-- a reserved melody voice on one deck, unless two decks are rejected
-- a new panel cell or a shift layer
-- inversion control
-- BODY, BBD and SAMPLER support
-- retuning by-ear constants: kFlowNoteMinS, kStabSpreadS, chord spans and edges, FLOW sustain 0.7, and the CHOKE duck constants outside their own pass
-- patch migration
-- bit-exactness gates on audition WAVs
+## What the probes measured
+
+**The pickup window in the real ModLane** (16 seeds × 8 phrases per row, SONG ABBB):
+
+| STEPS | Window | DENSE for 2–4 notes | Notes |
+|---|---|---|---|
+| 16 | 4 slots | 0.6–1.0: 100 % of phrases | 0.6/0.7 → 2–3 (median 3), 0.8 → 2–4, 1.0 → always 4; 0.5 → 1–3; 0.4 → 0–3 (3 % empty) |
+| 8 | 2 slots | only 1.0 guarantees 2 | 36–81 % of phrases have 1 note for DENSE 0.4–0.9 |
+| 32 | 8 slots | 0.4 → 3–4 | 0.7 and up always 5–8; STEPS 32 is not reachable from the panel (param_table.h:58,77) |
+
+VARY 0 and 0.5 gave identical STEPS-16 rows. The count is set by k = lround(DENSE·L) (lane.cpp:767) and the groove ranks, so it barely varies between seeds.
+
+**The progression** (real pitch path: `reflect_into(base 0.5 + lane·RANGE + TUNE + offset)` and a real Quantizer, part.cpp:132-143 / 200-205; DORIAN, DENSE 0.8, 16 seeds × 16 phrases):
+- **Without anti-repeat it stalls.** AAAB and ABBB repeat the previous root about half the time (48–53 %); ABAB ping-pongs (root equals the one two back 71–72 %). About 4 distinct roots per 16 chords. The last pickup keeps landing on the pattern's cadence note.
+- **With anti-repeat** no root repeats the last two (by construction), 5.6–6.1 distinct roots per 16 chords in DORIAN, 4.7–4.9 in MIN_PENT (capped at one per degree). But the rule, not the tune, picks the root on 45–54 % of chords, and AAAB settles into period-4 cycles. Honest summary: the tune proposes, the rule disposes. The round-2 verdict was formed with this behaviour.
+- **At the factory RANGE 0.0 the mode degenerates.** Every note quantizes to semitone 17; the tune is one repeated pitch; anti-repeat produces the same F–B♭–C loop on every seed (gen_panel.py:829 RANGE_A 0.0). The renders correspond to RANGE 0.5 (the rig's pitch law equals the real path at RANGE 0.5: identical statistics for ABAB, within 1–2 counts otherwise).
+
+**Register.** Under the real path, 20 % (RANGE 0.5) to 29 % (RANGE 1.0) of pickup notes land below the chord root if the root is taken unfolded at last − 12; at RANGE 1.0 pickups reach the note floor (−12) and −7. The rig's fold and lift have no counterpart in Part, so rule 5 is new behaviour, not existing.
+
+**The struck pitch can be mid-glide** *(review probe)*. On every PULL bind/unbind flip, leader-mask change and ROOT/scale turn the Quantizer arms its change slew (quantizer.h:108-129, 172-178) and lerps on the first call (quantizer.h:158-162). The PULL draw lands just before the fire's control tick (part.h:388-389, then 417-422), so the note is struck after 1 of 20 slew ticks — about 95 % of the previous note — and STEP voices latch it (synth_engine.cpp:257). Storing `_tg[LANE_PITCH]` as the pickup would therefore put the next chord root off the semitone grid (slot 0 passes root_norm through exactly, chord.h:150). Hence rule 4 works on the Quantizer's integer target note. The PULL-follower mid-glide strike itself exists on `main` today and is out of scope here.
+
+**One deck can alternate chord size per fire** (real Part, SYNTH STEP): a COLOR-0.7 fire sounds 4 voices; a following COLOR-0 fire restrikes exactly one voice (the oldest, when all four are busy) while the other three ring on with envelopes identical to the chord-alone reference (±0.1 dB at chord tones). STEP voices do not retune when the pitch target moves while they ring (0.0 dB difference; only sustaining FLOW voices retune, synth_engine.cpp:384). So the next chord's root can be set from Part state without bending the last pickup. **No SynthEngine change is needed.**
+
+**Sizes** (desktop clang and ARM GCC agree): ModLane 896 B in production, 920 B under SPKY_TESTING; the storage gate `(sizeof(ModLane) - 412) * 10u < 5u*1024u` (test_song_form.cpp:310-319) passes up to 923 B. One extra 4-byte member after `_cur_step` (lane.h:429) still fits by padding; two fail (928 B). Appending a SongMode value changes no size. **This design adds nothing to ModLane.**
+
+**Appending a SongMode value alone makes it an alias of MIRROR** (bitwise identical Instrument output on SYNTH, WAVE, BODY and FEED, STEP and FLOW): without its own case `song_symbol_at` falls into Mirror's parity branch (song_form.h:99-104). And `clamp_song(99)` would return the new value instead of Off (breaks test_song_form.cpp:87 and test_instrument.cpp:960-970).
+
+**FLOW does not pause the arrangement on note decks.** Only SAMPLER and BBD stop (lane.cpp:910-912, set by `set_flow_melody` at part.cpp:53 and :586); SYNTH/WAVE/BODY/FEED keep advancing A/B through flow-melody (lane.cpp:913-921). A STEP-only mode needs its own `_step_on` check.
+
+**Where to silence: Part, not lane.** Gating slots 1..W−1 inside `ModLane::_effective_gate` (lane.cpp:773-781) works as a pure function of slot, but it lengthens slot 0's `_note_hold`, freezes the lane output on the chord pitch through the silence, changes SuperModulator's onset-gap RhythmView (super_modulator.cpp:169-188), and at VARY > 0 diverges the GROW random stream (up to 4.7 points at STEPS 8/32, none at 16). The audition rig silenced downstream, which is what Part-level suppression reproduces. Part-level suppression has side effects of its own, listed under "Engine design".
+
+## Engine design
+
+**Where it lives: Part.** ModLane is untouched apart from the SongMode case.
+
+- `song_form.h`: append `SongMode::Pickup` (=7) before `kCount`; give it its own case in `song_symbol_at` returning the ABBB symbols. Make `clamp_song` (song_form.h:19-24) map out-of-range values to Off explicitly.
+- `Part::process` (part.h:376-379): on a PITCH fire, `_note_suppressed = _inhibit || _pickup_silent(slot)`, and `_gate_ctr` is set only when not suppressed. This reuses CHOKE's swallow path: no trigger, no gate pulse, no gate sustain (gate() already honours `_note_suppressed`, part.h:303). The PULL draw still runs, so its stream does not depend on the mode (same rule as CHOKE, part.h:385-387). `_pickup_silent` is true when the mode is active, `0 < slot < song_zones(L).turn_start`. Slot from `_mod.pitch_cur_step()`, L from `_mod.pitch_steps()` (super_modulator.h:137-138); there is no pitch `wrapped()` accessor, so slot 0 is the phrase start (see rule 1 for the STEPS-turn exception).
+- `Part::_fire_trigger` (part.cpp:636-654), when the mode is active:
+  - **slot 0:** build the chord on the root from rule 4 instead of `_tg[LANE_PITCH]` at the `_chord.build` call (part.cpp:646), folded per rule 5. Then **latch the PULL leader mask**: `_chord_pc = pc_mask12(built chord)`. Today `_control_tick` recomputes it every 96-sample tick from the lane pitch (part.cpp:493-498), and the fire's refresh tick runs before `_fire_trigger` (part.h:417-426); in this mode the lane keeps moving through the silent slots, so a follower deck (instrument.cpp:350) would bind to pitch classes this deck never plays *(review probe: the mask changed through slots 1..11 while they would be silent)*. So `_control_tick` must not overwrite `_chord_pc` while the mode is active. Pickup pitch classes are not added: the follower holds the chord.
+  - **slot ≥ W:** strike one voice, `trigger_chord(&pickup, 1)`, **without** calling `_chord.build`. build() writes ChordBuilder's voice-leading memory (`_prev`, `_prev_n`, chord.h:130-133) unconditionally; a full-size build around each pickup would make the next chord voice-lead against a phantom chord. Count 1 takes the COLOR-0 path (synth_engine.cpp:171-172, no `_stab_rng` draw). Pitch lifted per rule 5. Store the Quantizer's integer target note (a new accessor for its `_last_note`, which already carries TUNE and offset) as the last struck pickup and set `pickup_seen`.
+  - Ordering is safe: the last pickup fires strictly before the next wrap, and the wrap sample carries slot 0's fire with the pattern already advanced (measured over 6144 phrases; lane.cpp:994-1001).
+- **New Part state:** last struck pickup (int semitone), `pickup_seen` (bool, cleared at every slot-0 strike), the last two roots (two ints). Part has no size gate.
+- **Reset:** Part has no `restart_song` today; `Instrument::restart` calls `p.mod().restart_song()` on the SuperModulator directly (instrument.h:603-611, super_modulator.h:79), and both hosts reach RESET only through it (Fireflow.cpp:789, shell/panel_scan.cpp:1169). Add `Part::restart_song()`, which clears the mode state and forwards to `_mod.restart_song()`, and route instrument.h:609 through it. `Part::init` clears the same state (VCV re-inits on a sample-rate change). After a reset the first chord is built from `_tg[LANE_PITCH]` as on a fresh init.
+- **PITCH CV:** `Part::pitch_cv()` returns the lane pitch `_pitch_q` (part.h:209, 305), so the PITCH jack would carry the lane melody through the silent window and the unlifted pickup, while GATE follows the suppression (Fireflow.cpp:811-814). In this mode `pitch_cv()` reports the last struck pitch (the chord root at slot 0, the lifted pickup after) and holds it through the silent window.
+- **Accepted side effects of Part-level suppression:** the VCV lane ring still brightens on silent fires (`lane_fired`, Fireflow.cpp:1237), and the sibling deck's FLUX THIN still reads this deck's RhythmView, which counts the silent onsets (super_modulator.cpp:169-188, instrument.cpp:310-311).
+- **Active only when** the deck is SYNTH or WAVE, in STEP. On FLOW, BODY (one voice: trigger_chord clamps to kVoices, body_voice.h:27 with synth_engine.cpp:171), BBD (trigger is a no-op, bbd_engine.h:36), SAMPLER (chords flatten, part.h:620-624) and FEED, the mode is just the ABBB table.
+- **Knob meaning on this rung:** COLOR = chord size, DENSE = pickup density (useful range about 0.6–1.0 at STEPS 16), DEC = ring of both, RANGE = melodic width (0 degenerates, see question 1), STEPS = phrase length (window = the last quarter).
+
+## Surface
+
+**Must change** (each goes red or reads out of bounds otherwise):
+- `param_table.h:76` → `X(P_SONG_A, 0.f, 7.f, 8) X(P_SONG_B, 0.f, 7.f, 8)` (the step column too; nothing checks it today).
+- One appended ladder rung `{form 2, song 7}` (song_ladder.h:27-37, 14 → 15; never inserted; rung 0 stays Off, test_song_ladder.cpp:16-18). Form 2 (Hierarchical) is what the renders used.
+- `kSongWords` gets an 8th word (Fireflow.cpp:489-491; :496 reads out of bounds without it) **in the same commit as the enum**, and its pin in test_panel.py:1083-1091.
+- The 13s that break with 15 rungs: test_control_params.cpp:62 and test_controls_map.cpp:59 → 14.f.
+- `tests/test_param_impact.cpp`: `moves_audio()` compares each parameter at lo against hi, so SONG moves from "AAAB vs Off" to "AAAB vs Pickup". That flips two UNTRACED pins — SONG_B "dead on both modes" (:305) and SONG_A "alive only in STEP" (:371) — and fails 4 cases *(review probe build)*. The file forbids deleting an UNTRACED entry to go green. Decision: keep the old AAAB-vs-Off measurement as its own small case so the open SONG_B thread stays pinned, and let the lo/hi sweep re-pin with a dated note.
+
+**Docs and comments** (nothing goes red today, so extend the guard):
+- test_panel.py:1118-1121 gets the new word, which makes the host/vcv/README.md entry mandatory.
+- host/vcv/README.md:58 ("14-rung"), :62 ("seven arrangements"), :65-73 (per-mode list); README.md:63 and :203 (the mode list); docs/roadmap.md:1503-1511 (SONG table).
+- Stale counts in comments: param_table.h:47-48 and :51-57, control/control_law.h:836, Fireflow.cpp:481, gen_panel.py.
+
+**Optional:** test_song_rung_state.cpp:22-68 uses its own local `n = 14` and stays green (it could read `kSongLadderCount`); the comment at test_song_ladder.cpp:33-35.
+
+**Side effects, all fine:** the persist layout hash changes (persist_record.cpp:90 folds in `kSongLadderCount`, test_persist_record.cpp:139-149), so the first boot of a new Rev A image resets Bastian's persisted patch — tell him before a flash. The rung inherits `new_phrase` and `sampler_punch` on change (control_law.h:848-860). The SONG lamp keeps showing A/B changes (led_law.hpp:377-393).
+
+## Tests
+
+Each RED proved once; the sabotage for the RED is named.
+
+- **Enum and clamp** (test_song_form.cpp): `clamp_song(7) == Pickup` (RED on main: 7 clamps to Off), `clamp_song(8) == Off`, `song_text(Pickup, 8) == "ABBBABBB"` (RED while Pickup falls into Mirror's branch, which gives ABBABAAB). Order: append the enum, see :87 go red, then fix the clamp. The existing :87 and test_instrument.cpp:960-970 stay.
+- **Range pinned to the enum** (test_param_table.cpp): `kParams[P_SONG_A].hi == kCount − 1` and steps == kCount, same for B.
+- **Ladder reach** (test_song_ladder.cpp): some rung carries `SongMode::Pickup` (structural, so it respects the "order is taste" comment, song_ladder.h:22-24).
+- **Silent window, non-vacuous:** SYNTH STEP, STEPS 16, DENSE 1.0, several phrases, a mixed seed. First require `lane_fired(LANE_PITCH)` on at least N slots in 1..W−1, then assert no trigger and no rising gate edge at those fires (not "gate low across 1..W−1": slot 0's sustain may carry into slot 1). The "outside" half runs the same seed with SONG = ABBB and asserts the same slots trigger. RED: drop `_pickup_silent`.
+- **One voice per pickup:** COLOR 0.7, every fire at slot ≥ W strikes exactly one voice (`VoiceCountProbe` trig_count idiom, synth_engine.h:281-296, or `probe_synth().probe_voice()`), and the next chord's strew equals a run with the pickup slots forced to COLOR 0. RED: pass the COLOR count instead of 1.
+- **No phantom voice-leading:** the slot-0 chord after a pickup phrase equals one built with ChordBuilder's `_prev` set to the previous slot-0 chord. RED: call `_chord.build` on pickup fires.
+- **Root = last pickup − 12:** RANGE ≥ 0.5, mixed seed, a case where last − 12 differs from both previous roots (asserted in the test). Observe the root through the engine's struck voice pitch, not through the new Part state.
+- **On the grid under PULL:** a bound follower whose pickup is struck mid-glide still builds the next chord on an integer semitone. RED: store `_tg[LANE_PITCH]`.
+- **Anti-repeat:** no root equals either of the last two, in DORIAN, MIN_PENT and CHROM (+5 there), RANGE ≥ 0.5.
+- **No pickup:** DENSE 0 (slot 0 still fires, the window is empty) still moves the root; and a run where CHOKE swallows the whole window behaves the same (only struck notes count). RED: keep `pickup_seen` set across phrases.
+- **Register:** RANGE 1.0, a case where a raw pickup lands below c; every sounded pickup is ≥ c and every root is in [c − 12, c). RED: disable the lift.
+- **Leader mask:** a follower's mask through slots 1..W−1 equals the pitch classes of the slot-0 chord. RED: let `_control_tick` overwrite `_chord_pc`.
+- **Reset:** after RESET (and after `Part::init`) the first slot-0 chord is built from `_tg[LANE_PITCH]` as on a fresh init. RED: skip the clear.
+- **PITCH CV:** `pitch_cv()` holds the last struck pitch through the silent window.
+- **STEPS turn:** turning 16 → 8 mid-phrase skips at most one chord, and the next wrap strikes one.
+- **Inert elsewhere:** bitwise-identical Instrument output for SONG = Pickup vs SONG = ABBB on FLOW-SYNTH, FLOW-WAVE, BODY, BBD, SAMPLER and FEED. RED: drop the `_step_on` / engine check.
+- **Outside the mode:** `ctrl_identity` and `wave_formant_sweep` stay unchanged. They only guard "nothing moved outside the mode": neither sets SONG nor runs a STEP deck (ctrl_identity is two SYNTH decks in FLOW; wave_formant_sweep has `set_step` false), so they cannot catch a pickup that draws `_stab_rng`; the one-voice test above does that. Optional: a render scenario with `set_song 7` on a STEP SYNTH deck (scenario.cpp:125 supports it).
+- `ctest --test-dir build -E "^reva_"` after a Release build.
+
+## Plan of work
+
+1. **Enum** (one commit): song_form.h enum, clamp, symbol case, `kSongWords` and its test_panel pin (same commit, or the label loop reads out of bounds); the clamp and range tests.
+2. **Surface** (one commit): ladder rung, P_SONG row, test_control_params / test_controls_map 13 → 14, test_param_impact split and re-pin, ladder-reach test.
+3. **Part logic and its tests** — after rec-snap is merged (it edits `part.*`).
+4. **Docs:** README.md, host/vcv/README.md (+ test_panel.py guard), roadmap.md, the stale comments.
+5. **Finish:** the worktree has no env.sh, so source the main checkout's (`source <main>/env.sh`), then `cmake -B build -DCMAKE_BUILD_TYPE=Release`, `cmake --build build` (ctest does not build), `ctest --test-dir build -E "^reva_"`; `host/vcv/build-local.sh install` and a Rack restart; if released, bump plugin.json (MAJOR stays 2) and rewrite docs/release-notes.md. Before flashing Rev A, warn about the persisted-patch reset.
+
+Building in this worktree also needs `git submodule update --init lib/DaisySP` first (the CMake configure fails on the empty submodule).
+
+## Round 3: the winner through the real Instrument
+
+No engine change is needed for it. A host-side closed-loop driver around the real Instrument (it reads `lane_fired` and the PITCH `cur_step` after each `process()` and switches DENSE, COLOR and the PITCH base/depth at steps 0, W−1 and L−1) struck every requested root exactly and fired nothing in the silent window (8 phrases per deck, step length exact). It needs `-DSPKY_TESTING` for `Instrument::part()`, which renders byte-identical audio. The render host builds from this worktree in about 2 s and renders 40 s in 0.55 s.
+
+Before round 3 is played to Bastian, the driver needs: the register rule (rule 5); a DENSE that is not switched mid-phrase (its first renders fired all 4 window slots in every phrase, against median 3 for an unswitched lane — likely the mid-phrase DENSE change); a seed other than k0 (the Instrument seeds deck A with 0x1234abcd = k0 and deck B with 0x9e3779b9, instrument.cpp:157,161); MOTION's COLOR swing left on, so 3-note chords and the later thinning of rule 3 are heard as they would ship; and no `_chord.build` on pickup fires.
 
 ## Open questions
 
-1. **May this mode use both decks** (A plays chords, B plays the melody)? If not, the only one-deck options are taking turns (C1) or a synth-engine change to reserve a melody voice.
-2. **Should the chords progress on their own** (a new degree-walk source in Part), or keep today's law, where the chord root is the melody note? Only C3 works without a new source (its chords follow the melody's cadence notes). C0, C2 and C4 need one, and C1 needs at least the `_last_melody_q` rule: today a STEP DENSE 0 chord deck plays one root forever.
-3. **How long is "long"?** 2 bars at 80 BPM (6 s) or 4–8 bars (12–24 s)? This sets round 1's harmonic rhythm.
-4. **Where should the mode live:** an appended SONG rung (ladder and persist hash change, narrower rungs on the 9 mm pot), or a zone of PULL/CHOKE?
-5. **Should PULL's first listening pass happen in this round?** C0 is effectively that pass, and kPullDead 0.03 and the linear bind curve are untuned.
+1. **RANGE 0 (the factory value):** accept that the mode degenerates there (one pickup pitch, a fixed three-chord loop), or should the rung give the melody its own width?
+2. **The register rule** (fold the chord into the bass octave, lift low pickups): confirm by ear in round 3, or leave the real pitch path alone?
+3. **STEPS 8 gives 1–2-note pickups.** Keep "the last quarter" (the pickup scales with STEPS), or a fixed window such as the last min(L/4, 4) slots?
+4. **Anti-repeat overrides the tune on about half the chords.** Fine as heard, or try a softer rule (only the immediately previous root) in round 3?
+5. **Name and word on the panel:** "PICKUP" / "PICK"?
+6. **Chords of 1–3 notes thin one pickup later** (rule 3). Accept, or silence the previous pickup's voice at the slot-0 strike so pickups always eat chord voices oldest-first? The second cuts the last pickup's tail at the chord.
+
+## Appendix: audition record
+
+**Rigs.** Round 1 and 2 used a scratch harness: one real ModLane (melodic, STEP, Part-style seeds `0x1234abcd + (k+2)*2654435761`), one SynthEngine, ChordBuilder (COLOR 0.7), AmbientReverb on a 0.4 send; 80 BPM, A Dorian, 16 bars of 2-bar phrases plus a 12 s tail with a 2 s fade; VARY 0.5; files matched to one BS.1770 loudness under a −1 dBFS peak cap; letters/x-y assigned at random. Pitch law `36·reflect(0.5 + 0.5·v)` snapped to the scale (equal to the real path at RANGE 0.5, without quantizer hysteresis or slew); no FLUX, GRIT or master bus. The rig struck 4-note chords every phrase and had no MOTION swing.
+
+**Lessons from the rig itself** (each found by an independent check and fixed before listening):
+- A 4-bar phrase cannot hold a chord at any DEC (DEC 1.0 is under env 0.01 after about 5.5 s), so R2/R4 first rendered as gap candidates; all candidates moved to 2-bar phrases.
+- Under AAAB with 4-bar phrases, R2/R4 played one root for most of the file; R3 never played pattern B. Fixed with A/B-alternating tables, VARY 0.5 and anti-repeat.
+- Plain RMS matching left 1.65 dB of perceived loudness difference; BS.1770 matching brought it to 0.1 dB.
+- Round 1's "fourth up three times" closes a C↔G cycle in A Dorian; round 2 uses one fourth, then single degrees.
+
+**Engine finding, unrelated to this mode:** an attack zipper on the 96-sample control grid — steps at `kCtrlInterval` boundaries in the first ~9–12 ms after strikes (531 strikes; median ratio 15.4 of tick-boundary to off-boundary second difference; stronger where a strike lands on still-ringing voices). It applies to the instrument as well. Mechanism unmeasured (candidates: the voice's per-tick `_vel` glide, per-tick envelope/filter pushes); probe before filing.
+
+**Unmeasured:** the cause of COLOR 0.7 striking 3 or 4 notes from phrase to phrase in the real deck (MOTION's COLOR swing, part.cpp:434-438, or ChordBuilder at the register edges); FEED in this mode; the fold octave against the note floor (rule 5); the Rev A SONG pot hover at the new rung's seam (`knob_from_pot`'s `std::round`, shell/controls.cpp:49-55).
