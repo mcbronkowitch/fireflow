@@ -47,10 +47,19 @@ MOD four, SHIFT once).
 | image | capture | frames | `cb_max` | `cyc_max` | `led_max` |
 |---|---|---|---|---|---|
 | `reva_play`, hands on | first 10 min | 1 009 | 797 576 | 18 292 | 2 408 |
+| `reva_play`, hands on | about 29 min, to frame 2 561 | 2 561 | 817 816 | 19 120 | 2 408 |
 
-797 576 is 83 % of a block, under the read_play criterion of 900 000. It
+817 816 is 85 % of a block, under the read_play criterion of 900 000. It
 includes engine swaps and every pot move of the session, so it is not the
 snap's price alone; it is the worst the play image did while the snap worked.
+
+**The end of the capture is a power event, not a load.** At frame 2 562 all
+73 pot rows jumped in one frame to one value per sense group (933, 574, 260,
+637) and stayed there; `cb_max` went 872 478 -> 905 718 -> 933 334 over the
+next three frames (the law pushing every knob at once), and then the serial
+port vanished (`ClearCommError`, no COM port left). That is the shape of the
+panel losing its supply while the Daisy ran on for a moment -- the case
+switched off, or a cable pulled. Those three frames are not in the table.
 
 ## 4. By hand (plan Task 10 step 2), Bastian's verdicts
 

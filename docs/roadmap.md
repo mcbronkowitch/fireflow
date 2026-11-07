@@ -4228,7 +4228,8 @@ plan of the same name; branch `feat/rec-snap`, cut from
 - **Switches.** Firmware `SHELL_REC_SNAP` (default 1; the rings cost 1.15 MB
   of SDRAM); VCV menu "REC snaps to bar" (default off); the render host off.
 - **Measured.** `cb_max` 770 062 with the snap against 763 987 without, hands
-  off (0.63 % of a block, gate 2 %); 797 576 while Bastian played it.
+  off (0.63 % of a block, gate 2 %); 817 816 over about 29 min while
+  Bastian played it.
   Everything on the by-hand list passed by ear.
 - **Open:** an external source at the audio input through the new record
   path (item 6, L5). The takes image is down to 5 084 B of SRAM_EXEC.
