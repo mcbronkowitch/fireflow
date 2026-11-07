@@ -58,8 +58,9 @@ snap's price alone; it is the worst the play image did while the snap worked.
 637) and stayed there; `cb_max` went 872 478 -> 905 718 -> 933 334 over the
 next three frames (the law pushing every knob at once), and then the serial
 port vanished (`ClearCommError`, no COM port left). That is the shape of the
-panel losing its supply while the Daisy ran on for a moment -- the case
-switched off, or a cable pulled. Those three frames are not in the table.
+panel losing its supply while the Daisy ran on for a moment, and Bastian
+confirmed it: he switched the case off at the end of the session. Those three
+frames are not in the table.
 
 ## 4. By hand (plan Task 10 step 2), Bastian's verdicts
 
