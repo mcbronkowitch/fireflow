@@ -469,7 +469,9 @@ mistake "compiles and passes its gates" for "tuned."
   5–12 st/s instead of ~100 st/s. Side effect, accepted with it: a medium
   deck (1.33 s notes) now bends over ~0.33 s, not 40 ms; only notes under
   ~160 ms keep 40 ms. Scale/root/mode changes and bind/release keep the plain
-  40 ms slew. Do not shorten the cap or straighten the curve without a pass.
+  40 ms slew. Confirmed the same day on Rev A hardware (play image build
+  `3447249`): "viel besser". Do not shorten the cap or straighten the curve
+  without a pass.
 
 ## MOD depth split (2026-08-23) — HEARD, one item still open
 
