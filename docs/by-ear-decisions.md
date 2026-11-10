@@ -434,7 +434,7 @@ which is exactly why they are recorded here.
   `tests/test_led_law.cpp`, which measures the dark-run lengths precisely
   because counting edges cannot tell a pair from an even blink.
 
-## PULL (2026-08-22) — NOT YET HEARD
+## PULL (2026-08-22) — NOT YET HEARD, except the glide (2026-11-10)
 
 PULL — chord gravity between the two decks — shipped on branch
 `feat/pull-chord-gravity`, spec
@@ -456,6 +456,20 @@ mistake "compiles and passes its gates" for "tuned."
   binding near-certain) or spread evenly across the whole span is an open
   listening question — do not curve it, and do not declare the straight line
   "correct," without a pass.
+- **HEARD 2026-11-10: the live-retarget glide follows the note length.**
+  Bastian reported that a bound note on a slow deck jerked when the leader
+  changed chord mid-note: the old path was the fixed 40 ms linear change
+  slew (measured 32 ms 10–90 % for a 2–3 st bend). A/B render, B accepted:
+  the glide takes `kPullGlideFrac = 0.25f` of the longer of the previous note
+  and the current one so far, floored at the 40 ms change slew and capped at
+  `kPullGlideMaxS = 1.2f` (both in `Part::_control_tick`,
+  `engine/parts/part.cpp`), on a smoothstep curve; a fire of the follower's
+  own cuts a running long glide back to 40 ms. Measured on the A/B scenario
+  (follower notes ~10.7 s, so the cap applies): 10–90 % in ~730 ms, max slope
+  5–12 st/s instead of ~100 st/s. Side effect, accepted with it: a medium
+  deck (1.33 s notes) now bends over ~0.33 s, not 40 ms; only notes under
+  ~160 ms keep 40 ms. Scale/root/mode changes and bind/release keep the plain
+  40 ms slew. Do not shorten the cap or straighten the curve without a pass.
 
 ## MOD depth split (2026-08-23) — HEARD, one item still open
 

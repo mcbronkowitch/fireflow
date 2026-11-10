@@ -84,6 +84,8 @@ public:
                                      / static_cast<float>(call_interval));
         if (_slew_len < 1) _slew_len = 1;
         _slew_ctr = 0;
+        _slew_cur = _slew_len;
+        _slew_smooth = false;
         _have_note = false;
         _have_out = false;
         // PULL's gravity mask is runtime-derived, same footing as _have_out
@@ -105,7 +107,14 @@ public:
     // REPLACES the scale/chrom mask in every mode, FREE included: binding a
     // note to the neighbour's harmony is the whole point of the feature, so a
     // free-running deck is not exempt. A zero mask is not gravity.
-    void set_gravity(uint16_t abs_pc_mask, bool on) {
+    //
+    // glide_calls: how long a LIVE retarget may take, in process() calls. A
+    // live retarget is the leader changing chord under a note that stays
+    // bound -- the only case where a sounding note moves with no fire of its
+    // own. Part sizes it from the follower's note length, so a slow deck
+    // glides slowly instead of jerking over the fixed 40 ms. 0 (or anything
+    // at or below the 40 ms change slew) keeps the plain change slew.
+    void set_gravity(uint16_t abs_pc_mask, bool on, int glide_calls = 0) {
         const bool want = on && abs_pc_mask != 0;
         // Load-bearing, not a redundant fast path: Part::_control_tick calls
         // this every control tick (500 Hz at 48k/96), so without this guard
@@ -123,11 +132,31 @@ public:
         // value sitting here while gravity is off is never observed. Kept
         // rather than special-cased to skip the write on that path, so this
         // setter stays the one place both members change together.
+        const bool live_retarget = want && _grav_on;   // mask moved, still bound
         _grav_mask = abs_pc_mask;
         _grav_on   = want;
         on_change();
+        if (live_retarget && glide_calls > _slew_len && _slew_ctr > 0) {
+            _slew_cur = glide_calls;
+            _slew_ctr = glide_calls;
+            _slew_smooth = true;                  // S-curve: no corner at either end
+        }
     }
     bool gravity_on() const { return _grav_on; }
+
+    // A new note must not inherit a long PULL glide: it would drag into the
+    // note's own pitch over up to a second. Part calls this on every PITCH
+    // fire; a long glide still running is cut down to the plain 40 ms change
+    // slew from where it is now. Anything else is left alone.
+    void end_long_glide() {
+        if (_slew_smooth && _slew_ctr > 0) {
+            _slew_from   = _last_out;
+            _slew_cur    = _slew_len;
+            _slew_ctr    = _slew_len;
+            _slew_smooth = false;
+        }
+    }
+    bool long_glide_active() const { return _slew_smooth && _slew_ctr > 0; }
 
     QuantMode mode() const { return _mode; }
     uint16_t scale_mask() const { return _scale; }   // last active scale (survives FREE)
@@ -157,7 +186,8 @@ public:
         float out = static_cast<float>(note) / SPAN_SEMIS;
         if (_slew_ctr > 0) {
             --_slew_ctr;
-            const float t = 1.f - static_cast<float>(_slew_ctr) / static_cast<float>(_slew_len);
+            float t = 1.f - static_cast<float>(_slew_ctr) / static_cast<float>(_slew_cur);
+            if (_slew_smooth) t = t * t * (3.f - 2.f * t);   // smoothstep
             out = lerpf(_slew_from, out, t);
         }
         _last_out = out;
@@ -172,6 +202,8 @@ private:
 
     void on_change() {
         _have_note = false;                       // re-pick without hysteresis
+        _slew_cur = _slew_len;
+        _slew_smooth = false;
         if (_have_out && _quantizing()) {
             _slew_from = _last_out;               // soften the jump (~40 ms)
             _slew_ctr = _slew_len;
@@ -225,7 +257,9 @@ private:
     bool      _have_out  = false;
     float     _slew_from = 0.f;
     int       _slew_ctr  = 0;
-    int       _slew_len  = 1920;
+    int       _slew_len  = 1920;   // the 40 ms change slew, in calls
+    int       _slew_cur  = 1920;   // length of the slew now running
+    bool      _slew_smooth = false;// running slew is a long PULL glide (S-curve)
     uint16_t  _grav_mask = 0;
     bool      _grav_on   = false;
 };

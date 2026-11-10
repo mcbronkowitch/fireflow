@@ -92,6 +92,7 @@ void Part::init(float sample_rate, uint32_t seed_base,
     // probability carry into the first post-reinit _quant.process() call
     // (see this function's closing _pitch_q assignment).
     _grav_mask = 0; _grav_prob = 0.f; _grav_bound = false; _chord_pc = 0;
+    _ticks_since_fire = 0; _note_ticks = 0;   // PULL glide's note-length memory
     // _bus_dc.Process() only ever runs from _control_tick(), i.e. once per
     // SynthEngine::kCtrlInterval samples (500 Hz at 48 kHz) -- NOT once per
     // sample. daisysp::DcBlock::Init(rate) sizes its pole from the rate it is
@@ -347,7 +348,27 @@ void Part::_control_tick() {
     // the quantizer's own 40 ms change slew. Measured 2026-08-22: a sounding
     // SYNTH note does follow a mask change (24000/24000 samples differ,
     // max |d| 0.544), so no re-trigger machinery is needed here.
-    _quant.set_gravity(_grav_mask, _grav_bound);
+    //
+    // The glide length scales with the note length (heard and accepted
+    // 2026-11-10, see docs/by-ear-decisions.md "PULL"):
+    // a live retarget takes kPullGlideFrac of the longer of the previous note
+    // and the current one so far, floored at the 40 ms change slew and capped
+    // at kPullGlideMaxS. Only notes under ~160 ms keep today's 40 ms (a
+    // 1.33 s note glides ~0.33 s); a slow deck's long note is bent over a
+    // matching portamento instead of a 40 ms jerk. The
+    // fire tick itself passes 0 -- a chord change landing on this deck's own
+    // fire is a new note, not a bend.
+    {
+        constexpr float kPullGlideFrac = 0.25f;
+        constexpr float kPullGlideMaxS = 1.2f;
+        const int32_t len = _note_ticks > _ticks_since_fire ? _note_ticks : _ticks_since_fire;
+        const int max_calls = static_cast<int>(kPullGlideMaxS * _sr
+                                               / static_cast<float>(SynthEngine::kCtrlInterval));
+        int glide = static_cast<int>(kPullGlideFrac * static_cast<float>(len));
+        if (glide > max_calls) glide = max_calls;
+        if (_ticks_since_fire == 0) glide = 0;
+        _quant.set_gravity(_grav_mask, _grav_bound, glide);
+    }
     const float pitch_quantized = _quant.process(pitch_raw, _pitch_floor_semis());
 
     // The SAMPLER does not quantize. The quantizer is a melody device: it snaps
