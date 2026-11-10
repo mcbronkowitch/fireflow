@@ -71,18 +71,16 @@ frames are not in the table.
 | 3 | A held start blinks REC fast; TEMPO shows beat 1 brighter | ok |
 | 4 | An overdub snaps the same way | ok |
 | 5 | TEMPO below 40 BPM, PACE down: REC acts at once, TEMPO pulses evenly | ok |
-| 6 | An external source at the input is recorded and heard while recording; B is not doubled | **not tested yet** |
+| 6 | An external source at the input is recorded and heard while recording; B is not doubled | ok (2026-11-10) |
 | L1 | B recorded on A stays at its own level; the take shows up when REC stops | ok |
 | L2 | Both decks SAMPLER recording each other; SAMPLER recording a BBD deck | ok |
 | L3 | The held-request blink (8 Hz) | ok |
 | L4 | TEMPO beat 1 at full, the other three at 0.35 | ok |
-| L5 | An audio-in take through the new `tanh` path | **not tested yet** (needs the input, item 6) |
+| L5 | An audio-in take through the new `tanh` path | ok (2026-11-10) |
 | L6 | The take becomes playable one beat after the stop press | ok |
 
 ## 5. What is left
 
-- Item 6 and L5: an external source at the audio input, recorded on a SAMPLER
-  deck, heard while recording, and compared by ear with a take from before the
-  `tanh` path (`reva_play_no_snap` does not help there: the route is on in
-  both images).
+- Nothing. Bastian passed item 6 and L5 on 2026-11-10, and the branch was
+  merged into `main` the same day.
 - The board stays on `reva_play` (build `68510c2`), the normal play image.
