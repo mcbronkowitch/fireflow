@@ -186,3 +186,53 @@ TEST_CASE("slice map: strength orders the transients") {
     // detector to measure the peak after the crossing, not at it. That is a
     // behaviour change and belongs to the instrument's author, not here.
 }
+
+TEST_CASE("slice_map: export/import round trip") {
+    // Spec 2026-11-06-sampler-takes-on-sd §4.1: the saved take carries the
+    // map, strengths included. Material: hits every 0.25 s with rising
+    // amplitude, scanned, exported, imported into a fresh map.
+    constexpr size_t kN = 48000;
+    std::vector<SampleBuffer::Frame> buf(kN, SampleBuffer::Frame{0.f, 0.f});
+    for (size_t h = 0; h < 4; ++h)
+        for (size_t i = 0; i < 2000; ++i) {
+            const float v = (0.2f + 0.2f * float(h)) * std::exp(-float(i) / 400.f);
+            buf[h * 12000 + 3000 + i] = {v, -v};
+        }
+    SliceMap a, b;
+    a.init(48000.f); b.init(48000.f);
+    a.scan(buf.data(), kN);
+    REQUIRE(a.count() >= 4);
+    uint32_t f[SliceMap::kMax];
+    uint8_t  s[SliceMap::kMax];
+    const int n = a.export_markers(f, s, SliceMap::kMax);
+    CHECK(n == a.count());
+    REQUIRE(b.import_markers(f, s, n, kN));
+    REQUIRE(b.count() == a.count());
+    for (int i = 0; i < n; ++i) {
+        CHECK(b.start(i) == a.start(i));
+        CHECK(b.strength(i) == a.strength(i));
+    }
+    CHECK(a.export_markers(f, s, 2) == 2);   // max honoured
+}
+
+TEST_CASE("slice_map: import rejects a bad marker list and leaves the map empty") {
+    SliceMap m;
+    m.init(48000.f);
+    const uint8_t s[3] = {10, 20, 30};
+    const uint32_t ok[3] = {0, 100, 200};
+    REQUIRE(m.import_markers(ok, s, 3, 1000));
+    REQUIRE(m.count() == 3);
+
+    const uint32_t unsorted[3] = {0, 200, 100};
+    CHECK_FALSE(m.import_markers(unsorted, s, 3, 1000));
+    CHECK(m.count() == 0);
+    const uint32_t equal[3] = {0, 100, 100};
+    CHECK_FALSE(m.import_markers(equal, s, 3, 1000));
+    const uint32_t past[3] = {0, 100, 1000};
+    CHECK_FALSE(m.import_markers(past, s, 3, 1000));
+    CHECK_FALSE(m.import_markers(ok, s, SliceMap::kMax + 1, 1000));
+    CHECK_FALSE(m.import_markers(ok, s, -1, 1000));
+    CHECK(m.count() == 0);
+    CHECK(m.import_markers(nullptr, nullptr, 0, 0));   // an empty take is fine
+    CHECK(m.count() == 0);
+}

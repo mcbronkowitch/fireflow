@@ -7,6 +7,8 @@
 #include "control/led_law.hpp"
 #include <cmath>
 #include <cstdlib>
+#include <memory>
+#include <utility>
 #include <vector>
 
 using namespace spky;
@@ -860,5 +862,114 @@ TEST_CASE("led: CLK and RST flash on their pulses") {
         CHECK(duty[ffctl::RST_L] == steps - 1);
         for (int k = n / 2; k < n + 3; ++k) spkyled::fill(inst, panel, dt, steps, {}, duty);
         CHECK(duty[ffctl::RST_L] == 0);
+    }
+}
+
+// --- REC snap lamps (spec 2026-11-07-sampler-records-other-deck-on-the-bar §4.3)
+
+namespace {
+// An instrument with sampler buffers and REC rings, so set_rec_snap() holds.
+struct SnapLampRig {
+    std::vector<float> echo[PART_COUNT][2];
+    std::vector<SampleBuffer::Frame> smp[PART_COUNT], ring[PART_COUNT];
+    std::unique_ptr<AmbientReverb> reverb = std::make_unique<AmbientReverb>();
+    std::unique_ptr<Instrument> inst = std::make_unique<Instrument>();
+    explicit SnapLampRig(bool snap, float bpm = 120.f) {
+        FxMem m;
+        for (int p = 0; p < PART_COUNT; ++p) {
+            for (int ch = 0; ch < 2; ++ch) {
+                echo[p][ch].assign(Flux::kMaxSamples, 0.f);
+                m.echo[p][ch] = echo[p][ch].data();
+            }
+            smp[p].assign(48000 * 4, SampleBuffer::Frame{ 0.f, 0.f });
+            ring[p].assign(72128, SampleBuffer::Frame{ 0.f, 0.f });
+            m.sampler_buf[p] = smp[p].data();
+            m.rec_ring[p] = ring[p].data();
+        }
+        m.sampler_frames = smp[0].size();
+        m.rec_ring_frames = ring[0].size();
+        m.reverb = reverb.get();
+        inst->init(48000.f, m);
+        inst->set_tempo_bpm(bpm);
+        inst->set_pace(0.5f);
+        inst->set_engine(PART_A, ENGINE_SAMPLER);
+        inst->set_rec_snap(snap);
+    }
+    void step() { float x = 0.1f, l, r; inst->process(&x, &x, &l, &r, 1); }
+};
+
+// The TEMPO duty at the start of each of the next `beats` beats, with the
+// beat_in_bar() it was read at.
+std::vector<std::pair<int, int>> tempo_pulses(Instrument& inst, int beats) {
+    spkyled::Panel panel;
+    int duty[ffctl::NUM_LIGHTS];
+    std::vector<std::pair<int, int>> out;
+    float l, r, x = 0.1f;
+    int last = inst.beat_in_bar();
+    while (static_cast<int>(out.size()) < beats) {
+        inst.process(&x, &x, &l, &r, 1);
+        if (inst.beat_in_bar() == last) continue;
+        last = inst.beat_in_bar();
+        for (int i = 0; i < 480; ++i) inst.process(&x, &x, &l, &r, 1);   // inside the pulse
+        spkyled::fill(inst, panel, 1.f / 750.f, 16, {}, duty);
+        out.push_back({ inst.beat_in_bar(), duty[ffctl::TEMPO_L] });
+    }
+    return out;
+}
+} // namespace
+
+TEST_CASE("tempo lamp: beat 1 brighter with snap on") {
+    SnapLampRig g(true);
+    REQUIRE(g.inst->rec_snap());
+    const int dim = spkyled::duty_from_light(spkyled::kTempoOffBeatLight, 16);
+    REQUIRE(dim > 0);
+    REQUIRE(dim < 15);
+    int ones = 0, others = 0;
+    for (auto [beat, d] : tempo_pulses(*g.inst, 9)) {
+        INFO("beat ", beat);
+        if (beat == 0) { CHECK(d == 15); ++ones; }
+        else           { CHECK(d == dim); ++others; }
+    }
+    CHECK(ones >= 2);
+    CHECK(others >= 6);
+}
+
+TEST_CASE("tempo lamp: unchanged with snap off, and on a beat too slow to snap") {
+    SnapLampRig off(false);
+    for (auto [beat, d] : tempo_pulses(*off.inst, 5)) { INFO("beat ", beat); CHECK(d == 15); }
+    SnapLampRig slow(true, 30.f);                    // a 2 s beat: the snap does not act
+    REQUIRE(slow.inst->rec_snap());
+    REQUIRE_FALSE(spky::rec_snap_enabled_at(slow.inst->frames_per_beat()));
+    for (auto [beat, d] : tempo_pulses(*slow.inst, 5)) { INFO("beat ", beat); CHECK(d == 15); }
+}
+
+TEST_CASE("rec lamp: held blinks at 8 Hz") {
+    for (bool held_stop : { false, true }) {
+        INFO((held_stop ? "held stop" : "held start"));
+        SnapLampRig g(true);
+        if (held_stop) {                              // a take running, stopped in the last beat
+            while (g.inst->beat_in_bar() != 1) g.step();
+            g.inst->sampler_record(PART_A, true);
+            for (int i = 0; i < 24000 + 100; ++i) g.step();
+            REQUIRE(g.inst->sampler_is_recording(PART_A));
+        }
+        while (g.inst->beat_in_bar() != 3) g.step();
+        g.inst->sampler_record(PART_A, !held_stop);
+        REQUIRE(g.inst->sampler_rec_held(PART_A));
+        // One second of fills without processing: the request stays held.
+        spkyled::Panel panel;
+        int duty[ffctl::NUM_LIGHTS];
+        int edges = 0, prev = -1, lit = 0;
+        for (int i = 0; i < 750; ++i) {
+            spkyled::fill(*g.inst, panel, 1.f / 750.f, 16, {}, duty);
+            const int d = duty[ffctl::REC_A_L];
+            CHECK((d == 15 || d == 0));
+            lit += d == 15;
+            if (prev >= 0 && d != prev) ++edges;
+            prev = d;
+        }
+        CHECK(edges >= 15);                           // 8 cycles in 1 s
+        CHECK(edges <= 16);
+        CHECK(std::abs(lit - 375) <= 10);             // even
     }
 }

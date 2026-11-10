@@ -15,6 +15,7 @@
 #include "init_patch.hpp"       // sampler.vcvm snapshot + non-param init state
 #include "form_song_migration.hpp"
 #include "link_migration.hpp"
+#include "sampler/rec_snap.h"         // kSnapMaxBeatFrames: the REC rings' size
 #include "control/bbd_edge_state.hpp"  // ENG->BBD edge detector (dependency-free, unit-tested)
 #include "control/song_rung_state.hpp"  // SONG rung tracker (dependency-free, unit-tested)
 #include "control/drift_settle_state.hpp"  // DRIFT left-stop edge detector (dependency-free, unit-tested)
@@ -346,6 +347,17 @@ struct Fireflow : Module {
     std::vector<spky::SampleBuffer::Frame> samplerMem[spky::PART_COUNT];
     spkyvcv::SamplerPartState smp[spky::PART_COUNT];
 
+    // REC on the bar (spec 2026-11-07-sampler-records-other-deck-on-the-bar
+    // §4.2): one ring per deck, the longest beat the snap acts on plus the
+    // writer's slack, frames at the engine rate. Always allocated (1.15 MB);
+    // whether REC snaps is the menu's "REC snaps to bar", patch state under
+    // the JSON key "recSnap", default off. The menu writes recSnap on the UI
+    // thread; process() hands it to the engine.
+    static constexpr size_t kRecRingFrames =
+        static_cast<size_t>(spky::kSnapMaxBeatFrames) + spky::SamplerEngine::kRingSlack;
+    std::vector<spky::SampleBuffer::Frame> recRing[spky::PART_COUNT];
+    std::atomic<bool> recSnap { false };
+
     // First-use factory sample (Task 8): flipping ENG to Sampler on an empty
     // part autoloads res/factory.wav so the deck sounds within one gesture.
     // factoryTried[p] stops a failed load or a deliberate Clear from
@@ -635,6 +647,11 @@ struct Fireflow : Module {
             fxmem.sampler_buf[p] = samplerMem[p].data();
         }
         fxmem.sampler_frames = frames;
+        for (int p = 0; p < spky::PART_COUNT; ++p) {
+            if (recRing[p].size() != kRecRingFrames) recRing[p].resize(kRecRingFrames);
+            fxmem.rec_ring[p] = recRing[p].data();
+        }
+        fxmem.rec_ring_frames = kRecRingFrames;
 
         // The song offset (spec 2026-10-18 root-and-wobl-knobs §2.1) latches
         // inside init() from the root the quantizer still holds -- init()
@@ -649,6 +666,7 @@ struct Fireflow : Module {
         inst.set_root(spky::PART_A, (int)std::round(params[ROOT_A].getValue()));
         inst.set_root(spky::PART_B, (int)std::round(params[ROOT_B].getValue()));
         inst.init(sr, fxmem);
+        inst.set_rec_snap(recSnap);
         // A new rate, a patch open or Initialize is a discontinuity for the
         // clock too: init() drops the period history, any held external tempo
         // and a pending reset, and the knob owns the tempo again (spec
@@ -794,6 +812,10 @@ struct Fireflow : Module {
         resetSeen |= lastClockOut.reset_lamp;
         if (resyncReq.exchange(false))
             inst.reset_transport();
+        // The menu's "REC snaps to bar", on the audio thread. The rings are
+        // always there, so the engine never refuses it and this fires once.
+        if (recSnap != inst.rec_snap())
+            inst.set_rec_snap(recSnap);
 
         if (ctrlDiv.process()) pushParams();
 
@@ -864,6 +886,7 @@ struct Fireflow : Module {
         json_t* root = json_object();
         json_object_set_new(root, "formSongVersion", json_integer(1));
         json_object_set_new(root, "linkVersion", json_integer(1));
+        json_object_set_new(root, "recSnap", json_boolean(recSnap));
 
         json_t* parts = json_array();
         for (int p = 0; p < spky::PART_COUNT; ++p) {
@@ -933,6 +956,10 @@ struct Fireflow : Module {
 
     void dataFromJson(json_t* root) override {
         if (!root) return;
+        {   // absent (an older patch) -> off
+            json_t* v = json_object_get(root, "recSnap");
+            recSnap = v && json_boolean_value(v);
+        }
         json_t* version = json_object_get(root, "formSongVersion");
         const bool modern = is_modern_form_song_version(
             version && json_is_integer(version),
@@ -1527,6 +1554,12 @@ static void appendFireflowMenu(Menu* menu, Fireflow* m) {
             m->params[t.depthId].setValue(ffctl::mod_clear_value(t));
         m->modClearedReq = true;
     }));
+    // REC on the bar (spec 2026-11-07-sampler-records-other-deck-on-the-bar):
+    // a REC press in the first beat after a bar line records from the line,
+    // one in the last beat waits for the next. Off by default in Rack.
+    menu->addChild(createBoolMenuItem("REC snaps to bar", "",
+        [m]() { return m->recSnap.load(); },
+        [m](bool on) { m->recSnap = on; }));
 
     // DRIVE_A/B retired (spec 2026-08-09 hw-control-reduction task 9): the
     // menu-only slider never reached the engine (its BBD drive target is a

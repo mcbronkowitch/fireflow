@@ -31,6 +31,11 @@ struct FxMem {
     // nullptr -> that deck's BBD engine runs silent.
     //
     float* bbd[PART_COUNT][2] = {};
+    // The REC snap's ring per part (spec 2026-11-07-sampler-records-other-
+    // deck-on-the-bar §4.2): the deck's last input frames, which the delayed
+    // writer records from. nullptr -> no ring, and the snap stays off.
+    SampleBuffer::Frame* rec_ring[PART_COUNT] = {};
+    size_t rec_ring_frames = 0;
 };
 
 static_assert(BbdEngine::kCells == bbd_tuning::kMaxStages / 2,
@@ -381,7 +386,12 @@ public:
     float deck_tap(int p, int ch) const { return _deck_tap[p][ch]; }
 
     // --- M2 synth voice API (spec "Instrument API") ---
-    void set_engine(int p, EngineId e)       { _parts[p].set_engine(e); }
+    void set_engine(int p, EngineId e) {
+        // Snap on: leaving SAMPLER stops the writer at once and drops what
+        // is held or pending (spec §4.2); the take ends D short of the change.
+        if (_snap && e != ENGINE_SAMPLER) _snap_leave(p);
+        _parts[p].set_engine(e);
+    }
     void set_voice_attack(int p, float n)    { _parts[p].set_voice_attack(n); }
     void set_voice_decay(int p, float n)     { _parts[p].set_voice_decay(n); }
     void set_voice_resonance(int p, float n) { _parts[p].set_voice_resonance(n); }
@@ -423,12 +433,33 @@ public:
 
     // --- M5 sampler API (spec "Instrument API") ---
     void sampler_record(int p, bool on) {
+        if (_snap) { _snap_record(p, on); return; }
         _parts[p].sampler().set_recording(on);
         // Monitoring follows REC automatically, in one place, so both hosts
         // get it right (plan: deliberate deviation 3).
         _parts[p].sampler().set_monitor(on);
     }
-    void  sampler_clear(int p)              { _parts[p].sampler().clear(); }
+    void  sampler_clear(int p)              { _snap_drop(p); _parts[p].sampler().clear(); }
+
+    // --- REC on the bar (spec 2026-11-07-sampler-records-other-deck-on-the-
+    // bar §4.2). Off by default; refused (stays off) unless both decks have a
+    // ring (FxMem::rec_ring). On, a REC press goes through rec_snap.h: the
+    // deck's writer runs one beat behind live (D, fixed while it is busy),
+    // and the press becomes a target frame -- the last bar line when it came
+    // late, the next one when it came early (held until the line), the press
+    // itself otherwise or at slow settings. The monitor follows the press,
+    // live.
+    void set_rec_snap(bool on);
+    bool rec_snap() const { return _snap; }
+    // What the control law compares REC against. Snap off: is_recording(),
+    // as before. Snap on: the last accepted press -- true from a start press
+    // (held or not) to the stop press, so a held request is not pushed again
+    // and the fade-out's re-push is no press.
+    bool sampler_rec_requested(int p) const {
+        return _snap ? _snap_req[p] : _parts[p].sampler().is_recording();
+    }
+    // A start or a stop waits for the next bar line (the REC lamp's blink).
+    bool sampler_rec_held(int p) const { return _held_start[p] || _held_stop[p]; }
     float sampler_fill(int p) const         { return _parts[p].sampler().buffer_fill(); }
     bool  sampler_empty(int p) const        { return _parts[p].sampler().is_empty(); }
     bool  sampler_is_recording(int p) const { return _parts[p].sampler().is_recording(); }
@@ -486,6 +517,20 @@ public:
         return _parts[p].sampler().sample_data();
     }
     size_t sampler_rec_size(int p) const { return _parts[p].sampler().rec_size(); }
+    // Deck p's content generation (SamplerEngine::content_gen()).
+    uint32_t sampler_content_gen(int p) const { return _parts[p].sampler().content_gen(); }
+    // Saved-take restore, audio-callback side (SamplerEngine::begin_load()).
+    void sampler_begin_load(int p)       { _snap_drop(p); _parts[p].sampler().begin_load(); }
+    bool sampler_loading(int p) const    { return _parts[p].sampler().loading(); }
+    bool sampler_restore(int p, size_t frames, const uint32_t* mf, const uint8_t* ms, int n) {
+        return _parts[p].sampler().restore(frames, mf, ms, n);
+    }
+    void sampler_abort_load(int p)       { _parts[p].sampler().abort_load(); }
+    SampleBuffer::Frame* sampler_buffer(int p) { return _parts[p].sampler().raw_buffer(); }
+    size_t sampler_capacity(int p) const { return _parts[p].sampler().capacity(); }
+    int  sampler_export_markers(int p, uint32_t* f, uint8_t* s, int max) const {
+        return _parts[p].sampler().export_markers(f, s, max);
+    }
 
     float lane_output(int p, int s)  const { return _parts[p].lane_output(s); }
     float lane_output_stepped(int p, int s) const {
@@ -497,6 +542,32 @@ public:
     // Transport beat in [0, 1). The TEMPO lamp's metronome pulse reads this;
     // it already carries PACE (the transport ticks at _bpm * _pace).
     float beat_phase() const { return _center.transport().beat_phase(); }
+
+    // --- the bar clock (spec 2026-11-07-sampler-records-other-deck-on-the-bar
+    // §4.2). The engine has no bar of its own; a bar here is kBarBeats
+    // transport beats, the RATE ladder's "2 bars = 8 steps" reading.
+    static constexpr int kBarBeats = 4;
+    // Samples processed since init(): the frame index the next sample gets.
+    uint64_t frame_now() const      { return _frame; }
+    // The frame of the last bar line: where the transport crossed a multiple
+    // of kBarBeats, interpolated inside the control block. The value a tick
+    // leaves is read as standing at that tick's frame, so a line crossed by
+    // the tick at frame f lies in (f - 96, f]. RST and RESET log their own
+    // frame (beat 0 is a downbeat); an external clock edge that snaps the
+    // count backwards logs nothing, and the line it re-crosses is not logged
+    // twice. Always <= frame_now().
+    uint64_t last_bar_frame() const { return _last_bar; }
+    // Counts the lines logged; a change means a new last_bar_frame().
+    uint32_t bar_seq() const        { return _bar_seq; }
+    // floor(beats) mod kBarBeats, 0 = beat 1 -- for the TEMPO lamp.
+    int beat_in_bar() const {
+        const double b = std::floor(_center.transport().beats());
+        const int k = static_cast<int>(std::fmod(b, double(kBarBeats)));
+        return k < 0 ? k + kBarBeats : k;
+    }
+    // One transport beat in frames: sample rate * 60 / (bpm * pace).
+    float frames_per_beat() const { return _sr * 60.f / (_bpm * _pace); }
+
     float target_value(int p, int s) const { return _parts[p].target_value(s); }
     bool  lane_fired(int p, int s)   const { return _parts[p].lane_fired(s); }
     bool  gate(int p)  const { return _parts[p].gate(); }
@@ -575,17 +646,18 @@ public:
     // zone exists so 12 o'clock on a real pot is reliably off.
     void set_pull(float p) { _pull = clampf(p, -1.f, 1.f); }
     static constexpr float kPullDead = 0.03f;
-    void clock_pulse()     { _center.clock_pulse(_pace); }
+    void clock_pulse()     { _center.clock_pulse(_pace); _bar_after_pulse(); }
     // The pulse control::ClockOut marks counted: the clock starting after a
     // RESET at its first edge lands one pace step after that restart instead
     // of rounding (Transport::clock_pulse_counted, spec 2026-10-19 §10).
-    void clock_pulse_counted() { _center.clock_pulse_counted(_pace); }
+    void clock_pulse_counted() { _center.clock_pulse_counted(_pace); _bar_after_pulse(); }
     // RST = bar resync: zero the downbeat, drop the grid offsets a live STEPS
     // turn left behind, and restart the loops at phase 0 — everything lands on
     // the fresh bar start together (no servo drag).
     void reset_transport() {
         _center.reset_transport();
         for (auto& p : _parts) p.mod().reset_phases();
+        _bar_after_reset(_frame);
     }
     // RESET at the jack (spec 2026-10-19 clock-and-reset-jacks §2.2): restart
     // the music, not only the bar. Returns false and changes nothing when no
@@ -607,6 +679,7 @@ public:
         for (auto& p : _parts) p.mod().reset_phases(age);
         for (auto& p : _parts)
             if (p.mod().step_mode()) p.mod().restart_song();
+        _bar_after_reset(_frame - (age < _frame ? age : _frame));
         return true;
     }
     void spot()   { _center.spot(_parts[PART_A].mod(),   _parts[PART_B].mod()); }
@@ -758,6 +831,34 @@ private:
                                // (boots true: the FLOW drone predates any fire)
     float _pull = 0.f;         // -1..+1 chord-gravity knob (dead zone at noon)
     float _sr = 48000.f;
+    // The bar clock (see last_bar_frame()).
+    uint64_t _frame    = 0;
+    uint64_t _last_bar = 0;
+    int64_t  _bar_max  = 0;    // highest bar index logged (floor(beats / kBarBeats))
+    uint32_t _bar_seq  = 0;
+    void _bar_log(uint64_t frame, int64_t idx) {
+        _last_bar = frame; _bar_max = idx; ++_bar_seq;
+        if (_snap) _snap_on_line();
+    }
+    // REC on the bar (set_rec_snap()).
+    bool _snap = false;
+    bool _snap_req[PART_COUNT]   = { false, false };
+    bool _held_start[PART_COUNT] = { false, false };
+    bool _held_stop[PART_COUNT]  = { false, false };
+    void _snap_record(int p, bool on);
+    void _snap_on_line();                 // a bar line was logged: release what is held
+    void _snap_drop(int p);               // clear / load: nothing held, nothing pending
+    void _snap_leave(int p);              // engine change: and the buffer stops now
+    // An Instrument frame (the bar clock's) in deck p's sampler frames.
+    uint64_t _to_deck_frame(int p, uint64_t f) const;
+    int64_t _bar_index() const {
+        return static_cast<int64_t>(std::floor(_center.transport().beats() / double(kBarBeats)));
+    }
+    // After a clock edge: a forward snap across a line logs it here.
+    void _bar_after_pulse() { const int64_t k = _bar_index(); if (k > _bar_max) _bar_log(_frame, k); }
+    // After RST / RESET: the jump's frame is a line, whatever the count was.
+    void _bar_after_reset(uint64_t frame) { _bar_log(frame, _bar_index()); }
+    void _bar_tick(double b0, double b1);
     // Lamp-observer state (see deck_out_level() and friends). Written in
     // process() / set_scale(); read by nothing on the audio path.
     float    _deck_level[PART_COUNT] = { 0.f, 0.f };

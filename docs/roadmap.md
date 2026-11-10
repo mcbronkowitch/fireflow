@@ -37,7 +37,10 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-11-02 (**the SD card on Rev A is measured** —
+- **Last updated:** 2026-11-07 (**a SAMPLER deck records the other deck again,
+  and REC snaps to the bar** — built on `feat/rec-snap`, checked on Rev A by
+  ear, not merged; see the M6 entry of that date and
+  `docs/hardware/rec-snap-measured.md`. 2026-11-02: **the SD card on Rev A is measured** —
   bring-up and the use-case tests merged and pushed, `9bb67b2b`; the C_SENSE0
   and C_SD2 solder jobs are deferred to the end of bring-up; see the M6
   entry of that date and `docs/hardware/sd-use-cases-measured.md` §18.
@@ -4207,6 +4210,29 @@ LEDs on the 595 — waits for the control PCB's pin map, which should give one
 spare channel to AGND and one to the rail (spec §8).
 *(Superseded: part 2 was built on the Rev A pin map, entries 2026-10-02
 onward, and the Rev A bring-up has run since 2026-10-24.)*
+
+**2026-11-07 — REC on the bar, and a SAMPLER deck records the other deck again ✅ built, checked on Rev A, not merged.**
+Spec `docs/superpowers/specs/2026-11-07-sampler-records-other-deck-on-the-bar-design.md`,
+plan of the same name; branch `feat/rec-snap`, cut from
+`feat/sampler-takes-sd` (not merged either). Board record
+`docs/hardware/rec-snap-measured.md`.
+- **The route.** Since `2f78f17a` (2026-10-27) a SAMPLER deck on the board
+  recorded the audio input only; the shell now turns the deck route on for a
+  SAMPLER deck every tick. The monitor plays the audio input alone, so the
+  other deck is not heard twice.
+- **The snap.** A bar is 4 transport beats. A REC press in the first beat
+  after a line records from that line (the writer runs one beat behind the
+  input, from a ring per deck); a press in the last beat waits for the next
+  line, REC blinking at 8 Hz; anything else acts at the press. Off at a beat
+  over 1.5 s. TEMPO lights beat 1 at full, the others at 0.35.
+- **Switches.** Firmware `SHELL_REC_SNAP` (default 1; the rings cost 1.15 MB
+  of SDRAM); VCV menu "REC snaps to bar" (default off); the render host off.
+- **Measured.** `cb_max` 770 062 with the snap against 763 987 without, hands
+  off (0.63 % of a block, gate 2 %); 817 816 over about 29 min while
+  Bastian played it.
+  Everything on the by-hand list passed by ear.
+- **Open:** an external source at the audio input through the new record
+  path (item 6, L5). The takes image is down to 5 084 B of SRAM_EXEC.
 
 **2026-11-02 — SD card on Rev A: bring-up and use-case tests ✅ measured, merged.**
 Specs `docs/superpowers/specs/2026-10-31-sd-bring-up-design.md` and

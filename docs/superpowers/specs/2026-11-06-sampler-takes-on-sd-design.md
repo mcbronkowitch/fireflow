@@ -25,7 +25,11 @@ Goals
 - Each deck's take is saved to the card without a button press and is in the
   buffer again after a power cycle.
 - The restore is exact: the same frames, the same slice markers and
-  strengths, the same overdub behaviour (§3.2 P2, P4).
+  strengths, the same overdub behaviour (§3.2 P2, P4). One measured
+  exception: a take that was never overdubbed still has the feedback switch's
+  4 ms rise ahead of it, a restored one does not (`SampleBuffer::settle_loop`),
+  so the first overdub after such a take can differ in its first
+  `kRecordFade` frames, under its own fade-in (Task 3's test pins this).
 - A power cut at any moment leaves the previous take loadable.
 - The pots stay playable while a take saves (paced writes, §4.3).
 - A take can be cleared from the panel, and the clear survives a restart too

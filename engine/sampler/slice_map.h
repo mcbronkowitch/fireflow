@@ -30,6 +30,15 @@ public:
     // landed in the buffer (post overdub mix).
     void on_write(size_t frame, float l, float r);
 
+    // Persistence (spec 2026-11-06-sampler-takes-on-sd §4.1): a rescan does
+    // not reproduce the live map's strengths (spec P2), so a saved take
+    // carries the markers themselves. export copies at most `max` markers
+    // and returns how many. import replaces the map and leaves the detector
+    // as scan() does; it rejects (clears the map, returns false) unless the
+    // frames are strictly ascending, each < content, and n <= kMax.
+    int  export_markers(uint32_t* frame, uint8_t* strength, int max) const;
+    bool import_markers(const uint32_t* frame, const uint8_t* strength, int n, size_t content);
+
     int count() const { return _n; }
     // Last marker with start <= frame. 0 when frame precedes every marker
     // (the material before the first transient belongs to slice 0), -1 only

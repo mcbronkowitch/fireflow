@@ -124,12 +124,99 @@ public:
     // --- material ---
     void   set_recording(bool on);
     bool   is_recording() const { return _buf.is_recording(); }
+    bool   is_writing() const   { return _buf.is_writing(); }   // fade-in or sustain
+    // The target of a pending start, if one is pending (rec_at()).
+    bool   pending_start(uint64_t* at) const {
+        for (int i = 0; i < _npend; ++i)
+            if (_pend[i].on) { if (at) *at = _pend[i].at; return true; }
+        return false;
+    }
     float  buffer_fill() const  { return _buf.fill(); }
     bool   is_empty() const     { return _buf.is_empty(); }
     size_t rec_size() const     { return _buf.rec_size(); }
-    void   clear()              { _kill_all(); _buf.clear(); _slices.clear(); }
+    // Also drops any start or stop the delayed writer still has pending.
+    void   clear()              { _kill_all(); _buf.clear(); _slices.clear(); ++_gen_own; _npend = 0; }
+
+    // --- The ring and the delayed writer (spec 2026-11-07-sampler-records-
+    // other-deck-on-the-bar §4.2). With a ring and a delay D > 0 the buffer
+    // is written from the ring, D frames behind live, and a start or stop
+    // takes effect on the sample where the writer's index reaches its target
+    // frame: a target up to D frames in the past is still ahead of the
+    // writer. The take is built in order, exactly as a live writer would
+    // have built it from the same input; the fades, the overdub feedback
+    // and the slice detector are the ones of today. No ring, or D == 0, is
+    // today's record path. The monitor never goes through the ring.
+    static constexpr size_t kRingSlack = 128;   // the ring holds D + this
+    void     set_ring(SampleBuffer::Frame* mem, size_t frames) {
+        _ring = mem; _ring_frames = mem ? frames : 0;
+        _rw = 0; _ring_since = _now; _delay = 0; _npend = 0;
+    }
+    bool     has_ring() const      { return _ring != nullptr; }
+    // This deck's sample counter: advances once per process_in().
+    uint64_t frame_now() const     { return _now; }
+    // Frames the writer runs behind live. Refused (false, D unchanged) while
+    // the writer is busy, without a ring, or past the ring's size.
+    bool     set_delay(uint32_t d) {
+        if (writer_busy()) return false;
+        if (d != 0 && (!_ring || size_t(d) + kRingSlack > _ring_frames)) return false;
+        _delay = d;
+        return true;
+    }
+    uint32_t delay() const         { return _delay; }
+    // The writer's index: the frame it writes on the next process_in().
+    uint64_t writer_frame() const  { return _now >= _delay ? _now - _delay : 0; }
+    // Start (on) or stop the buffer when the writer reaches `frame`. A frame
+    // the writer has passed acts on its next sample. Two may be pending (a
+    // start and its stop); a third replaces the later one. A start is
+    // refused while a take loads, as set_recording(true) is.
+    void     rec_at(uint64_t frame, bool on);
+    void     rec_cancel_pending()  { _npend = 0; }
+    int      rec_pending() const   { return _npend; }
+    bool     writer_busy() const   { return _buf.is_recording() || _npend != 0; }
+    // The ring's history starts over: called when the deck lands on SAMPLER.
+    void     ring_reset()          { _ring_since = _now; }
+    // The content generation (spec 2026-11-06-sampler-takes-on-sd §4.3): it
+    // changes when a take or overdub starts, when its fade-out ends, on
+    // clear(), load_sample() and a restore -- and on nothing else. Equal
+    // readings with is_recording() false in between mean the frames and the
+    // slice map did not change. init() does not move it.
+    uint32_t content_gen() const { return _buf.gen() + _gen_own; }
     void   set_monitor(bool on) { _monitor = on; }
+    // The monitor plays what process_in() received, unless this call, made
+    // after process_in() for the same sample, hands it something else. Part
+    // uses it while the deck route is on: the buffer records tanh(in + other
+    // deck), the monitor plays the raw audio input, so the other deck is not
+    // heard twice (spec 2026-11-07-sampler-records-other-deck-on-the-bar §4.1).
+    void   set_monitor_in(float l, float r) { _mon_l = l; _mon_r = r; }
+    // Observer only, for tests: the record input process_in() last received.
+    // Since the monitor no longer has to carry it, the deck bus tests read
+    // the record path here (tests/test_deck_bus.cpp).
+    float  rec_in_l() const { return _in_l; }
+    float  rec_in_r() const { return _in_r; }
     void   load_sample(const float* l, const float* r, size_t frames);
+
+    // --- Restoring a saved take (spec 2026-11-06-sampler-takes-on-sd §4.4,
+    // §4.7). Callback side: the firmware's foreground writes the frames into
+    // raw_buffer() between begin_load() and restore() and never calls these
+    // itself (a mailbox hands them to the audio callback).
+    // begin_load: grains killed, the deck emptied (clear(), O(1)), REC locked
+    //   out -- set_recording(true) is ignored until restore() or abort_load(),
+    //   so the law's every-tick REC push starts the take once the load ends
+    //   if REC is still latched.
+    // restore: declares [0, frames) of the buffer as the take, imports the
+    //   markers, moves the generation, unlocks REC. Rejected markers leave an
+    //   empty deck and return false. frames == 0 is an empty take.
+    // abort_load: an empty deck, REC unlocked.
+    void   begin_load();
+    bool   loading() const { return _loading; }
+    bool   restore(size_t frames, const uint32_t* marker_frame,
+                   const uint8_t* marker_strength, int n_markers);
+    void   abort_load();
+    SampleBuffer::Frame* raw_buffer() { return _buf.raw(); }
+    size_t capacity() const { return _buf.capacity(); }
+    int    export_markers(uint32_t* frame, uint8_t* strength, int max) const {
+        return _slices.export_markers(frame, strength, max);
+    }
 
     // Read the recorded content back out: Save sample..., the patch-storage
     // autosave, and the host's sample-rate snapshot all need it. This hands
@@ -138,14 +225,13 @@ public:
     // when no memory was injected.
     //
     // Note for callers carrying content across an init(): copy OUT first.
-    // init() ends in clear(), but clear() only memsets the buffer when it
-    // held content going in (_size != 0) -- see SampleBuffer::clear()'s I-3
-    // fast path. A buffer that never held content (_size == 0, e.g. memory
-    // a host just injected and has not written to yet) is NOT zeroed by
-    // init()/clear(). Hosts must inject already-zeroed memory: this matters
-    // for any host that carves buffers out of memory the platform does not
-    // zero at startup (e.g. Daisy SDRAM), where the overdub read-before-
-    // write path would otherwise read uninitialised garbage.
+    // init() ends in clear(), which empties the buffer (rec_size 0) without
+    // touching the frames. Injected memory need not be zeroed: the buffer's
+    // written-frame watermark (SampleBuffer::written(), spec
+    // 2026-11-06-sampler-takes-on-sd §4.7) keeps the overdub read away from
+    // anything a take has not written, so Daisy SDRAM's power-up garbage is
+    // unreachable. What lies past rec_size() is either that garbage or an
+    // older take: never read it.
     const SampleBuffer::Frame* sample_data() const { return _buf.raw(); }
 
     // --- edit layer ---
@@ -360,6 +446,8 @@ private:
 
     SampleBuffer _buf;
     SliceMap _slices;
+    uint32_t _gen_own = 0;   // content_gen()'s own bumps: clear, load, restore
+    bool     _loading = false;   // begin_load() .. restore() / abort_load()
     SampleBuffer::Frame* _mem = nullptr;
     size_t _mem_frames = 0;
 
@@ -434,7 +522,19 @@ private:
     float _feel = 0.f;                // FEEL: accent depth, 0..1
     float _dec_ref[kGrains] = {};    // dec samples per slot, for gate-fall release
 
-    float _in_l = 0.f, _in_r = 0.f;
+    float _in_l = 0.f, _in_r = 0.f;     // the record input (process_in)
+    float _mon_l = 0.f, _mon_r = 0.f;   // the monitor's input (process_in, set_monitor_in)
+
+    // The ring and the delayed writer (set_ring()).
+    struct Pend { uint64_t at; bool on; };
+    SampleBuffer::Frame* _ring = nullptr;
+    size_t   _ring_frames = 0;
+    size_t   _rw          = 0;   // the ring's write index, == _now mod _ring_frames
+    uint64_t _now         = 0;
+    uint64_t _ring_since  = 0;   // ring frames before this one read as silence
+    uint32_t _delay       = 0;
+    Pend     _pend[2]     = {};
+    int      _npend       = 0;
 
     bool _flow    = false;
     bool _hold    = false;

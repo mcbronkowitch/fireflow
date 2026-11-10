@@ -200,6 +200,16 @@ by ear are a different list: [`docs/by-ear-decisions.md`](by-ear-decisions.md).
 
 ## Engines & parts
 
+- **With the REC snap on, the sampler writes one beat behind the input**
+  (spec 2026-11-07-sampler-records-other-deck-on-the-bar §4.2). A stop press
+  in mid-bar leaves `sampler_is_recording()` true for one more beat, and a
+  start press makes it true only a beat later. Ask
+  `sampler_rec_requested()` for "did the player ask for REC" and
+  `sampler_rec_held()` for "waiting for the bar line"; the control law
+  compares REC against the first, never against `is_recording()`, or it
+  would re-press every tick. Snap off is `D = 0`: no ring read, REC acts at
+  the press, every render unchanged -- and the default in Rack (menu "REC
+  snaps to bar"); the firmware has it on (`SHELL_REC_SNAP`, default 1).
 - **`apply_range` is unipolar/affine for range ≤ 0.5**: `r·v+r`, so output
   only rises from the base. That is the law of the texture/FX targets, where a
   DC lift is lost when `range` (the MOD·RANGE product) drops below 0.5 — if a

@@ -12,6 +12,7 @@
 #include <cstdint>
 
 #include "hw/board.h"
+#include "sd_hold.h"
 
 namespace shell {
 
@@ -59,22 +60,20 @@ void sd_duplex_block(const float* l, const float* r, size_t n);
 // dropped, so the readings that stay can be measured against the noise floor
 // (fault R5: the card makes every pot noisy while it transfers).
 //
-// Set by the foreground right before every f_read / f_write, and again right
-// after it returns; cleared by the callback when it takes it.
-extern volatile bool g_sd_seen;
-
+// g_sd_seen and sd_hold_block() are declared in sd_hold.h (shared with the
+// take image); this image defines them in sd_probe.cpp. g_sd_seen is set by
+// the foreground right before every f_read / f_write, and again right after
+// it returns; cleared by the callback when it takes it.
+//
 // The current phase's tail: blocks after a transfer whose readings are also
 // dropped. 0 outside the burst mode and in an idle phase (no transfer starts
 // there, and a countdown that began earlier finishes on the tail it was
 // started with -- SdHold keeps it).
 uint8_t sd_hold_tail();
 
-// The callback's side, once per block, before the step's readings are looked
-// at: true means drop this block's pot readings. Counts the dropped blocks and
+// sd_hold_block(), this image's definition: counts the dropped blocks and
 // the longest run of them for the pass line. Always false when nothing sets
 // g_sd_seen (every mode but the burst, bank, buffer, patch, duplex and,
-// with kTailBurst, the tail modes), so
-// the other modes read every block.
-bool sd_hold_block();
+// with kTailBurst, the tail modes), so the other modes read every block.
 
 } // namespace shell

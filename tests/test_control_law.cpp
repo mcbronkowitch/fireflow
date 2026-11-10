@@ -223,6 +223,22 @@ TEST_CASE("law: BBD edge fires once per genuine entry, never on restore") {
     CHECK_FALSE(r.tick().bbd_part[0]);   // and off once the deck leaves
 }
 
+TEST_CASE("law: sampler_part follows the running engine") {
+    Rig r;
+    r.k[ENGINE_A] = 5.f;                         // knob slot 5 = SAMPLER (control_law.h)
+    control::Events ev = r.tick();
+    CHECK(ev.sampler_part[0]);
+    CHECK_FALSE(ev.sampler_part[1]);
+    CHECK_FALSE(ev.bbd_part[0]);
+    // The knob asks for SYNTH but the sampler still runs (the swap's fade):
+    // the level follows the running engine, not the knob.
+    r.inst.deferEngine = true;
+    r.k[ENGINE_A] = 0.f;
+    CHECK(r.tick().sampler_part[0]);
+    r.inst.land_engines();
+    CHECK_FALSE(r.tick().sampler_part[0]);
+}
+
 TEST_CASE("law: SONG rung change re-rolls, the first tick after restore does not") {
     Rig r;
     // A non-init rung on the very first tick: the seed must adopt it. (At the

@@ -1,5 +1,7 @@
 #include <doctest/doctest.h>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <limits>
 #include <utility>
 #include <vector>
@@ -296,6 +298,32 @@ TEST_CASE("sampler: monitoring passes the dry input at unity") {
     // hide the monitor path behind -- the property the old empty-buffer rig
     // could not exercise.
     CHECK(cloud_heard);
+}
+
+TEST_CASE("sampler: set_monitor_in replaces the monitored input, not the recorded one") {
+    // Spec 2026-11-07-sampler-records-other-deck-on-the-bar §4.1: with the
+    // deck route on, Part records tanh(in + other deck) but monitors the raw
+    // input. Same two-rig shape as the test above: identical clouds, so the
+    // on/off difference is the monitor term alone, and it must be the value
+    // handed to set_monitor_in(), not the one handed to process_in().
+    Rig on(24000, 909), off(24000, 909);
+    on.e.set_flow(true);
+    off.e.set_flow(true);
+    on.e.set_monitor(true);
+    off.e.set_monitor(false);
+    on.render(4800);
+    off.render(4800);
+    for (int i = 0; i < 2000; ++i) {
+        float al = 0.f, ar = 0.f, bl = 0.f, br = 0.f;
+        on.e.process_in(0.37f, -0.21f);
+        on.e.set_monitor_in(0.10f, 0.05f);
+        on.e.process(al, ar);
+        off.e.process_in(0.37f, -0.21f);
+        off.e.set_monitor_in(0.10f, 0.05f);
+        off.e.process(bl, br);
+        CHECK(al == doctest::Approx(bl + 0.10f).epsilon(0.001));
+        CHECK(ar == doctest::Approx(br + 0.05f).epsilon(0.001));
+    }
 }
 
 TEST_CASE("sampler: CHOKE hold fades the cloud out and re-arms on release") {
@@ -1557,10 +1585,10 @@ TEST_CASE("sample_data exposes the loaded content at rec_size length") {
 
 TEST_CASE("a host can carry content across a re-init by copying it out") {
     // This is exactly what the VCV host does on a sample-rate change, and the
-    // reason sample_data() exists. init() memsets the injected buffer
-    // (SampleBuffer::clear), so the snapshot MUST be taken into separate
-    // storage first -- copying out of the buffer after init() would read
-    // zeroes, and that mistake is what this case is here to catch.
+    // reason sample_data() exists. init() empties the buffer (rec_size 0,
+    // watermark 0), so the snapshot MUST be taken into separate storage first
+    // -- after init() there is no valid length left to copy out, and that
+    // mistake is what this case is here to catch.
     std::vector<SampleBuffer::Frame> mem(4096);
     SamplerEngine eng;
     eng.set_memory(mem.data(), mem.size());
@@ -1576,8 +1604,7 @@ TEST_CASE("a host can carry content across a re-init by copying it out") {
                                      sr[i] = eng.sample_data()[i].r; }
 
     eng.init(44100.f);
-    CHECK(eng.rec_size() == 0);
-    CHECK(eng.sample_data()[10].l == doctest::Approx(0.f));  // init DID wipe it
+    CHECK(eng.rec_size() == 0);   // init DID empty it
 
     eng.load_sample(sl.data(), sr.data(), n);
     CHECK(eng.rec_size() == 800);
@@ -1586,36 +1613,40 @@ TEST_CASE("a host can carry content across a re-init by copying it out") {
     CHECK(eng.sample_data()[799].r == doctest::Approx(-0.75f));
 }
 
-TEST_CASE("clear() erases stale content, not just rec_size") {
-    // I-3 fix: SampleBuffer::clear() now skips its memset when _size == 0
-    // going in, to avoid an unconditional ~16 MB stall on a buffer that is
-    // already empty (see the factory-drone autoload in host/vcv, which hits
-    // exactly that case on the audio thread). This pins the property that
-    // must NOT regress: when the buffer HAD content (_size != 0 going into
-    // clear()), the memset still runs and the stale frames are actually
-    // erased -- not merely hidden behind rec_size() reporting 0.
-    // sample_data() returns the raw buffer pointer regardless of rec_size(),
-    // so it can see past the "valid" length exactly the way a naive host bug
-    // (reading past rec_size after a load) would. A clear() that skipped the
-    // memset unconditionally (not just when _size == 0) would leave the old
-    // 0.5f/-0.75f content sitting here and fail this loop.
-    std::vector<SampleBuffer::Frame> mem(4096);
-    SamplerEngine eng;
+TEST_CASE("clear() makes stale content unreachable, not just rec_size 0") {
+    // Since the written-frame watermark (spec 2026-11-06-sampler-takes-on-sd
+    // §4.7) clear() no longer memsets: the old frames stay in memory and the
+    // watermark makes them unreachable. The property that must NOT regress is
+    // the one the old memset bought: a fresh take after a clear sounds as it
+    // would on zeroed memory. A fresh take adds onto the old frame (feedback
+    // is 1 until the loop is cut), so a clear that only reset rec_size would
+    // leave the 0.5 / -0.75 load in this take and fail the comparison.
+    auto fresh_take = [](SamplerEngine& e) {
+        e.set_recording(true);
+        for (int i = 0; i < 600; ++i) e.process_in(0.1f, 0.2f);
+        e.set_recording(false);
+        for (size_t i = 0; i < sampler_cfg::kRecordFade + 2; ++i) e.process_in(0.1f, 0.2f);
+    };
+    std::vector<SampleBuffer::Frame> mem(4096), ref_mem(4096);
+    SamplerEngine eng, ref;
     eng.set_memory(mem.data(), mem.size());
-    eng.set_seed(1);
-    eng.init(48000.f);
+    ref.set_memory(ref_mem.data(), ref_mem.size());
+    eng.set_seed(1); ref.set_seed(1);
+    eng.init(48000.f); ref.init(48000.f);
 
     std::vector<float> l(800, 0.5f), r(800, -0.75f);
     eng.load_sample(l.data(), r.data(), 800);
     REQUIRE(eng.rec_size() == 800);
-    REQUIRE(eng.sample_data()[400].l == doctest::Approx(0.5f));
-    REQUIRE(eng.sample_data()[400].r == doctest::Approx(-0.75f));
 
     eng.clear();
     CHECK(eng.rec_size() == 0);
-    for (size_t i = 0; i < 800; ++i) {
-        CHECK(eng.sample_data()[i].l == doctest::Approx(0.f));
-        CHECK(eng.sample_data()[i].r == doctest::Approx(0.f));
+    fresh_take(eng);
+    fresh_take(ref);
+    REQUIRE(eng.rec_size() == ref.rec_size());
+    REQUIRE(eng.rec_size() > 500);
+    for (size_t i = 0; i < eng.rec_size(); ++i) {
+        CHECK(eng.sample_data()[i].l == ref.sample_data()[i].l);
+        CHECK(eng.sample_data()[i].r == ref.sample_data()[i].r);
     }
 }
 
@@ -3488,3 +3519,364 @@ TEST_CASE("sampler: the SCAN curve is linear below the knee") {
     CHECK(test_scan_rate(0.5f) > 0.5f);
 }
 
+
+// --- Content generation (spec 2026-11-06-sampler-takes-on-sd §4.3) ---
+namespace {
+struct GenRig {
+    std::vector<SampleBuffer::Frame> mem = std::vector<SampleBuffer::Frame>(48000);
+    SamplerEngine eng;
+    GenRig() { eng.set_memory(mem.data(), mem.size()); eng.set_seed(7); eng.init(48000.f); }
+};
+}  // namespace
+
+TEST_CASE("gen: take start and end move it, nothing else does") {
+    GenRig r;
+    const uint32_t g0 = r.eng.content_gen();
+    r.eng.set_recording(true);
+    CHECK(r.eng.content_gen() == g0 + 1);           // leaves idle
+    for (int i = 0; i < 4800; ++i) r.eng.process_in(0.3f, -0.3f);
+    CHECK(r.eng.content_gen() == g0 + 1);           // writing does not count
+    r.eng.set_recording(false);
+    int steps = 0;
+    while (r.eng.is_recording() && steps < 10000) {
+        CHECK(r.eng.content_gen() == g0 + 1);       // still fading out
+        r.eng.process_in(0.3f, -0.3f);
+        ++steps;
+    }
+    REQUIRE_FALSE(r.eng.is_recording());
+    CHECK(r.eng.content_gen() == g0 + 2);           // the sample idle was reached
+
+    // Idle traffic, a feedback and a SCAN change: nothing.
+    r.eng.set_feedback(0.3f);
+    r.eng.set_scan(0.5f);
+    for (int i = 0; i < 480000; ++i) r.eng.process_in(0.5f, 0.5f);
+    CHECK(r.eng.content_gen() == g0 + 2);
+}
+
+TEST_CASE("gen: clear and load_sample move it; init does not") {
+    GenRig r;
+    const uint32_t g0 = r.eng.content_gen();
+    std::vector<float> l(500, 0.2f);
+    r.eng.load_sample(l.data(), l.data(), 500);
+    CHECK(r.eng.content_gen() == g0 + 1);
+    r.eng.clear();
+    CHECK(r.eng.content_gen() == g0 + 2);
+    r.eng.init(48000.f);
+    CHECK(r.eng.content_gen() == g0 + 2);
+}
+
+// --- Restoring a saved take (spec 2026-11-06-sampler-takes-on-sd §4.4, §4.7) ---
+namespace {
+constexpr size_t kRsCap = 240000;   // 5 s
+
+// Spec P2's material: decaying noise bursts every `period` frames, offset
+// `off`, amplitude cycling 0.3..1.0, from an LCG.
+struct Bursts {
+    uint32_t s;
+    size_t period, off;
+    float next(size_t i) {
+        s = s * 1664525u + 1013904223u;
+        const float n = float(s >> 8) * (2.f / 16777216.f) - 1.f;
+        const size_t ph = (i + period - off % period) % period;
+        const float env = std::exp(-float(ph) / (0.02f * 48000.f));
+        const float amp = 0.3f + 0.7f * float((i / period) % 5) / 4.f;
+        return n * env * amp;
+    }
+};
+
+struct RsRig {
+    std::vector<SampleBuffer::Frame> mem;
+    SamplerEngine eng;
+    explicit RsRig(bool dirty = false) : mem(kRsCap) {
+        if (dirty) {
+            uint32_t s = 0x2545F491u;
+            for (auto& f : mem) {
+                s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+                f.l = float(s >> 8) / 8388608.f - 1.f;
+                f.r = -f.l;
+            }
+        }
+        eng.set_memory(mem.data(), mem.size());
+        eng.set_seed(11);
+        eng.init(48000.f);
+        eng.set_feedback(sampler_cfg::kDefaultFeedback);
+    }
+    void drain() { for (int k = 0; k < 4000 && eng.is_recording(); ++k) eng.process_in(0.f, 0.f); }
+    // A 4 s take of bursts every 12 000 frames.
+    void take() {
+        Bursts b{0x9E3779B9u, 12000, 0};
+        eng.set_recording(true);
+        for (size_t i = 0; i < 192000; ++i) { const float v = b.next(i); eng.process_in(v, -v); }
+        eng.set_recording(false);
+        drain();
+    }
+    // One overdub pass over the locked loop, bursts offset by 6 000 frames.
+    void overdub(uint32_t seed) {
+        Bursts b{seed, 12000, 6000};
+        const size_t n = eng.rec_size();
+        eng.set_recording(true);
+        for (size_t i = 0; i < n; ++i) { const float v = b.next(i); eng.process_in(v, v * 0.5f); }
+        eng.set_recording(false);
+        drain();
+    }
+    // A short fresh take of a constant, for the "is the memory clean" checks.
+    void fresh() {
+        eng.set_recording(true);
+        for (int i = 0; i < 3000; ++i) eng.process_in(0.1f, 0.2f);
+        eng.set_recording(false);
+        drain();
+    }
+};
+
+// What the firmware's foreground does at boot: frames copied into the raw
+// buffer between begin_load() and restore(), markers handed over.
+void restore_from(RsRig& dst, const RsRig& src) {
+    uint32_t f[SliceMap::kMax];
+    uint8_t  s[SliceMap::kMax];
+    const int n = src.eng.export_markers(f, s, SliceMap::kMax);
+    dst.eng.begin_load();
+    const size_t frames = src.eng.rec_size();
+    std::memcpy(dst.eng.raw_buffer(), src.mem.data(), frames * sizeof(SampleBuffer::Frame));
+    REQUIRE(dst.eng.restore(frames, f, s, n));
+}
+
+bool same_markers(const SamplerEngine& a, const SamplerEngine& b, int& differ) {
+    uint32_t fa[SliceMap::kMax], fb[SliceMap::kMax];
+    uint8_t  sa[SliceMap::kMax], sb[SliceMap::kMax];
+    const int na = a.export_markers(fa, sa, SliceMap::kMax);
+    const int nb = b.export_markers(fb, sb, SliceMap::kMax);
+    differ = 0;
+    if (na != nb) { differ = -1; return false; }
+    for (int i = 0; i < na; ++i) if (fa[i] != fb[i] || sa[i] != sb[i]) ++differ;
+    return differ == 0;
+}
+
+bool same_frames(const RsRig& a, const RsRig& b, size_t n) {
+    return std::memcmp(a.mem.data(), b.mem.data(), n * sizeof(SampleBuffer::Frame)) == 0;
+}
+}  // namespace
+
+TEST_CASE("restore: exact") {
+    RsRig a, b;
+    a.take();
+    a.overdub(0x1234567u);
+    REQUIRE(a.eng.slice_count() >= 8);
+    restore_from(b, a);
+    CHECK(b.eng.rec_size() == a.eng.rec_size());
+    int differ = 0;
+    CHECK(same_markers(a.eng, b.eng, differ));
+    INFO("markers differing: " << differ);
+
+    // The same overdub on both lands bitwise equal (spec P4, with the engine).
+    a.overdub(0xABCDEFu);
+    b.overdub(0xABCDEFu);
+    REQUIRE(a.eng.rec_size() == b.eng.rec_size());
+    CHECK(same_frames(a, b, a.eng.rec_size()));
+    CHECK(same_markers(a.eng, b.eng, differ));
+}
+
+TEST_CASE("restore: after a single take only the first overdub's 4 ms differ") {
+    // The one place a restore is not bitwise the live buffer: a live take
+    // that was never overdubbed still has its feedback switch's 4 ms rise
+    // ahead of it, a restored one does not (settle_loop()). The rise runs
+    // under the first overdub's own 4 ms fade-in, so only frames
+    // [0, kRecordFade) of that pass can differ. Pinned so the claim stays
+    // true, and so a change that widens it shows up here.
+    RsRig a, b;
+    a.take();
+    restore_from(b, a);
+    a.overdub(0xABCDEFu);
+    b.overdub(0xABCDEFu);
+    REQUIRE(a.eng.rec_size() == b.eng.rec_size());
+    const size_t k = sampler_cfg::kRecordFade;
+    CHECK(std::memcmp(a.mem.data() + k, b.mem.data() + k,
+                      (a.eng.rec_size() - k) * sizeof(SampleBuffer::Frame)) == 0);
+}
+
+TEST_CASE("restore: load_sample is not exact") {
+    // Pins spec P2: a rescan (the load_sample path) does not reproduce the
+    // live map's strengths. This is why the take file carries the markers.
+    // If this ever passes, the file could drop them -- report it, do not
+    // delete the test.
+    RsRig a, b;
+    a.take();
+    a.overdub(0x1234567u);
+    const size_t n = a.eng.rec_size();
+    std::vector<float> l(n), r(n);
+    for (size_t i = 0; i < n; ++i) { l[i] = a.mem[i].l; r[i] = a.mem[i].r; }
+    b.eng.load_sample(l.data(), r.data(), n);
+    int differ = 0;
+    CHECK_FALSE(same_markers(a.eng, b.eng, differ));
+    INFO("markers differing after a rescan: " << differ);
+}
+
+TEST_CASE("restore: rejected load leaves the deck clean") {
+    RsRig clean, dirty(true);
+    dirty.eng.begin_load();
+    for (size_t i = 0; i < 100000; ++i) dirty.eng.raw_buffer()[i] = {0.9f, -0.9f};
+    dirty.eng.abort_load();
+    CHECK(dirty.eng.rec_size() == 0);
+    CHECK_FALSE(dirty.eng.loading());
+    clean.fresh();
+    dirty.fresh();
+    REQUIRE(clean.eng.rec_size() == dirty.eng.rec_size());
+    CHECK(same_frames(clean, dirty, clean.eng.rec_size()));
+
+    // Markers the take cannot hold: restore refuses and the deck stays clean.
+    RsRig dirty2(true);
+    dirty2.eng.begin_load();
+    const uint32_t f[2] = {10, 5};
+    const uint8_t  s[2] = {1, 2};
+    CHECK_FALSE(dirty2.eng.restore(1000, f, s, 2));
+    CHECK(dirty2.eng.rec_size() == 0);
+    CHECK_FALSE(dirty2.eng.loading());
+    dirty2.fresh();
+    REQUIRE(dirty2.eng.rec_size() == clean.eng.rec_size());
+    CHECK(same_frames(clean, dirty2, clean.eng.rec_size()));
+}
+
+TEST_CASE("restore: REC is locked out while loading") {
+    RsRig r;
+    r.eng.begin_load();
+    r.eng.set_recording(true);
+    CHECK_FALSE(r.eng.is_recording());
+    for (int i = 0; i < 1000; ++i) r.eng.process_in(0.5f, 0.5f);
+    CHECK(r.eng.rec_size() == 0);
+    REQUIRE(r.eng.restore(0, nullptr, nullptr, 0));
+    r.eng.set_recording(true);   // the law's next push
+    CHECK(r.eng.is_recording());
+}
+
+TEST_CASE("gen: restore moves it") {
+    RsRig a, b;
+    a.take();
+    const uint32_t g0 = b.eng.content_gen();
+    restore_from(b, a);
+    CHECK(b.eng.content_gen() != g0);
+    const uint32_t g1 = b.eng.content_gen();
+    for (int i = 0; i < 48000; ++i) b.eng.process_in(0.3f, 0.3f);
+    CHECK(b.eng.content_gen() == g1);
+}
+
+// --- The ring and the delayed writer (spec 2026-11-07-sampler-records-other-
+// deck-on-the-bar §4.2, plan Task 4) ----------------------------------------
+
+namespace {
+
+// Deterministic input: noise at 0.2 plus a 0.9 burst every 6000 frames, so the
+// slice detector has transients to mark.
+struct Feed {
+    uint32_t x = 0x2468ACE1u;
+    uint64_t n = 0;
+    SampleBuffer::Frame next() {
+        x ^= x << 13; x ^= x >> 17; x ^= x << 5;
+        float v = (float(x) / 4294967296.f * 2.f - 1.f) * 0.2f;
+        if (n % 6000 < 200) v += (n % 6000 < 100 ? 0.9f : -0.9f);
+        ++n;
+        return { v, -0.5f * v };
+    }
+};
+
+std::vector<uint32_t> markers_of(const SamplerEngine& e) {
+    std::vector<uint32_t> f(sampler_cfg::kMaxSlices);
+    std::vector<uint8_t> s(sampler_cfg::kMaxSlices);
+    const int n = e.export_markers(f.data(), s.data(), sampler_cfg::kMaxSlices);
+    f.resize(size_t(n));
+    for (int i = 0; i < n; ++i) f[size_t(i)] = f[size_t(i)] * 256u + s[size_t(i)];
+    return f;
+}
+
+} // namespace
+
+TEST_CASE("writer: delayed writer equals live writer") {
+    // 6 s of storage (Rig's 2 s is too short for a take plus an overdub).
+    struct Big {
+        std::vector<SampleBuffer::Frame> mem = std::vector<SampleBuffer::Frame>(48000 * 6);
+        SamplerEngine e;
+        Big() { e.set_seed(4242); e.set_memory(mem.data(), mem.size()); e.init(48000.f); }
+    };
+    auto* a = new Big;                      // live: no ring, D = 0
+    auto* b = new Big;                      // delayed: D = 24 000
+    std::vector<SampleBuffer::Frame> ring(30000);
+    b->e.set_ring(ring.data(), ring.size());
+    REQUIRE(b->e.set_delay(24000));
+    for (Big* g : {a, b}) { g->e.rec_at(48000, true); g->e.rec_at(192000, false); }
+
+    Feed fa, fb;
+    for (uint64_t i = 0; i < 300000; ++i) {
+        if (i == 220000)                    // both writers past the first stop
+            for (Big* g : {a, b}) { g->e.rec_at(240000, true); g->e.rec_at(260000, false); }
+        const auto xa = fa.next(), xb = fb.next();
+        a->e.process_in(xa.l, xa.r);
+        b->e.process_in(xb.l, xb.r);
+    }
+    REQUIRE_FALSE(a->e.writer_busy());
+    REQUIRE_FALSE(b->e.writer_busy());
+    REQUIRE(a->e.rec_size() > 100000);      // a take was made, then overdubbed
+    CHECK(b->e.rec_size() == a->e.rec_size());
+    size_t diff = 0;
+    for (size_t i = 0; i < a->e.rec_size(); ++i)
+        if (a->mem[i].l != b->mem[i].l || a->mem[i].r != b->mem[i].r) ++diff;
+    CHECK(diff == 0);
+    const auto ma = markers_of(a->e), mb = markers_of(b->e);
+    REQUIRE(ma.size() > 3);
+    CHECK(ma == mb);
+    delete a;
+    delete b;
+}
+
+TEST_CASE("writer: snap off has no ring and D = 0") {
+    Rig a(0), b(0);
+    CHECK_FALSE(a.e.has_ring());
+    CHECK_FALSE(a.e.set_delay(100));
+    CHECK(a.e.delay() == 0);
+    // rec_at on a live writer acts on exactly the sample set_recording would.
+    Feed fa, fb;
+    for (int i = 0; i < 40000; ++i) {
+        if (i == 1000)  a.e.set_recording(true);
+        if (i == 30000) a.e.set_recording(false);
+        if (i == 0) { b.e.rec_at(1000, true); b.e.rec_at(30000, false); }
+        const auto xa = fa.next(), xb = fb.next();
+        a.e.process_in(xa.l, xa.r);
+        b.e.process_in(xb.l, xb.r);
+    }
+    REQUIRE(a.e.rec_size() > 20000);
+    CHECK(b.e.rec_size() == a.e.rec_size());
+    size_t diff = 0;
+    for (size_t i = 0; i < a.e.rec_size(); ++i)
+        if (a.mem[i].l != b.mem[i].l) ++diff;
+    CHECK(diff == 0);
+}
+
+TEST_CASE("writer: the ring's history before a reset reads as silence") {
+    Rig g(0);
+    std::vector<SampleBuffer::Frame> ring(30000);
+    g.e.set_ring(ring.data(), ring.size());
+    REQUIRE(g.e.set_delay(24000));
+    for (int i = 0; i < 50000; ++i) g.e.process_in(0.5f, 0.5f);   // ring full of 0.5
+    g.e.ring_reset();                                           // as a landing on SAMPLER
+    g.e.rec_at(g.e.writer_frame(), true);                       // start at once
+    for (int i = 0; i < 40000; ++i) g.e.process_in(0.5f, 0.5f);
+    // The writer's first 24 000 frames lie before the reset: silence. After
+    // that the live 0.5 arrives (sustain, nothing under it: exactly 0.5).
+    REQUIRE(g.e.rec_size() >= 39000);
+    bool silent = true;
+    for (size_t i = 0; i < 23900; ++i) if (g.mem[i].l != 0.f) silent = false;
+    CHECK(silent);
+    CHECK(g.mem[24500].l == 0.5f);
+    CHECK(g.mem[38000].l == 0.5f);
+}
+
+TEST_CASE("writer: cancel drops a pending target") {
+    Rig g(0);
+    g.e.rec_at(1000, true);
+    CHECK(g.e.rec_pending() == 1);
+    g.e.rec_cancel_pending();
+    for (int i = 0; i < 5000; ++i) g.e.process_in(0.3f, 0.3f);
+    CHECK_FALSE(g.e.is_recording());
+    CHECK(g.e.rec_size() == 0);
+    // clear() drops it too.
+    g.e.rec_at(g.e.frame_now() + 100, true);
+    g.e.clear();
+    CHECK(g.e.rec_pending() == 0);
+}

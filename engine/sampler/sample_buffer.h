@@ -43,11 +43,20 @@ public:
     void set_recording(bool on);
     bool is_recording() const { return _state != State::idle; }
     bool is_overdubbing() const { return _cut.is_on() && is_recording(); }
+    // Fade-in or sustain: a take is being written and not yet ending. Unlike
+    // is_recording(), false during the fade-out.
+    bool is_writing() const { return _state == State::fadein || _state == State::sustain; }
     void set_feedback(float knob);    // 0..1 knob -> -60..0 dB linear factor
     void write(float in0, float in1); // call once per sample, always
     void cut();                       // lock the loop length at the fill
     void clear();
     void set_rec_size(size_t frames); // load path + tests: declare content
+    // A locked loop's feedback switch jumps to fully on, where any overdub
+    // leaves it. cut() only arms it, and its 4 ms rise runs inside the next
+    // overdub's fade-in -- right at the moment of the cut, never again. A take
+    // restored after a power cycle has no such moment, so the restore settles
+    // it (spec 2026-11-06-sampler-takes-on-sd §4.7). No-op on an uncut buffer.
+    void settle_loop() { if (_cut.is_on()) _cut.set_on(true, true); }
 
     // --- queries ---
     // The linear feedback coefficient. Exposed for tests: above unity it is
@@ -55,6 +64,18 @@ public:
     float  feedback() const { return _feedback; }
     float  fill() const { return _buffer_size ? float(_size) / float(_buffer_size) : 0.f; }
     size_t rec_size() const { return _size; }
+    // The written-frame watermark (spec 2026-11-06-sampler-takes-on-sd §4.7):
+    // frames at or past it count as silence, whatever the memory holds. The
+    // overdub read in write() never sees past it, and the reads never see
+    // past rec_size() <= written(). So the host's memory need not be zeroed
+    // (Daisy SDRAM is not), and clear() needs no memset. Follows the write
+    // head up; clear() sets it to 0, set_rec_size() to the declared length.
+    size_t written() const { return _written; }
+    // Counts the state machine's idle edges: +1 when a take or overdub
+    // leaves idle, +1 when its fade-out reaches idle. Between two equal
+    // readings with is_recording() false the content did not change. clear()
+    // does not count (init() calls it); SamplerEngine adds its own bumps.
+    uint32_t gen() const { return _gen; }
     bool   is_empty() const { return _size == 0; }
     bool   valid() const { return _buffer != nullptr && _buffer_size > 0; }
     size_t capacity() const { return _buffer_size; }
@@ -72,6 +93,8 @@ private:
     size_t  _buffer_size = 0;
     float   _feedback    = 0.f;   // linear factor; set by set_feedback()
     size_t  _size        = 0;     // recorded content length, in frames
+    size_t  _written     = 0;     // watermark: frames [0, _written) hold content
+    uint32_t _gen        = 0;     // idle edges, see gen()
     size_t  _write_head  = 0;
     size_t  _fade_ctr    = 0;
     State   _state       = State::idle;

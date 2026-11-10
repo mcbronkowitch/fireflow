@@ -93,6 +93,8 @@ void SamplerEngine::init(float sample_rate) {
     _sr = sample_rate;
     _buf.init(_mem, _mem_frames, sample_rate);
     _slices.init(sample_rate);
+    // The delayed writer starts over; the ring itself (set_ring) is kept.
+    _now = 0; _rw = 0; _ring_since = 0; _delay = 0; _npend = 0;
     // MUST differ from the constant Part::init XORs in (0x5A11E20Du). With
     // the same constant on both sides the XOR cancels and the sampler is
     // seeded with seed_base exactly -- which is also what SuperModulator
@@ -159,8 +161,41 @@ void SamplerEngine::set_gate(bool on) {
 void SamplerEngine::process_in(float inL, float inR) {
     _in_l = inL;
     _in_r = inR;
+    _mon_l = inL;    // set_monitor_in() may replace these for this sample
+    _mon_r = inR;
+
+    // The delayed writer (set_ring(), set_delay(), rec_at()). Without a ring
+    // and pending targets this is two compares and today's write of the live
+    // input. The ring index wraps by compare, never by a 64-bit modulo: on
+    // the Cortex-M7 that is a library call per sample.
+    float wl = inL, wr = inR;
+    if (_ring) {
+        _ring[_rw] = SampleBuffer::Frame{ inL, inR };
+        if (_delay) {
+            const uint64_t w = writer_frame();
+            if (_now >= _delay && w >= _ring_since) {
+                const size_t ri = _rw >= _delay ? _rw - _delay : _rw + _ring_frames - _delay;
+                wl = _ring[ri].l;
+                wr = _ring[ri].r;
+            } else {
+                wl = 0.f;      // before the ring's history: silence
+                wr = 0.f;
+            }
+        }
+        if (++_rw >= _ring_frames) _rw = 0;
+    }
+    if (_npend) {
+        const uint64_t w = writer_frame();
+        while (_npend && _pend[0].at <= w) {
+            set_recording(_pend[0].on);
+            _pend[0] = _pend[1];
+            --_npend;
+        }
+    }
+    ++_now;
+
     const size_t head = _buf.write_head();
-    _buf.write(inL, inR);              // no-op unless recording
+    _buf.write(wl, wr);                // no-op unless recording
     // is_recording() before the call is NOT proof a frame landed at `head`:
     // write()'s fadeout early-return (sample_buffer.cpp, _fade_ctr == 0 on
     // entry -- two REC toggles inside one block) can leave is_recording()
@@ -176,7 +211,47 @@ void SamplerEngine::process_in(float inL, float inR) {
     }
 }
 
-void SamplerEngine::set_recording(bool on) { _buf.set_recording(on); }
+void SamplerEngine::set_recording(bool on) {
+    if (_loading && on) return;   // REC locked out while a take loads
+    _buf.set_recording(on);
+}
+
+void SamplerEngine::rec_at(uint64_t frame, bool on) {
+    if (_loading && on) return;
+    const uint64_t w = writer_frame();
+    if (frame < w) frame = w;
+    const Pend p{ frame, on };
+    if (_npend == 0)                 { _pend[0] = p; _npend = 1; }
+    else if (_npend == 1) {
+        if (frame < _pend[0].at)     { _pend[1] = _pend[0]; _pend[0] = p; }
+        else                         { _pend[1] = p; }
+        _npend = 2;
+    } else                           { _pend[1] = p; }   // full: replaces the later one
+}
+
+void SamplerEngine::begin_load() {
+    clear();
+    _loading = true;
+}
+
+bool SamplerEngine::restore(size_t frames, const uint32_t* marker_frame,
+                            const uint8_t* marker_strength, int n_markers) {
+    _loading = false;
+    if (!_buf.valid()) return false;
+    _kill_all();
+    const size_t n = frames > _buf.capacity() ? _buf.capacity() : frames;
+    _buf.set_rec_size(n);          // n == 0: clear()
+    _buf.settle_loop();            // as after any overdub (SampleBuffer::settle_loop)
+    const bool ok = _slices.import_markers(marker_frame, marker_strength, n_markers, n);
+    if (!ok) _buf.clear();
+    ++_gen_own;
+    return ok;
+}
+
+void SamplerEngine::abort_load() {
+    clear();
+    _loading = false;
+}
 
 void SamplerEngine::load_sample(const float* l, const float* r, size_t frames) {
     if (!_buf.valid() || l == nullptr) return;
@@ -190,6 +265,7 @@ void SamplerEngine::load_sample(const float* l, const float* r, size_t frames) {
     }
     _buf.set_rec_size(n);
     _slices.scan(dst, n);
+    ++_gen_own;
 }
 
 void SamplerEngine::trigger(float pitch_norm) {
@@ -974,7 +1050,7 @@ void SamplerEngine::process(float& outL, float& outR) {
     r *= gain;
 
     // --- monitoring: dry input at unity, ahead of the part chain (pre-GRIT) ---
-    if (_monitor) { l += _in_l; r += _in_r; }
+    if (_monitor) { l += _mon_l; r += _mon_r; }
 
     outL = l;
     outR = r;

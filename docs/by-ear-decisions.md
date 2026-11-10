@@ -604,3 +604,26 @@ math. A tail that sounds brighter in Rack than on the board is this decision,
 not a bug. The command to turn either back is in `shell/README.md` ("Turning a
 CPU saving back"). Do not drop the switches, and do not carry the half-rate
 tank into VCV, without a new listening pass.
+
+## REC on the bar: the lamps and the one-beat lag (2026-11-07) — seen and heard, accepted
+
+The REC snap (spec `2026-11-07-sampler-records-other-deck-on-the-bar-design.md`,
+board record `docs/hardware/rec-snap-measured.md` §4). Bastian asked for beat 1
+"heller" before the build and checked the result on Rev A #1 with the snap
+image (build `68510c2`): *"alles ok"*.
+
+- **`kTempoOffBeatLight = 0.35`** (`control/led_law.hpp`): with the snap acting,
+  the TEMPO pulse lights beat 1 at full light and beats 2-4 at 0.35, through
+  `duty_from_light`. Snap off, or a beat over 1.5 s, every pulse is full.
+- **`kRecHeldHz = 8`**: a REC press held for the next bar line blinks the REC
+  lamp evenly at 8 Hz, full light and dark, winning over the recording pulse.
+- **The take plays one beat after the stop press.** The delayed writer runs
+  `D` = one beat behind the input; at slow tempos that is up to 1.5 s.
+  Accepted by ear (listening item L6); not a latency to optimise away.
+- **The snap stands down at a beat over 1.5 s** (Bastian's call before the
+  build: at tempos that slow the sampler cannot record long enough for
+  quantising to make sense).
+
+Not yet heard: an external source at the audio input through the new
+`fast_tanh(in + other deck)` record path (L5, measured at −0.5 dB at 0.5 and
+−1.5 dB at 0.9 on the desktop).

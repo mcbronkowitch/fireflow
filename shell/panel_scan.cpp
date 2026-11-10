@@ -9,6 +9,7 @@
 #include "shell_remote_measure.h"
 #include "shell_sd.h"
 #include "shell_rgrain.h"
+#include "shell_takes.h"
 
 #if SHELL_PANEL_SCAN
 
@@ -57,6 +58,18 @@
 #if SHELL_SD
 #include "sd_probe.h"
 #include "shell_sd_probe.h"
+#endif
+// The pot hold for card traffic (sd_hold.h): the SD probe image and the take
+// image, which the Makefile never builds together.
+#if SHELL_SD || SHELL_TAKES
+#define SHELL_POT_HOLD 1
+#include "sd_hold.h"
+#else
+#define SHELL_POT_HOLD 0
+#endif
+#if SHELL_TAKES
+// Sampler takes on the SD card (spec 2026-11-06-sampler-takes-on-sd).
+#include "take_card.h"
 #endif
 #if SHELL_RGRAIN
 #include <cmath>
@@ -1018,6 +1031,12 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
     // reads it per sample through wt::table() (wt_bank.h, set_bank()).
     sd_bank_block();
 #endif
+#if SHELL_TAKES
+    // A take the foreground loaded becomes the deck's here, at the top of the
+    // block and ahead of process(); then each deck's state is published for
+    // the save policy, and the block is counted (take_card.h).
+    take_block(inst);
+#endif
     g_inst = &inst;
 #if SHELL_REMOTE_MEASURE
     const uint32_t sec0 = cycles_now();   // the scan section starts here
@@ -1034,11 +1053,18 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
     // cleared value, so every pot lets go until it is moved again.
     const uint8_t edges = static_cast<uint8_t>(g_keys.pressed & ~g_last_pressed);
     g_last_pressed      = g_keys.pressed;
-    if(apply_key_edges(edges, g_keys.pressed, kKeyMap, g_knobs).mod_cleared)
+    const KeyResult kr  = apply_key_edges(edges, g_keys.pressed, kKeyMap, g_knobs);
+    if(kr.mod_cleared)
     {
         for(PotOwner& o : g_owner) pot_release(o);
         g_mod_cleared = true;   // held for led_tick(): a step < 0 returns first
     }
+    // SHIFT + REC: the deck's take is cleared (spec 2026-11-06-sampler-takes-
+    // on-sd section 4.5), O(1) with the written-frame watermark -- no memset
+    // in the callback. A deck that is loading a take ignores it: the load
+    // wins, and the clear can be repeated once it is done.
+    for(int p = 0; p < 2; ++p)
+        if(kr.rec_cleared[p] && !inst.sampler_loading(p)) inst.sampler_clear(p);
 #if SHELL_RGRAIN
     // The grain layer: after the scan's step, whose read and next select must
     // stay one block apart (a cost that changes from block to block ahead of
@@ -1048,18 +1074,19 @@ void panel_scan_tick(bench::Board& hw, spky::Instrument& inst)
 #endif
     if(step < 0) return;
 
-#if SHELL_SD
-    // The SD burst probe's pot hold (spec 2026-10-31-sd-use-cases-tests-design
-    // section 5, A1), decided once per block: while a card transfer runs and
-    // for a tail of blocks after it, none of this step's readings counts --
-    // not the raw window below, not the calibration pair, not the pot filter.
-    // What is left is what the board test judges against the noise floor.
-    // False in every other SD mode.
+#if SHELL_POT_HOLD
+    // The pot hold (spec 2026-10-31-sd-use-cases-tests-design section 5, A1),
+    // decided once per block: while a card transfer runs and for a tail of
+    // blocks after it, none of this step's readings counts -- not the raw
+    // window below, not the calibration pair, not the pot filter. In the SD
+    // probe image what is left is what the board test judges against the
+    // noise floor (false in its non-hold modes); in the take image it keeps
+    // the take traffic off the pots (tail 0, sd_hold.cpp).
     const bool sd_drop = sd_hold_block();
 #endif
     for(int s = 0; s < kActiveChain.sense_pins; ++s)
     {
-#if SHELL_SD
+#if SHELL_POT_HOLD
         if(sd_drop) continue;
 #endif
         // A pin with no live channel this step floats; group_at() says so.
@@ -1490,6 +1517,9 @@ void run_panel_scan_report(bench::Board& hw)
     // with the passes below.
     sd_bringup_run();
     uint32_t sd_pass = 0;
+#endif
+#if SHELL_TAKES
+    uint32_t takes_pass = 0;
 #endif
 #if SHELL_REMOTE_MEASURE
     // The last busy window's figures, printed with the next frame.
@@ -2091,6 +2121,19 @@ void run_panel_scan_report(bench::Board& hw)
         // (row 11.2: the pots' spread streaming against idle).
         sd_report(hw, sd_pass++);
         sd_stream_pass(hw, g_raw_win);
+#elif SHELL_TAKES
+        // The card work starts once the boot take is done (spec 4.4): audio
+        // runs, the boot-only listener is up, so a card that hangs still
+        // leaves BOOT working. Then the same 500 ms as Delay(500), spent on
+        // the save policy's card work (take_card.h).
+#if SHELL_PERSIST_ON
+        const bool takes_ready = g_take.done;
+#else
+        const bool takes_ready = true;
+#endif
+        if(takes_ready) take_card_boot(hw);
+        take_report(hw, takes_pass++);
+        take_service_for(hw, 500);
 #else
         hw.Delay(500);
 #endif

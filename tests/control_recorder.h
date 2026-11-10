@@ -61,6 +61,7 @@ struct Rec {
     float lane_output_stepped(int p, int s) const { return laneStep[p][s]; }
     spky::EngineId engine_id(int p) const { return eng[p]; }
     bool  sampler_is_recording(int p) const { return recording[p]; }
+    bool  sampler_rec_requested(int p) const { return recording[p]; }   // snap off
     bool  sampler_empty(int p) const { return empty[p]; }
 
 #define REC_G(name) template <class T> void name(T v) { log(#name, -1, f(v)); }

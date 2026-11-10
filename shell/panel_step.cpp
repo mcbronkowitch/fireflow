@@ -36,8 +36,8 @@ void apply_excite_events(const control::Events& ev, control::Options& opt)
 {
     for(int p = 0; p < 2; ++p)
     {
-        if(ev.bbd_edge[p])        opt.deck[p].excite_other_deck = true;
-        else if(!ev.bbd_part[p])  opt.deck[p].excite_other_deck = false;
+        if(ev.bbd_edge[p] || ev.sampler_part[p]) opt.deck[p].excite_other_deck = true;
+        else if(!ev.bbd_part[p])                 opt.deck[p].excite_other_deck = false;
     }
 }
 

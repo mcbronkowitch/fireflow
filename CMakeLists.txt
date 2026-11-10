@@ -50,6 +50,9 @@ add_executable(spky_tests
     tests/test_divisions.cpp
     tests/test_lane_len.cpp
     tests/test_transport.cpp
+    tests/test_bar_clock.cpp
+    tests/test_rec_snap.cpp
+    tests/test_rec_snap_instrument.cpp
     tests/test_waveforms.cpp
     tests/test_range.cpp
     engine/mod/lane.cpp
@@ -223,6 +226,10 @@ add_executable(spky_tests
     tests/test_persist_record.cpp
     shell/persist_policy.cpp
     tests/test_persist_policy.cpp
+    shell/take_file.cpp
+    tests/test_take_file.cpp
+    shell/take_policy.cpp
+    tests/test_take_policy.cpp
     tests/test_boot_patch.cpp
     shell/workload_run.cpp
     tests/test_workload_run.cpp

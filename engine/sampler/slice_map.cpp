@@ -21,6 +21,34 @@ void SliceMap::clear() {
     _reset_detector();
 }
 
+int SliceMap::export_markers(uint32_t* frame, uint8_t* strength, int max) const {
+    const int n = _n < max ? _n : max;
+    for (int i = 0; i < n; ++i) {
+        frame[i]    = _m[i].frame;
+        strength[i] = _m[i].strength;
+    }
+    return n;
+}
+
+bool SliceMap::import_markers(const uint32_t* frame, const uint8_t* strength, int n,
+                              size_t content) {
+    clear();
+    if (n < 0 || n > kMax) return false;
+    if (n > 0 && (frame == nullptr || strength == nullptr)) return false;
+    for (int i = 0; i < n; ++i) {
+        if (frame[i] >= content) return false;
+        if (i > 0 && frame[i] <= frame[i - 1]) return false;
+    }
+    for (int i = 0; i < n; ++i) {
+        _m[i].frame    = frame[i];
+        _m[i].strength = strength[i];
+    }
+    _n = n;
+    // clear() already left _last_frame = SIZE_MAX and the detector reset,
+    // which is where scan() leaves them: a following live take re-aims.
+    return true;
+}
+
 void SliceMap::_reset_detector() {
     _env_fast = 0.f;
     _env_slow = 0.f;

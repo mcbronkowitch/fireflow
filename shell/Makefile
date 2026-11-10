@@ -585,6 +585,73 @@ endif
 C_DEFS += -DSPKY_PROBE_REVERB_INJECT=1
 endif
 
+# Sampler takes on the SD card (spec 2026-11-06-sampler-takes-on-sd-design.md):
+# each deck's take is saved to the card 5 s after it last changed and loaded
+# again at boot. The play image's feature, not a probe: it needs the Rev A
+# panel scan, and it is refused with everything that measures -- the SD probe
+# image (both own the card), the listener and its measurement image, the
+# grain layer -- so card traffic never lands in a CPU or workload number.
+# SHELL_BOOT_PATCH arrives through C_USER_FLAGS, which only the preprocessor
+# sees: take_card.cpp refuses it there. The card work runs in the report loop,
+# after StartAudio(), the boot-only listener and the boot take, so a hung card
+# still leaves BOOT working. Default 0 until the board sessions pass (spec
+# section 7). FatFs is linked in this image and in the SD image only.
+SHELL_TAKES ?= 0
+
+ifneq ($(words $(SHELL_TAKES))-$(filter $(SHELL_TAKES),0 1),1-$(SHELL_TAKES))
+$(error SHELL_TAKES must be 0 or 1)
+endif
+
+# The takes' stress image, hands-free measurement (plan Task 9): deck A gets a
+# 10 s pattern if it loads empty, a save of it is forced every 30 s, each save
+# is read back and compared, and the raw windows are printed so the pots can
+# be judged as A1 judged them.
+SHELL_TAKES_STRESS ?= 0
+
+ifneq ($(words $(SHELL_TAKES_STRESS))-$(filter $(SHELL_TAKES_STRESS),0 1),1-$(SHELL_TAKES_STRESS))
+$(error SHELL_TAKES_STRESS must be 0 or 1)
+endif
+
+ifeq ($(SHELL_TAKES_STRESS),1)
+ifneq ($(SHELL_TAKES),1)
+$(error SHELL_TAKES_STRESS=1 needs SHELL_TAKES=1)
+endif
+ifneq ($(SHELL_RAW_SPREAD),1)
+$(error SHELL_TAKES_STRESS=1 needs SHELL_RAW_SPREAD=1: the pots are judged on the raw windows)
+endif
+endif
+
+ifeq ($(SHELL_TAKES),1)
+ifneq ($(SHELL_PANEL_SCAN)$(SHELL_COUPON_PROBE),10)
+$(error SHELL_TAKES=1 needs SHELL_PANEL_SCAN=1 and not SHELL_COUPON_PROBE=1: \
+the takes are the Rev A play image's)
+endif
+ifeq ($(SHELL_SD),1)
+$(error SHELL_TAKES=1 excludes SHELL_SD=1: both own the card)
+endif
+ifeq ($(SHELL_REMOTE),1)
+$(error SHELL_TAKES=1 excludes SHELL_REMOTE=1: card traffic must not land in a workload run)
+endif
+ifeq ($(SHELL_REMOTE_MEASURE),1)
+$(error SHELL_TAKES=1 excludes SHELL_REMOTE_MEASURE=1)
+endif
+ifneq ($(SHELL_RGRAIN),0)
+$(error SHELL_TAKES=1 excludes SHELL_RGRAIN=$(SHELL_RGRAIN): card traffic would land in the grain's price)
+endif
+USE_FATFS = 1
+endif
+
+# REC on the bar (spec 2026-11-07-sampler-records-other-deck-on-the-bar
+# §4.2). 1: each deck gets a one-beat ring in SDRAM (2 x 72128 frames,
+# 1.15 MB) and a REC press snaps to the bar line; 0: no rings, and REC acts
+# at the press exactly as before -- the A/B image for the board session.
+# Read by main.cpp (set_rec_snap) and sdram_mem.cpp (the rings).
+SHELL_REC_SNAP ?= 1
+
+ifneq ($(words $(SHELL_REC_SNAP))-$(filter $(SHELL_REC_SNAP),0 1),1-$(SHELL_REC_SNAP))
+$(error SHELL_REC_SNAP must be 0 or 1)
+endif
+
 CPP_SOURCES = \
 	main.cpp \
 	cb_profile.cpp \
@@ -673,6 +740,14 @@ endif
 # panel_scan.cpp sit under #if SHELL_SD.
 ifeq ($(SHELL_SD),1)
 CPP_SOURCES += sd_probe.cpp sd_schedule.cpp
+endif
+
+# The take card worker and the pot hold, in SHELL_TAKES images alone; their
+# callers in panel_scan.cpp sit under #if SHELL_TAKES. take_file.cpp and
+# take_policy.cpp are the host-tested halves (tests/test_take_*.cpp);
+# sd_schedule.cpp holds SdHold.
+ifeq ($(SHELL_TAKES),1)
+CPP_SOURCES += take_card.cpp take_file.cpp take_policy.cpp sd_hold.cpp sd_schedule.cpp
 endif
 
 # The reverb grain layer and the schedules it runs on, in SHELL_RGRAIN images
@@ -913,6 +988,9 @@ SWITCH_HEADERS := \
   $(shell python write_shell_sd.py $(BUILD_DIR)/shell_sd.h $(SHELL_SD) $(BUILD_DIR)/panel_scan.o) \
   $(shell python write_shell_sd_probe.py $(BUILD_DIR)/shell_sd_probe.h $(SHELL_SD_PROBE) $(BUILD_DIR)/sd_probe.o $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/wt_bank_d2.o) \
   $(shell python write_shell_rgrain.py $(BUILD_DIR)/shell_rgrain.h $(SHELL_RGRAIN) $(BUILD_DIR)) \
+  $(shell python write_shell_takes.py $(BUILD_DIR)/shell_takes.h $(SHELL_TAKES) $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/take_card.o $(BUILD_DIR)/sd_hold.o $(BUILD_DIR)/main.o) \
+  $(shell python write_shell_takes_stress.py $(BUILD_DIR)/shell_takes_stress.h $(SHELL_TAKES_STRESS) $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/take_card.o $(BUILD_DIR)/sd_hold.o $(BUILD_DIR)/main.o) \
+  $(shell python write_shell_rec_snap.py $(BUILD_DIR)/shell_rec_snap.h $(SHELL_REC_SNAP) $(BUILD_DIR)/main.o $(BUILD_DIR)/sdram_mem.o) \
   $(shell python write_shell_fast_math.py $(BUILD_DIR)/shell_fast_math.h $(SHELL_FAST_MATH) $(ENGINE_OBJECTS)) \
   $(shell python write_shell_engine_lean.py $(BUILD_DIR)/shell_engine_lean.h SVF1=$(SHELL_LEAN_SVF1) GRAIN_WIN=$(SHELL_LEAN_GRAIN_WIN) EXP2=$(SHELL_LEAN_EXP2) -- $(BUILD_DIR)) \
   $(shell python write_shell_reverb_half.py itcm_hot.ld $(BUILD_DIR)/itcm_hot.ld $(BUILD_DIR)/shell_reverb_half.state $(SHELL_REVERB_HALF) $(SHELL_REMOTE_MEASURE) $(BUILD_DIR)) \
@@ -943,6 +1021,8 @@ $(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/sd_probe.o $(BUILD_DIR)/wt_bank_d2.o: $(B
 # The rgrain writer deletes every object on a flip (the inject define reaches
 # the engine); this edge is the ordering for the object that reads the header.
 $(BUILD_DIR)/panel_scan.o: $(BUILD_DIR)/shell_rgrain.h
+$(BUILD_DIR)/panel_scan.o $(BUILD_DIR)/take_card.o: $(BUILD_DIR)/shell_takes.h $(BUILD_DIR)/shell_takes_stress.h
+$(BUILD_DIR)/main.o $(BUILD_DIR)/sdram_mem.o: $(BUILD_DIR)/shell_rec_snap.h
 $(ENGINE_OBJECTS): $(BUILD_DIR)/shell_fast_math.h
 # The lean stamp: the writer deletes every object on a change; this edge is
 # the ordering for the objects that read the defines it stands for.

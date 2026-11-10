@@ -594,6 +594,10 @@ void Part::_engine_swap() {
 #if defined(SPKY_PROBE_MARKS)
     tb1 = *probe_clock;
 #endif
+    // The sampler's ring was not written while another engine ran: what it
+    // holds is from before, so its history starts over (spec 2026-11-07-
+    // sampler-records-other-deck-on-the-bar §4.2).
+    if (_engine_id == ENGINE_SAMPLER && changed) _sampler.ring_reset();
     // Same reason for every other engine in STEP: an unselected engine is not
     // processed, so its voices froze mid-note and would resume it on return.
     // FLOW keeps the frozen drone -- resuming it is the intended behaviour.

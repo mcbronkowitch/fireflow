@@ -497,6 +497,52 @@ TEST_CASE("controls: SHFT + MOD clears every depth twin but the super modulators
     CHECK(k[ffctl::MODD_SUB_B] == -0.37f);
 }
 
+TEST_CASE("controls: SHFT + REC clears that deck and releases its latch") {
+    // Spec 2026-11-06-sampler-takes-on-sd §4.5. Keys: 0 REC A, 1 REC B,
+    // 2 MOD, 3 SHFT (kRevaKeyMap).
+    const shell::KeyMap& m = shell::kRevaKeyMap;
+    float k[ffctl::NUM_PARAMS];
+    for(const float latch : {0.f, 1.f})
+    {
+        CAPTURE(latch);
+        init_knobs(k);
+        k[ffctl::REC_A] = latch;
+        k[ffctl::REC_B] = 1.f;
+        k[ffctl::MODBTN] = 1.f;
+        float before[ffctl::NUM_PARAMS];
+        for(int i = 0; i < ffctl::NUM_PARAMS; ++i) before[i] = k[i];
+
+        const shell::KeyResult r =
+            shell::apply_key_edges(1u << 0, (1u << 0) | (1u << 3), m, k);
+        CHECK(r.rec_cleared[0]);
+        CHECK_FALSE(r.rec_cleared[1]);
+        CHECK_FALSE(r.mod_changed);
+        CHECK_FALSE(r.mod_cleared);
+        CHECK(k[ffctl::REC_A] == 0.f);        // released, never toggled on
+        before[ffctl::REC_A] = 0.f;
+        for(int i = 0; i < ffctl::NUM_PARAMS; ++i) CHECK(k[i] == before[i]);   // nothing else
+    }
+    init_knobs(k);
+    k[ffctl::REC_B] = 1.f;
+    const shell::KeyResult rb = shell::apply_key_edges(1u << 1, (1u << 1) | (1u << 3), m, k);
+    CHECK(rb.rec_cleared[1]);
+    CHECK_FALSE(rb.rec_cleared[0]);
+    CHECK(k[ffctl::REC_B] == 0.f);
+}
+
+TEST_CASE("controls: REC without SHFT still toggles and clears nothing") {
+    const shell::KeyMap& m = shell::kRevaKeyMap;
+    float k[ffctl::NUM_PARAMS];
+    init_knobs(k);
+    k[ffctl::REC_A] = 0.f;
+    const shell::KeyResult r = shell::apply_key_edges(1u << 0, 1u << 0, m, k);
+    CHECK_FALSE(r.rec_cleared[0]);
+    CHECK(k[ffctl::REC_A] == 1.f);
+    const shell::KeyResult r2 = shell::apply_key_edges(1u << 0, 1u << 0, m, k);
+    CHECK_FALSE(r2.rec_cleared[0]);
+    CHECK(k[ffctl::REC_A] == 0.f);
+}
+
 TEST_CASE("controls: the key maps are as long as their pads") {
     CHECK(shell::kRevaKeyMap.count == shell::kRevaKeys.count);
     CHECK(shell::kCouponKeyMap.count == shell::kCouponKeys.count);

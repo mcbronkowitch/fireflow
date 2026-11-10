@@ -8,6 +8,7 @@
                               // unnamed transitive dependency costs when the
                               // chain ever changes).
 #include "util/math.h"
+#include "sampler/rec_snap.h"
 #include "util/probe_mark.h"
 #include "util/probe_toggles.h"
 #include <algorithm>
@@ -162,6 +163,8 @@ void Instrument::init(float sample_rate, const FxMem& mem) {
                         mem.echo[PART_B][0], mem.echo[PART_B][1],
                         mem.sampler_buf[PART_B], mem.sampler_frames,
                         mem.bbd[PART_B][0], mem.bbd[PART_B][1]);
+    for (int p = 0; p < PART_COUNT; ++p)
+        _parts[p].sampler().set_ring(mem.rec_ring[p], mem.rec_ring_frames);
     if (_reverb) _reverb->init(sample_rate);
     for (int p = 0; p < PART_COUNT; ++p) {
         _rev_dry[p].init(sample_rate, kMixSmoothS);
@@ -199,7 +202,124 @@ void Instrument::init(float sample_rate, const FxMem& mem) {
     _pan_c_ok = false;     // the mix memos belong to the old init
     _ck_ok = false;
     _ctrl_ctr = 0;
+    _frame = 0; _last_bar = 0; _bar_max = 0; _bar_seq = 0;   // beat 0 is a line
+    // The REC snap: the host's setting survives a re-init if the rings do;
+    // nothing held or requested survives it (the decks were just emptied).
+    for (int p = 0; p < PART_COUNT; ++p) _snap_req[p] = _held_start[p] = _held_stop[p] = false;
+    if (!(_parts[PART_A].sampler().has_ring() && _parts[PART_B].sampler().has_ring())) _snap = false;
     set_tempo_bpm(_bpm);
+}
+
+// --- REC on the bar (instrument.h, set_rec_snap()) --------------------------
+
+void Instrument::set_rec_snap(bool on) {
+    if (on && !(_parts[PART_A].sampler().has_ring() && _parts[PART_B].sampler().has_ring()))
+        on = false;                        // no rings, no snap
+    if (on == _snap) return;
+    // Either way, nothing stays held. Pending targets are absolute frames and
+    // still land; a writer left behind at D > 0 keeps D until it is idle.
+    for (int p = 0; p < PART_COUNT; ++p) {
+        _held_start[p] = _held_stop[p] = false;
+        _snap_req[p] = _parts[p].sampler().is_writing();
+    }
+    _snap = on;
+}
+
+uint64_t Instrument::_to_deck_frame(int p, uint64_t f) const {
+    // The sampler counts only the samples it processed; the gap to the bar
+    // clock's count is constant while it runs, so it is read at the call.
+    const uint64_t off = _frame - _parts[p].sampler().frame_now();
+    return f > off ? f - off : 0;
+}
+
+void Instrument::_snap_record(int p, bool on) {
+    SamplerEngine& s = _parts[p].sampler();
+    if (on) {
+        if (_snap_req[p]) return;                 // already requested
+        if (_held_stop[p]) {                      // a start cancels a held stop:
+            _held_stop[p] = false;                // the take simply goes on
+            _snap_req[p] = true;
+            s.set_monitor(true);
+            return;
+        }
+        if (s.loading()) return;                  // REC locked out while a take loads
+        if (s.is_writing() && s.rec_pending()) {  // a stop the writer has not reached yet:
+            s.rec_cancel_pending();               // the take simply goes on
+            _snap_req[p] = true;
+            s.set_monitor(true);
+            return;
+        }
+        const float fpb = frames_per_beat();
+        if (!s.writer_busy()) {
+            const bool snaps = rec_snap_enabled_at(fpb);
+            s.set_delay(snaps ? static_cast<uint32_t>(fpb) : 0u);
+        }
+        const SnapOut o = spky::rec_snap({ s.frame_now(), _to_deck_frame(p, _last_bar),
+                                           _center.transport().beats(), fpb, s.delay(), true });
+        _snap_req[p] = true;
+        s.set_monitor(true);
+        if (o.kind == SnapKind::HeldNext) _held_start[p] = true;
+        else s.rec_at(o.kind == SnapKind::Past ? o.target : s.frame_now(), true);
+        return;
+    }
+    // A stop.
+    if (!_snap_req[p]) return;                    // nothing asked for: the fade-out's re-push
+    _snap_req[p] = false;
+    s.set_monitor(false);
+    if (_held_start[p]) { _held_start[p] = false; return; }   // a stop cancels a held start
+    const SnapOut o = spky::rec_snap({ s.frame_now(), _to_deck_frame(p, _last_bar),
+                                       _center.transport().beats(), frames_per_beat(), s.delay(), false });
+    if (o.kind == SnapKind::HeldNext) { _held_stop[p] = true; return; }
+    uint64_t at = o.kind == SnapKind::Past ? o.target : s.frame_now();
+    uint64_t start_at = 0;
+    if (s.pending_start(&start_at) && at < start_at) at = start_at;   // never before its start
+    s.rec_at(at, false);
+}
+
+void Instrument::_snap_on_line() {
+    for (int p = 0; p < PART_COUNT; ++p) {
+        if (!_held_start[p] && !_held_stop[p]) continue;
+        SamplerEngine& s = _parts[p].sampler();
+        uint64_t at = _to_deck_frame(p, _last_bar);
+        if (_held_start[p]) { _held_start[p] = false; s.rec_at(at, true); }
+        if (_held_stop[p]) {
+            _held_stop[p] = false;
+            uint64_t start_at = 0;
+            if (s.pending_start(&start_at) && at < start_at) at = start_at;
+            s.rec_at(at, false);
+        }
+    }
+}
+
+void Instrument::_snap_drop(int p) {
+    _held_start[p] = _held_stop[p] = false;
+    _snap_req[p] = false;
+    _parts[p].sampler().rec_cancel_pending();
+}
+
+void Instrument::_snap_leave(int p) {
+    SamplerEngine& s = _parts[p].sampler();
+    if (!_snap_req[p] && !sampler_rec_held(p) && !s.rec_pending() && !s.is_writing()) return;
+    _snap_drop(p);
+    if (s.is_writing()) s.set_recording(false);
+    s.set_monitor(false);
+}
+
+// The bar clock's per-tick half (instrument.h, last_bar_frame()). b0 and b1
+// are the beat count before and after this tick; the tick's value is read as
+// standing at its own frame, so the count runs linearly from b0 at
+// _frame - kCtrlInterval to b1 at _frame and a crossing lies in between.
+void Instrument::_bar_tick(double b0, double b1) {
+    const int64_t k = static_cast<int64_t>(std::floor(b1 / double(kBarBeats)));
+    if (k <= _bar_max) return;
+    const double line = double(k) * kBarBeats;
+    double f = b1 > b0 ? (line - b0) / (b1 - b0) : 1.0;
+    f = f < 0.0 ? 0.0 : (f > 1.0 ? 1.0 : f);
+    const uint64_t blk = Center::kCtrlInterval;
+    const uint64_t start = _frame >= blk ? _frame - blk : 0;
+    uint64_t at = start + static_cast<uint64_t>(std::floor(f * double(blk)));
+    if (at > _frame) at = _frame;
+    _bar_log(at, k);
 }
 
 void Instrument::set_reverb_mix(int part, float n) {
@@ -283,8 +403,10 @@ void Instrument::process(const float* inL, const float* inR,
         const float in_l = inL ? inL[i] : 0.f;
         const float in_r = inR ? inR[i] : 0.f;
         if (_ctrl_ctr == 0) {                 // control-rate center update (per 96 samples)
+            const double bar_b0 = _center.transport().beats();
             _center.update(_parts[PART_A].mod(), _parts[PART_B].mod(),
                            _parts[PART_A], _parts[PART_B]);
+            _bar_tick(bar_b0, _center.transport().beats());
             // The pan gains are read from the PAN smoothers, which only
             // update() advances (and Center::init resets), so they are
             // constant until the next tick -- read them once here instead of
@@ -387,6 +509,7 @@ void Instrument::process(const float* inL, const float* inR,
             _ctrl_ctr = Center::kCtrlInterval;
         }
         --_ctrl_ctr;
+        ++_frame;    // the bar clock's sample count (frame_now())
 
         // MORPH/LEVEL gains, hoisted above the CHOKE block because the duck's
         // detector needs them (see below). Value-identical to reading them at

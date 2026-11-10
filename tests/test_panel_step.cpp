@@ -212,6 +212,46 @@ TEST_CASE("panel step: excite_other_deck follows the BBD visit") {
     CHECK(opt.deck[1].excite_other_deck);
 }
 
+// Spec 2026-11-07-sampler-records-other-deck-on-the-bar §4.1: a SAMPLER deck
+// records the other deck, so the route is open while the deck is on SAMPLER.
+TEST_CASE("panel step: excite_other_deck is on while the deck is on SAMPLER") {
+    control::Options opt;
+    control::Events ev;
+    ev.sampler_part[0] = true;
+    shell::apply_excite_events(ev, opt);
+    CHECK(opt.deck[0].excite_other_deck);
+    CHECK_FALSE(opt.deck[1].excite_other_deck);
+    shell::apply_excite_events(ev, opt);          // and stays on, tick after tick
+    CHECK(opt.deck[0].excite_other_deck);
+}
+
+TEST_CASE("panel step: excite_other_deck goes when the deck leaves SAMPLER") {
+    control::Options opt;
+    control::Events ev;
+    ev.sampler_part[1] = true;
+    shell::apply_excite_events(ev, opt);
+    REQUIRE(opt.deck[1].excite_other_deck);
+    ev = control::Events{};                       // SYNTH (or BODY, WAVE, FEED)
+    shell::apply_excite_events(ev, opt);
+    CHECK_FALSE(opt.deck[1].excite_other_deck);
+}
+
+TEST_CASE("panel step: BBD to SAMPLER keeps the route, SAMPLER to BODY clears it") {
+    control::Options opt;
+    control::Events ev;
+    ev.bbd_edge[0] = true;
+    ev.bbd_part[0] = true;
+    shell::apply_excite_events(ev, opt);
+    REQUIRE(opt.deck[0].excite_other_deck);
+    ev = control::Events{};
+    ev.sampler_part[0] = true;                    // the swap onto SAMPLER landed
+    shell::apply_excite_events(ev, opt);
+    CHECK(opt.deck[0].excite_other_deck);
+    ev = control::Events{};                       // BODY: neither level
+    shell::apply_excite_events(ev, opt);
+    CHECK_FALSE(opt.deck[0].excite_other_deck);
+}
+
 // Panel-state persistence (spec 2026-10-28 section 4.3): a restored BBD deck
 // boots on another engine until the swap lands, and bbd_part follows the
 // running engine, so the restored bit has to be held across the swap -- one

@@ -43,6 +43,11 @@ IMAGES = [
     ("default", []),
     ("reva_play", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1"]),
     ("reva_play_nopersist", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_PERSIST=0"]),
+    # REC on the bar is on in reva_play (SHELL_REC_SNAP defaults to 1); the
+    # board session's A/B image has no rings and REC acts at the press; and a
+    # value the Makefile refuses (plan 2026-11-07, Task 8).
+    ("reva_play_no_snap", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REC_SNAP=0"]),
+    ("reva_play_snap2_refused", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REC_SNAP=2"]),
     # The persistence probe image (plan 2026-10-28, Task 6): forced saves.
     ("reva_play_stress", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_PERSIST_STRESS=1"]),
     # The play image without the boot-only listener (SHELL_BOOTCMD=0): the play
@@ -120,16 +125,34 @@ IMAGES = [
                      "SHELL_RGRAIN=1"]),
     ("reva_rgrain_with_sd_refused", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
                                      "SHELL_RAW_SPREAD=1", "SHELL_SD=1", "SHELL_RGRAIN=1"]),
+    # Sampler takes on the SD card (spec 2026-11-06-sampler-takes-on-sd-design.md,
+    # plan Task 8): the play image with FatFs and the take worker; its stress
+    # image (forced saves of a pattern, read back, the raw windows). Both own
+    # the card, so the SD probe image is refused with it, and so is every
+    # measurement image (here the listener; the Makefile refuses the rest).
+    ("reva_play_takes", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_TAKES=1"]),
+    ("reva_play_takes_stress", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_TAKES=1",
+                                "SHELL_TAKES_STRESS=1", "SHELL_RAW_SPREAD=1"]),
+    ("reva_takes_with_sd_refused", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1", "SHELL_REMOTE=1",
+                                    "SHELL_RAW_SPREAD=1", "SHELL_SD=1", "SHELL_TAKES=1"]),
+    ("reva_takes_with_remote_refused", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1",
+                                        "SHELL_REMOTE=1", "SHELL_TAKES=1"]),
+    ("reva_takes_stress_alone_refused", ["SHELL_PANEL_SCAN=1", "SHELL_KEYS_NC=1",
+                                         "SHELL_RAW_SPREAD=1", "SHELL_TAKES_STRESS=1"]),
 ]
 
 # Images whose build must be refused, and the refusal's text (name -> text).
 EXPECT_REFUSED = {
     "reva_play_bootcmd2_refused": "SHELL_BOOTCMD must be 0 or 1",
     "reva_play_bootcmd_empty_refused": "SHELL_BOOTCMD must be 0 or 1",
+    "reva_play_snap2_refused": "SHELL_REC_SNAP must be 0 or 1",
     "reva_remote_fm2_refused": "math guard: isfinite guard folded away in",
     "reva_sd_no_listener_refused": "SHELL_SD=1 needs SHELL_REMOTE=1",
     "reva_sd_probe_no_sd_refused": "SHELL_SD_PROBE=burst needs SHELL_SD=1",
     "reva_rgrain_with_sd_refused": "SHELL_RGRAIN=1 excludes SHELL_SD=1",
+    "reva_takes_with_sd_refused": "SHELL_TAKES=1 excludes SHELL_SD=1",
+    "reva_takes_with_remote_refused": "SHELL_TAKES=1 excludes SHELL_REMOTE=1",
+    "reva_takes_stress_alone_refused": "SHELL_TAKES_STRESS=1 needs SHELL_TAKES=1",
 }
 
 # The save path, as linked symbols (nm -C): persist_write() and the QSPI
@@ -234,6 +257,22 @@ SYMBOL_RULES["reva_remote"] = (SYMBOL_RULES["reva_remote"][0] + BOOT_PATH + WORK
                                SYMBOL_RULES["reva_remote"][1])
 SYMBOL_RULES["reva_play_nobootcmd"] = (SAVE_PATH, BOOT_PATH + WORKLOAD_PATH + RGRAIN_PATH)
 SYMBOL_RULES["default"] = ([], BOOT_PATH)
+
+# The take path (plan 2026-11-06-sampler-takes-on-sd, Task 8): the card worker,
+# its callback side and FatFs, in the take images alone. They are play images
+# -- the save path and the boot-only listener linked, the SD probe's card test
+# not. The plain play image and the SD image must not link the worker: the
+# canaries that show the names are spelled as nm prints them.
+TAKE_PATH = [
+    "shell::take_card_boot(",
+    "shell::take_block(",
+]
+SYMBOL_RULES["reva_play_takes"] = (SAVE_PATH + BOOT_PATH + TAKE_PATH + ["f_mount"],
+                                   ["shell::sd_bringup_run("] + WORKLOAD_PATH + RGRAIN_PATH)
+SYMBOL_RULES["reva_play_takes_stress"] = SYMBOL_RULES["reva_play_takes"]
+SYMBOL_RULES["reva_play"] = (SYMBOL_RULES["reva_play"][0],
+                             SYMBOL_RULES["reva_play"][1] + TAKE_PATH)
+SYMBOL_RULES["reva_sd"] = (SYMBOL_RULES["reva_sd"][0], SYMBOL_RULES["reva_sd"][1] + TAKE_PATH)
 
 TOOLCHAIN_BIN = os.environ.get("DAISY_TOOLCHAIN_BIN",
                                r"C:\Program Files\DaisyToolchain\bin")
@@ -348,7 +387,7 @@ def main():
         if rules:
             for what, path in (("save path", SAVE_PATH), ("SD path", SD_PATH),
                                ("grain layer", RGRAIN_PATH), ("bank swap", BANK_PATH),
-                               ("duplex rings", DUPLEX_PATH)):
+                               ("duplex rings", DUPLEX_PATH), ("take path", TAKE_PATH)):
                 if path[0] in rules[0]:
                     held += ", %s linked" % what
                 elif path[0] in rules[1]:

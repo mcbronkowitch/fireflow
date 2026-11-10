@@ -43,7 +43,8 @@ void boot_overlay(const PersistRecord* rec, float* knobs, bool excite_out[2]);
 // bit; a deck the take turned onto BBD (the pot moved while off) is excited,
 // as a live turn onto BBD would excite it -- FLUX still stays at its pot,
 // since the take fires no bbd_edge. was_bbd[p]: deck p's ENGINE knob was on
-// BBD before the take wrote.
+// BBD before the take wrote. A SAMPLER deck needs nothing here:
+// apply_excite_events() opens its route on every tick it runs SAMPLER.
 void excite_after_take(const bool rec_excite[2], const bool was_bbd[2], const float* knobs,
                        bool excite_out[2]);
 
