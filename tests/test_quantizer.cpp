@@ -2,6 +2,7 @@
 #include <cmath>
 #include <initializer_list>
 #include <string>
+#include <vector>
 #include "pitch/quantizer.h"
 using namespace spky;
 
@@ -237,4 +238,65 @@ TEST_CASE("gravity: a mask change slews over 20 calls (40 ms at 48k/96)") {
         prev = x;
     }
     CHECK(last_move == 20);
+}
+
+TEST_CASE("gravity: a live retarget with glide_calls takes that long, on an S-curve") {
+    // PULL glide (2026-11-10): a mask change under a note that stays bound
+    // runs over glide_calls instead of the 20-call change slew, eased in and
+    // out. 18 st sits between 2/6 and 3/7, so the bound note moves 1 st.
+    Quantizer q; q.init(48000.f, 96);
+    q.set_gravity(0x0044, true);                  // classes 2, 6
+    float v = 0.f;
+    for (int i = 0; i < 200; ++i) v = q.process(0.5f);
+    q.set_gravity(0x0088, true, 200);             // classes 3, 7, 200-call glide
+    std::vector<float> out;
+    for (int i = 0; i < 300; ++i) out.push_back(q.process(0.5f));
+    const float target = out.back();
+    REQUIRE(target != v);
+    int last_move = 0;
+    for (int i = 1; i < 300; ++i) if (out[i] != out[i - 1]) last_move = i + 1;
+    CHECK(last_move == 200);                      // not the 20-call slew
+    // Eased: the first step is far smaller than a straight line's 1/200.
+    const float span = std::fabs(target - v);
+    CHECK(std::fabs(out[0] - v) < 0.1f * span / 200.f);
+    // Halfway in, exactly half way (smoothstep is symmetric).
+    CHECK(std::fabs(out[99] - (v + 0.5f * (target - v))) < 1e-5f);
+}
+
+TEST_CASE("gravity: binding or releasing never takes the long glide") {
+    // glide_calls only applies to a LIVE retarget (bound before and after).
+    // Binding a free note is the change slew, whatever glide_calls says.
+    Quantizer q; q.init(48000.f, 96);
+    float prev = 0.f;
+    for (int i = 0; i < 200; ++i) prev = q.process(0.45f);
+    q.set_gravity(0x0088, true, 200);             // bind: off -> on
+    int last_move = 0;
+    for (int i = 1; i <= 300; ++i) {
+        const float x = q.process(0.45f);
+        if (x != prev) last_move = i;
+        prev = x;
+    }
+    CHECK(last_move == 20);
+    CHECK_FALSE(q.long_glide_active());
+}
+
+TEST_CASE("gravity: end_long_glide cuts a long glide down to the change slew") {
+    // Part calls this on every PITCH fire, so a new note is not dragged
+    // through the rest of a PULL glide.
+    Quantizer q; q.init(48000.f, 96);
+    q.set_gravity(0x0044, true);
+    for (int i = 0; i < 200; ++i) q.process(0.5f);
+    q.set_gravity(0x0088, true, 1000);
+    for (int i = 0; i < 10; ++i) q.process(0.5f);
+    REQUIRE(q.long_glide_active());
+    q.end_long_glide();
+    CHECK_FALSE(q.long_glide_active());
+    float prev = q.process(0.5f);
+    int last_move = 0;
+    for (int i = 2; i <= 300; ++i) {
+        const float x = q.process(0.5f);
+        if (x != prev) last_move = i;
+        prev = x;
+    }
+    CHECK(last_move == 20);                       // arrived after 20 calls, not 990
 }

@@ -925,6 +925,17 @@ quantizer's existing scale-change slew, itself measured at exactly **40.0 ms**
 note glides onto a new mask over the same 20 control ticks a scale or root
 change already takes. PULL opens no new slew path; it reuses this one.
 
+**Superseded for live retargets, 2026-11-10.** A mask change under a note that
+stays bound now runs over `glide_calls` (`Quantizer::set_gravity`'s third
+argument), which `Part::_control_tick` sizes at 0.25 × the note length, 20
+calls (40 ms) to 1.2 s, eased with smoothstep; a PITCH fire calls
+`end_long_glide()`. Measured with a per-sample render probe (scenario: A leads
+STEP chords at RATE 0.35, RANGE 0.9; B follows at PULL −1, RATE 0.08 then
+0.03, notes ~10.7 s apart): 12 mid-note bends, 10–90 % **730 ms** each
+(was 32 ms), max slope 5–12 st/s (was ~100). With B at RATE 0.4 (1.33 s notes)
+the 10–90 % is ~167–201 ms. Binding, releasing, and scale/root/mode changes
+still take the 20-call linear slew.
+
 ---
 
 ## 8. The groove cell: length, rank, and when it exists

@@ -47,6 +47,11 @@ instead of the scale mask.
   at the control tick, and mask changes go through `on_change()` → the existing
   40 ms slew. A sustained bound note therefore *glides* onto the nearest tone
   of the new chord when the leader re-triggers — no special machinery.
+  **Amended 2026-11-10 (by ear):** 40 ms jerked on slow decks, so a live
+  retarget (bound before and after) now glides over a quarter of the
+  follower's note length, 40 ms to 1.2 s, on a smoothstep curve; the
+  follower's own next fire cuts a running long glide back to 40 ms. See
+  `docs/by-ear-decisions.md`, "PULL".
 - **Any octave.** The chord is a pitch-class set; the follower keeps its own
   register and arpeggiates across the lay. (Chosen over "exactly the leader's
   voicing", which would glue B into A's register.)
@@ -103,7 +108,8 @@ bit-exactness gates:
 3. PULL half → bound-note ratio statistically ~50 % (deterministic seed makes
    the count exactly reproducible).
 4. Chord change under a sounding bound note → pitch settles onto a tone of the
-   new mask within ~40 ms.
+   new mask within ~40 ms on a fast deck; on a slow deck within the
+   note-length glide (≤ 1.2 s, amended 2026-11-10).
 5. Leader COLOR 0 + full PULL → follower plays only the leader's pitch class
    (unison/octaves).
 

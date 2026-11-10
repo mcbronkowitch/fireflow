@@ -2,6 +2,7 @@
 // Spec: docs/superpowers/specs/2026-07-19-pull-chord-gravity-design.md
 // Plan: docs/superpowers/plans/2026-08-22-pull-chord-gravity.md
 #include <doctest/doctest.h>
+#include <cmath>
 #include <vector>
 #include "parts/part.h"
 #include "pitch/chord.h"
@@ -294,6 +295,42 @@ TEST_CASE("pull: a chord change under a bound note settles within 40 ms") {
     const int semis = static_cast<int>(p.pitch_cv() * Quantizer::SPAN_SEMIS + 0.5f);
     CAPTURE(semis);
     CHECK(((1u << (semis % 12)) & 0x0088u) != 0u);
+}
+
+TEST_CASE("pull: on a slow deck a chord change glides with the note length") {
+    // PULL glide (2026-11-10, heard and accepted): a live retarget takes a
+    // quarter of the note length, capped at 1.2 s, so a long note is not
+    // jerked over the 40 ms change slew. Mask swapped by hand mid-note, as in
+    // the settle test above; the window is checked to hold no fire of its own.
+    Part p; stepped(p, 21);
+    p.mod().set_rate(0.03f);
+    p.set_gravity(0x0044, 1.f);                    // classes 2, 6
+    float l, r;
+    int fires = 0, since = 0, gap = 0;
+    // Two fires: the first binds, the second gives Part a note length.
+    for (int i = 0; i < 48000 * 120 && fires < 2; ++i) {
+        p.process(l, r);
+        ++since;
+        if (p.lane_fired(LANE_PITCH)) { ++fires; gap = since; since = 0; }
+    }
+    REQUIRE(fires == 2);
+    REQUIRE(p.gravity_bound());
+    CAPTURE(gap);
+    REQUIRE(gap > 48000 * 5);                      // a slow deck: glide hits the cap
+    for (int i = 0; i < 4800; ++i) p.process(l, r);
+    const float before = p.pitch_cv();
+    p.set_gravity(0x0088, 1.f);                    // classes 3, 7
+    bool fired = false;
+    for (int i = 0; i < 1920 + 96; ++i) { p.process(l, r); fired |= p.lane_fired(LANE_PITCH); }
+    const float at_40ms = p.pitch_cv();
+    for (int i = 0; i < 48000 * 13 / 10; ++i) { p.process(l, r); fired |= p.lane_fired(LANE_PITCH); }
+    REQUIRE_FALSE(fired);
+    const float after = p.pitch_cv();
+    REQUIRE(after != before);
+    const int semis = static_cast<int>(after * Quantizer::SPAN_SEMIS + 0.5f);
+    CHECK(((1u << (semis % 12)) & 0x0088u) != 0u);            // arrived by 1.3 s
+    // At 40 ms the glide has covered well under a tenth of the way.
+    CHECK(std::fabs(at_40ms - before) < 0.1f * std::fabs(after - before));
 }
 
 TEST_CASE("pull: leader COLOR 0 plus full PULL is a unison follow") {

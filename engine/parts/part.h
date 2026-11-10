@@ -387,6 +387,12 @@ public:
             // lane seeds follow.
             _grav_bound = (_grav_mask != 0 && _grav_prob > 0.f)
                         && _pull_rng.next_unipolar() < _grav_prob;
+            // PULL glide sizing: the note that just ended lasted this many
+            // control ticks. A long glide still running is cut short so the
+            // new note lands on its own pitch.
+            _note_ticks = _ticks_since_fire;
+            _ticks_since_fire = 0;
+            _quant.end_long_glide();
         }
         if (_gate_ctr > 0) --_gate_ctr;
 
@@ -416,6 +422,7 @@ public:
         SPKY_PROBE_PART_MARK(8);   // the fade, the swap and the fire bookkeeping end here
         if (_ctrl_ctr == 0) {
             _ctrl_ctr = SynthEngine::kCtrlInterval;
+            if (!fired && _ticks_since_fire < 0x7FFFFFFF) ++_ticks_since_fire;
             _control_tick();
         } else if (fired) {
             _control_tick();
@@ -818,6 +825,8 @@ private:
     float    _grav_prob  = 0.f;  // PULL: per-note bind probability
     bool     _grav_bound = false;// PULL: is the note now sounding bound?
     Rng      _pull_rng;          // PULL: own stream, seeded off _seed_base
+    int32_t  _ticks_since_fire = 0;  // PULL glide: control ticks since the last PITCH fire
+    int32_t  _note_ticks = 0;        // PULL glide: length of the previous note, in ticks
     // The two engines on which the PITCH lane is not a note. Same set as
     // set_flow_melody's (part.cpp) and as the quantizer bypass's, and named
     // separately for the same reason that one is: they share a cause, not a
